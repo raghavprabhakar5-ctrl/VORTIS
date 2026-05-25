@@ -786,11 +786,18 @@ export default async function handler(req, res) {
 
       try {
         const seed   = Math.floor(Math.random() * 999999);
-        const imgRes = await fetchWithTimeout(
-          `https://floral-math-6a24.raghavprabhakar5.workers.dev/?prompt=${encodeURIComponent(prompt.trim())}&model=flux&seed=${seed}`,
-          { headers: { 'x-worker-token': process.env.WORKER_SECRET } },
-          25000
-        );
+       const imgRes = await fetchWithTimeout(
+  `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
+  {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-worker-token': process.env.WORKER_SECRET,
+    },
+    body: JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
+  },
+  25000
+);
         if (!imgRes.ok) throw new Error(`Worker: ${imgRes.status}`);
 
         const contentType = imgRes.headers.get('content-type') || '';
