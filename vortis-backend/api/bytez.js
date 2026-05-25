@@ -2,7 +2,7 @@ export const config = {
   maxDuration: 60,
   api: {
     bodyParser: {
-      sizeLimit: '10mb',
+    sizeLimit: '1mb',
     },
   },
 };
@@ -498,7 +498,7 @@ async function callAI(groq, messages, { isCoding = false, isLong = false, CF_TOK
 export default async function handler(req, res) {
 
   // CORS
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '*').split(',');
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://vortis-ai.vercel.app').split(',');
   const origin         = req.headers.origin || '';
   if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
