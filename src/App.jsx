@@ -100,150 +100,66 @@ const VortisAvatar = ({ size = 28, animating = false }) => (
   </div>
 );
 
-const ImageGeneratingPlaceholder = () => (
-  <div style={{ margin: '8px 0', width: '100%', maxWidth: 'min(420px,100%)', borderRadius: 14, overflow: 'hidden', border: '0.5px solid var(--border)', background: 'var(--bg2)' }}>
-    <style>{`
-      @keyframes pb1{0%,100%{opacity:.08}50%{opacity:.9}}
-      @keyframes pb2{0%,100%{opacity:.5}50%{opacity:.1}}
-      @keyframes pb3{0%,100%{opacity:.25}50%{opacity:.8}}
-      @keyframes pb4{0%,100%{opacity:.7}50%{opacity:.12}}
-      @keyframes pb5{0%,100%{opacity:.15}50%{opacity:.6}}
-      @keyframes fade5{0%,100%{opacity:.35}50%{opacity:1}}
-      @keyframes bar7{0%{width:0%}8%{width:8%}25%{width:32%}55%{width:62%}80%{width:82%}100%{width:94%}}
-    `}</style>
+const ImageGeneratingPlaceholder = () => {
+  const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
+  const anims = ['pb1','pb2','pb3','pb4','pb5'];
+  const cells = Array.from({length: 96}, (_, i) => ({
+    bg: colors[i % colors.length],
+    an: anims[i % 5],
+    dur: (0.8 + (i % 7) * 0.1).toFixed(1) + 's',
+    del: (i % 6 * 0.1).toFixed(1) + 's',
+  }));
 
-    <div style={{ position: 'relative', height: 260, overflow: 'hidden', background: '#07070f' }}>
-      <div style={{
-        position: 'absolute', inset: 0,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(12,1fr)',
-        gridTemplateRows: 'repeat(8,1fr)',
-        gap: 3, padding: 12
-      }}>
-        {[
-          { bg:'#4f46e5',an:'pb1',dur:'1.1s',del:'0s' },
-          { bg:'#7c3aed',an:'pb3',dur:'1.4s',del:'.2s' },
-          { bg:'#6366f1',an:'pb2',dur:'.9s', del:'.4s' },
-          { bg:'#4f46e5',an:'pb4',dur:'1.3s',del:'.1s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.0s',del:'.5s' },
-          { bg:'#6366f1',an:'pb1',dur:'1.5s',del:'.3s' },
-          { bg:'#7c3aed',an:'pb2',dur:'1.2s',del:'.6s' },
-          { bg:'#4f46e5',an:'pb3',dur:'.8s', del:'.2s' },
-          { bg:'#6366f1',an:'pb4',dur:'1.4s',del:'.4s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.1s',del:'.1s' },
-          { bg:'#7c3aed',an:'pb1',dur:'.9s', del:'.5s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.3s',del:'.3s' },
-          { bg:'#8b5cf6',an:'pb3',dur:'1.2s',del:'.6s' },
-          { bg:'#6366f1',an:'pb4',dur:'1.0s',del:'.1s' },
-          { bg:'#a78bfa',an:'pb5',dur:'1.5s',del:'.3s' },
-          { bg:'#7c3aed',an:'pb1',dur:'.8s', del:'.5s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.3s',del:'.2s' },
-          { bg:'#a78bfa',an:'pb3',dur:'1.1s',del:'.4s' },
-          { bg:'#6366f1',an:'pb4',dur:'.9s', del:'.6s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.4s',del:'.1s' },
-          { bg:'#7c3aed',an:'pb1',dur:'1.2s',del:'.3s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.0s',del:'.5s' },
-          { bg:'#6366f1',an:'pb3',dur:'1.5s',del:'.2s' },
-          { bg:'#a78bfa',an:'pb4',dur:'.8s', del:'.4s' },
-          { bg:'#4f46e5',an:'pb5',dur:'1.1s',del:'.6s' },
-          { bg:'#7c3aed',an:'pb1',dur:'1.3s',del:'.1s' },
-          { bg:'#6366f1',an:'pb2',dur:'.9s', del:'.3s' },
-          { bg:'#8b5cf6',an:'pb3',dur:'1.4s',del:'.5s' },
-          { bg:'#a78bfa',an:'pb4',dur:'1.2s',del:'.2s' },
-          { bg:'#4f46e5',an:'pb5',dur:'1.0s',del:'.4s' },
-          { bg:'#7c3aed',an:'pb1',dur:'1.5s',del:'.6s' },
-          { bg:'#6366f1',an:'pb2',dur:'.8s', del:'.1s' },
-          { bg:'#8b5cf6',an:'pb3',dur:'1.3s',del:'.3s' },
-          { bg:'#4f46e5',an:'pb4',dur:'1.1s',del:'.5s' },
-          { bg:'#a78bfa',an:'pb5',dur:'.9s', del:'.2s' },
-          { bg:'#7c3aed',an:'pb1',dur:'1.4s',del:'.4s' },
-          { bg:'#6366f1',an:'pb2',dur:'1.2s',del:'.6s' },
-          { bg:'#4f46e5',an:'pb3',dur:'1.0s',del:'.1s' },
-          { bg:'#8b5cf6',an:'pb4',dur:'1.5s',del:'.3s' },
-          { bg:'#a78bfa',an:'pb5',dur:'.8s', del:'.5s' },
-          { bg:'#7c3aed',an:'pb1',dur:'1.3s',del:'.2s' },
-          { bg:'#6366f1',an:'pb2',dur:'1.1s',del:'.4s' },
-          { bg:'#4f46e5',an:'pb3',dur:'.9s', del:'.6s' },
-          { bg:'#a78bfa',an:'pb4',dur:'1.4s',del:'.1s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.2s',del:'.3s' },
-          { bg:'#7c3aed',an:'pb1',dur:'1.0s',del:'.5s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.5s',del:'.2s' },
-          { bg:'#6366f1',an:'pb3',dur:'.8s', del:'.4s' },
-          { bg:'#a78bfa',an:'pb4',dur:'1.1s',del:'.6s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.3s',del:'.1s' },
-          { bg:'#7c3aed',an:'pb1',dur:'.9s', del:'.3s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.4s',del:'.5s' },
-          { bg:'#6366f1',an:'pb3',dur:'1.2s',del:'.2s' },
-          { bg:'#a78bfa',an:'pb4',dur:'1.0s',del:'.4s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.5s',del:'.6s' },
-          { bg:'#7c3aed',an:'pb1',dur:'.8s', del:'.1s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.3s',del:'.3s' },
-          { bg:'#6366f1',an:'pb3',dur:'1.1s',del:'.5s' },
-          { bg:'#a78bfa',an:'pb4',dur:'.9s', del:'.2s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.4s',del:'.4s' },
-          { bg:'#6366f1',an:'pb1',dur:'1.2s',del:'.6s' },
-          { bg:'#4f46e5',an:'pb2',dur:'1.0s',del:'.1s' },
-          { bg:'#7c3aed',an:'pb3',dur:'1.5s',del:'.3s' },
-          { bg:'#a78bfa',an:'pb4',dur:'.8s', del:'.5s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.3s',del:'.2s' },
-          { bg:'#6366f1',an:'pb1',dur:'1.1s',del:'.4s' },
-          { bg:'#4f46e5',an:'pb2',dur:'.9s', del:'.6s' },
-          { bg:'#7c3aed',an:'pb3',dur:'1.4s',del:'.1s' },
-          { bg:'#a78bfa',an:'pb4',dur:'1.2s',del:'.3s' },
-          { bg:'#8b5cf6',an:'pb5',dur:'1.0s',del:'.5s' },
-          { bg:'#6366f1',an:'pb1',dur:'1.5s',del:'.2s' },
-          { bg:'#4f46e5',an:'pb2',dur:'.8s', del:'.4s' },
-          { bg:'#8b5cf6',an:'pb3',dur:'1.1s',del:'.6s' },
-          { bg:'#7c3aed',an:'pb4',dur:'1.3s',del:'.1s' },
-          { bg:'#4f46e5',an:'pb5',dur:'.9s', del:'.3s' },
-          { bg:'#6366f1',an:'pb1',dur:'1.4s',del:'.5s' },
-          { bg:'#a78bfa',an:'pb2',dur:'1.2s',del:'.2s' },
-          { bg:'#8b5cf6',an:'pb3',dur:'1.0s',del:'.4s' },
-          { bg:'#7c3aed',an:'pb4',dur:'1.5s',del:'.6s' },
-          { bg:'#4f46e5',an:'pb5',dur:'.8s', del:'.1s' },
-          { bg:'#6366f1',an:'pb1',dur:'1.3s',del:'.3s' },
-          { bg:'#a78bfa',an:'pb2',dur:'1.1s',del:'.5s' },
-          { bg:'#8b5cf6',an:'pb3',dur:'.9s', del:'.2s' },
-          { bg:'#7c3aed',an:'pb4',dur:'1.4s',del:'.4s' },
-        ].map((p, i) => (
-          <div key={i} style={{
-            borderRadius: 3,
-            background: p.bg,
-            animation: `${p.an} ${p.dur} ease-in-out ${p.del} infinite`
-          }}/>
-        ))}
-      </div>
+  return (
+    <div style={{ margin: '8px 0', width: '100%', maxWidth: 'min(420px,100%)', borderRadius: 14, overflow: 'hidden', border: '0.5px solid var(--border)', background: 'var(--bg2)' }}>
+      <style>{`
+        @keyframes pb1{0%,100%{opacity:.08}50%{opacity:.9}}
+        @keyframes pb2{0%,100%{opacity:.5}50%{opacity:.1}}
+        @keyframes pb3{0%,100%{opacity:.25}50%{opacity:.8}}
+        @keyframes pb4{0%,100%{opacity:.7}50%{opacity:.12}}
+        @keyframes pb5{0%,100%{opacity:.15}50%{opacity:.6}}
+        @keyframes bar7{0%{width:0%}8%{width:8%}25%{width:32%}55%{width:62%}80%{width:82%}100%{width:94%}}
+      `}</style>
 
-      <div style={{ position: 'absolute', bottom: 14, left: 0, right: 0, display: 'flex', justifyContent: 'center' }}>
-        <span style={{
-          fontSize: 11, fontWeight: 500,
-          color: 'rgba(190,185,255,.7)',
-          letterSpacing: '.16em', textTransform: 'uppercase',
-          animation: 'fade5 2.5s ease-in-out infinite'
-        }}>Generating image</span>
-      </div>
-    </div>
-
-    <div style={{ padding: '11px 15px 13px', borderTop: '0.5px solid var(--border)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(99,102,241,.85)" stroke="none">
-            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-          </svg>
-          <span style={{ fontSize: 11, color: 'var(--text2)', letterSpacing: '.04em' }}>VORTIS Image AI</span>
-        </div>
-        <span style={{ fontSize: 11, color: 'var(--text3)' }}>Processing…</span>
-      </div>
-      <div style={{ height: '2.5px', borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
+      <div style={{ position: 'relative', height: 260, overflow: 'hidden', background: '#07070f' }}>
         <div style={{
-          height: '100%', borderRadius: 3,
-          background: 'linear-gradient(90deg,#4f46e5,#7c3aed,#a78bfa)',
-          animation: 'bar7 10s ease-out forwards'
-        }}/>
+          position: 'absolute', inset: 0,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(12,1fr)',
+          gridTemplateRows: 'repeat(8,1fr)',
+          gap: 3, padding: 12
+        }}>
+          {cells.map((p, i) => (
+            <div key={i} style={{
+              borderRadius: 3,
+              background: p.bg,
+              animation: `${p.an} ${p.dur} ease-in-out ${p.del} infinite`
+            }}/>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '11px 15px 13px', borderTop: '0.5px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(99,102,241,.85)" stroke="none">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+            </svg>
+            <span style={{ fontSize: 11, color: 'var(--text2)', letterSpacing: '.04em' }}>VORTIS Image AI</span>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Processing…</span>
+        </div>
+        <div style={{ height: '2.5px', borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 3,
+            background: 'linear-gradient(90deg,#4f46e5,#7c3aed,#a78bfa)',
+            animation: 'bar7 10s ease-out forwards'
+          }}/>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 const makeStyles = (isDark) => `
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
