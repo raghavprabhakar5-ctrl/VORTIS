@@ -100,58 +100,66 @@ const VortisAvatar = ({ size = 28, animating = false }) => (
   </div>
 );
 
-const ImageGeneratingPlaceholder = () => (
-  <div style={{ margin: '8px 0', width: '100%', maxWidth: 'min(420px,100%)', borderRadius: 16, overflow: 'hidden', border: '1px solid rgba(99,102,241,0.25)', background: 'var(--bg2)', boxShadow: '0 8px 40px rgba(99,102,241,0.15)' }}>
-    <style>{`
-      @keyframes gradientShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-      @keyframes orbitRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      @keyframes orbitRingReverse { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
-      @keyframes pulseCore { 0%,100% { transform: scale(1); box-shadow: 0 0 20px rgba(99,102,241,0.5); } 50% { transform: scale(1.12); box-shadow: 0 0 40px rgba(139,92,246,0.8); } }
-      @keyframes barFill { 0% { width: 0%; } 15% { width: 20%; } 40% { width: 50%; } 70% { width: 75%; } 90% { width: 88%; } 100% { width: 92%; } }
-      @keyframes particle { 0% { transform: translateY(0) scale(1); opacity: 0.8; } 100% { transform: translateY(-40px) scale(0); opacity: 0; } }
-      @keyframes labelFade { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
-    `}</style>
-    <div style={{ position: 'relative', height: 210, overflow: 'hidden', background: 'linear-gradient(135deg, #07071a 0%, #0e0e28 50%, #07071a 100%)' }}>
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(99,102,241,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,.06) 1px, transparent 1px)', backgroundSize: '28px 28px' }}/>
-      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 60% at 50% 55%, rgba(99,102,241,.18) 0%, transparent 70%)', animation: 'labelFade 3s ease-in-out infinite' }}/>
-      {[{ left: '20%', delay: '0s', size: 3 }, { left: '45%', delay: '0.7s', size: 4 }, { left: '70%', delay: '1.4s', size: 3 }, { left: '32%', delay: '2.1s', size: 2 }, { left: '60%', delay: '0.3s', size: 2 }].map((p, i) => (
-        <div key={i} style={{ position: 'absolute', bottom: '35%', left: p.left, width: p.size, height: p.size, borderRadius: '50%', background: i % 2 === 0 ? '#6366f1' : '#8b5cf6', animation: `particle 2.5s ease-out infinite`, animationDelay: p.delay }}/>
-      ))}
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-        <div style={{ position: 'relative', width: 72, height: 72 }}>
-          <div style={{ position: 'absolute', inset: 0, border: '1.5px dashed rgba(99,102,241,.35)', borderRadius: '50%', animation: 'orbitRing 8s linear infinite' }}>
-            <div style={{ position: 'absolute', top: -3, left: '50%', transform: 'translateX(-50%)', width: 6, height: 6, borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 8px #6366f1' }}/>
-          </div>
-          <div style={{ position: 'absolute', inset: 10, border: '1px dashed rgba(139,92,246,.3)', borderRadius: '50%', animation: 'orbitRingReverse 5s linear infinite' }}>
-            <div style={{ position: 'absolute', bottom: -3, left: '50%', transform: 'translateX(-50%)', width: 4, height: 4, borderRadius: '50%', background: '#8b5cf6', boxShadow: '0 0 6px #8b5cf6' }}/>
-          </div>
-          <div style={{ position: 'absolute', inset: 18, borderRadius: 12, background: 'linear-gradient(135deg, #4f46e5, #7c3aed)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulseCore 2.5s ease-in-out infinite' }}>
-            <ImageIcon size={16} color="white"/>
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.16em', color: 'rgba(255,255,255,.65)', fontFamily: "'JetBrains Mono',monospace", textTransform: 'uppercase', animation: 'labelFade 2s ease-in-out infinite' }}>Generating Image</span>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[0,1,2].map(i => (<div key={i} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--indigo)', animation: 'typingDot 1.2s ease-in-out infinite', animationDelay: `${i * 0.2}s` }}/>))}
-          </div>
-        </div>
-      </div>
-    </div>
-    <div style={{ padding: '10px 14px 12px', borderTop: '1px solid rgba(99,102,241,.12)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Sparkles size={10} color="var(--indigo)"/>
-          <span style={{ fontSize: 10.5, color: 'var(--text3)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em' }}>VORTIS IMAGE AI</span>
-        </div>
-        <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: "'JetBrains Mono',monospace" }}>Processing…</span>
-      </div>
-      <div style={{ height: 3, borderRadius: 3, background: 'rgba(99,102,241,.1)', overflow: 'hidden' }}>
-        <div style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #4f46e5, #6366f1, #8b5cf6)', backgroundSize: '200% 100%', animation: 'barFill 8s ease-out forwards, gradientShift 2s ease-in-out infinite' }}/>
-      </div>
-    </div>
-  </div>
-);
+const ImageGeneratingPlaceholder = () => {
+  const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
+  const anims = ['pb1','pb2','pb3','pb4','pb5'];
+  const cells = Array.from({length: 96}, (_, i) => ({
+    bg: colors[i % colors.length],
+    an: anims[i % 5],
+    dur: (0.8 + (i % 7) * 0.1).toFixed(1) + 's',
+    del: (i % 6 * 0.1).toFixed(1) + 's',
+  }));
 
+  return (
+    <div style={{ margin: '8px 0', width: '100%', maxWidth: 'min(420px,100%)', borderRadius: 14, overflow: 'hidden', border: '0.5px solid var(--border)', background: 'var(--bg2)' }}>
+      <style>{`
+        @keyframes pb1{0%,100%{opacity:.08}50%{opacity:.9}}
+        @keyframes pb2{0%,100%{opacity:.5}50%{opacity:.1}}
+        @keyframes pb3{0%,100%{opacity:.25}50%{opacity:.8}}
+        @keyframes pb4{0%,100%{opacity:.7}50%{opacity:.12}}
+        @keyframes pb5{0%,100%{opacity:.15}50%{opacity:.6}}
+        @keyframes bar7{0%{width:0%}8%{width:8%}25%{width:32%}55%{width:62%}80%{width:82%}100%{width:94%}}
+      `}</style>
+
+      <div style={{ position: 'relative', height: 260, overflow: 'hidden', background: '#07070f' }}>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(12,1fr)',
+          gridTemplateRows: 'repeat(8,1fr)',
+          gap: 3, padding: 12
+        }}>
+          {cells.map((p, i) => (
+            <div key={i} style={{
+              borderRadius: 3,
+              background: p.bg,
+              animation: `${p.an} ${p.dur} ease-in-out ${p.del} infinite`
+            }}/>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: '11px 15px 13px', borderTop: '0.5px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(99,102,241,.85)" stroke="none">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
+            </svg>
+            <span style={{ fontSize: 11, color: 'var(--text2)', letterSpacing: '.04em' }}>VORTIS Image AI</span>
+          </div>
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>Processing…</span>
+        </div>
+        <div style={{ height: '2.5px', borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
+          <div style={{
+            height: '100%', borderRadius: 3,
+            background: 'linear-gradient(90deg,#4f46e5,#7c3aed,#a78bfa)',
+            animation: 'bar7 10s ease-out forwards'
+          }}/>
+        </div>
+      </div>
+    </div>
+  );
+};
 const makeStyles = (isDark) => `
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
