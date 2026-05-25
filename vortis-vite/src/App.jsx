@@ -15,7 +15,6 @@ import {
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2
 } from 'lucide-react';
-import { getAuth, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
