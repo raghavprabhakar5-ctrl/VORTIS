@@ -18,7 +18,7 @@ if (!admin.apps.length) {
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_QUALITY = 'qwen/qwen3-30b-a3b-fp8';
+const GROQ_CHAT_QUALITY = 'qwen-qwen3-32b'; 
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-4-scout-17b-16e-instruct',
