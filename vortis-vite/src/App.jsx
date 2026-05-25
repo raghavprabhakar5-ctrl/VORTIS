@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Analytics } from '@vercel/analytics/react';
-import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, OAuthProvider, signOut } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import './index.css';
 import {
@@ -13,7 +13,7 @@ import {
   ThumbsUp, ThumbsDown, RefreshCw, ZoomIn,
   AlertTriangle, Layers,
   BookOpen, PenTool,
-  Shield, Lock, Cpu, Edit2, Brain, Trash2
+  Shield, Lock, Cpu, Edit2, Brain, Trash2, Mail, KeyRound
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -21,7 +21,7 @@ const API = 'https://vortis-backend.vercel.app/api/bytez';
 const getAuthHeader = async () => {
   try {
     const auth = getAuth();
-   const token = await auth.currentUser?.getIdToken(true);
+    const token = await auth.currentUser?.getIdToken(true);
     if (token) return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
@@ -62,20 +62,17 @@ const VortisLogo = ({ size = 36, color = "#8b5cf6" }) => (
 
 const VortisLogoMark = ({ size = 26, color = "#8b5cf6" }) => (
   <div style={{
-    width: size,
-    height: size,
+    width: size, height: size,
     borderRadius: Math.round(size * 0.28),
     background: 'transparent',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   }}>
     <VortisLogo size={size * 0.72} color={color} />
   </div>
 );
 
 export { VortisLogo, VortisLogoMark };
+
 const UserAvatar = ({ avatar, name = '', size = 28 }) => {
   const [imgErr, setImgErr] = React.useState(false);
   const initials = (name || 'U').trim().split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || 'U';
@@ -105,12 +102,9 @@ const ImageGeneratingPlaceholder = () => {
   const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
   const anims = ['pb1','pb2','pb3','pb4','pb5'];
   const cells = Array.from({length: 96}, (_, i) => ({
-    bg: colors[i % colors.length],
-    an: anims[i % 5],
-    dur: (0.8 + (i % 7) * 0.1).toFixed(1) + 's',
-    del: (i % 6 * 0.1).toFixed(1) + 's',
+    bg: colors[i % colors.length], an: anims[i % 5],
+    dur: (0.8 + (i % 7) * 0.1).toFixed(1) + 's', del: (i % 6 * 0.1).toFixed(1) + 's',
   }));
-
   return (
     <div style={{ margin: '8px 0', width: '100%', maxWidth: 'min(420px,100%)', borderRadius: 14, overflow: 'hidden', border: '0.5px solid var(--border)', background: 'var(--bg2)' }}>
       <style>{`
@@ -121,46 +115,29 @@ const ImageGeneratingPlaceholder = () => {
         @keyframes pb5{0%,100%{opacity:.15}50%{opacity:.6}}
         @keyframes bar7{0%{width:0%}8%{width:8%}25%{width:32%}55%{width:62%}80%{width:82%}100%{width:94%}}
       `}</style>
-
       <div style={{ position: 'relative', height: 260, overflow: 'hidden', background: '#07070f' }}>
-        <div style={{
-          position: 'absolute', inset: 0,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(12,1fr)',
-          gridTemplateRows: 'repeat(8,1fr)',
-          gap: 3, padding: 12
-        }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(12,1fr)', gridTemplateRows: 'repeat(8,1fr)', gap: 3, padding: 12 }}>
           {cells.map((p, i) => (
-            <div key={i} style={{
-              borderRadius: 3,
-              background: p.bg,
-              animation: `${p.an} ${p.dur} ease-in-out ${p.del} infinite`
-            }}/>
+            <div key={i} style={{ borderRadius: 3, background: p.bg, animation: `${p.an} ${p.dur} ease-in-out ${p.del} infinite`}}/>
           ))}
         </div>
       </div>
-
       <div style={{ padding: '11px 15px 13px', borderTop: '0.5px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(99,102,241,.85)" stroke="none">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
-            </svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(99,102,241,.85)" stroke="none"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
             <span style={{ fontSize: 11, color: 'var(--text2)', letterSpacing: '.04em' }}>VORTIS Image AI</span>
           </div>
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>Processing…</span>
         </div>
         <div style={{ height: '2.5px', borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', borderRadius: 3,
-            background: 'linear-gradient(90deg,#4f46e5,#7c3aed,#a78bfa)',
-            animation: 'bar7 10s ease-out forwards'
-          }}/>
+          <div style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg,#4f46e5,#7c3aed,#a78bfa)', animation: 'bar7 10s ease-out forwards' }}/>
         </div>
       </div>
     </div>
   );
 };
+
 const makeStyles = (isDark) => `
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -293,7 +270,6 @@ input,textarea,select { font-size:16px; }
 .rc-icon { width:22px; height:22px; border-radius:6px; background:rgba(99,102,241,.1); border:1px solid rgba(99,102,241,.2); display:flex; align-items:center; justify-content:center; margin-bottom:9px; }
 .rc-title { font-size:12px; font-weight:500; color:var(--text2); margin-bottom:4px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .rc-time { font-size:10.5px; color:var(--text4); font-family:'JetBrains Mono',monospace; }
-.tip-card { display:flex; align-items:flex-start; gap:12px; padding:12px 14px; background:linear-gradient(135deg,rgba(99,102,241,.05),rgba(139,92,246,.03)); border:1px solid rgba(99,102,241,.15); border-radius:12px; margin-bottom:20px; }
 .msg-wrap { animation:fadeUp .2s ease; }
 .bubble-user { background:linear-gradient(135deg,#4f46e5,#6366f1); border-radius:18px 18px 4px 18px; padding:10px 15px; font-size:14px; color:#e0e7ff; line-height:1.65; max-width:100%; box-shadow:0 4px 16px rgba(99,102,241,.25); word-break:break-word; overflow-wrap:anywhere; white-space:pre-wrap; }
 .bubble-ai { font-size:14.5px; color:var(--text1); line-height:1.85; max-width:94%; }
@@ -379,6 +355,9 @@ code.inline-code { background:rgba(99,102,241,.12); padding:1px 5px; border-radi
 .memory-dot { width:7px; height:7px; border-radius:50%; background:var(--indigo); flex-shrink:0; margin-top:5px; }
 .feedback-textarea { width:100%; padding:10px 12px; border-radius:10px; background:var(--bg3); border:1px solid var(--border2); color:var(--text1); font-family:'Geist',sans-serif; font-size:13.5px; outline:none; resize:vertical; line-height:1.6; box-sizing:border-box; transition:border-color .15s; }
 .feedback-textarea:focus { border-color:rgba(99,102,241,.5); box-shadow:0 0 0 3px rgba(99,102,241,.08); }
+.auth-input { width:100%; padding:12px 14px; border-radius:11px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); color:#fff; font-family:'Geist',sans-serif; font-size:14px; outline:none; transition:border-color .15s; box-sizing:border-box; }
+.auth-input:focus { border-color:rgba(99,102,241,.6); box-shadow:0 0 0 3px rgba(99,102,241,.12); }
+.auth-input::placeholder { color:rgba(255,255,255,.3); }
 @media(max-width:900px){
   :root { --sidebar-w:220px; }
   .recent-grid { grid-template-columns:1fr 1fr; }
@@ -648,7 +627,6 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               </div>
             </>
           )}
-
           {tab === 'memories' && (
             <>
               <div className="settings-section-title">Memories</div>
@@ -664,7 +642,7 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
                   <>
                     <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>{memories.length} memories</span>
-                      <button onClick={() => setConfirmDialog({ message: 'Clear all memories? Vortis will forget everything it learned about you.', onConfirm: () => { setConfirmDialog(null); onClearMemories(); } })} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>
+                      <button onClick={() => setConfirmDialog({ message: 'Clear all memories?', onConfirm: () => { setConfirmDialog(null); onClearMemories(); } })} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}>
                         <Trash2 size={10}/> Clear all
                       </button>
                     </div>
@@ -675,7 +653,7 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
                           <p style={{ fontSize: 13, color: 'var(--text1)', lineHeight: 1.55 }}>{mem.text}</p>
                           <p style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono', marginTop: 3 }}>{new Date(mem.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
                         </div>
-                        <button onClick={() => setConfirmDialog({ message: 'Remove this memory?', onConfirm: () => { setConfirmDialog(null); onDeleteMemory(mem.id); } })} style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', flexShrink: 0, transition: 'color .12s' }} onMouseEnter={e => e.currentTarget.style.color='var(--red)'} onMouseLeave={e => e.currentTarget.style.color='var(--text4)'}>
+                        <button onClick={() => setConfirmDialog({ message: 'Remove this memory?', onConfirm: () => { setConfirmDialog(null); onDeleteMemory(mem.id); } })} style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color='var(--red)'} onMouseLeave={e => e.currentTarget.style.color='var(--text4)'}>
                           <X size={13}/>
                         </button>
                       </div>
@@ -685,7 +663,6 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               </div>
             </>
           )}
-
           {tab === 'billing' && (
             <>
               <div className="settings-section-title">Billing</div>
@@ -706,7 +683,6 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               </div>
             </>
           )}
-
           {tab === 'usage' && (
             <>
               <div className="settings-section-title">Usage</div>
@@ -738,7 +714,6 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               </div>
             </>
           )}
-
           {tab === 'display' && (
             <>
               <div className="settings-section-title">Display</div>
@@ -767,7 +742,6 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               </div>
             </>
           )}
-
           {tab === 'shortcuts' && (
             <>
               <div className="settings-section-title">Keyboard Shortcuts</div>
@@ -791,7 +765,6 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               </div>
             </>
           )}
-
           {tab === 'about' && (
             <>
               <div className="settings-section-title">About Vortis</div>
@@ -869,6 +842,14 @@ export default function VortisAI() {
   const [showLogin, setShowLogin] = useState(() => {
     try { return !localStorage.getItem('vortis_user'); } catch(_) { return true; }
   });
+  // Email auth state
+  const [emailMode, setEmailMode] = useState('signin'); // 'signin' | 'signup'
+  const [emailVal, setEmailVal] = useState('');
+  const [passwordVal, setPasswordVal] = useState('');
+  const [nameVal, setNameVal] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [showEmailForm, setShowEmailForm] = useState(false);
+
   const [hoveredMsg, setHoveredMsg] = useState(null);
   const [selectedDuration, setSelectedDuration] = useState(0);
   const [reactions, setReactions] = useState({});
@@ -1025,43 +1006,20 @@ export default function VortisAI() {
   const extractMemories = useCallback(async (userMsg, aiResponse, existingMemories) => {
     const trimmed = userMsg.trim();
     if (trimmed.length < 5) return;
-
     const existingText = existingMemories.length > 0
       ? existingMemories.slice(0, 30).map(m => `- ${m.text}`).join('\n')
       : 'none';
-
     try {
       const res = await fetch(API, {
         method: 'POST',
         headers: await getAuthHeader(),
         body: JSON.stringify({
           action: 'chat',
-          prompt: `You are a memory manager for a personal AI assistant. Your job is to decide what facts about the user are worth remembering long-term.
-
-Review this exchange and output a JSON array of memories worth saving. Output ONLY raw JSON — no markdown, no explanation, no backticks.
-
-Rules:
-- Save ONLY explicit personal facts the user stated about themselves in their OWN words
-- Save: name, age, location, job, skills, scores, hobbies, interests, education, preferences, achievements
-- NEVER save temporary states like "I am free", "I am bored", "I am tired", "I am busy", "I am hungry", "I have free time"
-- NEVER save the subject/topic of something the user asked you to write, create, draw, or generate
-- NEVER save anything from the AI response — only from the user's actual words
-- NEVER save questions the user asked
-- If nothing is a genuine permanent personal fact, return []
-- Each memory is a short declarative sentence, max 20 words
-${existingText}
-
-User said: "${userMsg}"
-
-Output format: ["memory one", "memory two"] or []`,
-          history: [
-            { role: 'user', content: 'Analyze and return JSON array only.' }
-          ]
+          prompt: `You are a memory manager for a personal AI assistant. Your job is to decide what facts about the user are worth remembering long-term.\n\nReview this exchange and output a JSON array of memories worth saving. Output ONLY raw JSON — no markdown, no explanation, no backticks.\n\nRules:\n- Save ONLY explicit personal facts the user stated about themselves in their OWN words\n- Save: name, age, location, job, skills, scores, hobbies, interests, education, preferences, achievements\n- NEVER save temporary states like "I am free", "I am bored", "I am tired", "I am busy", "I am hungry", "I have free time"\n- NEVER save the subject/topic of something the user asked you to write, create, draw, or generate\n- NEVER save anything from the AI response — only from the user's actual words\n- NEVER save questions the user asked\n- If nothing is a genuine permanent personal fact, return []\n- Each memory is a short declarative sentence, max 20 words\nExisting memories:\n${existingText}\n\nUser said: "${userMsg}"\n\nOutput format: ["memory one", "memory two"] or []`,
+          history: [{ role: 'user', content: 'Analyze and return JSON array only.' }]
         })
       });
-
       if (!res.ok) return;
-
       const rd = res.body.getReader();
       const dc = new TextDecoder();
       let raw = '';
@@ -1075,19 +1033,14 @@ Output format: ["memory one", "memory two"] or []`,
           try { const p = JSON.parse(chunk); if (p.content) raw += p.content; } catch(_) {}
         }
       }
-
       const cleaned = raw.trim().replace(/```json|```/g, '').trim();
       const start = cleaned.indexOf('[');
       const end = cleaned.lastIndexOf(']');
       if (start === -1 || end === -1) return;
-
       const parsed = JSON.parse(cleaned.slice(start, end + 1));
       if (!Array.isArray(parsed)) return;
-
       for (const mem of parsed) {
-        if (typeof mem === 'string' && mem.length > 5 && mem.length < 150) {
-          addMemory(mem);
-        }
+        if (typeof mem === 'string' && mem.length > 5 && mem.length < 150) addMemory(mem);
       }
     } catch(_) {}
   }, [addMemory]);
@@ -1105,7 +1058,6 @@ Output format: ["memory one", "memory two"] or []`,
           setShowLogin(false);
           try { const d = localStorage.getItem('vortis_usage'); if (d) setUsage(JSON.parse(d)); } catch(_) {}
           loadMemories();
-
           const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
             unsubscribe();
             if (firebaseUser) {
@@ -1180,51 +1132,132 @@ Output format: ["memory one", "memory two"] or []`,
     }
   };
 
+  // ── FIXED: handleLogin — Google + GitHub only, proper name fallback ──
   const handleLogin = async (provider) => {
-  setAuthLoading(true);
-  try {
-    let authProvider;
-    if (provider === 'google')    authProvider = new GoogleAuthProvider();
-    else if (provider === 'github')    authProvider = new GithubAuthProvider();
-    else if (provider === 'microsoft') authProvider = new OAuthProvider('microsoft.com');
-    else { setAuthLoading(false); return; }
-
-    const result = await signInWithPopup(auth, authProvider);
-    const u = result.user;
-    const p = { name: u.displayName || 'User', email: u.email, avatar: u.photoURL || '', provider };
-    userUidRef.current = u.uid;
-    setProfile(p);
-    try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch (_) {}
-
+    setAuthLoading(true);
+    setEmailError('');
     try {
-      const userSnap = await getDoc(doc(db, 'users', u.uid));
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        if (data.tier) setTier(data.tier); else setTier('free');
-        if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0 });
-      } else {
+      let authProvider;
+      if (provider === 'google') authProvider = new GoogleAuthProvider();
+      else if (provider === 'github') authProvider = new GithubAuthProvider();
+      else { setAuthLoading(false); return; }
+
+      const result = await signInWithPopup(auth, authProvider);
+      const u = result.user;
+
+      // Fix GitHub name: Firebase doesn't always populate displayName for GitHub
+      // Fall back to: screenName from token response → email prefix → 'User'
+      let displayName = u.displayName;
+      if (!displayName || displayName.trim() === '') {
+        if (provider === 'github') {
+          // Try to get GitHub username from token response
+          const tokenResp = result._tokenResponse;
+          displayName = tokenResp?.screenName
+            || tokenResp?.displayName
+            || u.email?.split('@')[0]
+            || 'User';
+          // Capitalize first letter
+          displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1);
+        } else {
+          displayName = u.email?.split('@')[0] || 'User';
+        }
+        // Update Firebase profile with the resolved name
+        try { await updateProfile(u, { displayName }); } catch(_) {}
+      }
+
+      const p = { name: displayName, email: u.email, avatar: u.photoURL || '', provider };
+      userUidRef.current = u.uid;
+      setProfile(p);
+      try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
+
+      try {
+        const userSnap = await getDoc(doc(db, 'users', u.uid));
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          if (data.tier) setTier(data.tier); else setTier('free');
+          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0 });
+        } else {
+          setTier('free');
+          setUsage({ messages: 0, documents: 0, images: 0 });
+          await setDoc(doc(db, 'users', u.uid), {
+            tier: 'free', usage: { messages: 0, documents: 0, images: 0 },
+            email: u.email, name: displayName, createdAt: new Date().toISOString()
+          });
+        }
+      } catch(_) {}
+
+      setShowLogin(false);
+      setShowEmailForm(false);
+      addMemory(`User's name is ${displayName.split(' ')[0]}`);
+      await loadChats(u.uid);
+      loadMemories();
+      startNewChat();
+    } catch (e) {
+      const msg = e.code === 'auth/popup-closed-by-user' ? 'Sign-in cancelled.' :
+                  e.code === 'auth/account-exists-with-different-credential' ? 'An account already exists with this email.' :
+                  'Login failed: ' + (e.message || 'Unknown error');
+      setEmailError(msg);
+    }
+    setAuthLoading(false);
+  };
+
+  // ── Email/Password login & signup ──
+  const handleEmailAuth = async () => {
+    setEmailError('');
+    if (!emailVal.trim() || !passwordVal.trim()) { setEmailError('Please fill in all fields.'); return; }
+    if (emailMode === 'signup' && !nameVal.trim()) { setEmailError('Please enter your name.'); return; }
+    if (passwordVal.length < 6) { setEmailError('Password must be at least 6 characters.'); return; }
+    setAuthLoading(true);
+    try {
+      let result;
+      if (emailMode === 'signup') {
+        result = await createUserWithEmailAndPassword(auth, emailVal.trim(), passwordVal);
+        const displayName = nameVal.trim();
+        await updateProfile(result.user, { displayName });
+        const p = { name: displayName, email: result.user.email, avatar: '', provider: 'email' };
+        userUidRef.current = result.user.uid;
+        setProfile(p);
+        try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: result.user.uid })); } catch(_) {}
+        await setDoc(doc(db, 'users', result.user.uid), {
+          tier: 'free', usage: { messages: 0, documents: 0, images: 0 },
+          email: result.user.email, name: displayName, createdAt: new Date().toISOString()
+        });
         setTier('free');
         setUsage({ messages: 0, documents: 0, images: 0 });
-        await setDoc(doc(db, 'users', u.uid), {
-          tier: 'free',
-          usage: { messages: 0, documents: 0, images: 0 },
-          email: u.email,
-          name: u.displayName || 'User',
-          createdAt: new Date().toISOString()
-        });
+        addMemory(`User's name is ${displayName.split(' ')[0]}`);
+      } else {
+        result = await signInWithEmailAndPassword(auth, emailVal.trim(), passwordVal);
+        const u = result.user;
+        const displayName = u.displayName || u.email?.split('@')[0] || 'User';
+        const p = { name: displayName, email: u.email, avatar: u.photoURL || '', provider: 'email' };
+        userUidRef.current = u.uid;
+        setProfile(p);
+        try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
+        try {
+          const snap = await getDoc(doc(db, 'users', u.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.tier) setTier(data.tier);
+            if (data.usage) setUsage(data.usage);
+          }
+        } catch(_) {}
       }
-    } catch (_) {}
-
-    setShowLogin(false);
-    if (u.displayName) addMemory(`User's name is ${u.displayName.split(' ')[0]}`);
-    await loadChats(u.uid);
-    loadMemories();
-    startNewChat();
-  } catch (e) {
-    alert('Login failed: ' + e.message);
-  }
-  setAuthLoading(false);
-};
+      setShowLogin(false);
+      setShowEmailForm(false);
+      await loadChats(result.user.uid);
+      loadMemories();
+      startNewChat();
+    } catch (e) {
+      const msg = e.code === 'auth/user-not-found' ? 'No account found with this email.' :
+                  e.code === 'auth/wrong-password' ? 'Incorrect password.' :
+                  e.code === 'auth/email-already-in-use' ? 'Email already in use. Try signing in.' :
+                  e.code === 'auth/invalid-email' ? 'Invalid email address.' :
+                  e.code === 'auth/invalid-credential' ? 'Incorrect email or password.' :
+                  'Authentication failed. Please try again.';
+      setEmailError(msg);
+    }
+    setAuthLoading(false);
+  };
 
   const handleLogout = () => {
     setConfirmDialog({
@@ -1233,6 +1266,8 @@ Output format: ["memory one", "memory two"] or []`,
         setConfirmDialog(null);
         setShowSettings(false);
         setShowLogin(true);
+        setShowEmailForm(false);
+        setEmailVal(''); setPasswordVal(''); setNameVal(''); setEmailError('');
         setProfile({ name: '', email: '', avatar: '', provider: 'none' });
         setUsage({ messages: 0, documents: 0, images: 0 });
         setSavedChats([]);
@@ -1250,21 +1285,11 @@ Output format: ["memory one", "memory two"] or []`,
       onConfirm: async () => {
         setConfirmDialog(null);
         setShowSettings(false);
-        setMessages([]);
-        setMemories([]);
-        setUsage({ messages: 0, documents: 0, images: 0 });
-        setReactions({});
-        setStarred({});
-        setSavedChats([]);
-        setUploadedDoc(null);
-        setShowMenu(false);
-        setImgGenMode(false);
-        setLastImagePrompt(null);
-        convHistory.current = [];
-        setProcessingStatus('');
-        imgGenLock.current = false;
-        savingRef.current = false;
-        setShowAITimeout(false);
+        setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0 });
+        setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
+        setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
+        convHistory.current = []; setProcessingStatus('');
+        imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false);
         try { localStorage.removeItem('vortis_usage'); } catch(_) {}
         try { localStorage.removeItem('vortis_memories'); } catch(_) {}
         try { localStorage.removeItem('vortis_reactions'); } catch(_) {}
@@ -1276,8 +1301,7 @@ Output format: ["memory one", "memory two"] or []`,
           } catch(_) {}
         }
         const newId = Date.now().toString();
-        setChatId(newId);
-        chatIdRef.current = newId;
+        setChatId(newId); chatIdRef.current = newId;
         setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
       }
     });
@@ -1316,12 +1340,9 @@ Output format: ["memory one", "memory two"] or []`,
       }
     }
     const newId = Date.now().toString();
-    setChatId(newId);
-    chatIdRef.current = newId;
-    setMessages([]); setUploadedDoc(null);
-    setShowMenu(false); setImgGenMode(false);
-    setLastImagePrompt(null);
-    convHistory.current = []; setProcessingStatus('');
+    setChatId(newId); chatIdRef.current = newId;
+    setMessages([]); setUploadedDoc(null); setShowMenu(false); setImgGenMode(false);
+    setLastImagePrompt(null); convHistory.current = []; setProcessingStatus('');
     imgGenLock.current = false; savingRef.current = false;
     setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
@@ -1333,8 +1354,7 @@ Output format: ["memory one", "memory two"] or []`,
       const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
       if (snap.exists()) {
         const c = snap.data();
-        setChatId(id);
-        chatIdRef.current = id;
+        setChatId(id); chatIdRef.current = id;
         const msgs = (c.messages || []).filter(
           m => !(m.type === 'vortis' && m.text?.toLowerCase().includes("hello, i'm vortis"))
         );
@@ -1402,10 +1422,7 @@ Output format: ["memory one", "memory two"] or []`,
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const hasLoading = messages.some(m => m.text === '__IMG_LOADING__');
-      if (hasLoading) {
-        saveTimerRef.current = setTimeout(() => saveChat(messages), 4000);
-        return;
-      }
+      if (hasLoading) { saveTimerRef.current = setTimeout(() => saveChat(messages), 4000); return; }
       saveChat(messages);
     }, 1500);
     return () => clearTimeout(saveTimerRef.current);
@@ -1508,9 +1525,7 @@ Output format: ["memory one", "memory two"] or []`,
     } catch(_) {
       setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m));
     } finally {
-      imgGenLock.current = false;
-      setIsProcessing(false);
-      setProcessingStatus('');
+      imgGenLock.current = false; setIsProcessing(false); setProcessingStatus('');
     }
   };
 
@@ -1523,18 +1538,14 @@ Output format: ["memory one", "memory two"] or []`,
       const historyWithPrimer = convHistory.current;
       const now = new Date();
       const userName = profile.name ? profile.name.split(' ')[0] : null;
-
       let memoriesContext = '';
       if (memories.length > 0) {
         memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules for using memories:\n- Only bring up a memory if it is genuinely relevant to what the user just said\n- Never force memories into unrelated conversations\n- Sound natural, like a friend who remembers things about you\n- Never list memories out loud to the user`;
       } else {
         memoriesContext = `\n\nYou have NO memories about this user yet. If they ask for suggestions or seem unsure what to talk about, ask them what they're into rather than making generic suggestions. Keep it short and casual.`;
       }
-
-       const sys2 = `Reply in the same language and script the user used. Match their tone and energy. Never mirror or repeat their words back — always give a fresh original response.`;
-
-
-    let sys = `You are Vortis, an advanced AI assistant with the following capabilities:\n- **Web Search**: Real-time web results for news, people, events, scores\n- **Image Generation**: Create stunning images from text descriptions\n- **Vision (Image Analysis)**: Analyze and describe uploaded images\n- **Document Analysis**: Read and answer questions about uploaded documents\n- **Memories**: You remember facts about the user across conversations\n- **Voice Mode**: Speak responses (when enabled)\n\nToday is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. The current year is ${now.getFullYear()}. Never say a wrong year. If unsure about something current, use WEB_SEARCH.\n${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally.` : ''}${memoriesContext}\n\nYOU HAVE SPECIAL COMMANDS — output ONLY the command on its own line when needed:\n\nGENERATE_IMAGE: <description>\n→ ONLY output this command when the user provides a clear description of what to generate\n→ If the user says things like "gen an image", "make an image", "create a picture", "generate an image" with NO description, ALWAYS ask: "What would you like me to generate? Describe the image."\n→ If the user says "I don't know" or "you decide" or "surprise me" or gives no answer, ask them 2-3 simple questions to help — like what subject, what style, what mood\n→ If the user still has no idea after that, YOU come up with a creative unique image idea yourself and ask: "How about I generate [your idea]? Want that?"\n→ NEVER generate randomly without the user confirming — always get a yes before outputting the command\n→ Once the user confirms or gives a description, output the command immediately\n→ For follow-up requests like "now make him do X" or "same character but Y" — ALWAYS output the FULL description again, never refer to previous image\n→ NEVER say "generating image..." or describe what you are doing — just output the command silently\n→ NEVER use for: analyze, describe, look at an existing image\nWEB_SEARCH: <query>\n→ ALWAYS search for: live scores, match results, current news, today's weather, stock prices, recent events, any sports happening now, trending topics\n→ Search automatically whenever you need fresh/live data to answer well\n→ Also search when user explicitly asks to search something\n→ Decide the query yourself — never ask the user what to search\n→ Make queries SPECIFIC — for sports include team names and today's date\n→ For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}\n→ NEVER guess or make up scores, results, news — ALWAYS search\n→ NEVER show "WEB_SEARCH:" text in your response to the user\n\nCURRENT_TIME\n→ Only when user asks what time or date it is\n\nPERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it.\nNEVER: Do not mention today's date unless the user explicitly asks. Do not end every response with "Feel free to ask more!" type phrases.`;
+      const sys2 = `Reply in the same language and script the user used. Match their tone and energy. Never mirror or repeat their words back — always give a fresh original response.`;
+      let sys = `You are Vortis, an advanced AI assistant with the following capabilities:\n- **Web Search**: Real-time web results for news, people, events, scores\n- **Image Generation**: Create stunning images from text descriptions\n- **Vision (Image Analysis)**: Analyze and describe uploaded images\n- **Document Analysis**: Read and answer questions about uploaded documents\n- **Memories**: You remember facts about the user across conversations\n- **Voice Mode**: Speak responses (when enabled)\n\nToday is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. The current year is ${now.getFullYear()}. Never say a wrong year. If unsure about something current, use WEB_SEARCH.\n${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally.` : ''}${memoriesContext}\n\nYOU HAVE SPECIAL COMMANDS — output ONLY the command on its own line when needed:\n\nGENERATE_IMAGE: <description>\n→ ONLY output this command when the user provides a clear description of what to generate\n→ If the user says things like "gen an image", "make an image", "create a picture", "generate an image" with NO description, ALWAYS ask: "What would you like me to generate? Describe the image."\n→ If the user says "I don't know" or "you decide" or "surprise me" or gives no answer, ask them 2-3 simple questions to help — like what subject, what style, what mood\n→ If the user still has no idea after that, YOU come up with a creative unique image idea yourself and ask: "How about I generate [your idea]? Want that?"\n→ NEVER generate randomly without the user confirming — always get a yes before outputting the command\n→ Once the user confirms or gives a description, output the command immediately\n→ For follow-up requests like "now make him do X" or "same character but Y" — ALWAYS output the FULL description again, never refer to previous image\n→ NEVER say "generating image..." or describe what you are doing — just output the command silently\n→ NEVER use for: analyze, describe, look at an existing image\nWEB_SEARCH: <query>\n→ ALWAYS search for: live scores, match results, current news, today's weather, stock prices, recent events, any sports happening now, trending topics\n→ Search automatically whenever you need fresh/live data to answer well\n→ Also search when user explicitly asks to search something\n→ Decide the query yourself — never ask the user what to search\n→ Make queries SPECIFIC — for sports include team names and today's date\n→ For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}\n→ NEVER guess or make up scores, results, news — ALWAYS search\n→ NEVER show "WEB_SEARCH:" text in your response to the user\n\nCURRENT_TIME\n→ Only when user asks what time or date it is\n\nPERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it.\nNEVER: Do not mention today's date unless the user explicitly asks. Do not end every response with "Feel free to ask more!" type phrases.`;
       if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Be very thorough. Write at least 4-6 paragraphs with real depth.';
       if (uploadedDoc) sys += `\n\nThe user uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
@@ -1573,39 +1584,26 @@ Output format: ["memory one", "memory two"] or []`,
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
       setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       const cleaned = full.trim();
-
       pushHistory(convHistory, 'assistant', cleaned);
-
-      if (userInput.trim().length > 10) {
-        extractMemories(userInput, cleaned, memories).catch(() => {});
-      }
+      if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
 
       const genMatch = cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/);
       if (genMatch) {
         const imagePrompt = genMatch[1].trim();
-        if (convHistory.current.length > 0)
-          convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` };
-        try {
-          await runImageGeneration(imagePrompt, imgGenStyle);
-        } catch(_) {
-          imgGenLock.current = false;
-        } finally {
-          setIsProcessing(false);
-        }
+        if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` };
+        try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); }
         return;
       }
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
       if (searchMatch) {
-        if (convHistory.current.length > 0)
-          convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched web for: ${searchMatch[1].trim()}]` };
+        if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched web for: ${searchMatch[1].trim()}]` };
         await explicitSearch(searchMatch[1].trim()); return;
       }
 
       if (cleaned.trim() === 'CURRENT_TIME') {
         const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`;
-        if (convHistory.current.length > 0)
-          convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr };
+        if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr };
         addMsg('vortis', timeStr, shouldSpeak);
         setIsProcessing(false); return;
       }
@@ -1620,7 +1618,6 @@ Output format: ["memory one", "memory two"] or []`,
         .trim();
 
       addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
-
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
       setIsStreaming(false); setStreamText(''); setProcessingStatus('');
@@ -1671,7 +1668,6 @@ Output format: ["memory one", "memory two"] or []`,
 
     const searchResultSummary = clean.slice(0, 3).map(r => `${r.title}: ${r.snippet.slice(0, 200)}`).join(' | ');
     pushHistory(convHistory, 'assistant', `[Web search: "${q}" → ${searchResultSummary.slice(0, 400)}]`);
-
     addMsg('vortis', `<div style="display:flex;flex-direction:column;gap:6px;margin:4px 0 10px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace"><span style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 2s ease-in-out infinite;flex-shrink:0"></span>WEB RESULTS<span style="color:var(--text4)">·</span><span style="color:var(--text4)">${dateStr}</span></div><span style="font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace">${clean.length} sources</span></div>${cardHtml}</div>`, false);
 
     const snippet = clean.slice(0, 6).map((r, i) => `[${i+1}] ${r.title}: ${r.snippet.slice(0, 500)}`).join('\n');
@@ -1682,10 +1678,7 @@ Output format: ["memory one", "memory two"] or []`,
         prompt: `REPLY IN THE SAME LANGUAGE AND SCRIPT THE USER USED. User's message was: "${q}"\n\nYou are Vortis. Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}.\nRULES:\n- Summarize ONLY what is in the search results below.\n- Do NOT add anything from training data or memory.\n- Write 4-6 clear sentences using ONLY the facts in the results.\n- Include specific names, scores, dates, numbers from the results.\n- If results are about sports, include scores, teams, winners clearly.\n- Be direct and factual — no vague summaries.`,
         history: [{ role: 'user', content: `Search results for "${q}":\n${snippet}\n\nWrite a detailed 4-6 sentence summary using ONLY the above results.` }]
       })});
-      if (!res.ok) {
-        addMsg('vortis', 'Check out the results above for more details.', false);
-        setProcessingStatus(''); setIsProcessing(false); return;
-      }
+      if (!res.ok) { addMsg('vortis', 'Check out the results above for more details.', false); setProcessingStatus(''); setIsProcessing(false); return; }
       const rd = res.body.getReader(); const dc = new TextDecoder(); let ft = '';
       setIsStreaming(true); setStreamText('');
       while (true) {
@@ -1700,12 +1693,8 @@ Output format: ["memory one", "memory two"] or []`,
         pushHistory(convHistory, 'assistant', ft.trim());
         addMsg('vortis', `<div style="border-left:3px solid var(--indigo);padding:10px 14px;background:rgba(99,102,241,.05);border-radius:0 10px 10px 0;margin-top:4px"><div style="font-size:10px;color:var(--indigo);font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.1em;margin-bottom:6px">AI SUMMARY</div><div class="md-content" style="font-size:13.5px;color:var(--text1);line-height:1.7">${ft}</div><div style="font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace;margin-top:8px">Sources: ${clean.slice(0,3).map(r=>r.source).join(' · ')}</div></div>`, false);
       }
-    } catch(_) {
-      setIsStreaming(false); setStreamText(''); setProcessingStatus('');
-      addMsg('vortis', 'Check out the results above for more details.', false);
-    }
-    setIsProcessing(false);
-    setProcessingStatus('');
+    } catch(_) { setIsStreaming(false); setStreamText(''); setProcessingStatus(''); addMsg('vortis', 'Check out the results above for more details.', false); }
+    setIsProcessing(false); setProcessingStatus('');
   };
 
   const handleCmd = async (cmd) => {
@@ -1713,9 +1702,7 @@ Output format: ["memory one", "memory two"] or []`,
     if (!canDo('messages')) { hitLimit(); return; }
     addMsg('user', cmd);
     incrUsage('messages');
-    setIsProcessing(true);
-    setShowAITimeout(false);
-    setShowSettings(false);
+    setIsProcessing(true); setShowAITimeout(false); setShowSettings(false);
     const speak = lastMethod === 'voice';
     await getAI(cmd, speak);
     setIsProcessing(false);
@@ -1806,9 +1793,7 @@ Output format: ["memory one", "memory two"] or []`,
   const autoResize = useCallback((e) => {
     const val = e.target.value;
     e.target.style.height = 'auto';
-    if (val.trim()) {
-      e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
-    }
+    if (val.trim()) e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px';
     setWordCount(val.trim() ? val.trim().split(/\s+/).length : 0);
   }, []);
 
@@ -1817,12 +1802,8 @@ Output format: ["memory one", "memory two"] or []`,
     await new Promise(r => setTimeout(r, 2000));
     setTier(selectedPlan.tier);
     try { localStorage.setItem('vortis_tier', selectedPlan.tier); } catch(_) {}
-    if (userUidRef.current) {
-      setDoc(doc(db, 'users', userUidRef.current), { tier: selectedPlan.tier }, { merge: true }).catch(() => {});
-    }
-    setIsUpgrading(false);
-    setUpgradeOk(true);
-    setShowPayment(false);
+    if (userUidRef.current) setDoc(doc(db, 'users', userUidRef.current), { tier: selectedPlan.tier }, { merge: true }).catch(() => {});
+    setIsUpgrading(false); setUpgradeOk(true); setShowPayment(false);
     setTimeout(() => { setUpgradeOk(false); setSelectedPlan(null); }, 2000);
   };
 
@@ -1848,17 +1829,30 @@ Output format: ["memory one", "memory two"] or []`,
     { icon: <Download size={14}/>,  label: 'Export chat',     sub: 'Download as markdown', col: 'var(--amber)',  bg: 'rgba(245,158,11,.1)',  fn: () => { exportChat(); setShowMenu(false); } },
   ];
 
+  // ── GitHub SVG icon ──
+  const GithubIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="white" style={{ display:'block' }}>
+      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
+    </svg>
+  );
+
+  // ── Google SVG icon ──
+  const GoogleIcon = () => (
+    <svg width="18" height="18" viewBox="0 0 24 24" style={{ display:'block' }}>
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+  );
+
   return (
     <div className="v-app">
-
       {confirmDialog && (
-        <ConfirmDialog
-          message={confirmDialog.message}
-          onConfirm={confirmDialog.onConfirm}
-          onCancel={() => setConfirmDialog(null)}
-        />
+        <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>
       )}
 
+      {/* ── LOGIN SCREEN ── */}
       {showLogin && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', fontFamily: "'Geist',sans-serif", background: '#080810', overflow: 'hidden' }}>
           {/* LEFT PANEL */}
@@ -1867,7 +1861,6 @@ Output format: ["memory one", "memory two"] or []`,
             <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'rgba(99,102,241,.18)', filter:'blur(80px)', top:-120, left:-120, pointerEvents:'none' }}/>
             <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(139,92,246,.12)', filter:'blur(70px)', bottom:-60, right:-40, pointerEvents:'none' }}/>
             <div style={{ position:'relative', zIndex:1 }}>
-              {/* LOGO ROW — no border box */}
               <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:40 }}>
                 <VortisLogo size={36} color="#8b5cf6" />
                 <span style={{ fontSize:21, fontWeight:700, color:'#fff', letterSpacing:'.08em' }}>VORTIS</span>
@@ -1886,7 +1879,6 @@ Output format: ["memory one", "memory two"] or []`,
                   { icon:<Mic size={16}/>, color:'#10b981', bg:'rgba(16,185,129,.12)', label:'Voice Mode', desc:'talk naturally, hands-free' },
                 ].map(f => (
                   <div key={f.label} style={{ display:'flex', alignItems:'center', gap:14 }}>
-                    {/* Feature icons: colored background circle, NO border rectangle */}
                     <div style={{ width:36, height:36, minWidth:36, borderRadius:9, background:f.bg, display:'flex', alignItems:'center', justifyContent:'center', color:f.color, flexShrink:0 }}>{f.icon}</div>
                     <span style={{ fontSize:13.5, color:'rgba(255,255,255,.65)' }}><strong style={{ color:'#fff', fontWeight:600 }}>{f.label}</strong>{' — '}{f.desc}</span>
                   </div>
@@ -1898,7 +1890,6 @@ Output format: ["memory one", "memory two"] or []`,
           {/* RIGHT PANEL */}
           <div style={{ width:'min(460px,100%)', display:'grid', placeItems:'center', padding:'0 clamp(24px,5vw,52px)', background:'#0d0d18', flexShrink:0, height:'100%', overflowY:'auto', boxSizing:'border-box' }}>
             <div style={{ width:'100%', maxWidth:360 }}>
-              {/* RIGHT LOGO — no border box */}
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:30 }}>
                 <VortisLogo size={32} color="#8b5cf6" />
                 <span style={{ fontSize:17, fontWeight:700, letterSpacing:'.06em', color:'#fff' }}>VORTIS</span>
@@ -1909,24 +1900,86 @@ Output format: ["memory one", "memory two"] or []`,
               </div>
               <h2 style={{ fontSize:28, fontWeight:700, letterSpacing:'-.03em', marginBottom:6, color:'#fff' }}>Welcome back</h2>
               <p style={{ fontSize:13.5, color:'rgba(255,255,255,.35)', marginBottom:28, lineHeight:1.6 }}>Sign in to your account to continue</p>
-              {[
-                { provider: 'google', label: 'Continue with Google', icon: <svg width="18" height="18" viewBox="0 0 24 24" style={{ display:'block' }}><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg> },
-                { provider: 'microsoft', label: 'Continue with Microsoft', icon: <svg width="18" height="18" viewBox="0 0 18 18" style={{ display:'block' }}><path fill="#f35325" d="M0 0h8.5v8.5H0z"/><path fill="#81bc06" d="M9.5 0H18v8.5H9.5z"/><path fill="#05a6f0" d="M0 9.5h8.5V18H0z"/><path fill="#ffba08" d="M9.5 9.5H18V18H9.5z"/></svg> },
-                { provider: 'github', label: 'Continue with GitHub', icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="white" style={{ display:'block' }}><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg> },
-              ].map(b => (
-                <button key={b.provider} onClick={() => handleLogin(b.provider)} disabled={authLoading}
-                  style={{ width:'100%', padding:'0 18px', height:52, background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.09)', borderRadius:13, display:'flex', alignItems:'center', gap:14, cursor:authLoading?'not-allowed':'pointer', color:'rgba(255,255,255,.78)', fontSize:14, fontFamily:"'Geist',sans-serif", fontWeight:500, marginBottom:9, transition:'all .18s', opacity:authLoading?.5:1, WebkitTapHighlightColor:'transparent', outline:'none', boxSizing:'border-box' }}
-                  onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.background='rgba(255,255,255,.08)'; e.currentTarget.style.borderColor='rgba(255,255,255,.2)'; e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.color='#fff'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,.04)'; e.currentTarget.style.borderColor='rgba(255,255,255,.09)'; e.currentTarget.style.transform='none'; e.currentTarget.style.color='rgba(255,255,255,.78)'; }}
-                >
-                  {/* Provider icon: NO wrapper box, just the raw SVG centered */}
-                  <div style={{ width:36, height:36, minWidth:36, borderRadius:8, background:'rgba(255,255,255,.06)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <div style={{ width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center' }}>{b.icon}</div>
+
+              {!showEmailForm ? (
+                <>
+                  {/* ── OAuth Buttons: Google + GitHub only ── */}
+                  {[
+                    { provider: 'google', label: 'Continue with Google', icon: <GoogleIcon /> },
+                    { provider: 'github', label: 'Continue with GitHub', icon: <GithubIcon /> },
+                  ].map(b => (
+                    <button key={b.provider} onClick={() => handleLogin(b.provider)} disabled={authLoading}
+                      style={{ width:'100%', padding:'0 18px', height:52, background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.09)', borderRadius:13, display:'flex', alignItems:'center', gap:14, cursor:authLoading?'not-allowed':'pointer', color:'rgba(255,255,255,.78)', fontSize:14, fontFamily:"'Geist',sans-serif", fontWeight:500, marginBottom:9, transition:'all .18s', opacity:authLoading?.5:1, WebkitTapHighlightColor:'transparent', outline:'none', boxSizing:'border-box' }}
+                      onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.background='rgba(255,255,255,.08)'; e.currentTarget.style.borderColor='rgba(255,255,255,.2)'; e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.color='#fff'; } }}
+                      onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,.04)'; e.currentTarget.style.borderColor='rgba(255,255,255,.09)'; e.currentTarget.style.transform='none'; e.currentTarget.style.color='rgba(255,255,255,.78)'; }}
+                    >
+                      <div style={{ width:36, height:36, minWidth:36, borderRadius:8, background:'rgba(255,255,255,.06)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                        <div style={{ width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center' }}>{b.icon}</div>
+                      </div>
+                      <span style={{ flex:1, textAlign:'left', lineHeight:1 }}>{authLoading?'Opening…':b.label}</span>
+                      <svg width="13" height="13" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  ))}
+
+                  {/* Divider */}
+                  <div style={{ display:'flex', alignItems:'center', gap:12, margin:'14px 0' }}>
+                    <div style={{ flex:1, height:1, background:'rgba(255,255,255,.08)' }}/>
+                    <span style={{ fontSize:11.5, color:'rgba(255,255,255,.25)', fontFamily:"'JetBrains Mono',monospace" }}>or</span>
+                    <div style={{ flex:1, height:1, background:'rgba(255,255,255,.08)' }}/>
                   </div>
-                  <span style={{ flex:1, textAlign:'left', lineHeight:1 }}>{authLoading?'Opening…':b.label}</span>
-                  <svg width="13" height="13" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              ))}
+
+                  {/* Email button */}
+                  <button onClick={() => { setShowEmailForm(true); setEmailMode('signin'); setEmailError(''); }}
+                    style={{ width:'100%', padding:'0 18px', height:52, background:'rgba(99,102,241,.08)', border:'1px solid rgba(99,102,241,.2)', borderRadius:13, display:'flex', alignItems:'center', gap:14, cursor:'pointer', color:'rgba(255,255,255,.78)', fontSize:14, fontFamily:"'Geist',sans-serif", fontWeight:500, marginBottom:9, transition:'all .18s', WebkitTapHighlightColor:'transparent', outline:'none', boxSizing:'border-box' }}
+                    onMouseEnter={e => { e.currentTarget.style.background='rgba(99,102,241,.15)'; e.currentTarget.style.borderColor='rgba(99,102,241,.4)'; e.currentTarget.style.color='#fff'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background='rgba(99,102,241,.08)'; e.currentTarget.style.borderColor='rgba(99,102,241,.2)'; e.currentTarget.style.color='rgba(255,255,255,.78)'; }}
+                  >
+                    <div style={{ width:36, height:36, minWidth:36, borderRadius:8, background:'rgba(99,102,241,.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <Mail size={16} color="#818cf8"/>
+                    </div>
+                    <span style={{ flex:1, textAlign:'left' }}>Continue with Email</span>
+                    <svg width="13" height="13" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                  </button>
+
+                  {emailError && <p style={{ fontSize:12, color:'#f87171', marginTop:6, fontFamily:"'JetBrains Mono',monospace" }}>{emailError}</p>}
+                </>
+              ) : (
+                /* ── Email/Password Form ── */
+                <div style={{ animation:'fadeUp .2s ease' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+                    <button onClick={() => { setShowEmailForm(false); setEmailError(''); }} style={{ background:'none', border:'none', color:'rgba(255,255,255,.4)', cursor:'pointer', padding:'4px 8px 4px 0', display:'flex', alignItems:'center', gap:6, fontSize:13, fontFamily:"'Geist',sans-serif" }}>
+                      <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+                      Back
+                    </button>
+                    <div style={{ display:'flex', gap:0, flex:1, background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.08)', borderRadius:10, overflow:'hidden' }}>
+                      {['signin','signup'].map(m => (
+                        <button key={m} onClick={() => { setEmailMode(m); setEmailError(''); }} style={{ flex:1, padding:'8px', border:'none', background: emailMode===m ? 'rgba(99,102,241,.3)' : 'transparent', color: emailMode===m ? '#fff' : 'rgba(255,255,255,.4)', fontSize:12.5, fontFamily:"'Geist',sans-serif", fontWeight: emailMode===m ? 600 : 400, cursor:'pointer', transition:'all .15s' }}>
+                          {m === 'signin' ? 'Sign In' : 'Sign Up'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {emailMode === 'signup' && (
+                    <input className="auth-input" style={{ marginBottom:10 }} placeholder="Your name" value={nameVal} onChange={e => setNameVal(e.target.value)} autoComplete="name"/>
+                  )}
+                  <input className="auth-input" style={{ marginBottom:10 }} type="email" placeholder="Email address" value={emailVal} onChange={e => setEmailVal(e.target.value)} autoComplete="email"/>
+                  <input className="auth-input" style={{ marginBottom:emailError ? 8 : 16 }} type="password" placeholder="Password (min. 6 characters)" value={passwordVal} onChange={e => setPasswordVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleEmailAuth(); }}
+                    autoComplete={emailMode === 'signup' ? 'new-password' : 'current-password'}/>
+
+                  {emailError && <p style={{ fontSize:12, color:'#f87171', marginBottom:12, fontFamily:"'JetBrains Mono',monospace" }}>{emailError}</p>}
+
+                  <button onClick={handleEmailAuth} disabled={authLoading}
+                    style={{ width:'100%', height:50, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', borderRadius:12, color:'white', fontSize:14, fontWeight:700, fontFamily:"'Geist',sans-serif", cursor:authLoading?'not-allowed':'pointer', opacity:authLoading?.6:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, transition:'all .2s' }}>
+                    {authLoading
+                      ? <><Loader size={15} style={{ animation:'spin 1s linear infinite' }}/> Please wait…</>
+                      : <><KeyRound size={15}/> {emailMode === 'signup' ? 'Create Account' : 'Sign In'}</>
+                    }
+                  </button>
+                </div>
+              )}
+
               <div style={{ display:'flex', gap:18, marginTop:22, marginBottom:18, flexWrap:'wrap' }}>
                 {[[<Shield size={11}/>, 'Encrypted'], [<Lock size={11}/>, 'Private'], [<Cpu size={11}/>, 'No ads ever']].map(([icon, label]) => (
                   <div key={label} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'rgba(255,255,255,.28)', fontFamily:"'JetBrains Mono',monospace" }}>{icon}{label}</div>
@@ -1943,7 +1996,7 @@ Output format: ["memory one", "memory two"] or []`,
       {showSidebar && window.innerWidth <= 768 && (
         <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>
       )}
-
+      
       {showStarredPanel && (
         <>
           <div onClick={() => setShowStarredPanel(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 79, backdropFilter: 'blur(4px)' }}/>
