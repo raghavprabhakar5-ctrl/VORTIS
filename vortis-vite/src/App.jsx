@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { inject } from '@vercel/analytics';
-inject();
+import { Analytics } from '@vercel/analytics/react';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import './index.css';
 import {
@@ -2592,6 +2591,7 @@ Output format: ["memory one", "memory two"] or []`,
           </div>
         </div>
       )}
+       <Analytics />
     </div>
   );
 }
