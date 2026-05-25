@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, OAuthProvider, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import './index.css';
 import {
@@ -1181,54 +1182,50 @@ Output format: ["memory one", "memory two"] or []`,
   };
 
   const handleLogin = async (provider) => {
-    setAuthLoading(true);
+  setAuthLoading(true);
+  try {
+    let authProvider;
+    if (provider === 'google')    authProvider = new GoogleAuthProvider();
+    else if (provider === 'github')    authProvider = new GithubAuthProvider();
+    else if (provider === 'microsoft') authProvider = new OAuthProvider('microsoft.com');
+    else { setAuthLoading(false); return; }
+
+    const result = await signInWithPopup(auth, authProvider);
+    const u = result.user;
+    const p = { name: u.displayName || 'User', email: u.email, avatar: u.photoURL || '', provider };
+    userUidRef.current = u.uid;
+    setProfile(p);
+    try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch (_) {}
+
     try {
-      if (provider === 'google') {
-        const result = await signInWithPopup(auth, new GoogleAuthProvider());
-        const u = result.user;
-        const p = { name: u.displayName||'User', email: u.email, avatar: u.photoURL||'', provider: 'google' };
-        userUidRef.current = u.uid;
-        setProfile(p);
-        try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
-        try {
-          const userSnap = await getDoc(doc(db, 'users', u.uid));
-          if (userSnap.exists()) {
-            const data = userSnap.data();
-            if (data.tier) setTier(data.tier);
-            else setTier('free');
-            if (data.usage) setUsage(data.usage);
-            else setUsage({ messages: 0, documents: 0, images: 0 });
-          } else {
-            setTier('free');
-            setUsage({ messages: 0, documents: 0, images: 0 });
-            await setDoc(doc(db, 'users', u.uid), {
-              tier: 'free',
-              usage: { messages: 0, documents: 0, images: 0 },
-              email: u.email,
-              name: u.displayName || 'User',
-              createdAt: new Date().toISOString()
-            });
-          }
-        } catch(_) {}
-        setShowLogin(false);
-        if (u.displayName) {
-          const firstName = u.displayName.split(' ')[0];
-          addMemory(`User's name is ${firstName}`);
-        }
-        await loadChats(u.uid);
-        loadMemories();
-        startNewChat();
-        setAuthLoading(false);
-        return;
+      const userSnap = await getDoc(doc(db, 'users', u.uid));
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data.tier) setTier(data.tier); else setTier('free');
+        if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0 });
+      } else {
+        setTier('free');
+        setUsage({ messages: 0, documents: 0, images: 0 });
+        await setDoc(doc(db, 'users', u.uid), {
+          tier: 'free',
+          usage: { messages: 0, documents: 0, images: 0 },
+          email: u.email,
+          name: u.displayName || 'User',
+          createdAt: new Date().toISOString()
+        });
       }
-      const p = { name: `${provider.charAt(0).toUpperCase()+provider.slice(1)} User`, email: `user@${provider}.com`, avatar: '', provider };
-      setProfile(p);
-      try { localStorage.setItem('vortis_user', JSON.stringify(p)); } catch(_) {}
-      setShowLogin(false);
-      loadMemories();
-    } catch(e) { alert('Login failed: ' + e.message); }
-    setAuthLoading(false);
-  };
+    } catch (_) {}
+
+    setShowLogin(false);
+    if (u.displayName) addMemory(`User's name is ${u.displayName.split(' ')[0]}`);
+    await loadChats(u.uid);
+    loadMemories();
+    startNewChat();
+  } catch (e) {
+    alert('Login failed: ' + e.message);
+  }
+  setAuthLoading(false);
+};
 
   const handleLogout = () => {
     setConfirmDialog({
