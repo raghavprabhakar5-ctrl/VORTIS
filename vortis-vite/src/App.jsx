@@ -950,7 +950,7 @@ export default function VortisAI() {
       loadMemories();
       startNewChat();
     } catch (e) {
-      const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in cancelled.' :
+      const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in failed.' :
                   e.code === 'auth/account-exists-with-different-credential' ? 'An account already exists with this email.' :
                   'Login failed. Please try again.';
       setAuthError(msg);
