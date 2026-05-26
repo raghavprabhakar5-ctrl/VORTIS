@@ -897,7 +897,11 @@ export default function VortisAI() {
       let authProvider;
       if (provider === 'google') authProvider = new GoogleAuthProvider();
       else if (provider === 'github') authProvider = new GithubAuthProvider();
-      else if (provider === 'facebook') authProvider = new FacebookAuthProvider();
+      else if (provider === 'facebook') {
+  authProvider = new FacebookAuthProvider();
+  authProvider.addScope('email');
+  authProvider.addScope('public_profile');
+}
       else { setAuthLoading(false); return; }
 
       const result = await signInWithPopup(auth, authProvider);
