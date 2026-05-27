@@ -732,7 +732,7 @@ export default function VortisAI() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [lastMethod, setLastMethod] = useState('text');
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showSidebar, setShowSidebar] = useState(() => window.innerWidth > 768);
   const [showSettings, setShowSettings] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
@@ -811,10 +811,10 @@ export default function VortisAI() {
     styleEl.current.textContent = makeStyles(isDark);
   }, [isDark]);
 
-  useEffect(() => {
-    const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
-    handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
-  }, []);
+ useEffect(() => {
+  const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
+  handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
+}, []);
 
   const LIMITS = { free: { messages: 10, documents: 1, images: 2 }, silver: { messages: 300, documents: 40, images: 20 }, gold: { messages: 500, documents: 50, images: 40 }, platinum: { messages: 999999, documents: 999999, images: 999999 } };
   const PLANS = [
