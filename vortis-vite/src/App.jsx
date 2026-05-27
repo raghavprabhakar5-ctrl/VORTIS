@@ -125,16 +125,14 @@ const FacebookIcon = () => (
 // Converts messy GitHub usernames like "raghavprabhkr-ctrl5" → "Raghav Prabhkr"
 const cleanGitHubName = (raw) => {
   if (!raw) return null;
-  // Remove trailing numbers and common suffixes
   let name = raw
-    .replace(/[-_]/g, ' ')           // dashes/underscores → spaces
-    .replace(/\s*\d+\s*$/, '')       // remove trailing numbers like "ctrl5", "123"
-    .replace(/\s*(ctrl|dev|code|git|hack|pro|tech|the|real|its|im|iam|official)\s*/gi, ' ') // remove common username suffixes
+    .replace(/[-_]/g, ' ')
+    .replace(/\s*\d+\s*$/, '')
+    .replace(/\s*(ctrl|dev|code|git|hack|pro|tech|the|real|its|im|iam|official)\s*/gi, ' ')
     .trim();
-  // Title-case each word
   name = name.split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
- // Return first name only
-return name.split(' ')[0] || null;
+  // Return FIRST NAME ONLY
+  return name.split(' ')[0] || null;
 };
 
 const makeStyles = (isDark) => `
@@ -908,6 +906,11 @@ export default function VortisAI() {
       const result = await signInWithPopup(auth, authProvider);
       const u = result.user;
       let displayName = u.displayName;
+      // Fix cached GitHub names — strip numbers and take first name only
+if (displayName) {
+  displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
+  displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
+}
 
       // ── GITHUB NAME FIX ──
       // Firebase often returns the raw GitHub username (e.g. "raghavprabhkr-ctrl5") not the real name.
