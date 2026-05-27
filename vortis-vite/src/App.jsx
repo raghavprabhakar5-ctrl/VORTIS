@@ -133,7 +133,8 @@ const cleanGitHubName = (raw) => {
     .trim();
   // Title-case each word
   name = name.split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-  return name || null;
+ // Return first name only
+return name.split(' ')[0] || null;
 };
 
 const makeStyles = (isDark) => `
