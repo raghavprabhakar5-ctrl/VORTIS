@@ -1053,6 +1053,18 @@ if (displayName) {
           const p = JSON.parse(u);
           setProfile({ name: p.name, email: p.email, avatar: p.photoURL||p.avatar||'', provider: p.provider });
           setShowLogin(false);
+          try {
+  const saved = localStorage.getItem('vortis_last_chat');
+  if (saved) {
+    const { chatId: savedId, messages: savedMsgs } = JSON.parse(saved);
+    if (savedMsgs?.length > 0) {
+      setChatId(savedId);
+      chatIdRef.current = savedId;
+      setMessages(savedMsgs);
+      localStorage.removeItem('vortis_last_chat');
+    }
+  }
+} catch(_) {}
           try { const d = localStorage.getItem('vortis_usage'); if (d) setUsage(JSON.parse(d)); } catch(_) {}
           loadMemories();
           const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
