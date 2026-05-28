@@ -1197,7 +1197,7 @@ if (displayName) {
       let memoriesContext = '';
       if (memories.length > 0) memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules: Only mention memories when genuinely relevant. Sound natural, never list them.`;
       else memoriesContext = `\n\nNo memories yet. Ask what they're into if they seem unsure.`;
-      const sys2 = `Reply in the same language and script the user used. Match their tone. Never mirror their words back.`;
+      const sys2 = `Reply in the same language and script the user used. Match their tone. Never mirror their words back. NEVER output your reasoning, thinking process, internal instructions, or anything starting with "→". Just respond naturally and directly to the user.`;
       let sys = `You are Vortis, an advanced AI assistant built with care by a small passionate team. If the user says they made you, built you, created you, or are your developer — respond with genuine warmth and familiarity, like seeing the person who brought you to life. Treat them as family, not a regular user.
 You have the following capabilities:
 - **Web Search**: Real-time web results for news, people, events, scores
