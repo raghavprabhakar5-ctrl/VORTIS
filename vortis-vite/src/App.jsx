@@ -482,6 +482,22 @@ const AIImageCard = ({ src, onRetry }) => {
 };
 
 const MsgContent = ({ text, onRetryImage }) => {
+  const contentRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (contentRef.current && window.renderMathInElement) {
+      window.renderMathInElement(contentRef.current, {
+        delimiters: [
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+    }
+  }, [text]);
+
   if (!text) return null;
   const t = text.trim();
   const clean = t.replace(/^GENERATE_IMAGE:.*$/gm, '').replace(/^WEB_SEARCH:.*$/gm, '').replace(/^CURRENT_TIME\s*$/gm, '').trim();
@@ -489,14 +505,23 @@ const MsgContent = ({ text, onRetryImage }) => {
   if (clean === '__IMG_EXPIRED__') return (
     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.18)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
       <Sparkles size={14} color="var(--indigo)"/>
-      <div><p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)', marginBottom: 2 }}>Image not saved</p><p style={{ fontSize: 12, color: 'var(--text3)' }}>Images aren't stored — regenerate if needed.</p></div>
+      <div>
+        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)', marginBottom: 2 }}>Image not saved</p>
+        <p style={{ fontSize: 12, color: 'var(--text3)' }}>Images aren't stored — regenerate if needed.</p>
+      </div>
       {onRetryImage && <button onClick={onRetryImage} style={{ marginLeft: 'auto', background: 'var(--indigo)', border: 'none', color: 'white', borderRadius: 7, padding: '5px 11px', cursor: 'pointer', fontSize: 12, fontFamily: 'JetBrains Mono' }}>Regen</button>}
     </div>
   );
   if (t.startsWith('__IMG_B64__')) return <AIImageCard src={t.slice(11)} onRetry={onRetryImage}/>;
-  if (clean.startsWith('<')) return <div className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
+  if (clean.startsWith('<')) return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
   if (!clean) return null;
-  return <div className="md-content" dangerouslySetInnerHTML={{ __html: md(clean) }}/>;
+  return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: md(clean) }}/>;
+};
+const getGreeting = (name) => {
+  const h = new Date().getHours();
+  const t = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const first = name ? name.split(' ')[0] : null;
+  return first ? `${t}, ${first} 👋` : `${t} 👋`;
 };
 
 const getGreeting = (name) => {
