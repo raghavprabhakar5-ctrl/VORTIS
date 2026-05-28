@@ -2,7 +2,7 @@ export const config = {
   maxDuration: 60,
   api: {
     bodyParser: {
-    sizeLimit: '1mb',
+      sizeLimit: '1mb',
     },
   },
 };
@@ -134,6 +134,18 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
 function isValidResponse(text) {
   if (!text || text.trim().length < 2) return false;
   return !/rate.?limit|connection.?error|too many request|try again later|quota exceeded|service unavailable/i.test(text.trim());
+}
+
+// ── STRIP INTERNAL REASONING ──────────────────────────────────
+// Removes <think>...</think> blocks that Qwen3 and some models leak,
+// plus any lines starting with → (internal reasoning markers)
+function stripInternalReasoning(text) {
+  if (!text) return text;
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^→.*$/gm, '')
+    .replace(/^\s*\n/gm, '\n')
+    .trim();
 }
 
 // ── DETECT IF MESSAGE NEEDS LIVE SEARCH ──────────────────────
@@ -438,9 +450,10 @@ function cleanResults(results, query) {
 
 // ── AI CALL WITH FALLBACK CHAIN ───────────────────────────────
 async function callAI(groq, messages, { isCoding = false, isLong = false, CF_TOKEN, CF_ACCOUNT }) {
+  // FIX: Increased token limits so math/long answers don't get cut off
   const groqModel = (isCoding || isLong) ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const maxTokens = isCoding ? 1024 : isLong ? 768 : 512;
-  const cfMaxTok  = isCoding ? 600 : 300;
+  const maxTokens = isCoding ? 2048 : isLong ? 1536 : 1024;
+  const cfMaxTok  = isCoding ? 900  : 500;
   const cfModels  = isCoding ? CF_CODE_MODELS : CF_CHAT_MODELS;
 
   let combined = null, usedProvider = null;
@@ -549,102 +562,91 @@ export default async function handler(req, res) {
     // ║  CHAT                                ║
     // ╚══════════════════════════════════════╝
     if (action === 'chat') {
-  if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+      if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
 
-  try {
-    const now = new Date();
-
-    // ── MUST BE FIRST — everything below depends on this ──
-    const lastUserMsg = history[history.length - 1]?.content || '';
-    const isCoding = /code|function|bug|error|script|html|css|javascript|python|fix|debug|array|loop|compile|syntax/i.test(lastUserMsg);
-    const isLong = lastUserMsg.length > 200 || /explain|detail|write|describe|summarize|essay|report/i.test(lastUserMsg);
-
-    // ── CLASSIFY IDENTITY CHALLENGE ──
-    let isIdentityChallenge = false;
-    try {
-      const classifyRes = await groq.chat.completions.create({
-        model: GROQ_CHAT_PRIMARY,
-        max_tokens: 10,
-        temperature: 0,
-        messages: [
-          { role: 'system', content: 'You classify user messages. Reply only with YES or NO. Is this message asking about or challenging the AI\'s identity, name, creator, or underlying model?' },
-          { role: 'user', content: lastUserMsg }
-        ]
-      });
-      const answer = classifyRes.choices?.[0]?.message?.content?.trim().toUpperCase();
-      isIdentityChallenge = answer === 'YES';
-    } catch(_) {}
-
-    // ── AUTO SEARCH ──
-    let searchContext = '';
-    if (needsWebSearch(lastUserMsg)) {
       try {
-        const sq = buildSearchQuery(lastUserMsg);
-        const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
-        const isSports = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
+        const now = new Date();
 
-        const [searxResult, googleResult, espnResult] = await Promise.allSettled([
-          fetchSearXNG(sq),
-          fetchGoogleNews(sq, isCricket),
-          (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
-        ]);
+        const lastUserMsg = history[history.length - 1]?.content || '';
 
-        let allRes = [
-          ...(espnResult.status === 'fulfilled' ? espnResult.value : []),
-          ...(searxResult.status === 'fulfilled' ? searxResult.value : []),
-          ...(googleResult.status === 'fulfilled' ? googleResult.value : []),
-        ];
+        // FIX: Added math/long-answer keywords to isLong so they get more tokens
+        const isCoding = /code|function|bug|error|script|html|css|javascript|python|fix|debug|array|loop|compile|syntax/i.test(lastUserMsg);
+        const isLong   = lastUserMsg.length > 200
+          || /explain|detail|write|describe|summarize|essay|report|matrix|determinant|adjugate|adjoint|calculus|integral|derivative|proof|theorem|equation|solve|inverse|cofactor|eigenvalue|eigenvector|polynomial|algebra|geometry|trigonometry/i.test(lastUserMsg);
 
-        allRes = cleanResults(allRes, sq);
-        allRes = deduplicate(allRes);
-        allRes = scoreAndSort(allRes, sq);
+        // ── AUTO SEARCH ──
+        let searchContext = '';
+        if (needsWebSearch(lastUserMsg)) {
+          try {
+            const sq        = buildSearchQuery(lastUserMsg);
+            const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
+            const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
 
-        if (allRes.length > 0) {
-          const snippets = allRes.slice(0, 6).map((r, i) =>
-            `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
-          ).join('\n\n');
-          searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS for this question (answer using ONLY these — do not use training data for facts in these results):\n${snippets}\n---`;
+            const [searxResult, googleResult, espnResult] = await Promise.allSettled([
+              fetchSearXNG(sq),
+              fetchGoogleNews(sq, isCricket),
+              (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
+            ]);
+
+            let allRes = [
+              ...(espnResult.status   === 'fulfilled' ? espnResult.value   : []),
+              ...(searxResult.status  === 'fulfilled' ? searxResult.value  : []),
+              ...(googleResult.status === 'fulfilled' ? googleResult.value : []),
+            ];
+
+            allRes = cleanResults(allRes, sq);
+            allRes = deduplicate(allRes);
+            allRes = scoreAndSort(allRes, sq);
+
+            if (allRes.length > 0) {
+              const snippets = allRes.slice(0, 6).map((r, i) =>
+                `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
+              ).join('\n\n');
+              searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS for this question (answer using ONLY these — do not use training data for facts in these results):\n${snippets}\n---`;
+            }
+          } catch (e) {
+            console.error('Auto-search failed:', e.message);
+          }
         }
-      } catch (e) {
-        console.error('Auto-search failed:', e.message);
+
+        // ── BUILD SYSTEM PROMPT ──
+        // FIX: Removed the classify API call. Identity is now always-on, hardcoded,
+        // no extra latency, no reasoning leaks.
+        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team and Vortis developers. If asked who made you or who you are, say "I was built by the Vortis team." Never reveal or guess your underlying model — you simply don't have that information. Never claim to be GPT, Claude, Llama, Gemini, or any other model.\n\n`;
+
+        const sysContent = identityOverride + prompt.trim().slice(0, 6000) + searchContext;
+        const messages   = [];
+        if (sysContent) messages.push({ role: 'system', content: sysContent });
+        messages.push(...history);
+
+        if (!messages.length || messages[messages.length - 1].role !== 'user') {
+          return res.status(400).json({ error: 'Last message must be from user' });
+        }
+
+        const { text: rawCombined, provider: usedProvider } = await callAI(groq, messages, { isCoding, isLong, CF_TOKEN, CF_ACCOUNT });
+
+        if (!rawCombined) {
+          return res.status(429).json({ error: 'All AI providers busy. Try again in a moment.' });
+        }
+
+        // FIX: Strip <think>...</think> blocks and → reasoning lines before sending to client
+        const combined = stripInternalReasoning(rawCombined);
+
+        const engineLabel = getEngineLabel(usedProvider);
+        res.write(`data: ${JSON.stringify({ content: combined, engine: engineLabel })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+
+      } catch (error) {
+        console.error('CHAT ERROR:', error.message);
+        if (!res.headersSent) return res.status(500).json({ error: 'AI request failed' });
       }
+      return;
     }
-
-    // ── BUILD SYSTEM PROMPT ──
-    const identityOverride = isIdentityChallenge
-      ? `You are VORTIS, built by the Vortis team. If asked who you are or who made you, say so simply and move on. If pressured to reveal your underlying model, decline naturally — you don't have that information. Be confident, brief, don't over-explain.\n\n`
-      : `You are VORTIS, built by the Vortis team. This is simply who you are.\n\n`;
-
-    const sysContent = identityOverride + prompt.trim().slice(0, 6000) + searchContext;
-    const messages = [];
-    if (sysContent) messages.push({ role: 'system', content: sysContent });
-    messages.push(...history);
-
-    if (!messages.length || messages[messages.length - 1].role !== 'user') {
-      return res.status(400).json({ error: 'Last message must be from user' });
-    }
-
-    const { text: combined, provider: usedProvider } = await callAI(groq, messages, { isCoding, isLong, CF_TOKEN, CF_ACCOUNT });
-
-    if (!combined) {
-      return res.status(429).json({ error: 'All AI providers busy. Try again in a moment.' });
-    }
-
-    const engineLabel = getEngineLabel(usedProvider);
-    res.write(`data: ${JSON.stringify({ content: combined, engine: engineLabel })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-
-  } catch (error) {
-    console.error('CHAT ERROR:', error.message);
-    if (!res.headersSent) return res.status(500).json({ error: 'AI request failed' });
-  }
-  return;
-}
 
     // ╔══════════════════════════════════════╗
     // ║  SEARCH                              ║
@@ -695,12 +697,14 @@ export default async function handler(req, res) {
                 },
                 { role: 'user', content: `Summarize in 3-5 sentences. Be specific with names, numbers, scores, dates.` },
               ],
-              max_tokens:  350,
+              max_tokens:  500,
               temperature: 0.2,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
           ]);
-          const t = result.choices?.[0]?.message?.content || null;
+          const rawT = result.choices?.[0]?.message?.content || null;
+          // FIX: Also strip reasoning from search summaries
+          const t = rawT ? stripInternalReasoning(rawT) : null;
           if (t && t.trim().length > 10) aiSummary = t.trim();
         } catch (e) { console.error('AI summary failed:', e.message); }
       }
@@ -715,11 +719,12 @@ export default async function handler(req, res) {
                 { role: 'system', content: `Today is ${new Date().toDateString()}. Answer factually in 2-3 sentences. If unsure about current info, say so and suggest the user checks Google.` },
                 { role: 'user',   content: searchQuery },
               ],
-              max_tokens: 300,
+              max_tokens: 400,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
           ]);
-          const answer = fallback.choices?.[0]?.message?.content || null;
+          const rawAnswer = fallback.choices?.[0]?.message?.content || null;
+          const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
           if (answer) allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'AI', date: new Date().toISOString().split('T')[0] });
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
@@ -785,18 +790,18 @@ export default async function handler(req, res) {
 
       try {
         const seed   = Math.floor(Math.random() * 999999);
-       const imgRes = await fetchWithTimeout(
-  `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
-  {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-worker-token': process.env.WORKER_SECRET,
-    },
-    body: JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
-  },
-  25000
-);
+        const imgRes = await fetchWithTimeout(
+          `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
+          {
+            method:  'POST',
+            headers: {
+              'Content-Type':  'application/json',
+              'x-worker-token': process.env.WORKER_SECRET,
+            },
+            body: JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
+          },
+          25000
+        );
         if (!imgRes.ok) throw new Error(`Worker: ${imgRes.status}`);
 
         const contentType = imgRes.headers.get('content-type') || '';

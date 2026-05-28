@@ -484,18 +484,27 @@ const AIImageCard = ({ src, onRetry }) => {
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
-  React.useEffect(() => {
-    if (contentRef.current && window.renderMathInElement) {
-      window.renderMathInElement(contentRef.current, {
-        delimiters: [
-          { left: "\\[", right: "\\]", display: true },
-          { left: "\\(", right: "\\)", display: false },
-          { left: "$$", right: "$$", display: true },
-          { left: "$", right: "$", display: false }
-        ],
-        throwOnError: false
-      });
-    }
+ React.useEffect(() => {
+    const renderKatex = () => {
+      if (contentRef.current && window.renderMathInElement) {
+        try {
+          window.renderMathInElement(contentRef.current, {
+            delimiters: [
+              { left: "\\[", right: "\\]", display: true },
+              { left: "\\(", right: "\\)", display: false },
+              { left: "$$", right: "$$", display: true },
+              { left: "$", right: "$", display: false }
+            ],
+            throwOnError: false,
+            strict: false
+          });
+        } catch(e) {}
+      } else if (!window.renderMathInElement) {
+        // Retry until KaTeX script loads
+        setTimeout(renderKatex, 300);
+      }
+    };
+    renderKatex();
   }, [text]);
 
   if (!text) return null;
@@ -1258,7 +1267,15 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-      const displayText = cleaned.replace(/^GENERATE_IMAGE:.*$/gm, '').replace(/^WEB_SEARCH:.*$/gm, '').replace(/^CURRENT_TIME\s*$/gm, '').replace(/^#{5,}\s*$/gm, '').replace(/(#+\+){3,}/g, '').trim();
+      const displayText = cleaned
+  .replace(/^GENERATE_IMAGE:.*$/gm, '')
+  .replace(/^WEB_SEARCH:.*$/gm, '')
+  .replace(/^CURRENT_TIME\s*$/gm, '')
+  .replace(/^#{5,}\s*$/gm, '')
+  .replace(/(#+\+){3,}/g, '')
+  .replace(/^→.*$/gm, '')           // strip leaked reasoning lines
+  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')  // strip <think> blocks
+  .trim();
       addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
