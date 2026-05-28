@@ -51,9 +51,9 @@ function getEngineLabel(p) {
 const rateLimiter = new Map();
 const RATE_LIMITS = {
   chat:   { window: 60000, max: 30 },
-  image:  { window: 60000, max: 5  },
+  image:  { window: 60000, max: 10 },
   search: { window: 60000, max: 20 },
-  vision: { window: 60000, max: 5  },
+  vision: { window: 60000, max: 10 },
 };
 
 setInterval(() => {

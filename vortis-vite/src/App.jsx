@@ -654,9 +654,10 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               <div className="settings-section-sub">Daily limits — resets at midnight</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
-                  { k: 'messages', label: 'Messages', color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
-                  { k: 'documents', label: 'Documents', color: 'var(--green)', icon: <FileText size={14}/> },
-                  { k: 'images', label: 'Images', color: 'var(--cyan)', icon: <ImageIcon size={14}/> },
+                 { k: 'messages', label: 'Messages', color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
+{ k: 'documents', label: 'Documents', color: 'var(--green)', icon: <FileText size={14}/> },
+{ k: 'images', label: 'Image Gen', color: 'var(--cyan)', icon: <ImageIcon size={14}/> },
+{ k: 'vision', label: 'Vision', color: 'var(--violet)', icon: <Eye size={14}/> },
                 ].map(({ k, label, color, icon }) => {
                   const limit = LIMITS[tier][k]; const pct = usagePct(k);
                   return (
@@ -799,7 +800,7 @@ export default function VortisAI() {
   const [upiId, setUpiId] = useState('');
   const [processingStatus, setProcessingStatus] = useState('');
   const [tier, setTier] = useState('free');
-  const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0 });
+ const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0, vision: 0 });
   const [resetDay, setResetDay] = useState(new Date().toDateString());
   const [profile, setProfile] = useState({ name: '', email: '', avatar: '', provider: 'none' });
   const [showLogin, setShowLogin] = useState(() => { try { return !localStorage.getItem('vortis_user'); } catch(_) { return true; } });
@@ -860,23 +861,29 @@ export default function VortisAI() {
   handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
 }, []);
 
-  const LIMITS = { free: { messages: 10, documents: 1, images: 2 }, silver: { messages: 300, documents: 40, images: 20 }, gold: { messages: 500, documents: 50, images: 40 }, platinum: { messages: 999999, documents: 999999, images: 999999 } };
-  const PLANS = [
-    { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', 'Priority access', 'Voice mode'] },
-    { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', 'Priority responses', 'Deep research'] },
-    { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'VIP support', 'Early features'] },
-  ];
-  const availablePlans = PLANS.filter(p => tierIndex(p.tier) > tierIndex(tier));
-  const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
-  const QUICK_ACTIONS = [
-    { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
-    { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
-    { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
-    { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
-    { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
-    { icon: <BookOpen size={12}/>, text: 'Explain quantum computing', color: '#ec4899' },
-  ];
+ const LIMITS = { 
+  free:     { messages: 10, documents: 1, images: 2, vision: 0 }, 
+  silver:   { messages: 300, documents: 40, images: 20, vision: 3 }, 
+  gold:     { messages: 500, documents: 50, images: 40, vision: 10 }, 
+  platinum: { messages: 999999, documents: 999999, images: 999999, vision: 999999 } 
+};
 
+const PLANS = [
+  { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice mode'] },
+  { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', '10 vision/day', 'Priority responses', 'Deep research'] },
+  { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'Unlimited vision', 'VIP support', 'Early features'] },
+];
+
+const availablePlans = PLANS.filter(p => tierIndex(p.tier) > tierIndex(tier));
+const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
+const QUICK_ACTIONS = [
+  { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
+  { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
+  { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
+  { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
+  { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
+  { icon: <BookOpen size={12}/>, text: 'Explain quantum computing', color: '#ec4899' },
+];
   const artifacts = useMemo(() => {
     const items = [];
     messages.forEach((msg, idx) => {
@@ -990,10 +997,10 @@ if (displayName) {
         if (userSnap.exists()) {
           const data = userSnap.data();
           if (data.tier) setTier(data.tier); else setTier('free');
-          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0 });
+          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         } else {
-          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0 });
-          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
+          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
+          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0,  vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
         }
       } catch(_) {}
 
@@ -1017,7 +1024,7 @@ if (displayName) {
       onConfirm: () => {
         setConfirmDialog(null); setShowSettings(false); setShowLogin(true);
         setProfile({ name: '', email: '', avatar: '', provider: 'none' });
-        setUsage({ messages: 0, documents: 0, images: 0 });
+        setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setSavedChats([]); setMemories([]); setAuthError('');
         startNewChat();
         try { localStorage.removeItem('vortis_user'); } catch(_) {}
@@ -1031,7 +1038,7 @@ if (displayName) {
       message: 'Delete all chats, memories, and data? This cannot be undone.',
       onConfirm: async () => {
         setConfirmDialog(null); setShowSettings(false);
-        setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0 });
+        setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
         setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
         convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false);
@@ -1101,7 +1108,7 @@ if (displayName) {
 
   const checkReset = () => {
     const today = new Date().toDateString();
-    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
+    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0,  vision: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
   };
 
   const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
@@ -1382,12 +1389,14 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     reader.readAsText(file); e.target.value = '';
   };
 
-  const handleImgUpload = async (e) => {
-    if (!canDo('images')) { hitLimit(); return; } const file = e.target.files?.[0]; if (!file) return;
-    if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
-    const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
-    reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
-  };
+ const handleImgUpload = async (e) => {
+  if (!canDo('vision')) { hitLimit(); return; }  // ✅ add this first
+  if (!canDo('images')) { hitLimit(); return; }  // ✅ keep this too
+  const file = e.target.files?.[0]; if (!file) return;
+  if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
+  const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
+  reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
+};
 
   const handleSend = () => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
