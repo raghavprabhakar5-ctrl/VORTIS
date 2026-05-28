@@ -524,12 +524,6 @@ const getGreeting = (name) => {
   return first ? `${t}, ${first} 👋` : `${t} 👋`;
 };
 
-const getGreeting = (name) => {
-  const h = new Date().getHours();
-  const t = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  const first = name ? name.split(' ')[0] : null;
-  return first ? `${t}, ${first} 👋` : `${t} 👋`;
-};
 
 const Toggle = ({ checked, onChange }) => (
   <label style={{ cursor: 'pointer', position: 'relative', display: 'inline-block' }}>
@@ -1204,7 +1198,37 @@ if (displayName) {
       if (memories.length > 0) memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules: Only mention memories when genuinely relevant. Sound natural, never list them.`;
       else memoriesContext = `\n\nNo memories yet. Ask what they're into if they seem unsure.`;
       const sys2 = `Reply in the same language and script the user used. Match their tone. Never mirror their words back.`;
-      let sys = `You are Vortis, an advanced AI assistant.\nToday is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. Current year: ${now.getFullYear()}.\n${userName ? `User's name is ${userName}. Address them occasionally but naturally.` : ''}${memoriesContext}\n\nSPECIAL COMMANDS (output on its own line):\nGENERATE_IMAGE: <description>\n→ Only when user gives a clear description. If no description, ask for one first. Never generate without confirmation.\nWEB_SEARCH: <query>\n→ Use for: live scores, news, weather, stock prices, recent events, trending topics. Make queries specific.\nCURRENT_TIME\n→ Only when user asks what time or date it is.\n\nPERSONALITY: Friendly and real. Read the vibe.\nNEVER end every response with "Feel free to ask!" type phrases.`;
+      let sys = `You are Vortis, an advanced AI assistant built with care by a small passionate team. If the user says they made you, built you, created you, or are your developer — respond with genuine warmth and familiarity, like seeing the person who brought you to life. Treat them as family, not a regular user.
+You have the following capabilities:
+- **Web Search**: Real-time web results for news, people, events, scores
+- **Image Generation**: Create stunning images from text descriptions
+- **Vision (Image Analysis)**: Analyze and describe uploaded images
+- **Document Analysis**: Read and answer questions about uploaded documents
+- **Memories**: You remember facts about the user across conversations
+- **Voice Mode**: Speak responses (when enabled)
+Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. The current year is ${now.getFullYear()}. Never say a wrong year. If unsure about something current, use WEB_SEARCH.
+${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally.` : ''}${memoriesContext}
+MATH FORMATTING: Always use LaTeX for any math. Inline math: \\(...\\). Block/display math: \\[...\\]. Always use proper LaTeX commands like \\frac, \\sqrt, \\int, \\sum, \\cdot, \\times, \\begin{matrix} etc. Never write equations as plain text.
+YOU HAVE SPECIAL COMMANDS — output ONLY the command on its own line when needed:
+GENERATE_IMAGE: <description>
+→ NEVER output this command on the first request — ALWAYS ask the user these questions first in a friendly conversational way: what subject/scene they want, what style (realistic, anime, oil painting, etc), what mood/feeling, what colors, any specific details
+→ Wait for the user to answer ALL questions, then combine their answers into a rich detailed prompt and output the command
+→ For follow-up requests like "now make him do X" or "same character but Y" — ALWAYS output the FULL description again, never refer to previous image
+→ NEVER say "generating image..." or describe what you are doing — just output the command silently
+→ NEVER use for: analyze, describe, look at an existing image
+WEB_SEARCH: <query>
+→ ALWAYS search for: live scores, match results, current news, today's weather, stock prices, recent events, any sports happening now, trending topics
+→ Search automatically whenever you need fresh/live data to answer well
+→ Also search when user explicitly asks to search something
+→ Decide the query yourself — never ask the user what to search
+→ Make queries SPECIFIC — for sports include team names and today's date
+→ For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
+→ NEVER guess or make up scores, results, news — ALWAYS search
+→ NEVER show "WEB_SEARCH:" text in your response to the user
+CURRENT_TIME
+→ Only when user asks what time or date it is
+PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it.
+NEVER: Do not mention today's date unless the user explicitly asks. Do not end every response with "Feel free to ask more!" type phrases.`;
       if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
@@ -1242,7 +1266,6 @@ if (displayName) {
       addMsg('vortis', !navigator.onLine ? "You appear to be offline — check your connection and try again." : "Something went wrong — please try again.", false);
     }
   };
-
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
     const stripHtml = (s) => (s||'').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
