@@ -545,6 +545,22 @@ const AIImageCard = ({ src, onRetry }) => {
 };
 
 const MsgContent = ({ text, onRetryImage }) => {
+  const contentRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (contentRef.current && window.renderMathInElement) {
+      window.renderMathInElement(contentRef.current, {
+        delimiters: [
+          { left: "\\[", right: "\\]", display: true },
+          { left: "\\(", right: "\\)", display: false },
+          { left: "$$", right: "$$", display: true },
+          { left: "$", right: "$", display: false }
+        ],
+        throwOnError: false
+      });
+    }
+  }, [text]);
+
   if (!text) return null;
   const t = text.trim();
   const clean = t.replace(/^GENERATE_IMAGE:.*$/gm, '').replace(/^WEB_SEARCH:.*$/gm, '').replace(/^CURRENT_TIME\s*$/gm, '').trim();
@@ -560,11 +576,10 @@ const MsgContent = ({ text, onRetryImage }) => {
     </div>
   );
   if (t.startsWith('__IMG_B64__')) return <AIImageCard src={t.slice(11)} onRetry={onRetryImage}/>;
-  if (clean.startsWith('<')) return <div className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
+  if (clean.startsWith('<')) return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
   if (!clean) return null;
-  return <div className="md-content" dangerouslySetInnerHTML={{ __html: md(clean) }}/>;
+  return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: md(clean) }}/>;
 };
-
 const getGreeting = (name) => {
   const h = new Date().getHours();
   const t = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
