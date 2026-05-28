@@ -32,10 +32,10 @@ const getAuthHeader = async () => {
 };
 
 const pushHistory = (historyRef, role, content) => {
-  const clean = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 1200);
+  const clean = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 4000);
   if (!clean) return;
   historyRef.current.push({ role, content: clean });
-  if (historyRef.current.length > 16) historyRef.current = historyRef.current.slice(-16);
+  if (historyRef.current.length > 30) historyRef.current = historyRef.current.slice(-30);
 };
 
 // ── EXACT LOGO COMPONENTS FROM DOC 3/4 ──
@@ -443,6 +443,23 @@ const ImageLightbox = ({ src, onClose }) => {
     </div>
   );
 };
+
+useEffect(() => {
+  const handleBeforeUnload = () => {
+    try {
+      localStorage.setItem('vortis_last_chat', JSON.stringify({
+        chatId: chatIdRef.current,
+        messages: messages.map(m =>
+          m.text === '__IMG_LOADING__'
+            ? { ...m, text: '__IMG_EXPIRED__' }
+            : { ...m, text: m.text?.slice(0, 10000) }
+        )
+      }));
+    } catch(_) {}
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+}, [messages]);
 
 const AIImageCard = ({ src, onRetry }) => {
   const [open, setOpen] = useState(false);
@@ -1036,6 +1053,18 @@ if (displayName) {
           const p = JSON.parse(u);
           setProfile({ name: p.name, email: p.email, avatar: p.photoURL||p.avatar||'', provider: p.provider });
           setShowLogin(false);
+          try {
+  const saved = localStorage.getItem('vortis_last_chat');
+  if (saved) {
+    const { chatId: savedId, messages: savedMsgs } = JSON.parse(saved);
+    if (savedMsgs?.length > 0) {
+      setChatId(savedId);
+      chatIdRef.current = savedId;
+      setMessages(savedMsgs);
+      localStorage.removeItem('vortis_last_chat');
+    }
+  }
+} catch(_) {}
           try { const d = localStorage.getItem('vortis_usage'); if (d) setUsage(JSON.parse(d)); } catch(_) {}
           loadMemories();
           const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {

@@ -2,7 +2,7 @@ export const config = {
   maxDuration: 60,
   api: {
     bodyParser: {
-      sizeLimit: '1mb',
+      sizeLimit: '2mb',
     },
   },
 };
@@ -23,7 +23,6 @@ const CF_CHAT_MODELS = [
   '@cf/meta/llama-4-scout-17b-16e-instruct',
   '@cf/openai/gpt-oss-20b',
 ];
-
 const CF_CODE_MODELS = [
   '@cf/qwen/qwen3-30b-a3b-fp8',
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -51,10 +50,10 @@ function getEngineLabel(p) {
 // ── RATE LIMITER ──────────────────────────────────────────────
 const rateLimiter = new Map();
 const RATE_LIMITS = {
-  chat:   { window: 60000, max: 20 },
-  image:  { window: 60000, max: 3  },
-  search: { window: 60000, max: 15 },
-  vision: { window: 60000, max: 3  },
+  chat:   { window: 60000, max: 30 },
+  image:  { window: 60000, max: 5  },
+  search: { window: 60000, max: 20 },
+  vision: { window: 60000, max: 5  },
 };
 
 setInterval(() => {
@@ -88,13 +87,13 @@ function sanitizeString(str, maxLen = 2000) {
     .replace(/on\w+\s*=/gi, '');
 }
 
-function sanitizeHistory(history, maxMessages = 16) {
+function sanitizeHistory(history, maxMessages = 30) {
   if (!Array.isArray(history)) return [];
   return history.slice(-maxMessages)
     .filter(m => m && typeof m === 'object' && m.role && m.content)
     .map(m => ({
       role:    ['user', 'assistant', 'system'].includes(m.role) ? m.role : 'user',
-      content: sanitizeString(String(m.content), 4000),
+      content: sanitizeString(String(m.content), 8000),
     }));
 }
 
@@ -137,8 +136,6 @@ function isValidResponse(text) {
 }
 
 // ── STRIP INTERNAL REASONING ──────────────────────────────────
-// Removes <think>...</think> blocks that Qwen3 and some models leak,
-// plus any lines starting with → (internal reasoning markers)
 function stripInternalReasoning(text) {
   if (!text) return text;
   return text
@@ -151,24 +148,12 @@ function stripInternalReasoning(text) {
 // ── DETECT IF MESSAGE NEEDS LIVE SEARCH ──────────────────────
 function needsWebSearch(text) {
   const low = text.toLowerCase();
-
-  // Sports - cricket
   if (/\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|virat|kohli|rohit|dhoni|wicket|innings|over|scorecard)\b/.test(low)) return true;
-  // Sports - others
   if (/\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis|f1|formula 1)\b/.test(low)) return true;
-
-  // Time-sensitive keywords
   if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent)\b/.test(low)) return true;
-
-  // News/current events
   if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather)\b/.test(low)) return true;
-
-  // Year-specific
   if (/\b(2024|2025|2026)\b/.test(low)) return true;
-
-  // Current state questions
   if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
-
   return false;
 }
 
@@ -184,22 +169,18 @@ function parseSearXNGHtml(html, instanceUrl) {
   const results      = [];
   const articleRegex = /<article[^>]+class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
   let articleMatch;
-
   while ((articleMatch = articleRegex.exec(html)) !== null) {
     const block      = articleMatch[1];
     const titleMatch =
       block.match(/<h3[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i) ||
       block.match(/<a[^>]+class="[^"]*url_header[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
     if (!titleMatch) continue;
-
     const rawUrl   = titleMatch[1].trim();
     const rawTitle = titleMatch[2].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
     if (!rawTitle || rawTitle.length < 3) continue;
     if (rawUrl.startsWith('/') || rawUrl.includes(instanceUrl)) continue;
-
     const snippetMatch = block.match(/<p[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
     const cleanSnippet = (snippetMatch ? snippetMatch[1] : '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim().slice(0, 300);
-
     let sourceLabel    = 'Web';
     const enginesMatch = block.match(/<span[^>]*class="[^"]*engines[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
     if (enginesMatch) {
@@ -209,11 +190,9 @@ function parseSearXNGHtml(html, instanceUrl) {
     } else {
       try { sourceLabel = new URL(rawUrl).hostname.replace('www.', '').split('.')[0]; } catch (_) {}
     }
-
     const dateMatch = block.match(/class="[^"]*published_date[^"]*"[^>]*>([\s\S]*?)<\/span>/i) || block.match(/data-published="([^"]+)"/i);
     let date        = new Date().toISOString().split('T')[0];
     if (dateMatch) { const p = new Date(dateMatch[1].trim()); if (!isNaN(p.getTime())) date = p.toISOString().split('T')[0]; }
-
     results.push({ title: rawTitle, snippet: cleanSnippet.length > 10 ? cleanSnippet : rawTitle, link: rawUrl, source: sourceLabel, date });
     if (results.length >= 10) break;
   }
@@ -227,14 +206,12 @@ async function fetchSearXNG(query) {
     'https://searx.oloke.xyz', 'https://etsi.me', 'https://searx.work', 'https://searxng.site',
   ];
   const shuffled = [...INSTANCES].sort(() => Math.random() - 0.5);
-
   for (const instance of shuffled.slice(0, 6)) {
     try {
       const jsonUrl = `${instance}/search?q=${encodeURIComponent(query)}&format=json&categories=general,news&language=en-US&locale=en`;
       const jsonRes = await fetchWithTimeout(jsonUrl, {
         headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json, text/html', 'Accept-Language': 'en-US,en;q=0.9' },
       }, 6000);
-
       if (jsonRes.ok) {
         const ct = jsonRes.headers.get('content-type') || '';
         if (ct.includes('json')) {
@@ -250,7 +227,6 @@ async function fetchSearXNG(query) {
           }
         }
       }
-
       const htmlRes = await fetchWithTimeout(
         `${instance}/search?q=${encodeURIComponent(query)}&categories=general,news&language=en-US&locale=en`,
         { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9' } },
@@ -305,7 +281,6 @@ async function fetchGoogleNews(query, isCricket) {
   const editions = isCricket ? [{ hl: 'en-IN', gl: 'IN', ceid: 'IN:en' }] : [{ hl: 'en-US', gl: 'US', ceid: 'US:en' }, { hl: 'en-IN', gl: 'IN', ceid: 'IN:en' }];
   const windows  = isCricket ? ['6h', '1d', '7d'] : ['2d', '7d'];
   const headers  = { 'User-Agent': BROWSER_UA, 'Accept': 'application/rss+xml, application/xml, text/xml, */*', 'Accept-Language': 'en-US,en;q=0.9', 'Cache-Control': 'no-cache', 'Referer': 'https://news.google.com/' };
-
   for (const edition of editions) {
     for (const when of windows) {
       try {
@@ -332,7 +307,6 @@ async function fetchESPN(query) {
   const low     = query.toLowerCase();
   const today   = new Date().toISOString().split('T')[0];
   const results = [];
-
   const sportMap = [
     { keys: ['nba', 'basketball'],        sport: 'basketball', league: 'nba',            label: 'NBA'        },
     { keys: ['nfl', 'american football'], sport: 'football',   league: 'nfl',            label: 'NFL'        },
@@ -346,16 +320,13 @@ async function fetchESPN(query) {
     { keys: ['mls'],                      sport: 'soccer',     league: 'usa.1',          label: 'MLS'        },
     { keys: ['football', 'soccer'],       sport: 'soccer',     league: 'eng.1',          label: 'Soccer'     },
   ];
-
   const matched = sportMap.find(s => s.keys.some(k => low.includes(k)));
   if (!matched) return [];
-
   try {
     const url = `https://site.api.espn.com/apis/site/v2/sports/${matched.sport}/${matched.league}/scoreboard`;
     const res = await fetchWithTimeout(url, { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } }, 8000);
     if (!res.ok) return [];
     const data = await res.json();
-
     for (const event of (data.events || []).slice(0, 5)) {
       const comp = event.competitions?.[0];
       if (!comp) continue;
@@ -375,7 +346,6 @@ async function fetchESPN(query) {
       results.push({ title, snippet, link: `https://www.espn.com/${matched.sport}/game/_/gameId/${event.id}`, source: `ESPN ${matched.label}`, date: today });
     }
   } catch (e) { console.log('ESPN error:', e.message); }
-
   return results;
 }
 
@@ -419,7 +389,6 @@ function scoreAndSort(results, query) {
   const words     = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   const today     = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
   return results.map(r => {
     let score = 0;
     words.forEach(w => { if (r.title.toLowerCase().includes(w)) score += 3; if (r.snippet.toLowerCase().includes(w)) score += 1; });
@@ -449,12 +418,12 @@ function cleanResults(results, query) {
 }
 
 // ── AI CALL WITH FALLBACK CHAIN ───────────────────────────────
-async function callAI(groq, messages, { isCoding = false, isLong = false, CF_TOKEN, CF_ACCOUNT }) {
-  // FIX: Increased token limits so math/long answers don't get cut off
-  const groqModel = (isCoding || isLong) ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const maxTokens = isCoding ? 2048 : isLong ? 1536 : 1024;
-  const cfMaxTok  = isCoding ? 900  : 500;
-  const cfModels  = isCoding ? CF_CODE_MODELS : CF_CHAT_MODELS;
+async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
+  // Balanced: enough tokens to never cut off, but AI is instructed to be concise
+  const groqModel = GROQ_CHAT_QUALITY;
+  const maxTokens = 3000;
+  const cfMaxTok  = 1200;
+  const cfModels  = CF_CHAT_MODELS;
 
   let combined = null, usedProvider = null;
 
@@ -462,7 +431,7 @@ async function callAI(groq, messages, { isCoding = false, isLong = false, CF_TOK
   try {
     const result = await Promise.race([
       groq.chat.completions.create({ model: groqModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Groq timeout')), 15000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Groq timeout')), 25000)),
     ]);
     const text = result.choices?.[0]?.message?.content || null;
     if (isValidResponse(text)) { combined = text; usedProvider = groqModel; }
@@ -474,7 +443,7 @@ async function callAI(groq, messages, { isCoding = false, isLong = false, CF_TOK
     try {
       const result = await Promise.race([
         groq.chat.completions.create({ model: fallbackModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Groq fallback timeout')), 12000)),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Groq fallback timeout')), 20000)),
       ]);
       const text = result.choices?.[0]?.message?.content || null;
       if (isValidResponse(text)) { combined = text; usedProvider = fallbackModel; }
@@ -548,7 +517,7 @@ export default async function handler(req, res) {
     if (!['chat', 'search', 'image', 'vision'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
-    const prompt  = sanitizeString(body.prompt  || '', 10000);
+    const prompt  = sanitizeString(body.prompt  || '', 15000);
     const query   = sanitizeString(body.query   || '', 500);
     const image   = body.image || null;
     const history = sanitizeHistory(body.history || []);
@@ -570,13 +539,11 @@ export default async function handler(req, res) {
 
       try {
         const now = new Date();
-
         const lastUserMsg = history[history.length - 1]?.content || '';
 
-        // FIX: Added math/long-answer keywords to isLong so they get more tokens
-        const isCoding = /code|function|bug|error|script|html|css|javascript|python|fix|debug|array|loop|compile|syntax/i.test(lastUserMsg);
-        const isLong   = lastUserMsg.length > 200
-          || /explain|detail|write|describe|summarize|essay|report|matrix|determinant|adjugate|adjoint|calculus|integral|derivative|proof|theorem|equation|solve|inverse|cofactor|eigenvalue|eigenvector|polynomial|algebra|geometry|trigonometry/i.test(lastUserMsg);
+        // No triggers — always give the AI max tokens to decide length itself
+        const isCoding = false;
+        const isLong   = true;
 
         // ── AUTO SEARCH ──
         let searchContext = '';
@@ -606,19 +573,17 @@ export default async function handler(req, res) {
               const snippets = allRes.slice(0, 6).map((r, i) =>
                 `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
               ).join('\n\n');
-              searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS for this question (answer using ONLY these — do not use training data for facts in these results):\n${snippets}\n---`;
+              searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
             }
           } catch (e) {
             console.error('Auto-search failed:', e.message);
           }
         }
 
-        // ── BUILD SYSTEM PROMPT ──
-        // FIX: Removed the classify API call. Identity is now always-on, hardcoded,
-        // no extra latency, no reasoning leaks.
-        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team and Vortis developers. If asked who made you or who you are, say "I was built by the Vortis team." Never reveal or guess your underlying model — you simply don't have that information. Never claim to be GPT, Claude, Llama, Gemini, or any other model.\n\n`;
+        // ── IDENTITY + SYSTEM PROMPT ──
+        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.\n\nRESPONSE STYLE: Be concise and to the point. Short answers for simple questions. Only go long when the question genuinely requires it (math steps, code, detailed explanations). Never pad or repeat yourself. But always finish your answer completely — never stop mid-sentence or mid-step.\n\n`;
 
-        const sysContent = identityOverride + prompt.trim().slice(0, 6000) + searchContext;
+        const sysContent = identityOverride + prompt.trim().slice(0, 10000) + searchContext;
         const messages   = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
         messages.push(...history);
@@ -627,16 +592,15 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'Last message must be from user' });
         }
 
-        const { text: rawCombined, provider: usedProvider } = await callAI(groq, messages, { isCoding, isLong, CF_TOKEN, CF_ACCOUNT });
+        const { text: rawCombined, provider: usedProvider } = await callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT });
 
         if (!rawCombined) {
           return res.status(429).json({ error: 'All AI providers busy. Try again in a moment.' });
         }
 
-        // FIX: Strip <think>...</think> blocks and → reasoning lines before sending to client
-        const combined = stripInternalReasoning(rawCombined);
-
+        const combined    = stripInternalReasoning(rawCombined);
         const engineLabel = getEngineLabel(usedProvider);
+
         res.write(`data: ${JSON.stringify({ content: combined, engine: engineLabel })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
@@ -677,15 +641,12 @@ export default async function handler(req, res) {
       allResults = deduplicate(allResults);
       allResults = scoreAndSort(allResults, searchQuery);
 
-      // AI summary built strictly from search results
       let aiSummary = null;
       if (allResults.length > 0) {
         const contextSnippets = allResults.slice(0, 6).map((r, i) =>
           `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 400)}\nSource: ${r.source} | Date: ${r.date}`
         ).join('\n\n');
-
         const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
         try {
           const result = await Promise.race([
             groq.chat.completions.create({
@@ -693,18 +654,17 @@ export default async function handler(req, res) {
               messages: [
                 {
                   role:    'system',
-                  content: `Today is ${today}. Summarize these search results.\nRULES:\n- Use ONLY the results below. Never use training data.\n- Be specific: names, scores, dates, numbers.\n- 3-5 sentences. Direct and factual.\n- If results show a sports result, state it clearly.\n- Do NOT say "as of my knowledge" or "I'm not sure".\n- Do NOT mention that you searched the web.\n\nSEARCH RESULTS:\n${contextSnippets}`,
+                  content: `Today is ${today}. Summarize these search results.\nRULES:\n- Use ONLY the results below.\n- Be specific: names, scores, dates, numbers.\n- 3-5 sentences. Direct and factual.\n- If results show a sports result, state it clearly.\n- Do NOT say "as of my knowledge".\n\nSEARCH RESULTS:\n${contextSnippets}`,
                 },
                 { role: 'user', content: `Summarize in 3-5 sentences. Be specific with names, numbers, scores, dates.` },
               ],
-              max_tokens:  500,
+              max_tokens:  800,
               temperature: 0.2,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
           ]);
           const rawT = result.choices?.[0]?.message?.content || null;
-          // FIX: Also strip reasoning from search summaries
-          const t = rawT ? stripInternalReasoning(rawT) : null;
+          const t    = rawT ? stripInternalReasoning(rawT) : null;
           if (t && t.trim().length > 10) aiSummary = t.trim();
         } catch (e) { console.error('AI summary failed:', e.message); }
       }
@@ -719,7 +679,7 @@ export default async function handler(req, res) {
                 { role: 'system', content: `Today is ${new Date().toDateString()}. Answer factually in 2-3 sentences. If unsure about current info, say so and suggest the user checks Google.` },
                 { role: 'user',   content: searchQuery },
               ],
-              max_tokens: 400,
+              max_tokens: 600,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
           ]);
@@ -795,7 +755,7 @@ export default async function handler(req, res) {
           {
             method:  'POST',
             headers: {
-              'Content-Type':  'application/json',
+              'Content-Type':   'application/json',
               'x-worker-token': process.env.WORKER_SECRET,
             },
             body: JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
@@ -803,10 +763,8 @@ export default async function handler(req, res) {
           25000
         );
         if (!imgRes.ok) throw new Error(`Worker: ${imgRes.status}`);
-
         const contentType = imgRes.headers.get('content-type') || '';
         if (contentType.includes('json')) return res.status(200).json(await imgRes.json());
-
         const responseText = await imgRes.text();
         try {
           return res.status(200).json(JSON.parse(responseText));
