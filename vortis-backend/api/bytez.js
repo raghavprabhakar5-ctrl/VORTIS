@@ -707,15 +707,16 @@ export default async function handler(req, res) {
           {
             method:  'POST',
             headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-              messages: [{
-                role:    'user',
-                content: [
-                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-                  { type: 'text',      text: sanitizeString(prompt || 'Describe this image in detail.', 500) },
-                ],
-              }],
-            }),
+           body: JSON.stringify({
+  messages: [{
+    role: 'user',
+    content: [
+      { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+      { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail. If there is a math problem, solve it completely step by step.', 500) },
+    ],
+  }],
+  max_tokens: 2048,  // ✅ add this
+}),
           }
         );
 
@@ -726,7 +727,7 @@ export default async function handler(req, res) {
             {
               method:  'POST',
               headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ prompt: sanitizeString(prompt || 'Describe this image in detail.', 500), image: bytes }),
+              body:    JSON.stringify({ prompt: sanitizeString(prompt || 'If this image contains a math problem or question, solve it completely step by step showing all working. Otherwise describe the image in detail.', 500), image: bytes }),
             }
           );
           const d = await llavaRes.json();
