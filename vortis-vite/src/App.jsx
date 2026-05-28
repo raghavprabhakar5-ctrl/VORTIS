@@ -1112,13 +1112,8 @@ if (displayName) {
   };
 
   const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
- const hitLimit = (k = 'messages') => { 
-  const limit = LIMITS[tier][k];
-  const label = { messages: 'messages', vision: 'vision analyses', images: 'image generations', documents: 'document uploads' }[k] || k;
-  const display = limit >= 999999 ? 'unlimited' : `${limit}`;
-  showToast(`Daily ${label} limit reached (${display}/day). Upgrade for more!`, 'var(--red)'); 
-  setTimeout(() => setShowUpgrade(true), 800); 
-};
+  const hitLimit = () => { showToast(`You've used all your ${LIMITS[tier].messages} messages today. Upgrade for more!`, 'var(--red)'); setTimeout(() => setShowUpgrade(true), 800); };
+
   const incrUsage = (k) => {
     const n = { ...usage, [k]: usage[k]+1 }; setUsage(n);
     try { localStorage.setItem('vortis_usage', JSON.stringify(n)); } catch(_) {}
@@ -1397,7 +1392,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
  const handleImgUpload = async (e) => {
- if (!canDo('vision')) { hitLimit('vision'); return; }
+  if (!canDo('vision')) { hitLimit(); return; }
   const file = e.target.files?.[0]; if (!file) return;
   if (!file.type.startsWith('image/')) { 
     addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); 
