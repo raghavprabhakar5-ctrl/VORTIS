@@ -1392,21 +1392,14 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
  const handleImgUpload = async (e) => {
-  if (!canDo('vision')) { hitLimit(); return; }
+  if (!canDo('vision')) { hitLimit(); return; }  // ✅ add this first
+  if (!canDo('images')) { hitLimit(); return; }  // ✅ keep this too
   const file = e.target.files?.[0]; if (!file) return;
-  if (!file.type.startsWith('image/')) { 
-    addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); 
-    return; 
-  }
-  const reader = new FileReader(); 
-  reader.onload = (ev) => { 
-    setPendingImage({ base64: ev.target.result, name: file.name }); 
-    setTimeout(() => textareaRef.current?.focus(), 50); 
-  };
-  reader.readAsDataURL(file); 
-  e.target.value = ''; 
-  setShowMenu(false);
+  if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
+  const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
+  reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
 };
+
   const handleSend = () => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
     if (pendingCode) setPendingCode(null);
