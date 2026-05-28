@@ -444,23 +444,6 @@ const ImageLightbox = ({ src, onClose }) => {
   );
 };
 
-useEffect(() => {
-  const handleBeforeUnload = () => {
-    try {
-      localStorage.setItem('vortis_last_chat', JSON.stringify({
-        chatId: chatIdRef.current,
-        messages: messages.map(m =>
-          m.text === '__IMG_LOADING__'
-            ? { ...m, text: '__IMG_EXPIRED__' }
-            : { ...m, text: m.text?.slice(0, 10000) }
-        )
-      }));
-    } catch(_) {}
-  };
-  window.addEventListener('beforeunload', handleBeforeUnload);
-  return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-}, [messages]);
-
 const AIImageCard = ({ src, onRetry }) => {
   const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -768,6 +751,23 @@ const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
 export default function VortisAI() {
   const [messages, setMessages] = useState([]);
+  useEffect(() => {
+  const handleBeforeUnload = () => {
+    try {
+      localStorage.setItem('vortis_last_chat', JSON.stringify({
+        chatId: chatIdRef.current,
+        messages: messages.map(m =>
+          m.text === '__IMG_LOADING__'
+            ? { ...m, text: '__IMG_EXPIRED__' }
+            : { ...m, text: m.text?.slice(0, 10000) }
+        )
+      }));
+    } catch(_) {}
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+}, [messages]);
+
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
