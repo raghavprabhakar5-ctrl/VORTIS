@@ -1399,11 +1399,20 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   const sendImageForAnalysis = async (imgObj, question) => {
     if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
     if (!canDo('messages')) { hitLimit(); return; }
-   setMessages(prev => [...prev, { 
+  const canvas = document.createElement('canvas');
+const img = new Image();
+img.src = imgObj.base64;
+await new Promise(r => { img.onload = r; });
+canvas.width = 120;
+canvas.height = 90;
+canvas.getContext('2d').drawImage(img, 0, 0, 120, 90);
+const thumbnail = canvas.toDataURL('image/jpeg', 0.5); // small compressed thumbnail
+
+setMessages(prev => [...prev, { 
   id: Date.now()+Math.random(), 
   type: 'user', 
   text: question || 'Analyze this image',
-  image: null  // ✅ don't store base64
+  image: thumbnail  // ✅ small thumbnail, won't crash state
 }]);
 
 if (!imgObj?.base64 || imgObj.base64.length > 5000000) {
