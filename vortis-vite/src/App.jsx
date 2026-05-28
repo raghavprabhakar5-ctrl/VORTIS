@@ -1397,7 +1397,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
  const handleImgUpload = async (e) => {
-  if (!canDo('vision')) { hitLimit(); return; }
+ if (!canDo('vision')) { hitLimit('vision'); return; }
   const file = e.target.files?.[0]; if (!file) return;
   if (!file.type.startsWith('image/')) { 
     addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); 
