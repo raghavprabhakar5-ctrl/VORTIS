@@ -1396,41 +1396,38 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const sendImageForAnalysis = async (imgObj, question) => {
-    if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
-    if (!canDo('messages')) { hitLimit(); return; }
-  const canvas = document.createElement('canvas');
-const img = new Image();
-img.src = imgObj.base64;
-await new Promise(r => { img.onload = r; });
-canvas.width = 120;
-canvas.height = 90;
-canvas.getContext('2d').drawImage(img, 0, 0, 120, 90);
-const thumbnail = canvas.toDataURL('image/jpeg', 0.5); // small compressed thumbnail
+ const sendImageForAnalysis = async (imgObj, question) => {
+  // ✅ checks first, before anything else
+  if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
+  if (imgObj.base64.length > 5000000) { addMsg('vortis', "Image is too large — try a smaller one.", false); return; }
+  if (!canDo('messages')) { hitLimit(); return; }
 
-setMessages(prev => [...prev, { 
-  id: Date.now()+Math.random(), 
-  type: 'user', 
-  text: question || 'Analyze this image',
-  image: thumbnail  // ✅ small thumbnail, won't crash state
-}]);
+  // ✅ then show image in chat
+  setMessages(prev => [...prev, { 
+    id: Date.now()+Math.random(), 
+    type: 'user', 
+    text: question || 'Analyze this image',
+    image: imgObj.base64
+  }]);
 
-if (!imgObj?.base64 || imgObj.base64.length > 5000000) {
-  addMsg('vortis', "Image is too large — try a smaller one.", false);
-  return;
-}
-    incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
-    try {
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
-      if (result && typeof result === 'string' && result.length > 2) { pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`); pushHistory(convHistory, 'assistant', result); addMsg('vortis', result, autoSpeak); }
-      else await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
-    } catch(_) { addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false); }
-    setIsProcessing(false); setProcessingStatus('');
-  };
+  // ✅ clear from memory after 30s
+  setTimeout(() => {
+    setMessages(prev => prev.map(m => 
+      m.image === imgObj.base64 ? { ...m, image: null } : m
+    ));
+  }, 30000);
 
+  incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
+  try {
+    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
+    if (result && typeof result === 'string' && result.length > 2) { pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`); pushHistory(convHistory, 'assistant', result); addMsg('vortis', result, autoSpeak); }
+    else await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+  } catch(_) { addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false); }
+  setIsProcessing(false); setProcessingStatus('');
+};
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const autoResize = useCallback((e) => { const val = e.target.value; e.target.style.height = 'auto'; if (val.trim()) e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; setWordCount(val.trim() ? val.trim().split(/\s+/).length : 0); }, []);
 
