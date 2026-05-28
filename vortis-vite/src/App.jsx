@@ -1112,8 +1112,13 @@ if (displayName) {
   };
 
   const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
-  const hitLimit = () => { showToast(`You've used all your ${LIMITS[tier].messages} messages today. Upgrade for more!`, 'var(--red)'); setTimeout(() => setShowUpgrade(true), 800); };
-
+ const hitLimit = (k = 'messages') => { 
+  const limit = LIMITS[tier][k];
+  const label = { messages: 'messages', vision: 'vision analyses', images: 'image generations', documents: 'document uploads' }[k] || k;
+  const display = limit >= 999999 ? 'unlimited' : `${limit}`;
+  showToast(`Daily ${label} limit reached (${display}/day). Upgrade for more!`, 'var(--red)'); 
+  setTimeout(() => setShowUpgrade(true), 800); 
+};
   const incrUsage = (k) => {
     const n = { ...usage, [k]: usage[k]+1 }; setUsage(n);
     try { localStorage.setItem('vortis_usage', JSON.stringify(n)); } catch(_) {}
@@ -1392,14 +1397,21 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
  const handleImgUpload = async (e) => {
-  if (!canDo('vision')) { hitLimit(); return; }  // ✅ add this first
-  if (!canDo('images')) { hitLimit(); return; }  // ✅ keep this too
+  if (!canDo('vision')) { hitLimit(); return; }
   const file = e.target.files?.[0]; if (!file) return;
-  if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
-  const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
-  reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
+  if (!file.type.startsWith('image/')) { 
+    addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); 
+    return; 
+  }
+  const reader = new FileReader(); 
+  reader.onload = (ev) => { 
+    setPendingImage({ base64: ev.target.result, name: file.name }); 
+    setTimeout(() => textareaRef.current?.focus(), 50); 
+  };
+  reader.readAsDataURL(file); 
+  e.target.value = ''; 
+  setShowMenu(false);
 };
-
   const handleSend = () => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
     if (pendingCode) setPendingCode(null);
