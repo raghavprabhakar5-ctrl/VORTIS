@@ -1429,14 +1429,13 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   if (imgObj.base64.length > 5000000) { addMsg('vortis', "Image is too large — try a smaller one.", false); return; }
   if (!canDo('messages')) { hitLimit(); return; }
 
-  // ✅ only tiny blobUrl in state — no base64 ever touches React state
+  // ✅ show message WITHOUT storing image at all
   setMessages(prev => [...prev, { 
     id: Date.now()+Math.random(), 
     type: 'user', 
     text: question || 'Analyze this image',
-    imageBlobUrl: imgObj.blobUrl  // ← tiny URL string, full quality
+    // ← no image stored here at all
   }]);
-
 
   incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
   try {
