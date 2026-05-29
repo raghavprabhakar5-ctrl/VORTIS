@@ -1328,16 +1328,18 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-      const displayText = cleaned
+    const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/^WEB_SEARCH:.*$/gm, '')
   .replace(/^CURRENT_TIME\s*$/gm, '')
   .replace(/^#{5,}\s*$/gm, '')
   .replace(/(#+\+){3,}/g, '')
-  .replace(/^→.*$/gm, '')           // strip leaked reasoning lines
-  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')  // strip <think> blocks
+  .replace(/^→.*$/gm, '')
+  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
   .trim();
-      addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
+      requestAnimationFrame(() => {
+        addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
+      });
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
@@ -1377,10 +1379,19 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     setIsProcessing(false); setProcessingStatus('');
   };
 
-  const handleCmd = async (cmd) => {
-    if (!cmd.trim()) return; if (!canDo('messages')) { hitLimit(); return; }
-    addMsg('user', cmd); incrUsage('messages'); setIsProcessing(true); setShowAITimeout(false); setShowSettings(false);
-    await getAI(cmd, lastMethod === 'voice'); setIsProcessing(false);
+ const handleCmd = async (cmd) => {
+    if (!cmd.trim()) return; 
+    if (!canDo('messages')) { hitLimit(); return; }
+    setIsStreaming(false);
+    setStreamText('');
+    setProcessingStatus('');
+    addMsg('user', cmd); 
+    incrUsage('messages'); 
+    setIsProcessing(true); 
+    setShowAITimeout(false); 
+    setShowSettings(false);
+    await getAI(cmd, lastMethod === 'voice'); 
+    setIsProcessing(false);
   };
   useEffect(() => { handleCmdRef.current = handleCmd; });
 
