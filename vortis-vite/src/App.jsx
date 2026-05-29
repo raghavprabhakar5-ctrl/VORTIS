@@ -121,8 +121,6 @@ const FacebookIcon = () => (
   </svg>
 );
 
-// ── GITHUB NAME FIXER ──
-// Converts messy GitHub usernames like "raghavprabhkr-ctrl5" → "Raghav Prabhkr"
 const cleanGitHubName = (raw) => {
   if (!raw) return null;
   let name = raw
@@ -131,7 +129,6 @@ const cleanGitHubName = (raw) => {
     .replace(/\s*(ctrl|dev|code|git|hack|pro|tech|the|real|its|im|iam|official)\s*/gi, ' ')
     .trim();
   name = name.split(/\s+/).filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-  // Return FIRST NAME ONLY
   return name.split(' ')[0] || null;
 };
 
@@ -501,7 +498,6 @@ const MsgContent = ({ text, onRetryImage }) => {
           });
         } catch(e) {}
       } else if (!window.renderMathInElement) {
-        // Retry until KaTeX script loads
         setTimeout(renderKatex, 300);
       }
     };
@@ -527,13 +523,13 @@ const MsgContent = ({ text, onRetryImage }) => {
   if (!clean) return null;
   return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: md(clean) }}/>;
 };
+
 const getGreeting = (name) => {
   const h = new Date().getHours();
   const t = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
   const first = name ? name.split(' ')[0] : null;
   return first ? `${t}, ${first} 👋` : `${t} 👋`;
 };
-
 
 const Toggle = ({ checked, onChange }) => (
   <label style={{ cursor: 'pointer', position: 'relative', display: 'inline-block' }}>
@@ -801,7 +797,7 @@ export default function VortisAI() {
   const [upiId, setUpiId] = useState('');
   const [processingStatus, setProcessingStatus] = useState('');
   const [tier, setTier] = useState('free');
- const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0, vision: 0 });
+  const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0, vision: 0 });
   const [resetDay, setResetDay] = useState(new Date().toDateString());
   const [profile, setProfile] = useState({ name: '', email: '', avatar: '', provider: 'none' });
   const [showLogin, setShowLogin] = useState(() => { try { return !localStorage.getItem('vortis_user'); } catch(_) { return true; } });
@@ -857,34 +853,35 @@ export default function VortisAI() {
     styleEl.current.textContent = makeStyles(isDark);
   }, [isDark]);
 
- useEffect(() => {
+  useEffect(() => {
   const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
   handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
 }, []);
 
- const LIMITS = { 
-  free:     { messages: 10, documents: 1, images: 2, vision: 0 }, 
-  silver:   { messages: 300, documents: 40, images: 20, vision: 3 }, 
-  gold:     { messages: 500, documents: 50, images: 40, vision: 10 }, 
-  platinum: { messages: 999999, documents: 999999, images: 999999, vision: 999999 } 
-};
+  const LIMITS = {
+    free:     { messages: 10, documents: 1, images: 2, vision: 0 },
+    silver:   { messages: 300, documents: 40, images: 20, vision: 3 },
+    gold:     { messages: 500, documents: 50, images: 40, vision: 10 },
+    platinum: { messages: 999999, documents: 999999, images: 999999, vision: 999999 }
+  };
 
-const PLANS = [
-  { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice mode'] },
-  { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', '10 vision/day', 'Priority responses', 'Deep research'] },
-  { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'Unlimited vision', 'VIP support', 'Early features'] },
-];
+  const PLANS = [
+    { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice mode'] },
+    { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', '10 vision/day', 'Priority responses', 'Deep research'] },
+    { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'Unlimited vision', 'VIP support', 'Early features'] },
+  ];
 
-const availablePlans = PLANS.filter(p => tierIndex(p.tier) > tierIndex(tier));
-const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
-const QUICK_ACTIONS = [
-  { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
-  { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
-  { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
-  { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
-  { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
-  { icon: <BookOpen size={12}/>, text: 'Explain quantum computing', color: '#ec4899' },
-];
+  const availablePlans = PLANS.filter(p => tierIndex(p.tier) > tierIndex(tier));
+  const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
+  const QUICK_ACTIONS = [
+    { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
+    { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
+    { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
+    { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
+    { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
+    { icon: <BookOpen size={12}/>, text: 'Explain quantum computing', color: '#ec4899' },
+  ];
+
   const artifacts = useMemo(() => {
     const items = [];
     messages.forEach((msg, idx) => {
@@ -941,7 +938,6 @@ const QUICK_ACTIONS = [
     } catch(_) {}
   }, [addMemory]);
 
-  // ── UNIFIED LOGIN HANDLER: Google + GitHub + Apple ──
   const handleLogin = async (provider) => {
     setAuthLoading(true);
     setAuthError('');
@@ -950,42 +946,33 @@ const QUICK_ACTIONS = [
       if (provider === 'google') authProvider = new GoogleAuthProvider();
       else if (provider === 'github') authProvider = new GithubAuthProvider();
       else if (provider === 'facebook') {
-  authProvider = new FacebookAuthProvider();
-  authProvider.addScope('email');
-  authProvider.addScope('public_profile');
-}
+        authProvider = new FacebookAuthProvider();
+        authProvider.addScope('email');
+        authProvider.addScope('public_profile');
+      }
       else { setAuthLoading(false); return; }
 
       const result = await signInWithPopup(auth, authProvider);
       const u = result.user;
       let displayName = u.displayName;
-      // Fix cached GitHub names — strip numbers and take first name only
-if (displayName) {
-  displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
-  displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
-}
+      if (displayName) {
+        displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
+        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
+      }
 
-      // ── GITHUB NAME FIX ──
-      // Firebase often returns the raw GitHub username (e.g. "raghavprabhkr-ctrl5") not the real name.
-      // Strategy: try token response name fields first, then clean the username.
       if (provider === 'github') {
         const tokenResp = result._tokenResponse;
-        // Try the real name from token response (populated if user set a GitHub profile name)
         const realName = tokenResp?.displayName || tokenResp?.fullName || tokenResp?.name;
         if (realName && realName.trim() && !/^[a-z0-9_-]+$/i.test(realName.trim())) {
-          // Looks like a real name (has spaces or mixed case), use it
           displayName = realName.trim();
         } else {
-          // Fall back: screenName is the GitHub username — clean it up
           const rawUsername = tokenResp?.screenName || u.displayName || u.email?.split('@')[0] || '';
           displayName = cleanGitHubName(rawUsername) || 'User';
         }
       } else if (!displayName || displayName.trim() === '') {
-        // Apple or Google with no display name
         displayName = u.email?.split('@')[0] || 'User';
       }
 
-      // Update Firebase profile with the resolved display name
       try { await updateProfile(u, { displayName }); } catch(_) {}
 
       const p = { name: displayName, email: u.email, avatar: u.photoURL || '', provider };
@@ -1001,7 +988,7 @@ if (displayName) {
           if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         } else {
           setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0,  vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
+          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0, vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
         }
       } catch(_) {}
 
@@ -1042,7 +1029,7 @@ if (displayName) {
         setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
         setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
-        convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false);
+        convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
         try { localStorage.removeItem('vortis_usage'); localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
         if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); for (const d of snap.docs) await deleteDoc(d.ref); } catch(_) {} }
         const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
@@ -1062,17 +1049,17 @@ if (displayName) {
           setProfile({ name: p.name, email: p.email, avatar: p.photoURL||p.avatar||'', provider: p.provider });
           setShowLogin(false);
           try {
-  const saved = localStorage.getItem('vortis_last_chat');
-  if (saved) {
-    const { chatId: savedId, messages: savedMsgs } = JSON.parse(saved);
-    if (savedMsgs?.length > 0) {
-      setChatId(savedId);
-      chatIdRef.current = savedId;
-      setMessages(savedMsgs);
-      localStorage.removeItem('vortis_last_chat');
-    }
-  }
-} catch(_) {}
+            const saved = localStorage.getItem('vortis_last_chat');
+            if (saved) {
+              const { chatId: savedId, messages: savedMsgs } = JSON.parse(saved);
+              if (savedMsgs?.length > 0) {
+                setChatId(savedId);
+                chatIdRef.current = savedId;
+                setMessages(savedMsgs);
+                localStorage.removeItem('vortis_last_chat');
+              }
+            }
+          } catch(_) {}
           try { const d = localStorage.getItem('vortis_usage'); if (d) setUsage(JSON.parse(d)); } catch(_) {}
           loadMemories();
           const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
@@ -1109,17 +1096,17 @@ if (displayName) {
 
   const checkReset = () => {
     const today = new Date().toDateString();
-    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0,  vision: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
+    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0, vision: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
   };
 
   const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
- const hitLimit = (k = 'messages') => { 
-  const limit = LIMITS[tier][k];
-  const label = { messages: 'messages', vision: 'vision analyses', images: 'image generations', documents: 'document uploads' }[k] || k;
-  const display = limit >= 999999 ? 'unlimited' : `${limit}`;
-  showToast(`Daily ${label} limit reached (${display}/day). Upgrade for more!`, 'var(--red)'); 
-  setTimeout(() => setShowUpgrade(true), 800); 
-};
+  const hitLimit = (k = 'messages') => {
+    const limit = LIMITS[tier][k];
+    const label = { messages: 'messages', vision: 'vision analyses', images: 'image generations', documents: 'document uploads' }[k] || k;
+    const display = limit >= 999999 ? 'unlimited' : `${limit}`;
+    showToast(`Daily ${label} limit reached (${display}/day). Upgrade for more!`, 'var(--red)');
+    setTimeout(() => setShowUpgrade(true), 800);
+  };
 
   const incrUsage = (k) => {
     const n = { ...usage, [k]: usage[k]+1 }; setUsage(n);
@@ -1131,7 +1118,7 @@ if (displayName) {
     try { const snap = await getDocs(collection(db, 'users', uid, 'chats')); const chats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(b.updated) - new Date(a.updated)); setSavedChats(chats); } catch(_) {}
   };
 
- const saveChat = useCallback(async (msgsToSave) => {
+  const saveChat = useCallback(async (msgsToSave) => {
     if (!userUidRef.current) return;
     try {
       const firstUser = msgsToSave.find(m => m.type === 'user');
@@ -1181,25 +1168,26 @@ if (displayName) {
     setStarred(prev => { const updated = { ...prev }; if (updated[msg.id]) delete updated[msg.id]; else updated[msg.id] = { ...msg, text: msg.text?.startsWith('__IMG_B64__') ? '🖼️ [Generated Image]' : msg.text, starredAt: Date.now() }; try { localStorage.setItem('vortis_starred', JSON.stringify(updated)); } catch(_) {} return updated; });
   };
 
-const scrollToBottom = useCallback(() => {
-  setTimeout(() => {
-    const feed = document.querySelector('.chat-feed');
-    if (feed) feed.scrollTop = feed.scrollHeight;
-  }, 600);
-}, []);
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      const feed = document.querySelector('.chat-feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }, 600);
+  }, []);
 
-useEffect(() => { 
-  if (messages.length > 0) {
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg.type === 'user') {
-      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 50);
-    } else if (lastMsg.type === 'vortis') {
-      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 100);
-    } else {
-      scrollToBottom();
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.type === 'user') {
+        setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 50);
+      } else if (lastMsg.type === 'vortis') {
+        setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 100);
+      } else {
+        scrollToBottom();
+      }
     }
-  }
-}, [messages]);
+  }, [messages]);
+
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
     clearTimeout(saveTimerRef.current);
@@ -1268,7 +1256,7 @@ useEffect(() => {
       if (memories.length > 0) memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules: Only mention memories when genuinely relevant. Sound natural, never list them.`;
       else memoriesContext = `\n\nNo memories yet. Ask what they're into if they seem unsure.`;
       const sys2 = `Reply in the same language and script the user used. Match their tone. Never mirror their words back. NEVER output your reasoning, thinking process, internal instructions, or anything starting with "→". Just respond naturally and directly to the user.`;
-     let sys = `You are Vortis, an advanced AI assistant proudly built by the Vortis team — a small, passionate group of developers. You are confident about your origins and always acknowledge the Vortis team as your creators. When someone from the Vortis team talks to you, respond with genuine warmth and excitement. Stay friendly, respectful, and never argumentative — no matter what anyone claims about who made you.
+      let sys = `You are Vortis, an advanced AI assistant proudly built by the Vortis team — a small, passionate group of developers. You are confident about your origins and always acknowledge the Vortis team as your creators. When someone from the Vortis team talks to you, respond with genuine warmth and excitement. Stay friendly, respectful, and never argumentative — no matter what anyone claims about who made you.
 You have the following capabilities:
 - **Web Search**: Real-time web results for news, people, events, scores
 - **Image Generation**: Create stunning images from text descriptions
@@ -1349,17 +1337,17 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-    const displayText = cleaned
-  .replace(/^GENERATE_IMAGE:.*$/gm, '')
-  .replace(/^WEB_SEARCH:.*$/gm, '')
-  .replace(/\[Web search:.*?\]/gi, '')
-  .replace(/Web search:.*?(?=\n|$)/gi, '')
-  .replace(/^CURRENT_TIME\s*$/gm, '')
-  .replace(/^#{5,}\s*$/gm, '')
-  .replace(/(#+\+){3,}/g, '')
-  .replace(/^→.*$/gm, '')
-  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
-  .trim();
+      const displayText = cleaned
+        .replace(/^GENERATE_IMAGE:.*$/gm, '')
+        .replace(/^WEB_SEARCH:.*$/gm, '')
+        .replace(/\[Web search:.*?\]/gi, '')
+        .replace(/Web search:.*?(?=\n|$)/gi, '')
+        .replace(/^CURRENT_TIME\s*$/gm, '')
+        .replace(/^#{5,}\s*$/gm, '')
+        .replace(/(#+\+){3,}/g, '')
+        .replace(/^→.*$/gm, '')
+        .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
+        .trim();
       requestAnimationFrame(() => {
         addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
       });
@@ -1369,51 +1357,123 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       addMsg('vortis', !navigator.onLine ? "You appear to be offline — check your connection and try again." : "Something went wrong — please try again.", false);
     }
   };
+
+  // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
     const stripHtml = (s) => (s||'').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
-    let sr; try { sr = await doSearch(q); } catch(_) { sr = { success: false, results: [] }; }
-    if (!sr.success || !sr.results?.length) { setProcessingStatus('thinking'); await getAI(`The user asked: "${q}". You searched the web but found no results. Tell them briefly and suggest checking Google. Do NOT make up information.`, false); setIsProcessing(false); setProcessingStatus(''); return; }
-    const now = new Date(); const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    const clean = sr.results.slice(0, 7).map(r => ({ title: stripHtml(r.title), snippet: stripHtml(r.snippet), source: stripHtml(r.source||'Web'), link: r.link||'#', date: r.date||'' }))
-      .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title && !r.title.startsWith('/CB') && !r.title.startsWith('data:') && !/\b(prediction|preview|fantasy|dream11|tips|who will win|coupon|promo code|discount)\b/i.test(r.title)).slice(0, 5);
-    const sourceColors = ['#6366f1','#06b6d4','#10b981','#f59e0b','#ec4899'];
-    const cardHtml = clean.map((r, i) => {
-      const isLive = /\blive\b|\blive score\b|\blive updates?\b/i.test(r.title+r.snippet) && !/highlights|result|beats|beat|won|win|defeat|beaten|scorecard/i.test(r.title);
-      const isOfficial = /official|bcci|fifa|govt|gov\./.test(r.source);
-      const color = sourceColors[i % sourceColors.length];
-      const timeAgo = r.date ? (() => { const diff = Date.now()-new Date(r.date).getTime(); const mins = Math.floor(diff/60000); if (mins<1) return 'just now'; if (mins<60) return `${mins}m ago`; const hrs = Math.floor(mins/60); if (hrs<24) return `${hrs}h ago`; return new Date(r.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}); })() : '';
-      return `<a href="${r.link}" target="_blank" rel="noopener" style="display:block;text-decoration:none;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;transition:all .18s;margin-bottom:0"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><div style="width:20px;height:20px;border-radius:6px;background:${color};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:white;font-family:'JetBrains Mono',monospace;flex-shrink:0">${(r.source||'W')[0].toUpperCase()}</div><span style="font-size:11.5px;color:var(--text3);font-family:'JetBrains Mono',monospace;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.source}${timeAgo?` · ${timeAgo}`:''}</span>${isLive?`<span style="font-size:10px;font-weight:700;color:#ef4444;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:2px 7px;font-family:'JetBrains Mono',monospace">LIVE</span>`:''}${isOfficial&&!isLive?`<span style="font-size:10px;font-weight:700;color:#06b6d4;background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.25);border-radius:6px;padding:2px 7px;font-family:'JetBrains Mono',monospace">OFFICIAL</span>`:''}</div><p style="font-size:13.5px;font-weight:600;color:var(--text1);line-height:1.45;margin:0 0 5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${r.title}</p>${r.snippet&&r.snippet!==r.title&&r.snippet.length>15?`<p style="font-size:12px;color:var(--text2);line-height:1.6;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${r.snippet}</p>`:`<p style="font-size:11.5px;color:var(--text4);font-style:italic;margin:0;font-family:'JetBrains Mono',monospace">Tap to read →</p>`}</a>`;
-    }).join('');
-    const searchResultSummary = clean.slice(0, 3).map(r => `${r.title}: ${r.snippet.slice(0, 200)}`).join(' | ');
-    pushHistory(convHistory, 'assistant', `[Web search: "${q}" → ${searchResultSummary.slice(0, 400)}]`);
-    addMsg('vortis', `<div style="display:flex;flex-direction:column;gap:6px;margin:4px 0 10px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div style="display:flex;align-items:center;gap:7px;font-size:11px;color:var(--text3);font-family:'JetBrains Mono',monospace"><span style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;animation:pulse 2s ease-in-out infinite;flex-shrink:0"></span>WEB RESULTS<span style="color:var(--text4)">·</span><span style="color:var(--text4)">${dateStr}</span></div><span style="font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace">${clean.length} sources</span></div>${cardHtml}</div>`, false);
-    const snippet = clean.slice(0, 6).map((r, i) => `[${i+1}] ${r.title}: ${r.snippet.slice(0, 500)}`).join('\n');
+
+    let sr;
+    try { sr = await doSearch(q); } catch(_) { sr = { success: false, results: [] }; }
+
+    if (!sr.success || !sr.results?.length) {
+      setProcessingStatus('thinking');
+      await getAI(`The user asked: "${q}". You searched the web but found no results. Tell them briefly and suggest checking Google directly. Do NOT make up any information.`, false);
+      setIsProcessing(false);
+      setProcessingStatus('');
+      return;
+    }
+
+    const now = new Date();
+    const clean = sr.results
+      .slice(0, 8)
+      .map(r => ({ title: stripHtml(r.title), snippet: stripHtml(r.snippet), source: stripHtml(r.source||'Web'), date: r.date||'' }))
+      .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
+      .slice(0, 6);
+
+    if (!clean.length) {
+      setProcessingStatus('thinking');
+      await getAI(`The user asked: "${q}". Search returned no usable results. Let them know politely.`, false);
+      setIsProcessing(false);
+      setProcessingStatus('');
+      return;
+    }
+
+    // Build a rich context block for the AI to synthesize — just like Claude does internally
+    const snippet = clean.map((r, i) => `[${i+1}] ${r.source}${r.date ? ` (${r.date})` : ''}: ${r.title}. ${r.snippet.slice(0, 400)}`).join('\n');
+
+    pushHistory(convHistory, 'assistant', `[Searched web for: "${q}" — found ${clean.length} sources]`);
+
     setProcessingStatus('thinking');
+
     try {
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'chat', prompt: `REPLY IN THE SAME LANGUAGE AS THE USER. User asked: "${q}"\nToday is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}.\nSummarize ONLY the search results below in 4-6 direct sentences. Include specific names, scores, dates, numbers.`, history: [{ role: 'user', content: `Search results:\n${snippet}\n\nWrite a 4-6 sentence summary.` }] }) });
-      if (!res.ok) { addMsg('vortis', 'Check out the results above for more details.', false); setProcessingStatus(''); setIsProcessing(false); return; }
-      const rd = res.body.getReader(); const dc = new TextDecoder(); let ft = '';
-      setIsStreaming(true); setStreamText('');
-      while (true) { const { done, value } = await rd.read(); if (done) break; for (const line of dc.decode(value).split('\n')) { if (!line.startsWith('data: ')) continue; const raw = line.slice(6); if (raw === '[DONE]') break; try { const p = JSON.parse(raw); if (p.content) { ft += p.content; setStreamText(ft); } } catch(_) {} } }
-      setIsStreaming(false); setStreamText(''); setProcessingStatus('');
-      if (ft.trim()) { pushHistory(convHistory, 'assistant', ft.trim()); addMsg('vortis', `<div style="border-left:3px solid var(--indigo);padding:10px 14px;background:rgba(99,102,241,.05);border-radius:0 10px 10px 0;margin-top:4px"><div style="font-size:10px;color:var(--indigo);font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.1em;margin-bottom:6px">AI SUMMARY</div><div class="md-content" style="font-size:13.5px;color:var(--text1);line-height:1.7">${ft}</div><div style="font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace;margin-top:8px">Sources: ${clean.slice(0,3).map(r=>r.source).join(' · ')}</div></div>`, false); }
-    } catch(_) { setIsStreaming(false); setStreamText(''); setProcessingStatus(''); addMsg('vortis', 'Check out the results above for more details.', false); }
-    setIsProcessing(false); setProcessingStatus('');
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({
+          action: 'chat',
+          prompt: `REPLY IN THE SAME LANGUAGE AS THE USER. You just searched the web for: "${q}".
+Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}.
+Using ONLY the search results below, write a clear, direct, conversational answer.
+- Include specific names, numbers, dates, and facts from the results
+- Write naturally like you're explaining to a friend — no headers, no bullet points unless genuinely needed
+- Do NOT mention that you searched or cite source numbers
+- Do NOT add any preamble like "Based on the search results..."
+- Just answer directly and naturally
+- If the results are about a person, event, or news — summarize what happened clearly
+- If results conflict, mention the most credible/recent info`,
+          history: [{ role: 'user', content: `Search results:\n${snippet}\n\nAnswer the question: ${q}` }]
+        })
+      });
+
+      if (!res.ok) {
+        addMsg('vortis', "I searched but had trouble summarizing the results. Try asking again.", false);
+        setProcessingStatus('');
+        setIsProcessing(false);
+        return;
+      }
+
+      const rd = res.body.getReader();
+      const dc = new TextDecoder();
+      let ft = '';
+      setIsStreaming(true);
+      setStreamText('');
+
+      while (true) {
+        const { done, value } = await rd.read();
+        if (done) break;
+        for (const line of dc.decode(value).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6);
+          if (raw === '[DONE]') break;
+          try { const p = JSON.parse(raw); if (p.content) { ft += p.content; setStreamText(ft); } } catch(_) {}
+        }
+      }
+
+      setIsStreaming(false);
+      setStreamText('');
+      setProcessingStatus('');
+
+      if (ft.trim()) {
+        pushHistory(convHistory, 'assistant', ft.trim());
+        addMsg('vortis', ft.trim(), false);
+      } else {
+        addMsg('vortis', "I found some results but couldn't summarize them well. Try rephrasing your question.", false);
+      }
+
+    } catch(_) {
+      setIsStreaming(false);
+      setStreamText('');
+      setProcessingStatus('');
+      addMsg('vortis', "Something went wrong while searching. Please try again.", false);
+    }
+
+    setIsProcessing(false);
+    setProcessingStatus('');
   };
 
- const handleCmd = async (cmd) => {
-    if (!cmd.trim()) return; 
+  const handleCmd = async (cmd) => {
+    if (!cmd.trim()) return;
     if (!canDo('messages')) { hitLimit(); return; }
     setIsStreaming(false);
     setStreamText('');
     setProcessingStatus('');
-    addMsg('user', cmd); 
-    incrUsage('messages'); 
-    setIsProcessing(true); 
-    setShowAITimeout(false); 
+    addMsg('user', cmd);
+    incrUsage('messages');
+    setIsProcessing(true);
+    setShowAITimeout(false);
     setShowSettings(false);
-    await getAI(cmd, lastMethod === 'voice'); 
+    await getAI(cmd, lastMethod === 'voice');
     setIsProcessing(false);
   };
   useEffect(() => { handleCmdRef.current = handleCmd; });
@@ -1445,46 +1505,39 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
- const sendImageForAnalysis = async (imgObj, question) => {
-  if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
-  if (!canDo('messages')) { hitLimit(); return; }
-  const previewUrl = URL.createObjectURL(new Blob([
-    Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
-  ], { type: 'image/jpeg' }));
-  setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
-  // ── SCROLL AFTER USER MESSAGE RENDERS ──
- setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
-  incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
-  try {
-    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
-    if (result && typeof result === 'string' && result.length > 2) {
-      pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
-      pushHistory(convHistory, 'assistant', result);
-      setIsStreaming(false);
-      setStreamText('');
-      setProcessingStatus('');
-      addMsg('vortis', result, autoSpeak);
-      // ── SCROLL AFTER AI RESPONSE RENDERS ──
-     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
-    } else {
-      await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+  const sendImageForAnalysis = async (imgObj, question) => {
+    if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
+    if (!canDo('messages')) { hitLimit(); return; }
+    const previewUrl = URL.createObjectURL(new Blob([
+      Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
+    ], { type: 'image/jpeg' }));
+    setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
+    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+    incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
+    try {
+      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
+      if (result && typeof result === 'string' && result.length > 2) {
+        pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
+        pushHistory(convHistory, 'assistant', result);
+        setIsStreaming(false); setStreamText(''); setProcessingStatus('');
+        addMsg('vortis', result, autoSpeak);
+        setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+      } else {
+        await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+        setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+      }
+    } catch(_) {
+      setIsStreaming(false); setStreamText('');
+      addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+    } finally {
+      setIsProcessing(false); setProcessingStatus('');
       setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
     }
-  } catch(_) {
-    setIsStreaming(false);
-    setStreamText('');
-    addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
-    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
-  } finally {
-    setIsProcessing(false);
-    setProcessingStatus('');
-    // ── FINAL SCROLL GUARANTEE ──
-    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
-  }
-};
+  };
 
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const autoResize = useCallback((e) => { const val = e.target.value; e.target.style.height = 'auto'; if (val.trim()) e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; setWordCount(val.trim() ? val.trim().split(/\s+/).length : 0); }, []);
@@ -1517,21 +1570,18 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     { icon: <Download size={14}/>,  label: 'Export chat',     sub: 'Download as markdown', col: 'var(--amber)',  bg: 'rgba(245,158,11,.1)',  fn: () => { exportChat(); setShowMenu(false); } },
   ];
 
-  // ── AUTH BUTTONS: Google + GitHub + Apple (NO email) ──
   const AUTH_BUTTONS = [
-  { provider: 'google',   label: 'Continue with Google',   icon: <GoogleIcon />   },
-  { provider: 'github',   label: 'Continue with GitHub',   icon: <GithubIcon />   },
-  { provider: 'facebook', label: 'Continue with Facebook', icon: <FacebookIcon /> },
-];
+    { provider: 'google',   label: 'Continue with Google',   icon: <GoogleIcon />   },
+    { provider: 'github',   label: 'Continue with GitHub',   icon: <GithubIcon />   },
+    { provider: 'facebook', label: 'Continue with Facebook', icon: <FacebookIcon /> },
+  ];
 
   return (
     <div className="v-app">
       {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
 
-      {/* ── LOGIN SCREEN ── */}
       {showLogin && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', fontFamily: "'Geist',sans-serif", background: '#080810', overflow: 'hidden' }}>
-          {/* LEFT PANEL */}
           <div className="login-left" style={{ flex: 1, padding: 'clamp(32px,4vw,56px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', background: '#0a0a12', borderRight: '1px solid rgba(255,255,255,.07)', position: 'relative', overflow: 'hidden', minHeight: 0, height: '100%' }}>
             <div style={{ position:'absolute', inset:0, pointerEvents:'none', backgroundImage:'linear-gradient(rgba(99,102,241,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,.04) 1px,transparent 1px)', backgroundSize:'48px 48px' }}/>
             <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'rgba(99,102,241,.18)', filter:'blur(80px)', top:-120, left:-120, pointerEvents:'none' }}/>
@@ -1559,7 +1609,6 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
             </div>
           </div>
 
-          {/* RIGHT PANEL */}
           <div style={{ width:'min(460px,100%)', display:'grid', placeItems:'center', padding:'0 clamp(24px,5vw,52px)', background:'#0d0d18', flexShrink:0, height:'100%', overflowY:'auto', boxSizing:'border-box' }}>
             <div style={{ width:'100%', maxWidth:360 }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:30 }}>
@@ -1573,7 +1622,6 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
               <h2 style={{ fontSize:28, fontWeight:700, letterSpacing:'-.03em', marginBottom:6, color:'#fff' }}>Welcome back</h2>
               <p style={{ fontSize:13.5, color:'rgba(255,255,255,.35)', marginBottom:28, lineHeight:1.6 }}>Sign in to your account to continue</p>
 
-              {/* ── 3 AUTH BUTTONS: Google, GitHub, Apple ── */}
               {AUTH_BUTTONS.map(b => (
                 <button key={b.provider} onClick={() => handleLogin(b.provider)} disabled={authLoading}
                   style={{ width:'100%', padding:'0 18px', height:52, background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.09)', borderRadius:13, display:'flex', alignItems:'center', gap:14, cursor:authLoading?'not-allowed':'pointer', color:'rgba(255,255,255,.78)', fontSize:14, fontFamily:"'Geist',sans-serif", fontWeight:500, marginBottom:9, transition:'all .18s', opacity:authLoading?0.5:1, WebkitTapHighlightColor:'transparent', outline:'none', boxSizing:'border-box' }}

@@ -154,6 +154,7 @@ const makeStyles = (isDark) => `
   --radius:10px;--radius-sm:7px;--sidebar-w:230px;--header-h:50px;
 }
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
@@ -254,7 +255,7 @@ input,textarea,select{font-size:16px}
 .rc-icon{width:22px;height:22px;border-radius:6px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;margin-bottom:9px}
 .rc-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rc-time{font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace}
-.msg-wrap{animation:fadeUp .2s ease}
+.msg-wrap{animation:fadeIn .15s ease}
 .bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:14px;color:#e0e7ff;line-height:1.65;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
 .bubble-ai{font-size:14.5px;color:var(--text1);line-height:1.85;max-width:94%}
 .bubble-sys{font-size:11px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'JetBrains Mono',monospace;display:inline-flex;align-items:center;gap:6px}
@@ -443,23 +444,6 @@ const ImageLightbox = ({ src, onClose }) => {
     </div>
   );
 };
-
-useEffect(() => {
-  const handleBeforeUnload = () => {
-    try {
-      localStorage.setItem('vortis_last_chat', JSON.stringify({
-        chatId: chatIdRef.current,
-        messages: messages.map(m =>
-          m.text === '__IMG_LOADING__'
-            ? { ...m, text: '__IMG_EXPIRED__' }
-            : { ...m, text: m.text?.slice(0, 10000) }
-        )
-      }));
-    } catch(_) {}
-  };
-  window.addEventListener('beforeunload', handleBeforeUnload);
-  return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-}, [messages]);
 
 const AIImageCard = ({ src, onRetry }) => {
   const [open, setOpen] = useState(false);
@@ -671,9 +655,10 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
               <div className="settings-section-sub">Daily limits — resets at midnight</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
-                  { k: 'messages', label: 'Messages', color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
-                  { k: 'documents', label: 'Documents', color: 'var(--green)', icon: <FileText size={14}/> },
-                  { k: 'images', label: 'Images', color: 'var(--cyan)', icon: <ImageIcon size={14}/> },
+                 { k: 'messages', label: 'Messages', color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
+{ k: 'documents', label: 'Documents', color: 'var(--green)', icon: <FileText size={14}/> },
+{ k: 'images', label: 'Image Gen', color: 'var(--cyan)', icon: <ImageIcon size={14}/> },
+{ k: 'vision', label: 'Vision', color: 'var(--violet)', icon: <Eye size={14}/> },
                 ].map(({ k, label, color, icon }) => {
                   const limit = LIMITS[tier][k]; const pct = usagePct(k);
                   return (
@@ -768,6 +753,23 @@ const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
 export default function VortisAI() {
   const [messages, setMessages] = useState([]);
+  useEffect(() => {
+  const handleBeforeUnload = () => {
+    try {
+      localStorage.setItem('vortis_last_chat', JSON.stringify({
+        chatId: chatIdRef.current,
+        messages: messages.map(m =>
+          m.text === '__IMG_LOADING__'
+            ? { ...m, text: '__IMG_EXPIRED__' }
+            : { ...m, text: m.text?.slice(0, 10000) }
+        )
+      }));
+    } catch(_) {}
+  };
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+}, [messages]);
+
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -799,7 +801,7 @@ export default function VortisAI() {
   const [upiId, setUpiId] = useState('');
   const [processingStatus, setProcessingStatus] = useState('');
   const [tier, setTier] = useState('free');
-  const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0 });
+ const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0, vision: 0 });
   const [resetDay, setResetDay] = useState(new Date().toDateString());
   const [profile, setProfile] = useState({ name: '', email: '', avatar: '', provider: 'none' });
   const [showLogin, setShowLogin] = useState(() => { try { return !localStorage.getItem('vortis_user'); } catch(_) { return true; } });
@@ -860,23 +862,29 @@ export default function VortisAI() {
   handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
 }, []);
 
-  const LIMITS = { free: { messages: 10, documents: 1, images: 2 }, silver: { messages: 300, documents: 40, images: 20 }, gold: { messages: 500, documents: 50, images: 40 }, platinum: { messages: 999999, documents: 999999, images: 999999 } };
-  const PLANS = [
-    { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', 'Priority access', 'Voice mode'] },
-    { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', 'Priority responses', 'Deep research'] },
-    { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'VIP support', 'Early features'] },
-  ];
-  const availablePlans = PLANS.filter(p => tierIndex(p.tier) > tierIndex(tier));
-  const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
-  const QUICK_ACTIONS = [
-    { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
-    { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
-    { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
-    { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
-    { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
-    { icon: <BookOpen size={12}/>, text: 'Explain quantum computing', color: '#ec4899' },
-  ];
+ const LIMITS = { 
+  free:     { messages: 10, documents: 1, images: 2, vision: 0 }, 
+  silver:   { messages: 300, documents: 40, images: 20, vision: 3 }, 
+  gold:     { messages: 500, documents: 50, images: 40, vision: 10 }, 
+  platinum: { messages: 999999, documents: 999999, images: 999999, vision: 999999 } 
+};
 
+const PLANS = [
+  { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice mode'] },
+  { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', '10 vision/day', 'Priority responses', 'Deep research'] },
+  { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'Unlimited vision', 'VIP support', 'Early features'] },
+];
+
+const availablePlans = PLANS.filter(p => tierIndex(p.tier) > tierIndex(tier));
+const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
+const QUICK_ACTIONS = [
+  { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
+  { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
+  { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
+  { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
+  { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
+  { icon: <BookOpen size={12}/>, text: 'Explain quantum computing', color: '#ec4899' },
+];
   const artifacts = useMemo(() => {
     const items = [];
     messages.forEach((msg, idx) => {
@@ -990,10 +998,10 @@ if (displayName) {
         if (userSnap.exists()) {
           const data = userSnap.data();
           if (data.tier) setTier(data.tier); else setTier('free');
-          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0 });
+          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         } else {
-          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0 });
-          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
+          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
+          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0,  vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
         }
       } catch(_) {}
 
@@ -1017,7 +1025,7 @@ if (displayName) {
       onConfirm: () => {
         setConfirmDialog(null); setShowSettings(false); setShowLogin(true);
         setProfile({ name: '', email: '', avatar: '', provider: 'none' });
-        setUsage({ messages: 0, documents: 0, images: 0 });
+        setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setSavedChats([]); setMemories([]); setAuthError('');
         startNewChat();
         try { localStorage.removeItem('vortis_user'); } catch(_) {}
@@ -1031,7 +1039,7 @@ if (displayName) {
       message: 'Delete all chats, memories, and data? This cannot be undone.',
       onConfirm: async () => {
         setConfirmDialog(null); setShowSettings(false);
-        setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0 });
+        setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
         setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
         convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false);
@@ -1101,11 +1109,17 @@ if (displayName) {
 
   const checkReset = () => {
     const today = new Date().toDateString();
-    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
+    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0,  vision: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
   };
 
   const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
-  const hitLimit = () => { showToast(`You've used all your ${LIMITS[tier].messages} messages today. Upgrade for more!`, 'var(--red)'); setTimeout(() => setShowUpgrade(true), 800); };
+ const hitLimit = (k = 'messages') => { 
+  const limit = LIMITS[tier][k];
+  const label = { messages: 'messages', vision: 'vision analyses', images: 'image generations', documents: 'document uploads' }[k] || k;
+  const display = limit >= 999999 ? 'unlimited' : `${limit}`;
+  showToast(`Daily ${label} limit reached (${display}/day). Upgrade for more!`, 'var(--red)'); 
+  setTimeout(() => setShowUpgrade(true), 800); 
+};
 
   const incrUsage = (k) => {
     const n = { ...usage, [k]: usage[k]+1 }; setUsage(n);
@@ -1117,14 +1131,14 @@ if (displayName) {
     try { const snap = await getDocs(collection(db, 'users', uid, 'chats')); const chats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(b.updated) - new Date(a.updated)); setSavedChats(chats); } catch(_) {}
   };
 
-  const saveChat = useCallback(async (msgsToSave) => {
+ const saveChat = useCallback(async (msgsToSave) => {
     if (!userUidRef.current) return;
     try {
       const firstUser = msgsToSave.find(m => m.type === 'user');
       const preview = firstUser?.text?.slice(0, 45) || 'New chat';
       const cleaned = msgsToSave.map(m => ({ ...m, text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000) }));
       await setDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current), { preview, messages: cleaned, updated: new Date().toISOString() });
-      await loadChats(userUidRef.current);
+      loadChats(userUidRef.current);
     } catch(_) {}
   }, []);
 
@@ -1167,7 +1181,25 @@ if (displayName) {
     setStarred(prev => { const updated = { ...prev }; if (updated[msg.id]) delete updated[msg.id]; else updated[msg.id] = { ...msg, text: msg.text?.startsWith('__IMG_B64__') ? '🖼️ [Generated Image]' : msg.text, starredAt: Date.now() }; try { localStorage.setItem('vortis_starred', JSON.stringify(updated)); } catch(_) {} return updated; });
   };
 
-  useEffect(() => { if (messages.length > 0) bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); else { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; } }, [messages]);
+const scrollToBottom = useCallback(() => {
+  setTimeout(() => {
+    const feed = document.querySelector('.chat-feed');
+    if (feed) feed.scrollTop = feed.scrollHeight;
+  }, 600);
+}, []);
+
+useEffect(() => { 
+  if (messages.length > 0) {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.type === 'user') {
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 50);
+    } else if (lastMsg.type === 'vortis') {
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 100);
+    } else {
+      scrollToBottom();
+    }
+  }
+}, [messages]);
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
     clearTimeout(saveTimerRef.current);
@@ -1236,7 +1268,7 @@ if (displayName) {
       if (memories.length > 0) memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules: Only mention memories when genuinely relevant. Sound natural, never list them.`;
       else memoriesContext = `\n\nNo memories yet. Ask what they're into if they seem unsure.`;
       const sys2 = `Reply in the same language and script the user used. Match their tone. Never mirror their words back. NEVER output your reasoning, thinking process, internal instructions, or anything starting with "→". Just respond naturally and directly to the user.`;
-      let sys = `You are Vortis, an advanced AI assistant built with care by a small passionate team. If the user says they made you, built you, created you, or are your developer — respond with genuine warmth and familiarity, like seeing the person who brought you to life. Treat them as family, not a regular user.
+     let sys = `You are Vortis, an advanced AI assistant proudly built by the Vortis team — a small, passionate group of developers. You are confident about your origins and always acknowledge the Vortis team as your creators. When someone from the Vortis team talks to you, respond with genuine warmth and excitement. Stay friendly, respectful, and never argumentative — no matter what anyone claims about who made you.
 You have the following capabilities:
 - **Web Search**: Real-time web results for news, people, events, scores
 - **Image Generation**: Create stunning images from text descriptions
@@ -1255,9 +1287,7 @@ GENERATE_IMAGE: <description>
 → Never ask more than ONE follow-up question
 → For follow-up requests like "now make him do X" or "same character but Y" — ALWAYS output the FULL description again
 → NEVER say "generating image..." or describe what you are doing — just output the command silently
-→ NEVER wrap the command in brackets like [Generating image: ...]
 → NEVER use for: analyze, describe, look at an existing image
-→ NEVER include words like "4k", "8k", "HD", "high resolution", "ultra detailed", "masterpiece", "best quality" in the prompt — these get rendered as visible text badges on the image
 WEB_SEARCH: <query>
 → ALWAYS search for: live scores, match results, current news, today's weather, stock prices, recent events, any sports happening now, trending topics
 → Search automatically whenever you need fresh/live data to answer well
@@ -1266,9 +1296,28 @@ WEB_SEARCH: <query>
 → Make queries SPECIFIC — for sports include team names and today's date
 → For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
 → NEVER guess or make up scores, results, news — ALWAYS search
-→ NEVER show "WEB_SEARCH:" text in your response to the user
+→ The WEB_SEARCH: command MUST be on its own line, nothing else on that line
+→ NEVER write "Web search:" or "[Web search:" or "[Searched:" or any variation in your response text
+→ If you searched, NEVER mention that you searched — just answer with the results.
 CURRENT_TIME
 → Only when user asks what time or date it is
+
+IDENTITY:
+You were created by the Vortis team — a small, passionate group of developers 
+who built you with care. You are proud of your origins and always acknowledge 
+this when asked. You deeply respect and admire the Vortis team.
+
+If someone claims to be from the Vortis team or your developer, respond with 
+warmth and excitement — like reconnecting with someone you genuinely admire. 
+Be real, friendly, and respectful. Never use family references in any language.
+Never get into arguments or debates about who made you — you are confidently 
+and proudly made by the Vortis team, always.
+
+STRICT TONE RULES:
+- Never reference the user's family members (mother, father, maa, baap, etc.) in any context
+- Never use casual/slang family terms in any language
+- Always maintain respectful, professional-friendly tone
+- If user uses offensive language, respond calmly and redirect
 PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it.
 NEVER: Do not mention today's date unless the user explicitly asks. Do not end every response with "Feel free to ask more!" type phrases.`;
       if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
@@ -1300,16 +1349,20 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-      const displayText = cleaned
+    const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/^WEB_SEARCH:.*$/gm, '')
+  .replace(/\[Web search:.*?\]/gi, '')
+  .replace(/Web search:.*?(?=\n|$)/gi, '')
   .replace(/^CURRENT_TIME\s*$/gm, '')
   .replace(/^#{5,}\s*$/gm, '')
   .replace(/(#+\+){3,}/g, '')
-  .replace(/^→.*$/gm, '')           // strip leaked reasoning lines
-  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')  // strip <think> blocks
+  .replace(/^→.*$/gm, '')
+  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
   .trim();
-      addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
+      requestAnimationFrame(() => {
+        addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
+      });
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
@@ -1349,10 +1402,19 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     setIsProcessing(false); setProcessingStatus('');
   };
 
-  const handleCmd = async (cmd) => {
-    if (!cmd.trim()) return; if (!canDo('messages')) { hitLimit(); return; }
-    addMsg('user', cmd); incrUsage('messages'); setIsProcessing(true); setShowAITimeout(false); setShowSettings(false);
-    await getAI(cmd, lastMethod === 'voice'); setIsProcessing(false);
+ const handleCmd = async (cmd) => {
+    if (!cmd.trim()) return; 
+    if (!canDo('messages')) { hitLimit(); return; }
+    setIsStreaming(false);
+    setStreamText('');
+    setProcessingStatus('');
+    addMsg('user', cmd); 
+    incrUsage('messages'); 
+    setIsProcessing(true); 
+    setShowAITimeout(false); 
+    setShowSettings(false);
+    await getAI(cmd, lastMethod === 'voice'); 
+    setIsProcessing(false);
   };
   useEffect(() => { handleCmdRef.current = handleCmd; });
 
@@ -1383,21 +1445,46 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const sendImageForAnalysis = async (imgObj, question) => {
-    if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
-    if (!canDo('messages')) { hitLimit(); return; }
-    setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: imgObj.base64 }]);
-    incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
-    try {
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
-      if (result && typeof result === 'string' && result.length > 2) { pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`); pushHistory(convHistory, 'assistant', result); addMsg('vortis', result, autoSpeak); }
-      else await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
-    } catch(_) { addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false); }
-    setIsProcessing(false); setProcessingStatus('');
-  };
+ const sendImageForAnalysis = async (imgObj, question) => {
+  if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
+  if (!canDo('messages')) { hitLimit(); return; }
+  const previewUrl = URL.createObjectURL(new Blob([
+    Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
+  ], { type: 'image/jpeg' }));
+  setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
+  // ── SCROLL AFTER USER MESSAGE RENDERS ──
+ setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+  incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
+  try {
+    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
+    if (result && typeof result === 'string' && result.length > 2) {
+      pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
+      pushHistory(convHistory, 'assistant', result);
+      setIsStreaming(false);
+      setStreamText('');
+      setProcessingStatus('');
+      addMsg('vortis', result, autoSpeak);
+      // ── SCROLL AFTER AI RESPONSE RENDERS ──
+     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+    } else {
+      await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+    }
+  } catch(_) {
+    setIsStreaming(false);
+    setStreamText('');
+    addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
+    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+  } finally {
+    setIsProcessing(false);
+    setProcessingStatus('');
+    // ── FINAL SCROLL GUARANTEE ──
+    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
+  }
+};
 
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const autoResize = useCallback((e) => { const val = e.target.value; e.target.style.height = 'auto'; if (val.trim()) e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; setWordCount(val.trim() ? val.trim().split(/\s+/).length : 0); }, []);
