@@ -1180,13 +1180,16 @@ if (displayName) {
     setStarred(prev => { const updated = { ...prev }; if (updated[msg.id]) delete updated[msg.id]; else updated[msg.id] = { ...msg, text: msg.text?.startsWith('__IMG_B64__') ? '🖼️ [Generated Image]' : msg.text, starredAt: Date.now() }; try { localStorage.setItem('vortis_starred', JSON.stringify(updated)); } catch(_) {} return updated; });
   };
 
+const scrollToBottom = useCallback(() => {
+  setTimeout(() => {
+    const feed = document.querySelector('.chat-feed');
+    if (feed) feed.scrollTop = feed.scrollHeight;
+  }, 600);
+}, []);
+
 useEffect(() => { 
-  if (messages.length > 0) {
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  }
-}, [messages, isStreaming, isProcessing]);
+  if (messages.length > 0) scrollToBottom();
+}, [messages]);
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
     clearTimeout(saveTimerRef.current);
@@ -1436,7 +1439,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   ], { type: 'image/jpeg' }));
   setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
   // ── SCROLL AFTER USER MESSAGE RENDERS ──
-  setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+ setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
   incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
   try {
     const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
@@ -1451,21 +1454,21 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       setProcessingStatus('');
       addMsg('vortis', result, autoSpeak);
       // ── SCROLL AFTER AI RESPONSE RENDERS ──
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
+     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
     } else {
       await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
     }
   } catch(_) {
     setIsStreaming(false);
     setStreamText('');
     addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
+    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
   } finally {
     setIsProcessing(false);
     setProcessingStatus('');
     // ── FINAL SCROLL GUARANTEE ──
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 400);
+    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
   }
 };
 
