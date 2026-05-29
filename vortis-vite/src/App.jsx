@@ -1296,6 +1296,7 @@ WEB_SEARCH: <query>
 → Make queries SPECIFIC — for sports include team names and today's date
 → For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
 → NEVER guess or make up scores, results, news — ALWAYS search
+→ NEVER say "web searching..." or describe what you are doing — just output the command silently
 → NEVER show "WEB_SEARCH:" text in your response to the user
 CURRENT_TIME
 → Only when user asks what time or date it is
