@@ -1437,8 +1437,6 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     imageBlobUrl: imgObj.blobUrl  // ← tiny URL string, full quality
   }]);
 
-  // ✅ clean up blob URL after 30s to free memory
-  setTimeout(() => URL.revokeObjectURL(imgObj.blobUrl), 30000);
 
   incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
   try {
