@@ -1180,13 +1180,13 @@ if (displayName) {
     setStarred(prev => { const updated = { ...prev }; if (updated[msg.id]) delete updated[msg.id]; else updated[msg.id] = { ...msg, text: msg.text?.startsWith('__IMG_B64__') ? '🖼️ [Generated Image]' : msg.text, starredAt: Date.now() }; try { localStorage.setItem('vortis_starred', JSON.stringify(updated)); } catch(_) {} return updated; });
   };
 
- useEffect(() => { 
+useEffect(() => { 
   if (messages.length > 0) {
     setTimeout(() => {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
+    }, 100);
   }
-}, [messages]);
+}, [messages, isStreaming, isProcessing]);
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
     clearTimeout(saveTimerRef.current);
@@ -1447,7 +1447,8 @@ setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text
         setIsStreaming(false);
         setStreamText('');
         setProcessingStatus('');
-        addMsg('vortis', result, autoSpeak);
+       addMsg('vortis', result, autoSpeak);
+       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
       } else {
         await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
       }
