@@ -150,13 +150,14 @@ function needsWebSearch(text) {
   const low = text.toLowerCase();
   if (/\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|virat|kohli|rohit|dhoni|wicket|innings|over|scorecard)\b/.test(low)) return true;
   if (/\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis|f1|formula 1)\b/.test(low)) return true;
-  if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent)\b/.test(low)) return true;
-  if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather)\b/.test(low)) return true;
+  if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent|trending)\b/.test(low)) return true;
+  if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather|score|result|winner)\b/.test(low)) return true;
   if (/\b(2024|2025|2026)\b/.test(low)) return true;
-  if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
+  if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still|what are the latest|tell me about recent|search for)\b/.test(low)) return true;
+  // catch-all: any question asking for current/real-world facts
+  if (/\b(search|find|look up|google|check|verify)\b/.test(low)) return true;
   return false;
 }
-
 function buildSearchQuery(userMessage) {
   const now     = new Date();
   const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
@@ -570,10 +571,10 @@ export default async function handler(req, res) {
             allRes = scoreAndSort(allRes, sq);
 
             if (allRes.length > 0) {
-              const snippets = allRes.slice(0, 6).map((r, i) =>
-                `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
-              ).join('\n\n');
-              searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
+              const snippets = allRes.slice(0, 8).map((r, i) =>
+  `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 400)}\nSource: ${r.source} | Date: ${r.date}`
+).join('\n\n');
+searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS — Today is ${new Date().toDateString()}. You MUST answer using ONLY these results. Do NOT use training data for any facts below:\n${snippets}\n---`;
             }
           } catch (e) {
             console.error('Auto-search failed:', e.message);

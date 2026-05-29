@@ -1230,19 +1230,22 @@ useEffect(() => {
     return await res.json();
   };
 
-  const enrichImagePrompt = (rawPrompt, style) => {
-    const low = rawPrompt.toLowerCase();
-    const baseQuality = 'highly detailed, sharp focus, professional quality, 4k resolution';
-    let subjectEnrich = 'highly detailed, perfect composition, vivid colors, visually stunning';
-    if (/\b(person|man|woman|girl|boy|face|portrait|character|warrior|knight|wizard|hero|villain|anime|human)\b/.test(low)) subjectEnrich = 'detailed facial features, expressive eyes, cinematic lighting, professional portrait photography';
-    else if (/\b(landscape|mountain|forest|ocean|sea|beach|sky|sunset|sunrise|nature|field|valley|river|waterfall)\b/.test(low)) subjectEnrich = 'sweeping vista, volumetric lighting, dramatic atmosphere, golden hour, award-winning landscape photography';
-    else if (/\b(city|building|architecture|street|urban|skyline|tower|bridge|interior|room|house|palace|castle)\b/.test(low)) subjectEnrich = 'architectural detail, perspective, ambient lighting, high dynamic range';
-    else if (/\b(animal|cat|dog|dragon|creature|monster|bird|lion|wolf|horse|fox|bear)\b/.test(low)) subjectEnrich = 'detailed fur or scales, expressive eyes, natural habitat, dramatic lighting, wildlife photography';
-    else if (/\b(food|dish|meal|recipe|cake|burger|pizza|sushi|dessert|cuisine)\b/.test(low)) subjectEnrich = 'food photography, appetizing, studio lighting, bokeh background, high-end restaurant presentation';
-    else if (/\b(space|galaxy|planet|star|nebula|cosmos|universe|sci-fi|futuristic|robot|mech)\b/.test(low)) subjectEnrich = 'cosmic scale, dramatic nebula colors, ultra-detailed, sci-fi concept art, Unreal Engine render';
-    const styleMap = { 'realistic': 'photorealistic, DSLR photograph, natural lighting', 'anime': 'anime art style, clean line art, vibrant colors, Studio Ghibli quality', 'oil painting': 'oil on canvas, impasto technique, rich texture, museum quality', 'watercolor': 'soft watercolor washes, delicate brushwork, transparent layers', 'cyberpunk': 'neon lights, dark atmosphere, rain-slicked streets, holographic displays', '3d render': 'octane render, subsurface scattering, ray tracing, Blender 3D', 'sketch': 'detailed pencil sketch, cross-hatching, artistic linework', 'fantasy': 'epic fantasy art, magical atmosphere, intricate details, concept art', 'pixel art': '16-bit pixel art, crisp pixels, retro game aesthetic, vibrant palette', 'minimalist': 'clean minimal design, flat art, simple shapes, elegant composition' };
-    return `${rawPrompt}, ${subjectEnrich}, ${styleMap[style]||styleMap['realistic']}, ${baseQuality}`;
+ const enrichImagePrompt = (rawPrompt, style) => {
+  const styleMap = {
+    'realistic':    'photorealistic, cinematic lighting, sharp focus',
+    'anime':        'anime art style, vibrant colors, clean linework',
+    'oil painting': 'oil on canvas, rich brushstrokes, painterly texture',
+    'watercolor':   'watercolor painting, soft washes, delicate edges',
+    'cyberpunk':    'cyberpunk style, neon atmosphere, dark moody tones',
+    '3d render':    '3D render, volumetric lighting, smooth surfaces',
+    'sketch':       'pencil sketch, fine linework, artistic shading',
+    'fantasy':      'fantasy art, dramatic atmosphere, intricate details',
+    'pixel art':    'pixel art, crisp pixels, retro aesthetic',
+    'minimalist':   'minimalist, clean composition, flat design',
   };
+  const styleTag = styleMap[style] || 'cinematic lighting, sharp focus';
+  return `${rawPrompt}, ${styleTag}`;
+};
 
   const runImageGeneration = async (imagePrompt, detectedStyle) => {
     if (imgGenLock.current) return; imgGenLock.current = true;
@@ -1398,15 +1401,16 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     setIsProcessing(false); setProcessingStatus('');
   };
 
- const handleCmd = async (cmd) => {
+const handleCmd = async (cmd) => {
     if (!cmd.trim()) return; 
     if (!canDo('messages')) { hitLimit(); return; }
+    imgGenLock.current = false;  // ← ADD THIS LINE
     setIsStreaming(false);
     setStreamText('');
     setProcessingStatus('');
     addMsg('user', cmd); 
     incrUsage('messages'); 
-    setIsProcessing(true); 
+    setIsProcessing(true);
     setShowAITimeout(false); 
     setShowSettings(false);
     await getAI(cmd, lastMethod === 'voice'); 
