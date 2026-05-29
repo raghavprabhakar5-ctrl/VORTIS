@@ -154,6 +154,7 @@ const makeStyles = (isDark) => `
   --radius:10px;--radius-sm:7px;--sidebar-w:230px;--header-h:50px;
 }
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
@@ -254,7 +255,7 @@ input,textarea,select{font-size:16px}
 .rc-icon{width:22px;height:22px;border-radius:6px;background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;margin-bottom:9px}
 .rc-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rc-time{font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace}
-.msg-wrap{animation:fadeUp .2s ease}
+.msg-wrap{animation:fadeIn .15s ease}
 .bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:14px;color:#e0e7ff;line-height:1.65;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
 .bubble-ai{font-size:14.5px;color:var(--text1);line-height:1.85;max-width:94%}
 .bubble-sys{font-size:11px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'JetBrains Mono',monospace;display:inline-flex;align-items:center;gap:6px}
