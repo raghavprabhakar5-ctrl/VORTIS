@@ -1431,7 +1431,10 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
  const sendImageForAnalysis = async (imgObj, question) => {
     if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
     if (!canDo('messages')) { hitLimit(); return; }
-    setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: imgObj.base64 }]);
+    const previewUrl = URL.createObjectURL(new Blob([
+  Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
+], { type: 'image/jpeg' }));
+setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
     incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
     try {
       const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
