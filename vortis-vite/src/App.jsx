@@ -1458,7 +1458,7 @@ const handleCmd = async (cmd) => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
     if (pendingCode) setPendingCode(null);
     if (pendingImage) { const imgToSend = pendingImage; setInput(''); setWordCount(0); setPendingImage(null); if (textareaRef.current) textareaRef.current.style.height = 'auto'; sendImageForAnalysis(imgToSend, val); return; }
-    if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
+   if (!val) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
  const sendImageForAnalysis = async (imgObj, question) => {
