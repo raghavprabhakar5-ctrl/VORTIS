@@ -1399,11 +1399,18 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
   const handleImgUpload = async (e) => {
-    if (!canDo('images')) { hitLimit(); return; } const file = e.target.files?.[0]; if (!file) return;
-    if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
-    const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
-    reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
+  if (!canDo('images')) { hitLimit(); return; }
+  const file = e.target.files?.[0]; if (!file) return;
+  if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
+  
+  const blobUrl = URL.createObjectURL(file);
+  const reader = new FileReader();
+  reader.onload = (ev) => { 
+    setPendingImage({ base64: ev.target.result, blobUrl, name: file.name }); 
+    setTimeout(() => textareaRef.current?.focus(), 50); 
   };
+  reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
+};
 
   const handleSend = () => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
@@ -1413,29 +1420,21 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
  const sendImageForAnalysis = async (imgObj, question) => {
-  // ✅ checks first, before anything else
   if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
   if (imgObj.base64.length > 5000000) { addMsg('vortis', "Image is too large — try a smaller one.", false); return; }
   if (!canDo('messages')) { hitLimit(); return; }
 
-  // ✅ store base64 outside React state
-  const imageId = `img_${Date.now()}`;
-  imageCache.set(imageId, imgObj.base64);
-
-  // ✅ then show image in chat (only tiny ID in state)
+  // ✅ only tiny blobUrl in state — no base64 ever touches React state
   setMessages(prev => [...prev, { 
     id: Date.now()+Math.random(), 
     type: 'user', 
     text: question || 'Analyze this image',
-    imageRef: imageId   // ← changed from image: imgObj.base64
+    imageBlobUrl: imgObj.blobUrl  // ← tiny URL string, full quality
   }]);
 
-  // Replace the setTimeout with this:
-setTimeout(() => {
-  setMessages(prev => prev.map(m => 
-    m.imageRef === imageId ? { ...m, imageCleared: true } : m
-  ));
-}, 30000);
+  // ✅ clean up blob URL after 30s to free memory
+  setTimeout(() => URL.revokeObjectURL(imgObj.blobUrl), 30000);
+
   incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
   try {
     const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
@@ -1771,8 +1770,7 @@ setTimeout(() => {
                 ) : msg.type === 'user' ? (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
-                    {msg.imageRef && !msg.imageCleared && imageCache.get(msg.imageRef) && 
-                        <img src={imageCache.get(msg.imageRef)} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
+                   {msg.imageBlobUrl && <img src={msg.imageBlobUrl} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.text && <div className="bubble-user">{msg.text.includes('\n') && /[{};=>]/.test(msg.text) ? <pre style={{ margin: 0, fontFamily: 'JetBrains Mono', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</pre> : msg.text}</div>}
                       <div style={{ display: 'flex', gap: 4, opacity: hoveredMsg === 'u_'+idx ? 1 : 0, transition: 'opacity .15s', pointerEvents: hoveredMsg === 'u_'+idx ? 'auto' : 'none', marginTop: 2 }}>
                         <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
