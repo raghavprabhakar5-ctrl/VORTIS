@@ -1188,7 +1188,14 @@ const scrollToBottom = useCallback(() => {
 }, []);
 
 useEffect(() => { 
-  if (messages.length > 0 && !isStreaming) scrollToBottom();
+  if (messages.length > 0) {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.type === 'user') {
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 50);
+    } else {
+      scrollToBottom();
+    }
+  }
 }, [messages]);
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
