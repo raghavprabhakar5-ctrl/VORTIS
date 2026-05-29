@@ -1288,6 +1288,8 @@ GENERATE_IMAGE: <description>
 → Only ask questions if the description is very vague (less than 3 words like just "image" or "something cool")
 → If user says "just make it" or "go ahead" — generate immediately with your best judgment
 → Never ask more than ONE follow-up question
+→ NEVER wrap the command in brackets like [Generating image: ...]
+→ NEVER explain what you are doing, just output the command silently on its own line
 → For follow-up requests like "now make him do X" or "same character but Y" — ALWAYS output the FULL description again
 → NEVER say "generating image..." or describe what you are doing — just output the command silently
 → NEVER use for: analyze, describe, look at an existing image
@@ -1350,7 +1352,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-    const displayText = cleaned
+   const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/^WEB_SEARCH:.*$/gm, '')
   .replace(/^CURRENT_TIME\s*$/gm, '')
@@ -1358,6 +1360,8 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   .replace(/(#+\+){3,}/g, '')
   .replace(/^→.*$/gm, '')
   .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
+  .replace(/\[Generating image:.*?\]/gs, '')
+  .replace(/\[generating image:.*?\]/gis, '')
   .trim();
       requestAnimationFrame(() => {
         addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
