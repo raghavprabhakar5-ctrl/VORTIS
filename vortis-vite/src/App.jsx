@@ -1411,7 +1411,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const sendImageForAnalysis = async (imgObj, question) => {
+ const sendImageForAnalysis = async (imgObj, question) => {
     if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
     if (!canDo('messages')) { hitLimit(); return; }
     setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: imgObj.base64 }]);
@@ -1421,10 +1421,24 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
-      if (result && typeof result === 'string' && result.length > 2) { pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`); pushHistory(convHistory, 'assistant', result); addMsg('vortis', result, autoSpeak); }
-      else await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
-    } catch(_) { addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false); }
-    setIsProcessing(false); setProcessingStatus('');
+      if (result && typeof result === 'string' && result.length > 2) {
+        pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
+        pushHistory(convHistory, 'assistant', result);
+        setIsStreaming(false);
+        setStreamText('');
+        setProcessingStatus('');
+        addMsg('vortis', result, autoSpeak);
+      } else {
+        await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+      }
+    } catch(_) {
+      setIsStreaming(false);
+      setStreamText('');
+      addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
+    } finally {
+      setIsProcessing(false);
+      setProcessingStatus('');
+    }
   };
 
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
