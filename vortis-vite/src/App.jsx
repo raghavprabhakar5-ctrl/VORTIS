@@ -378,6 +378,9 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
 }
 `;
 
+const DARK_STYLES = makeStyles(true);
+const LIGHT_STYLES = makeStyles(false);
+
 const md = (text, dark = true) => {
   if (!text) return '';
   const t = text.trim();
@@ -771,7 +774,6 @@ export default function VortisAI() {
 
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const imageCache = new Map();
   const [showMenu, setShowMenu] = useState(false);
   const [researchMode, setResearchMode] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -852,10 +854,13 @@ export default function VortisAI() {
   const auth = getAuth();
   const db = getFirestore();
 
-  useEffect(() => {
-    if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
-    styleEl.current.textContent = makeStyles(isDark);
-  }, [isDark]);
+ useEffect(() => {
+  if (!styleEl.current) { 
+    styleEl.current = document.createElement('style'); 
+    document.head.appendChild(styleEl.current); 
+  }
+ styleEl.current.textContent = isDark ? DARK_STYLES : LIGHT_STYLES;// ← HUGE string rebuilt every render
+}, [isDark]);
 
  useEffect(() => {
   const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
@@ -1905,7 +1910,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
               )}
               {pendingImage && (
                 <div style={{ padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <img src={pendingImage.base64} alt="Preview" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(99,102,241,.3)' }}/>
+                <img src={pendingImage.blobUrl} alt="Preview"  style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(99,102,241,.3)' }}/>
                   <span style={{ fontSize: 12, color: 'var(--text2)', flex: 1 }}>{pendingImage.name}</span>
                   <button onClick={() => setPendingImage(null)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex' }}><X size={14}/></button>
                 </div>
