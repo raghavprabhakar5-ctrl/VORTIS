@@ -781,7 +781,7 @@ searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS — Today is ${new Date().toDa
               'Content-Type':   'application/json',
               'x-worker-token': process.env.WORKER_SECRET,
             },
-          body: JSON.stringify({ prompt: prompt.trim(), model: 'sdxl-lightning', fallback: 'flux-1-schnell', seed }),
+          body: JSON.stringify({ prompt: prompt.trim(), model: 'flux-2-klein-4b', fallback: 'flux-1-schnell', seed }),
           },
           25000
         );
