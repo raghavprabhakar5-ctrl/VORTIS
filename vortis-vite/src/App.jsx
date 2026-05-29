@@ -1345,7 +1345,19 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
 
       const genMatch = cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/);
-      if (genMatch) { const imagePrompt = genMatch[1].trim(); if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` }; try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); } return; }
+     if (genMatch) {
+  const imagePrompt = genMatch[1].trim();
+  if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` };
+  try { 
+    await runImageGeneration(imagePrompt, imgGenStyle); 
+  } catch(_) { 
+    imgGenLock.current = false;
+  } finally { 
+    setIsProcessing(false);
+    imgGenLock.current = false;
+  }
+  return;
+}
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
       if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
