@@ -1188,7 +1188,7 @@ const scrollToBottom = useCallback(() => {
 }, []);
 
 useEffect(() => { 
-  if (messages.length > 0) scrollToBottom();
+  if (messages.length > 0 && !isStreaming) scrollToBottom();
 }, [messages]);
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
