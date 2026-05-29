@@ -692,7 +692,7 @@ export default async function handler(req, res) {
       return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
 
-    // ╔══════════════════════════════════════╗
+   // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
     // ╚══════════════════════════════════════╝
     if (action === 'vision') {
@@ -702,43 +702,64 @@ export default async function handler(req, res) {
 
       try {
         const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
+
         const cfRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct`,
           {
             method:  'POST',
             headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-           body: JSON.stringify({
-  messages: [{
-    role: 'user',
-    content: [
-      { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-      { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail. If there is a math problem, solve it completely step by step.', 500) },
-    ],
-  }],
-  max_tokens: 2048,  // ✅ add this
-}),
+            body: JSON.stringify({
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+                  { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail. If there is a math problem, solve it completely step by step.', 500) },
+                ],
+              }],
+              max_tokens: 2048,
+            }),
           }
         );
 
-        if (!cfRes.ok) {
-          const bytes    = Array.from(Buffer.from(base64Data, 'base64'));
-          const llavaRes = await fetch(
-            `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
-            {
-              method:  'POST',
-              headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-              body:    JSON.stringify({ prompt: sanitizeString(prompt || 'If this image contains a math problem or question, solve it completely step by step showing all working. Otherwise describe the image in detail.', 500), image: bytes }),
-            }
-          );
-          const d = await llavaRes.json();
-          return res.status(200).json({ success: true, description: d.result?.description || 'Could not analyze image.' });
+        if (cfRes.ok) {
+          const data = await cfRes.json();
+          const description = data.result?.response || data.result?.description || null;
+          if (description && description.trim().length > 2) {
+            return res.status(200).json({ success: true, description });
+          }
         }
 
-        const data = await cfRes.json();
-        return res.status(200).json({ success: true, description: data.result?.response || data.result?.description || 'Could not analyze image.' });
+        // Fallback model
+        const bytes = Array.from(Buffer.from(base64Data, 'base64'));
+        const llavaRes = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
+          {
+            method:  'POST',
+            headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: sanitizeString(prompt || 'Describe this image in detail.', 500),
+              image: bytes
+            }),
+          }
+        );
+
+        if (!llavaRes.ok) {
+          return res.status(200).json({ success: false, description: 'Could not analyze image — please try again.' });
+        }
+
+        const d = await llavaRes.json();
+        const fallbackDesc = d.result?.description || d.result?.response || null;
+
+        return res.status(200).json({
+          success: true,
+          description: fallbackDesc && fallbackDesc.trim().length > 2
+            ? fallbackDesc
+            : 'Could not analyze image — please try again.'
+        });
+
       } catch (error) {
         console.error('VISION ERROR:', error.message);
-        return res.status(500).json({ error: 'Vision failed' });
+        return res.status(200).json({ success: false, description: 'Vision service unavailable — try describing the image instead.' });
       }
     }
 
