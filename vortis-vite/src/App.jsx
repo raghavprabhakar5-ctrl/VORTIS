@@ -1429,38 +1429,45 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
  const sendImageForAnalysis = async (imgObj, question) => {
-    if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
-    if (!canDo('messages')) { hitLimit(); return; }
-    const previewUrl = URL.createObjectURL(new Blob([
-  Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
-], { type: 'image/jpeg' }));
-setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
-    incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
-    try {
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
-      if (result && typeof result === 'string' && result.length > 2) {
-        pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
-        pushHistory(convHistory, 'assistant', result);
-        setIsStreaming(false);
-        setStreamText('');
-        setProcessingStatus('');
-       addMsg('vortis', result, autoSpeak);
-       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 150);
-      } else {
-        await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
-      }
-    } catch(_) {
+  if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
+  if (!canDo('messages')) { hitLimit(); return; }
+  const previewUrl = URL.createObjectURL(new Blob([
+    Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
+  ], { type: 'image/jpeg' }));
+  setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
+  // ── SCROLL AFTER USER MESSAGE RENDERS ──
+  setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+  incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
+  try {
+    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
+    if (result && typeof result === 'string' && result.length > 2) {
+      pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
+      pushHistory(convHistory, 'assistant', result);
       setIsStreaming(false);
       setStreamText('');
-      addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
-    } finally {
-      setIsProcessing(false);
       setProcessingStatus('');
+      addMsg('vortis', result, autoSpeak);
+      // ── SCROLL AFTER AI RESPONSE RENDERS ──
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
+    } else {
+      await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
     }
-  };
+  } catch(_) {
+    setIsStreaming(false);
+    setStreamText('');
+    addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false);
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
+  } finally {
+    setIsProcessing(false);
+    setProcessingStatus('');
+    // ── FINAL SCROLL GUARANTEE ──
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 400);
+  }
+};
 
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const autoResize = useCallback((e) => { const val = e.target.value; e.target.style.height = 'auto'; if (val.trim()) e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; setWordCount(val.trim() ? val.trim().split(/\s+/).length : 0); }, []);
