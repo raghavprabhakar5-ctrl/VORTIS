@@ -1285,7 +1285,7 @@ WEB_SEARCH: <query>
 → For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
 → NEVER guess or make up scores, results, news — ALWAYS search
 → The WEB_SEARCH: command MUST be on its own line, nothing else on that line
-→ NEVER write "Web search:" or "[Web search:" or "[Searched:" or any variation in your response text
+→ NEVER write "Web search:" or "[Web search:" or "[Searched:" or any variation in your response text never show your input command to the user only show them results
 → If you searched, NEVER mention that you searched — just answer with the results.
 CURRENT_TIME
 → Only when user asks what time or date it is
