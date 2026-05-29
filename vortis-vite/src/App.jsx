@@ -1296,8 +1296,9 @@ WEB_SEARCH: <query>
 → Make queries SPECIFIC — for sports include team names and today's date
 → For any live/today/current/recent queries ALWAYS include today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
 → NEVER guess or make up scores, results, news — ALWAYS search
-→ NEVER say "web searching..." or describe what you are doing — just output the command silently
-→ NEVER show "WEB_SEARCH:" text in your response to the user
+→ The WEB_SEARCH: command MUST be on its own line, nothing else on that line
+→ NEVER write "Web search:" or "[Web search:" or any variation in your response text
+→ If you searched, NEVER mention that you searched — just answer with the results
 CURRENT_TIME
 → Only when user asks what time or date it is
 
@@ -1351,6 +1352,8 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/^WEB_SEARCH:.*$/gm, '')
+  .replace(/\[Web search:.*?\]/gi, '')
+  .replace(/Web search:.*?(?=\n|$)/gi, '')
   .replace(/^CURRENT_TIME\s*$/gm, '')
   .replace(/^#{5,}\s*$/gm, '')
   .replace(/(#+\+){3,}/g, '')
