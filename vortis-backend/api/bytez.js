@@ -29,12 +29,12 @@ const CF_CODE_MODELS = [
 ];
 
 const ENGINE_LABELS = {
-  groq_fast:    'SearXNG α',
-  groq_quality: 'SearXNG β',
-  cf_primary:   'SearXNG γ',
-  cf_secondary: 'SearXNG δ',
-  cf_code:      'SearXNG ε',
-  unknown:      'SearXNG',
+  groq_fast:    'Vortis α',
+  groq_quality: 'Vortis β',
+  cf_primary:   'Vortis γ',
+  cf_secondary: 'Vortis δ',
+  cf_code:      'Vortis ε',
+  unknown:      'Vortis',
 };
 
 function getEngineLabel(p) {
@@ -164,142 +164,55 @@ function buildSearchQuery(userMessage) {
   return `${userMessage.slice(0, 180)} ${dateStr}`;
 }
 
-// ── SEARXNG ───────────────────────────────────────────────────
-function parseSearXNGHtml(html, instanceUrl) {
-  const results      = [];
-  const articleRegex = /<article[^>]+class="[^"]*result[^"]*"[^>]*>([\s\S]*?)<\/article>/gi;
-  let articleMatch;
-  while ((articleMatch = articleRegex.exec(html)) !== null) {
-    const block      = articleMatch[1];
-    const titleMatch =
-      block.match(/<h3[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i) ||
-      block.match(/<a[^>]+class="[^"]*url_header[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i);
-    if (!titleMatch) continue;
-    const rawUrl   = titleMatch[1].trim();
-    const rawTitle = titleMatch[2].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
-    if (!rawTitle || rawTitle.length < 3) continue;
-    if (rawUrl.startsWith('/') || rawUrl.includes(instanceUrl)) continue;
-    const snippetMatch = block.match(/<p[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
-    const cleanSnippet = (snippetMatch ? snippetMatch[1] : '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim().slice(0, 300);
-    let sourceLabel    = 'Web';
-    const enginesMatch = block.match(/<span[^>]*class="[^"]*engines[^"]*"[^>]*>([\s\S]*?)<\/span>/i);
-    if (enginesMatch) {
-      const badges = enginesMatch[1].match(/<span[^>]*>([\s\S]*?)<\/span>/gi) || [];
-      const names  = badges.map(b => b.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
-      if (names.length) sourceLabel = names.slice(0, 2).join(', ');
-    } else {
-      try { sourceLabel = new URL(rawUrl).hostname.replace('www.', '').split('.')[0]; } catch (_) {}
-    }
-    const dateMatch = block.match(/class="[^"]*published_date[^"]*"[^>]*>([\s\S]*?)<\/span>/i) || block.match(/data-published="([^"]+)"/i);
-    let date        = new Date().toISOString().split('T')[0];
-    if (dateMatch) { const p = new Date(dateMatch[1].trim()); if (!isNaN(p.getTime())) date = p.toISOString().split('T')[0]; }
-    results.push({ title: rawTitle, snippet: cleanSnippet.length > 10 ? cleanSnippet : rawTitle, link: rawUrl, source: sourceLabel, date });
-    if (results.length >= 10) break;
+// ── SERPER (Google Search API) ────────────────────────────────
+async function fetchSerper(query) {
+  const key = process.env.SERPER_API_KEY;
+  if (!key) {
+    console.warn('SERPER_API_KEY not set');
+    return [];
   }
-  return results;
-}
-
-async function fetchSearXNG(query) {
-  const INSTANCES = [
-    'https://searx.be', 'https://searxng.world', 'https://search.inetol.net',
-    'https://baresearch.org', 'https://searx.tiekoetter.com', 'https://search.hbubli.cc',
-    'https://searx.oloke.xyz', 'https://etsi.me', 'https://searx.work', 'https://searxng.site',
-  ];
-  const shuffled = [...INSTANCES].sort(() => Math.random() - 0.5);
-  for (const instance of shuffled.slice(0, 6)) {
-    try {
-      const jsonUrl = `${instance}/search?q=${encodeURIComponent(query)}&format=json&categories=general,news&language=en-US&locale=en`;
-      const jsonRes = await fetchWithTimeout(jsonUrl, {
-        headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json, text/html', 'Accept-Language': 'en-US,en;q=0.9' },
-      }, 6000);
-      if (jsonRes.ok) {
-        const ct = jsonRes.headers.get('content-type') || '';
-        if (ct.includes('json')) {
-          const data = await jsonRes.json();
-          if (data.results?.length) {
-            return data.results.slice(0, 10).map(r => ({
-              title:   r.title   || '',
-              snippet: r.content || r.title || '',
-              link:    r.url     || '#',
-              source:  r.engine  || new URL(r.url || instance).hostname.replace('www.', ''),
-              date:    r.publishedDate ? new Date(r.publishedDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-            })).filter(r => r.title.length > 3);
-          }
-        }
-      }
-      const htmlRes = await fetchWithTimeout(
-        `${instance}/search?q=${encodeURIComponent(query)}&categories=general,news&language=en-US&locale=en`,
-        { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9' } },
-        7000
-      );
-      if (!htmlRes.ok) continue;
-      const results = parseSearXNGHtml(await htmlRes.text(), instance);
-      if (results.length > 0) return results;
-    } catch (e) {
-      console.log(`SearXNG ${instance} failed: ${e.message}`);
-    }
-  }
-  return [];
-}
-
-// ── WIKIPEDIA ─────────────────────────────────────────────────
-async function fetchWikipedia(query) {
   try {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&format=json&srlimit=5&origin=*`;
-    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': 'VortisAI/1.0' } }, 5000);
-    if (!res.ok) return [];
+    const res = await fetchWithTimeout(
+      'https://google.serper.dev/search',
+      {
+        method:  'POST',
+        headers: {
+          'X-API-KEY':     key,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({
+          q:   query,
+          num: 10,
+          hl:  'en',
+          gl:  'us',
+        }),
+      },
+      8000
+    );
+    if (!res.ok) {
+      console.error(`Serper error: ${res.status}`);
+      return [];
+    }
     const data = await res.json();
-    return (data.query?.search || []).map(r => ({
-      title:   r.title,
-      snippet: r.snippet.replace(/<[^>]+>/g, '').slice(0, 300),
-      link:    `https://en.wikipedia.org/wiki/${encodeURIComponent(r.title.replace(/ /g, '_'))}`,
-      source:  'Wikipedia',
-      date:    new Date().toISOString().split('T')[0],
+    const organic = (data.organic || []).map(r => ({
+      title:   r.title   || '',
+      snippet: r.snippet || '',
+      link:    r.link    || '#',
+      source:  (() => { try { return new URL(r.link).hostname.replace('www.', ''); } catch { return 'Web'; } })(),
+      date:    r.date    || new Date().toISOString().split('T')[0],
     }));
-  } catch (e) { return []; }
-}
-
-// ── GOOGLE NEWS RSS ───────────────────────────────────────────
-function parseRSS(xml, defaultSource) {
-  const results = [];
-  const items   = xml.match(/<item>([\s\S]*?)<\/item>/g) || [];
-  for (const item of items.slice(0, 8)) {
-    const title   = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/)?.[1] || item.match(/<title>(.*?)<\/title>/)?.[1] || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
-    const link    = item.match(/<link>(.*?)<\/link>/)?.[1] || item.match(/<guid[^>]*>(.*?)<\/guid>/)?.[1] || '#';
-    const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1] || '';
-    const source  = item.match(/<source[^>]*>(.*?)<\/source>/)?.[1] || (() => { try { return new URL(link).hostname.replace('www.', '').split('.')[0]; } catch { return defaultSource; } })();
-    const rawDesc = item.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/)?.[1] || item.match(/<description>([\s\S]*?)<\/description>/)?.[1] || '';
-    const snippet = rawDesc.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim().slice(0, 300);
-    if (title && title.length > 3) {
-      results.push({ title, snippet: snippet.length > 10 ? snippet : title, link: link.trim(), source: source.trim(), date: pubDate ? new Date(pubDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0] });
-    }
+    const news = (data.news || []).map(r => ({
+      title:   r.title   || '',
+      snippet: r.snippet || '',
+      link:    r.link    || '#',
+      source:  r.source  || 'News',
+      date:    r.date    || new Date().toISOString().split('T')[0],
+    }));
+    return [...news, ...organic].filter(r => r.title.length > 3).slice(0, 10);
+  } catch (e) {
+    console.error('Serper failed:', e.message);
+    return [];
   }
-  return results;
-}
-
-async function fetchGoogleNews(query, isCricket) {
-  const editions = isCricket ? [{ hl: 'en-IN', gl: 'IN', ceid: 'IN:en' }] : [{ hl: 'en-US', gl: 'US', ceid: 'US:en' }, { hl: 'en-IN', gl: 'IN', ceid: 'IN:en' }];
-  const windows  = isCricket ? ['6h', '1d', '7d'] : ['2d', '7d'];
-  const headers  = { 'User-Agent': BROWSER_UA, 'Accept': 'application/rss+xml, application/xml, text/xml, */*', 'Accept-Language': 'en-US,en;q=0.9', 'Cache-Control': 'no-cache', 'Referer': 'https://news.google.com/' };
-  for (const edition of editions) {
-    for (const when of windows) {
-      try {
-        const q   = encodeURIComponent(`${query} when:${when}`);
-        const url = `https://news.google.com/rss/search?q=${q}&hl=${edition.hl}&gl=${edition.gl}&ceid=${edition.ceid}`;
-        const res = await fetchWithTimeout(url, { headers }, 8000);
-        if (!res.ok) continue;
-        const items = parseRSS(await res.text(), 'Google News');
-        if (items.length > 0) {
-          if (isCricket) {
-            const scoreItems = items.filter(r => /score|result|won|win|beat|wicket|runs|innings|over|scorecard|\d+\/\d+/.test(r.title.toLowerCase()));
-            return scoreItems.length > 0 ? scoreItems.slice(0, 6) : items.slice(0, 6);
-          }
-          return items;
-        }
-      } catch (e) { console.log(`Google News error:`, e.message); }
-    }
-  }
-  return [];
 }
 
 // ── ESPN ──────────────────────────────────────────────────────
@@ -397,8 +310,6 @@ function scoreAndSort(results, query) {
     if (/\b(\d+\/\d+|\d+ runs?|wickets?|overs?)\b/i.test(r.title))                          score += 30;
     if (/\b(score|result|won|win|beats|beat|defeat|victory|final score)\b/i.test(r.title))   score += 25;
     if (/espn/i.test(r.source))        score += 15;
-    if (/wikipedia/i.test(r.source))   score += 10;
-    if (/google news/i.test(r.source)) score += 8;
     if (/\b(streaming|where to watch|preview|pitch report|fantasy|dream11)\b/i.test(r.title)) score -= 40;
     if (/\b(buy|price|review|discount|offer|deal)\b/i.test(r.title))                          score -= 50;
     if (r.date === today)          score += 15;
@@ -419,7 +330,6 @@ function cleanResults(results, query) {
 
 // ── AI CALL WITH FALLBACK CHAIN ───────────────────────────────
 async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
-  // Balanced: enough tokens to never cut off, but AI is instructed to be concise
   const groqModel = GROQ_CHAT_QUALITY;
   const maxTokens = 3000;
   const cfMaxTok  = 1200;
@@ -538,31 +448,24 @@ export default async function handler(req, res) {
       res.setHeader('Connection', 'keep-alive');
 
       try {
-        const now = new Date();
         const lastUserMsg = history[history.length - 1]?.content || '';
-
-        // No triggers — always give the AI max tokens to decide length itself
-        const isCoding = false;
-        const isLong   = true;
 
         // ── AUTO SEARCH ──
         let searchContext = '';
         if (needsWebSearch(lastUserMsg)) {
           try {
             const sq        = buildSearchQuery(lastUserMsg);
-            const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
             const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
+            const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
 
-            const [searxResult, googleResult, espnResult] = await Promise.allSettled([
-              fetchSearXNG(sq),
-              fetchGoogleNews(sq, isCricket),
+            const [serperResult, espnResult] = await Promise.allSettled([
+              fetchSerper(sq),
               (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
             ]);
 
             let allRes = [
-              ...(espnResult.status   === 'fulfilled' ? espnResult.value   : []),
-              ...(searxResult.status  === 'fulfilled' ? searxResult.value  : []),
-              ...(googleResult.status === 'fulfilled' ? googleResult.value : []),
+              ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
+              ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
             ];
 
             allRes = cleanResults(allRes, sq);
@@ -624,19 +527,15 @@ export default async function handler(req, res) {
       const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/.test(low);
       const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/.test(low);
 
-      const [searxResult, wikiResult, googleResult, espnResult] = await Promise.allSettled([
-        fetchSearXNG(searchQuery),
-        fetchWikipedia(searchQuery),
-        fetchGoogleNews(searchQuery, isCricket),
+      const [serperResult, espnResult] = await Promise.allSettled([
+        fetchSerper(searchQuery),
         (isSports && !isCricket) ? fetchESPN(searchQuery) : Promise.resolve([]),
       ]);
 
-      const searx  = searxResult.status  === 'fulfilled' ? searxResult.value  : [];
-      const wiki   = wikiResult.status   === 'fulfilled' ? wikiResult.value   : [];
-      const google = googleResult.status === 'fulfilled' ? googleResult.value : [];
+      const serper = serperResult.status === 'fulfilled' ? serperResult.value : [];
       const espn   = espnResult.status   === 'fulfilled' ? espnResult.value   : [];
 
-      let allResults = [...searx, ...espn, ...google, ...wiki];
+      let allResults = [...espn, ...serper];
       allResults = cleanResults(allResults, searchQuery);
       allResults = deduplicate(allResults);
       allResults = scoreAndSort(allResults, searchQuery);
@@ -692,7 +591,7 @@ export default async function handler(req, res) {
       return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
 
-   // ╔══════════════════════════════════════╗
+    // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
     // ╚══════════════════════════════════════╝
     if (action === 'vision') {
@@ -738,7 +637,7 @@ export default async function handler(req, res) {
             headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               prompt: sanitizeString(prompt || 'Describe this image in detail.', 500),
-              image: bytes
+              image:  bytes,
             }),
           }
         );
@@ -754,7 +653,7 @@ export default async function handler(req, res) {
           success: true,
           description: fallbackDesc && fallbackDesc.trim().length > 2
             ? fallbackDesc
-            : 'Could not analyze image — please try again.'
+            : 'Could not analyze image — please try again.',
         });
 
       } catch (error) {
