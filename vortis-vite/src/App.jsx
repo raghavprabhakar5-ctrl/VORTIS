@@ -1180,7 +1180,13 @@ if (displayName) {
     setStarred(prev => { const updated = { ...prev }; if (updated[msg.id]) delete updated[msg.id]; else updated[msg.id] = { ...msg, text: msg.text?.startsWith('__IMG_B64__') ? '🖼️ [Generated Image]' : msg.text, starredAt: Date.now() }; try { localStorage.setItem('vortis_starred', JSON.stringify(updated)); } catch(_) {} return updated; });
   };
 
-  useEffect(() => { if (messages.length > 0) bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); else { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; } }, [messages]);
+ useEffect(() => { 
+  if (messages.length > 0) {
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 50);
+  }
+}, [messages]);
   useEffect(() => {
     if (messages.length === 0 || !profile.email) return;
     clearTimeout(saveTimerRef.current);
