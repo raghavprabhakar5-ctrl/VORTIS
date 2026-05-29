@@ -1141,11 +1141,11 @@ if (displayName) {
     try {
       const firstUser = msgsToSave.find(m => m.type === 'user');
       const preview = firstUser?.text?.slice(0, 45) || 'New chat';
-    const cleaned = msgsToSave.map(m => ({ 
+   const cleaned = msgsToSave.map(m => ({ 
   ...m, 
-  text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000),
-  imageBlobUrl: null  // ← strip blob URL before saving to Firestore
+  text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000) 
 }));
+
       await loadChats(userUidRef.current);
     } catch(_) {}
   }, []);
@@ -1160,7 +1160,7 @@ if (displayName) {
   };
 
   const loadChat = async (id) => {
-    try { if (!userUidRef.current) return; const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id)); if (snap.exists()) { const c = snap.data(); setChatId(id); chatIdRef.current = id; setMessages((c.messages || []).filter(m => !(m.type === 'vortis' && m.text?.toLowerCase().includes("hello, i'm vortis"))).map(m => ({ ...m, imageBlobUrl: null }))); convHistory.current = []; } } catch(_) {}
+    try { if (!userUidRef.current) return; const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id)); if (snap.exists()) { const c = snap.data(); setChatId(id); chatIdRef.current = id; setMessages((c.messages || []).filter(m => !(m.type === 'vortis' && m.text?.toLowerCase().includes("hello, i'm vortis")))); convHistory.current = []; } } catch(_) {}
     if (window.innerWidth <= 768) setShowSidebar(false);
   };
 
