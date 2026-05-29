@@ -771,6 +771,7 @@ export default function VortisAI() {
 
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const imageCache = new Map();
   const [showMenu, setShowMenu] = useState(false);
   const [researchMode, setResearchMode] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1417,19 +1418,21 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   if (imgObj.base64.length > 5000000) { addMsg('vortis', "Image is too large — try a smaller one.", false); return; }
   if (!canDo('messages')) { hitLimit(); return; }
 
-  // ✅ then show image in chat
+  // ✅ store base64 outside React state
+  const imageId = `img_${Date.now()}`;
+  imageCache.set(imageId, imgObj.base64);
+
+  // ✅ then show image in chat (only tiny ID in state)
   setMessages(prev => [...prev, { 
     id: Date.now()+Math.random(), 
     type: 'user', 
     text: question || 'Analyze this image',
-    image: imgObj.base64
+    imageRef: imageId   // ← changed from image: imgObj.base64
   }]);
 
-  // ✅ clear from memory after 30s
+  // ✅ clear from cache after 30s (not from state)
   setTimeout(() => {
-    setMessages(prev => prev.map(m => 
-      m.image === imgObj.base64 ? { ...m, image: null } : m
-    ));
+    imageCache.delete(imageId);
   }, 30000);
 
   incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
@@ -1767,7 +1770,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
                 ) : msg.type === 'user' ? (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
-                      {msg.image && <img src={msg.image} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
+                     {msg.imageRef && imageCache.get(msg.imageRef) && <img src={imageCache.get(msg.imageRef)} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.text && <div className="bubble-user">{msg.text.includes('\n') && /[{};=>]/.test(msg.text) ? <pre style={{ margin: 0, fontFamily: 'JetBrains Mono', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</pre> : msg.text}</div>}
                       <div style={{ display: 'flex', gap: 4, opacity: hoveredMsg === 'u_'+idx ? 1 : 0, transition: 'opacity .15s', pointerEvents: hoveredMsg === 'u_'+idx ? 'auto' : 'none', marginTop: 2 }}>
                         <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
