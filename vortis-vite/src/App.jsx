@@ -1363,8 +1363,8 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   .replace(/\[Generating image:.*?\]/gs, '')
   .replace(/\[generating image:.*?\]/gis, '')
   .trim();
-     requestAnimationFrame(() => {
-  addMsg('vortis', displayText || "I didn't quite get that — could you say it differently?", shouldSpeak);
+   requestAnimationFrame(() => {
+  if (displayText) addMsg('vortis', displayText, shouldSpeak);
 });
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
