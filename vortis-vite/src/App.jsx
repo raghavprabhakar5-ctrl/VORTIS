@@ -2047,12 +2047,6 @@ Using ONLY the search results below, write a clear, direct, conversational answe
             </div>
           </div>
         </div>
-
-        <div className="disclaimer">
-          {tier === 'free'
-            ? `${messagesLeft} messages left today · Resets at midnight`
-            : `${tier.toUpperCase()} plan · Ctrl+K = new chat`}
-        </div>
       </div>
 
       {showSettings && (
