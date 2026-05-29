@@ -1430,11 +1430,12 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     imageRef: imageId   // ← changed from image: imgObj.base64
   }]);
 
-  // ✅ clear from cache after 30s (not from state)
-  setTimeout(() => {
-    imageCache.delete(imageId);
-  }, 30000);
-
+  // Replace the setTimeout with this:
+setTimeout(() => {
+  setMessages(prev => prev.map(m => 
+    m.imageRef === imageId ? { ...m, imageCleared: true } : m
+  ));
+}, 30000);
   incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
   try {
     const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
@@ -1770,7 +1771,8 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
                 ) : msg.type === 'user' ? (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
-                     {msg.imageRef && imageCache.get(msg.imageRef) && <img src={imageCache.get(msg.imageRef)} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
+                    {msg.imageRef && !msg.imageCleared && imageCache.get(msg.imageRef) && 
+                        <img src={imageCache.get(msg.imageRef)} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.text && <div className="bubble-user">{msg.text.includes('\n') && /[{};=>]/.test(msg.text) ? <pre style={{ margin: 0, fontFamily: 'JetBrains Mono', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</pre> : msg.text}</div>}
                       <div style={{ display: 'flex', gap: 4, opacity: hoveredMsg === 'u_'+idx ? 1 : 0, transition: 'opacity .15s', pointerEvents: hoveredMsg === 'u_'+idx ? 'auto' : 'none', marginTop: 2 }}>
                         <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
