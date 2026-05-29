@@ -1251,7 +1251,7 @@ useEffect(() => {
     if (imgGenLock.current) return; imgGenLock.current = true;
     if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
     setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
-    pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
+    pushHistory(convHistory, 'assistant', `[Generated image with this prompt: "${imagePrompt}". User can now give feedback or ask for changes to this image.]`);
     const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
     try {
       const imgData = await callImageAPI(enriched); const imgUrl = extractImageUrl(imgData);
@@ -1363,9 +1363,9 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   .replace(/\[Generating image:.*?\]/gs, '')
   .replace(/\[generating image:.*?\]/gis, '')
   .trim();
-      requestAnimationFrame(() => {
-        addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
-      });
+     requestAnimationFrame(() => {
+  addMsg('vortis', displayText || "I didn't quite get that — could you say it differently?", shouldSpeak);
+});
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
