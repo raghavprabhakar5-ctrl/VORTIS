@@ -1192,6 +1192,8 @@ useEffect(() => {
     const lastMsg = messages[messages.length - 1];
     if (lastMsg.type === 'user') {
       setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 50);
+    } else if (lastMsg.type === 'vortis') {
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 100);
     } else {
       scrollToBottom();
     }
