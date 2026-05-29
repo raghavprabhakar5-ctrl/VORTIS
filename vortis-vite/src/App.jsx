@@ -378,9 +378,6 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
 }
 `;
 
-const DARK_STYLES = makeStyles(true);
-const LIGHT_STYLES = makeStyles(false);
-
 const md = (text, dark = true) => {
   if (!text) return '';
   const t = text.trim();
@@ -854,13 +851,10 @@ export default function VortisAI() {
   const auth = getAuth();
   const db = getFirestore();
 
- useEffect(() => {
-  if (!styleEl.current) { 
-    styleEl.current = document.createElement('style'); 
-    document.head.appendChild(styleEl.current); 
-  }
- styleEl.current.textContent = isDark ? DARK_STYLES : LIGHT_STYLES;// ← HUGE string rebuilt every render
-}, [isDark]);
+  useEffect(() => {
+    if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
+    styleEl.current.textContent = makeStyles(isDark);
+  }, [isDark]);
 
  useEffect(() => {
   const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
@@ -1141,11 +1135,8 @@ if (displayName) {
     try {
       const firstUser = msgsToSave.find(m => m.type === 'user');
       const preview = firstUser?.text?.slice(0, 45) || 'New chat';
-   const cleaned = msgsToSave.map(m => ({ 
-  ...m, 
-  text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000) 
-}));
-
+      const cleaned = msgsToSave.map(m => ({ ...m, text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000) }));
+      await setDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current), { preview, messages: cleaned, updated: new Date().toISOString() });
       await loadChats(userUidRef.current);
     } catch(_) {}
   }, []);
@@ -1407,18 +1398,11 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   };
 
   const handleImgUpload = async (e) => {
-  if (!canDo('images')) { hitLimit(); return; }
-  const file = e.target.files?.[0]; if (!file) return;
-  if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
-  
-  const blobUrl = URL.createObjectURL(file);
-  const reader = new FileReader();
-  reader.onload = (ev) => { 
-    setPendingImage({ base64: ev.target.result, blobUrl, name: file.name }); 
-    setTimeout(() => textareaRef.current?.focus(), 50); 
+    if (!canDo('images')) { hitLimit(); return; } const file = e.target.files?.[0]; if (!file) return;
+    if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
+    const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
+    reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
   };
-  reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
-};
 
   const handleSend = () => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
@@ -1427,30 +1411,22 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
- const sendImageForAnalysis = async (imgObj, question) => {
-  if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
-  if (imgObj.base64.length > 5000000) { addMsg('vortis', "Image is too large — try a smaller one.", false); return; }
-  if (!canDo('messages')) { hitLimit(); return; }
+  const sendImageForAnalysis = async (imgObj, question) => {
+    if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
+    if (!canDo('messages')) { hitLimit(); return; }
+    setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: imgObj.base64 }]);
+    incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
+    try {
+      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
+      if (result && typeof result === 'string' && result.length > 2) { pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`); pushHistory(convHistory, 'assistant', result); addMsg('vortis', result, autoSpeak); }
+      else await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
+    } catch(_) { addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false); }
+    setIsProcessing(false); setProcessingStatus('');
+  };
 
-  // ✅ show message WITHOUT storing image at all
-  setMessages(prev => [...prev, { 
-    id: Date.now()+Math.random(), 
-    type: 'user', 
-    text: question || 'Analyze this image',
-    // ← no image stored here at all
-  }]);
-
-  incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
-  try {
-    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
-    if (result && typeof result === 'string' && result.length > 2) { pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`); pushHistory(convHistory, 'assistant', result); addMsg('vortis', result, autoSpeak); }
-    else await getAI(`The user uploaded an image. ${question ? `They asked: "${question}".` : 'Please describe what you see.'} The vision API didn't return a result — let the user know and suggest they describe it instead.`, false);
-  } catch(_) { addMsg('vortis', "The vision service isn't responding right now — try describing the image in text instead.", false); }
-  setIsProcessing(false); setProcessingStatus('');
-};
   const onKey = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } };
   const autoResize = useCallback((e) => { const val = e.target.value; e.target.style.height = 'auto'; if (val.trim()) e.target.style.height = Math.min(e.target.scrollHeight, 140) + 'px'; setWordCount(val.trim() ? val.trim().split(/\s+/).length : 0); }, []);
 
@@ -1775,7 +1751,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
                 ) : msg.type === 'user' ? (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
-                   {msg.imageBlobUrl && <img src={msg.imageBlobUrl} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
+                      {msg.image && <img src={msg.image} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.text && <div className="bubble-user">{msg.text.includes('\n') && /[{};=>]/.test(msg.text) ? <pre style={{ margin: 0, fontFamily: 'JetBrains Mono', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</pre> : msg.text}</div>}
                       <div style={{ display: 'flex', gap: 4, opacity: hoveredMsg === 'u_'+idx ? 1 : 0, transition: 'opacity .15s', pointerEvents: hoveredMsg === 'u_'+idx ? 'auto' : 'none', marginTop: 2 }}>
                         <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
@@ -1910,7 +1886,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
               )}
               {pendingImage && (
                 <div style={{ padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <img src={pendingImage.blobUrl} alt="Preview"  style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(99,102,241,.3)' }}/>
+                  <img src={pendingImage.base64} alt="Preview" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(99,102,241,.3)' }}/>
                   <span style={{ fontSize: 12, color: 'var(--text2)', flex: 1 }}>{pendingImage.name}</span>
                   <button onClick={() => setPendingImage(null)} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex' }}><X size={14}/></button>
                 </div>
