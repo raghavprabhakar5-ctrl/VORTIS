@@ -1230,28 +1230,25 @@ useEffect(() => {
     return await res.json();
   };
 
- const enrichImagePrompt = (rawPrompt, style) => {
-  const styleMap = {
-    'realistic':    'photorealistic, cinematic lighting, sharp focus',
-    'anime':        'anime art style, vibrant colors, clean linework',
-    'oil painting': 'oil on canvas, rich brushstrokes, painterly texture',
-    'watercolor':   'watercolor painting, soft washes, delicate edges',
-    'cyberpunk':    'cyberpunk style, neon atmosphere, dark moody tones',
-    '3d render':    '3D render, volumetric lighting, smooth surfaces',
-    'sketch':       'pencil sketch, fine linework, artistic shading',
-    'fantasy':      'fantasy art, dramatic atmosphere, intricate details',
-    'pixel art':    'pixel art, crisp pixels, retro aesthetic',
-    'minimalist':   'minimalist, clean composition, flat design',
+  const enrichImagePrompt = (rawPrompt, style) => {
+    const low = rawPrompt.toLowerCase();
+    const baseQuality = 'highly detailed, sharp focus, professional quality, 4k resolution';
+    let subjectEnrich = 'highly detailed, perfect composition, vivid colors, visually stunning';
+    if (/\b(person|man|woman|girl|boy|face|portrait|character|warrior|knight|wizard|hero|villain|anime|human)\b/.test(low)) subjectEnrich = 'detailed facial features, expressive eyes, cinematic lighting, professional portrait photography';
+    else if (/\b(landscape|mountain|forest|ocean|sea|beach|sky|sunset|sunrise|nature|field|valley|river|waterfall)\b/.test(low)) subjectEnrich = 'sweeping vista, volumetric lighting, dramatic atmosphere, golden hour, award-winning landscape photography';
+    else if (/\b(city|building|architecture|street|urban|skyline|tower|bridge|interior|room|house|palace|castle)\b/.test(low)) subjectEnrich = 'architectural detail, perspective, ambient lighting, high dynamic range';
+    else if (/\b(animal|cat|dog|dragon|creature|monster|bird|lion|wolf|horse|fox|bear)\b/.test(low)) subjectEnrich = 'detailed fur or scales, expressive eyes, natural habitat, dramatic lighting, wildlife photography';
+    else if (/\b(food|dish|meal|recipe|cake|burger|pizza|sushi|dessert|cuisine)\b/.test(low)) subjectEnrich = 'food photography, appetizing, studio lighting, bokeh background, high-end restaurant presentation';
+    else if (/\b(space|galaxy|planet|star|nebula|cosmos|universe|sci-fi|futuristic|robot|mech)\b/.test(low)) subjectEnrich = 'cosmic scale, dramatic nebula colors, ultra-detailed, sci-fi concept art, Unreal Engine render';
+    const styleMap = { 'realistic': 'photorealistic, DSLR photograph, natural lighting', 'anime': 'anime art style, clean line art, vibrant colors, Studio Ghibli quality', 'oil painting': 'oil on canvas, impasto technique, rich texture, museum quality', 'watercolor': 'soft watercolor washes, delicate brushwork, transparent layers', 'cyberpunk': 'neon lights, dark atmosphere, rain-slicked streets, holographic displays', '3d render': 'octane render, subsurface scattering, ray tracing, Blender 3D', 'sketch': 'detailed pencil sketch, cross-hatching, artistic linework', 'fantasy': 'epic fantasy art, magical atmosphere, intricate details, concept art', 'pixel art': '16-bit pixel art, crisp pixels, retro game aesthetic, vibrant palette', 'minimalist': 'clean minimal design, flat art, simple shapes, elegant composition' };
+    return `${rawPrompt}, ${subjectEnrich}, ${styleMap[style]||styleMap['realistic']}, ${baseQuality}`;
   };
-  const styleTag = styleMap[style] || 'cinematic lighting, sharp focus';
-  return `${rawPrompt}, ${styleTag}`;
-};
 
   const runImageGeneration = async (imagePrompt, detectedStyle) => {
     if (imgGenLock.current) return; imgGenLock.current = true;
     if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
     setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
-    pushHistory(convHistory, 'assistant', `[Generated image with this prompt: "${imagePrompt}". User can now give feedback or ask for changes to this image.]`);
+    pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
     const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
     try {
       const imgData = await callImageAPI(enriched); const imgUrl = extractImageUrl(imgData);
@@ -1288,8 +1285,6 @@ GENERATE_IMAGE: <description>
 → Only ask questions if the description is very vague (less than 3 words like just "image" or "something cool")
 → If user says "just make it" or "go ahead" — generate immediately with your best judgment
 → Never ask more than ONE follow-up question
-→ NEVER wrap the command in brackets like [Generating image: ...]
-→ NEVER explain what you are doing, just output the command silently on its own line
 → For follow-up requests like "now make him do X" or "same character but Y" — ALWAYS output the FULL description again
 → NEVER say "generating image..." or describe what you are doing — just output the command silently
 → NEVER use for: analyze, describe, look at an existing image
@@ -1345,26 +1340,14 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
 
       const genMatch = cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/);
-     if (genMatch) {
-  const imagePrompt = genMatch[1].trim();
-  if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` };
-  try { 
-    await runImageGeneration(imagePrompt, imgGenStyle); 
-  } catch(_) { 
-    imgGenLock.current = false;
-  } finally { 
-    setIsProcessing(false);
-    imgGenLock.current = false;
-  }
-  return;
-}
+      if (genMatch) { const imagePrompt = genMatch[1].trim(); if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` }; try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); } return; }
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
       if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-   const displayText = cleaned
+    const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/^WEB_SEARCH:.*$/gm, '')
   .replace(/^CURRENT_TIME\s*$/gm, '')
@@ -1372,12 +1355,10 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
   .replace(/(#+\+){3,}/g, '')
   .replace(/^→.*$/gm, '')
   .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
-  .replace(/\[Generating image:.*?\]/gs, '')
-  .replace(/\[generating image:.*?\]/gis, '')
   .trim();
-   requestAnimationFrame(() => {
-  if (displayText) addMsg('vortis', displayText, shouldSpeak);
-});
+      requestAnimationFrame(() => {
+        addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
+      });
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
@@ -1417,16 +1398,15 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     setIsProcessing(false); setProcessingStatus('');
   };
 
-const handleCmd = async (cmd) => {
+ const handleCmd = async (cmd) => {
     if (!cmd.trim()) return; 
     if (!canDo('messages')) { hitLimit(); return; }
-    imgGenLock.current = false;  // ← ADD THIS LINE
     setIsStreaming(false);
     setStreamText('');
     setProcessingStatus('');
     addMsg('user', cmd); 
     incrUsage('messages'); 
-    setIsProcessing(true);
+    setIsProcessing(true); 
     setShowAITimeout(false); 
     setShowSettings(false);
     await getAI(cmd, lastMethod === 'voice'); 
@@ -1458,7 +1438,7 @@ const handleCmd = async (cmd) => {
     const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
     if (pendingCode) setPendingCode(null);
     if (pendingImage) { const imgToSend = pendingImage; setInput(''); setWordCount(0); setPendingImage(null); if (textareaRef.current) textareaRef.current.style.height = 'auto'; sendImageForAnalysis(imgToSend, val); return; }
-   if (!val) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
  const sendImageForAnalysis = async (imgObj, question) => {
