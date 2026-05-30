@@ -1383,7 +1383,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
 
   
   const clean = sr.results
-  .slice(0, 8)
+ .slice(0, 12)
   .map(r => {
     let source = stripHtml(r.source || '');
     if (!source || source === 'AI' || source === 'Web') {
@@ -1401,8 +1401,14 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       date: r.date || ''
     };
   })
-  .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
-  .slice(0, 6);
+ .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
+.reduce((acc, r) => {
+  const domain = r.source?.toLowerCase().replace('www.','') || '';
+  const domainCount = acc.filter(a => (a.source?.toLowerCase().replace('www.','') || '') === domain).length;
+  if (domainCount < 2) acc.push(r);
+  return acc;
+}, [])
+.slice(0, 10);
 
     if (!clean.length) {
       setProcessingStatus('thinking');
@@ -1474,11 +1480,11 @@ if (finalText) {
   </button>
   <div class="vsr-drawer">
     <div class="vsr-grid">${cards}</div>
-    <button class="vsr-deep" onclick="(function(){var ta=document.querySelector('.input-field');if(ta){ta.value='Search deeper on: ${q.replace(/'/g,"\\'").replace(/"/g,'&quot;')}';ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();}})()">↻ Search deeper</button>
+    <button class="vsr-deep" onclick="window.__vortisSend&&window.__vortisSend('Search deeper on: ${q.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">↻ Search deeper</button>
   </div>
   <div class="vsr-abox">
     <div class="vsr-alabel">✦ Vortis summary</div>
-    <div class="vsr-atext">${finalText}</div>
+    <div class="vsr-atext">${finalText.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\n\n/g,'<br/><br/>').replace(/\n/g,'<br/>')}</div>
     <div class="vsr-chips">${chips}</div>
   </div>
 </div>`;
@@ -1507,6 +1513,10 @@ setProcessingStatus('');
     setIsProcessing(false);
   };
   useEffect(() => { handleCmdRef.current = handleCmd; });
+  useEffect(() => {
+  window.__vortisSend = (text) => { setInput(text); setTimeout(() => textareaRef.current?.focus(), 50); };
+  return () => { delete window.__vortisSend; };
+}, []);
 
   const submitFeedback = async () => {
     if (!feedbackRating || !feedbackText.trim()) return; setFeedbackSending(true);
