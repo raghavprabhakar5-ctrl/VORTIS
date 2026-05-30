@@ -220,7 +220,7 @@ input,textarea,select{font-size:16px}
 .input-inner{max-width:720px;margin:0 auto}
 .input-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;transition:border-color .2s,box-shadow .2s}
 .input-box:focus-within{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.08),0 4px 24px rgba(99,102,241,.1)}
-.input-field{background:transparent;border:none;outline:none;color:var(--text1);font-family:'Geist',sans-serif;font-size:15px;line-height:1.6;resize:none;width:100%;padding:14px 16px 6px;min-height:44px;max-height:140px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.input-field{background:transparent;border:none;outline:none;color:var(--text1);font-family:'Geist',sans-serif;font-size:15px;line-height:1.6;resize:none;width:100%;padding:14px 16px 6px;min-height:36px;max-height:140px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .input-field::-webkit-scrollbar{display:none}
 .input-field::placeholder{color:var(--text3)}
 .input-actions-row{display:flex;align-items:center;gap:6px;padding:6px 10px 9px 12px}
