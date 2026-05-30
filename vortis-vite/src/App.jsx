@@ -487,18 +487,21 @@ const SelectionReply = ({ onReply }) => {
 
   React.useEffect(() => {
     const handler = () => {
-      const selection = window.getSelection();
-      const text = selection?.toString().trim();
-      if (text && text.length > 2) {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        setSel(text);
-        setPos({ top: rect.top + window.scrollY - 44, left: rect.left + rect.width / 2 });
-      } else {
-        setPos(null);
-        setSel('');
-      }
-    };
+  const selection = window.getSelection();
+  const text = selection?.toString().trim();
+  if (text && text.length > 2) {
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    setSel(text);
+    setPos({ 
+      top: rect.top - 44,  // removed window.scrollY since we use position:fixed
+      left: rect.left + rect.width / 2 
+    });
+  } else {
+    setPos(null);
+    setSel('');
+  }
+};
     document.addEventListener('mouseup', handler);
     document.addEventListener('touchend', handler);
     return () => {
