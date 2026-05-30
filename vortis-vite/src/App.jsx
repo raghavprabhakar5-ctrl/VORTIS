@@ -1348,9 +1348,7 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
         .replace(/^→.*$/gm, '')
         .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
         .trim();
-      requestAnimationFrame(() => {
-        addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
-      });
+      addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
@@ -1444,12 +1442,13 @@ Using ONLY the search results below, write a clear, direct, conversational answe
       setStreamText('');
       setProcessingStatus('');
 
-      if (ft.trim()) {
-        pushHistory(convHistory, 'assistant', ft.trim());
-        addMsg('vortis', ft.trim(), false);
-      } else {
-        addMsg('vortis', "I found some results but couldn't summarize them well. Try rephrasing your question.", false);
-      }
+     const finalText = ft.trim();
+if (!finalText) {
+  addMsg('vortis', "I found results but couldn't summarize them. Please try again.", false);
+} else {
+  pushHistory(convHistory, 'assistant', finalText);
+  addMsg('vortis', finalText, false);
+}
 
     } catch(_) {
       setIsStreaming(false);
