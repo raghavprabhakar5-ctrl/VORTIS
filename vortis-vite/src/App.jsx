@@ -487,26 +487,41 @@ const SelectionReply = ({ onReply }) => {
 
   React.useEffect(() => {
     const handler = () => {
-  const selection = window.getSelection();
-  const text = selection?.toString().trim();
-  if (text && text.length > 2) {
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    setSel(text);
-    setPos({ 
-      top: rect.top - 44,  // removed window.scrollY since we use position:fixed
-      left: rect.left + rect.width / 2 
-    });
-  } else {
-    setPos(null);
-    setSel('');
-  }
-};
+      setTimeout(() => {
+        const selection = window.getSelection();
+        const text = selection?.toString().trim();
+        if (text && text.length > 2) {
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          setSel(text);
+          setPos({
+            top: rect.top - 50,
+            left: Math.min(Math.max(rect.left + rect.width / 2, 80), window.innerWidth - 80)
+          });
+        } else {
+          setPos(null);
+          setSel('');
+        }
+      }, 10);
+    };
+
+    const clearHandler = (e) => {
+      if (e.target.closest && e.target.closest('button')) return;
+      setTimeout(() => {
+        if (!window.getSelection()?.toString().trim()) {
+          setPos(null);
+          setSel('');
+        }
+      }, 100);
+    };
+
     document.addEventListener('mouseup', handler);
     document.addEventListener('touchend', handler);
+    document.addEventListener('mousedown', clearHandler);
     return () => {
       document.removeEventListener('mouseup', handler);
       document.removeEventListener('touchend', handler);
+      document.removeEventListener('mousedown', clearHandler);
     };
   }, []);
 
@@ -515,34 +530,38 @@ const SelectionReply = ({ onReply }) => {
   return (
     <div style={{
       position: 'fixed',
-      top: pos.top,
+      top: Math.max(pos.top, 10),
       left: pos.left,
       transform: 'translateX(-50%)',
-      zIndex: 9999,
-      animation: 'fadeUp .15s ease'
+      zIndex: 99999,
+      animation: 'fadeUp .15s ease',
+      pointerEvents: 'all'
     }}>
       <button
         onMouseDown={e => {
           e.preventDefault();
+          e.stopPropagation();
           onReply(`> "${sel}"\n\n`);
           window.getSelection()?.removeAllRanges();
           setPos(null);
+          setSel('');
         }}
         style={{
           background: 'linear-gradient(135deg,var(--indigo),var(--violet))',
           border: 'none',
           color: 'white',
-          padding: '6px 12px',
+          padding: '7px 14px',
           borderRadius: 8,
           fontSize: 12,
           fontWeight: 700,
           cursor: 'pointer',
           fontFamily: 'Geist,sans-serif',
-          boxShadow: '0 4px 14px rgba(99,102,241,.4)',
+          boxShadow: '0 4px 20px rgba(99,102,241,.5)',
           display: 'flex',
           alignItems: 'center',
           gap: 5,
-          whiteSpace: 'nowrap'
+          whiteSpace: 'nowrap',
+          userSelect: 'none'
         }}
       >
         ↩ Reply
@@ -550,7 +569,6 @@ const SelectionReply = ({ onReply }) => {
     </div>
   );
 };
-
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -1811,9 +1829,18 @@ setProcessingStatus('');
   ];
 
   return (
-    <div className="v-app">
-      {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
-
+  <div className="v-app">
+    <SelectionReply onReply={(text) => {
+      setInput(text);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px';
+        }
+      }, 50);
+    }}/>
+    {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
       {showLogin && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', fontFamily: "'Geist',sans-serif", background: '#080810', overflow: 'hidden' }}>
           <div className="login-left" style={{ flex: 1, padding: 'clamp(32px,4vw,56px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', background: '#0a0a12', borderRight: '1px solid rgba(255,255,255,.07)', position: 'relative', overflow: 'hidden', minHeight: 0, height: '100%' }}>
