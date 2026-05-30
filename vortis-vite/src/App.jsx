@@ -1426,13 +1426,6 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
    let sr;
 try { sr = await doSearch(q); } catch(_) { sr = { success: false, results: [] }; }
 
-// ADD THIS TEMPORARILY
-console.log('=== VORTIS SEARCH DEBUG ===');
-console.log('Total results:', sr.results?.length);
-console.log('First result keys:', sr.results?.[0] ? Object.keys(sr.results[0]) : 'NO RESULTS');
-console.log('First result full:', JSON.stringify(sr.results?.[0], null, 2));
-console.log('Second result full:', JSON.stringify(sr.results?.[1], null, 2));
-console.log('=== END DEBUG ===');
     if (!sr.success || !sr.results?.length) {
       setProcessingStatus('thinking');
       await getAI(`The user asked: "${q}". You searched the web but found no results. Tell them briefly and suggest checking Google directly. Do NOT make up any information.`, false);
