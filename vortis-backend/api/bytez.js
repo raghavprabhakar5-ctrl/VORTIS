@@ -328,41 +328,44 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
-// ── AI CALL WITH FALLBACK CHAIN ───────────────────────────────
 async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
-  const groqModel = GROQ_CHAT_QUALITY;
-  const maxTokens = 3000;
-  const cfMaxTok  = 1200;
-  const cfModels  = CF_CHAT_MODELS;
+  
+  // Detect if question needs deep thinking
+  const lastMsg = messages[messages.length - 1]?.content || '';
+  const needsDeepThink = /\b(solve|calculate|prove|explain in detail|step by step|derive|integrate|differentiate|algorithm|debug|analyze|compare|research|write a (long|detailed|full|complete))\b/i.test(lastMsg);
+
+  const firstModel  = GROQ_CHAT_PRIMARY;   // always try fast first
+  const secondModel = needsDeepThink ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY; // quality only if needed
+  const maxTokens   = 3000;
+  const cfMaxTok    = 1200;
 
   let combined = null, usedProvider = null;
 
-  // 1. Groq primary
+  // 1. Fast model first
   try {
     const result = await Promise.race([
-      groq.chat.completions.create({ model: groqModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Groq timeout')), 25000)),
+      groq.chat.completions.create({ model: firstModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
     ]);
     const text = result.choices?.[0]?.message?.content || null;
-    if (isValidResponse(text)) { combined = text; usedProvider = groqModel; }
-  } catch (e) { console.error(`Groq primary failed: ${e.message}`); }
+    if (isValidResponse(text)) { combined = text; usedProvider = firstModel; }
+  } catch (e) { console.error(`Fast model failed: ${e.message}`); }
 
-  // 2. Groq fallback
-  if (!combined) {
-    const fallbackModel = groqModel === GROQ_CHAT_PRIMARY ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  // 2. Quality model if fast failed OR question needs deep thinking
+  if (!combined || needsDeepThink) {
     try {
       const result = await Promise.race([
-        groq.chat.completions.create({ model: fallbackModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Groq fallback timeout')), 20000)),
+        groq.chat.completions.create({ model: secondModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000)),
       ]);
       const text = result.choices?.[0]?.message?.content || null;
-      if (isValidResponse(text)) { combined = text; usedProvider = fallbackModel; }
-    } catch (e) { console.error(`Groq fallback failed: ${e.message}`); }
+      if (isValidResponse(text)) { combined = text; usedProvider = secondModel; }
+    } catch (e) { console.error(`Quality model failed: ${e.message}`); }
   }
 
   // 3. Cloudflare fallback
   if (!combined) {
-    for (const model of cfModels) {
+    for (const model of CF_CHAT_MODELS) {
       try {
         const cfRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${model}`,
