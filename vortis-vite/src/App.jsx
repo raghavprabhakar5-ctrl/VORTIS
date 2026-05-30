@@ -1447,12 +1447,15 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
         source = 'Web';
       }
     }
-    return {
-      title: stripHtml(r.title),
-      snippet: stripHtml(r.snippet),
-      source,
-      date: r.date || ''
-    };
+   let rawUrl = r.link || r.url || r.href || r.displayLink || '';
+if (rawUrl && !rawUrl.startsWith('http')) rawUrl = 'https://' + rawUrl;
+return {
+  title: stripHtml(r.title),
+  snippet: stripHtml(r.snippet),
+  source,
+  date: r.date || '',
+  url: rawUrl
+};
   })
  .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
 .reduce((acc, r) => {
@@ -1482,20 +1485,20 @@ setProcessingStatus('');
 const finalText = ft.trim();
 if (finalText) {
   const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
-  const chips = clean.map((r, i) =>
-    `<div class="vsr-chip"><span class="vsr-dot" style="background:${dotColors[i % dotColors.length]}"></span>${r.source}</div>`
+ const chips = clean.map((r, i) =>
+ `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><span class="vsr-dot" style="background:${dotColors[i % dotColors.length]}"></span>${r.source}</a>`
   ).join('');
-  const cards = clean.map((r, i) => `
-    <div class="vsr-card">
+ const cards = clean.map((r, i) => `
+    <a class="vsr-card" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:block;">
       <div class="vsr-card-top">
         <div class="vsr-fav">${(r.source||'?')[0].toUpperCase()}</div>
         <span class="vsr-site">${r.source}${r.date ? ' · ' + r.date : ''}</span>
       </div>
       <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
       <div class="vsr-snip">${r.snippet}</div>
-    </div>`
-  ).join('');
-  const searchHTML = `<style>
+    </a>`
+).join('');
+ const searchHTML = `<style>
 .vsr-wrap{font-size:14px}
 .vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px}
 .vsr-toggle:hover{background:var(--bg3);border-color:rgba(99,102,241,.35);color:var(--text1)}
@@ -1504,8 +1507,8 @@ if (finalText) {
 .vsr-drawer{overflow:hidden;max-height:0;transition:max-height .4s ease}
 .vsr-drawer.open{max-height:2000px}
 .vsr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px;padding-bottom:8px}
-.vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:border-color .15s}
-.vsr-card:hover{border-color:rgba(99,102,241,.4)}
+.vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:all .15s;display:block;text-decoration:none;color:inherit}
+.vsr-card:hover{border-color:rgba(99,102,241,.5);transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.1)}
 .vsr-card-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
 .vsr-fav{width:16px;height:16px;border-radius:3px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text3);flex-shrink:0}
 .vsr-site{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1517,8 +1520,11 @@ if (finalText) {
 .vsr-abox{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:13px 15px}
 .vsr-alabel{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--indigo);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
 .vsr-atext{font-size:13.5px;color:var(--text1);line-height:1.75}
+.vsr-atext strong{font-weight:700;color:var(--text1)}
+.vsr-atext em{font-style:italic;color:var(--text2)}
 .vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3)}
+.vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3);text-decoration:none;transition:all .15s}
+.vsr-chip:hover{border-color:rgba(99,102,241,.4);color:var(--indigo);background:rgba(99,102,241,.06)}
 .vsr-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 </style>
 <div class="vsr-wrap">
