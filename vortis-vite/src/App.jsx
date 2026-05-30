@@ -1118,6 +1118,72 @@ export default function VortisAI() {
     try { const snap = await getDocs(collection(db, 'users', uid, 'chats')); const chats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(b.updated) - new Date(a.updated)); setSavedChats(chats); } catch(_) {}
   };
 
+
+  const generateChatTitle = async (firstUserMsg) => {
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: 'Generate a short 3-5 word chat title. Output ONLY the title, nothing else. No quotes, no punctuation at the end.',
+        history: [{ role: 'user', content: firstUserMsg }]
+      })
+    });
+    if (!res.ok) return null;
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let title = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try { const p = JSON.parse(raw); if (p.content) title += p.content; } catch(_) {}
+      }
+    }
+    const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').slice(0, 50);
+    return clean || null;
+  } catch(_) { return null; }
+};
+
+const saveChat = useCallback(async (msgsToSave) => {
+  if (!userUidRef.current) return;
+  try {
+    const firstUser = msgsToSave.find(m => m.type === 'user');
+    if (!firstUser) return;
+
+    // Check if title already exists for this chat
+    let preview = null;
+    try {
+      const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
+      if (existing.exists() && existing.data().preview && existing.data().preview !== 'New chat') {
+        preview = existing.data().preview; // reuse existing title
+      }
+    } catch(_) {}
+
+    // Generate title only once (first save)
+    if (!preview) {
+      preview = await generateChatTitle(firstUser.text) || firstUser.text.slice(0, 45);
+    }
+
+    const cleaned = msgsToSave.map(m => ({
+      ...m,
+      text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000)
+    }));
+
+    await setDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current), {
+      preview,
+      messages: cleaned,
+      updated: new Date().toISOString()
+    });
+
+    loadChats(userUidRef.current);
+  } catch(_) {}
+}, []);
+
   const saveChat = useCallback(async (msgsToSave) => {
     if (!userUidRef.current) return;
     try {
@@ -1366,7 +1432,7 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
       setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'chat', prompt: sys2 + '\n\n' + sys, history: convHistory.current }) });
+      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(),body: JSON.stringify({ action: 'chat', prompt: sys + '\n\n' + sys2, history: convHistory.current }) });
 
       if (!res.ok) {
         const code = res.status; let msg = 'Something went wrong — please try again.';
@@ -1379,6 +1445,7 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
       const reader = res.body.getReader(); const dec = new TextDecoder(); let full = '';
       try { while (true) { const { done, value } = await reader.read(); if (done) break; for (const line of dec.decode(value, { stream: true }).split('\n')) { if (!line.startsWith('data: ')) continue; const raw = line.slice(6).trim(); if (raw === '[DONE]' || !raw) continue; try { const p = JSON.parse(raw); if (p.content) { full += p.content; setStreamText(t => t + p.content); } } catch(_) {} } } } catch(e) { console.error('SSE error:', e.message); }
 
+
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       const cleaned = full.trim(); pushHistory(convHistory, 'assistant', cleaned);
       if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
@@ -1390,7 +1457,7 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
       if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
-
+   
    const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/\[Generating image.*?\]/gi, '')
@@ -1410,7 +1477,10 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
   .replace(/(#+\+){3,}/g, '')
   .replace(/^→.*$/gm, '')
   .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
-  .replace(/\n{3,}/g, '\n\n') // ADD THIS
+  .replace(/^assistant\s*$/gim, '')
+  .replace(/^system\s*$/gim, '')
+  .replace(/\n{3,}/g, '\n\n')
+  .replace(/^\s*\n/, '')
   .trim();
       addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
     } catch(e) {
