@@ -413,8 +413,10 @@ const md = (text, dark = true) => {
   h = h.replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
-  h = h.replace(/\n\n/g, '<br/><br/>');
-  h = h.replace(/\n/g, '<br/>');
+ h = h.replace(/\n\n/g, '<br/>');
+h = h.replace(/\n/g, '<br/>');
+\
+
   return h;
 };
 
