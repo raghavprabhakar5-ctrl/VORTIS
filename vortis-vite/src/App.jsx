@@ -1458,22 +1458,15 @@ const cards = clean.map((r, i) => `
     <div class="vsr-snip">${r.snippet}</div>
   </div>`
 ).join('');
-
 const searchHTML = `<style>
 .vsr-wrap{font-size:14px}
-.vsr-abox{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:13px 15px;margin-bottom:8px}
-.vsr-alabel{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--indigo);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
-.vsr-atext{font-size:13.5px;color:var(--text1);line-height:1.75}
-.vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3)}
-.vsr-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
-.vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:0}
+.vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px}
 .vsr-toggle:hover{background:var(--bg3);border-color:rgba(99,102,241,.35);color:var(--text1)}
 .vsr-toggle-left{display:flex;align-items:center;gap:7px}
-.vsr-toggle-icon{font-size:13px;transition:transform .25s;display:inline-block}
-.vsr-drawer{overflow:hidden;max-height:0;transition:max-height .35s ease}
+.vsr-toggle-icon{transition:transform .25s;display:inline-flex}
+.vsr-drawer{overflow:hidden;max-height:0;transition:max-height .4s ease}
 .vsr-drawer.open{max-height:2000px}
-.vsr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;padding:10px 0 4px}
+.vsr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px;padding-bottom:8px}
 .vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:border-color .15s}
 .vsr-card:hover{border-color:rgba(99,102,241,.4)}
 .vsr-card-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
@@ -1482,15 +1475,16 @@ const searchHTML = `<style>
 .vsr-num{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:3px;background:var(--bg3);font-size:9px;color:var(--text3);flex-shrink:0;margin-right:3px;border:1px solid var(--border);vertical-align:middle}
 .vsr-title{font-size:12.5px;font-weight:600;color:var(--text1);line-height:1.45;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .vsr-snip{font-size:11.5px;color:var(--text2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.vsr-deep{width:100%;padding:8px 13px;background:transparent;border:1px solid rgba(99,102,241,.3);border-radius:9px;font-size:12px;color:var(--indigo);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;font-family:'Geist',sans-serif;margin-top:8px;font-weight:600}
+.vsr-deep{width:100%;padding:8px 13px;background:transparent;border:1px solid rgba(99,102,241,.3);border-radius:9px;font-size:12px;color:var(--indigo);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px;font-weight:600}
 .vsr-deep:hover{background:rgba(99,102,241,.08);border-color:rgba(99,102,241,.5)}
+.vsr-abox{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:13px 15px}
+.vsr-alabel{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--indigo);letter-spacing:.07em;margin-bottom:8px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+.vsr-atext{font-size:13.5px;color:var(--text1);line-height:1.75}
+.vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3)}
+.vsr-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 </style>
 <div class="vsr-wrap">
-  <div class="vsr-abox">
-    <div class="vsr-alabel">✦ Vortis summary</div>
-    <div class="vsr-atext">${finalText}</div>
-    <div class="vsr-chips">${chips}</div>
-  </div>
   <button class="vsr-toggle" onclick="(function(btn){var d=btn.nextElementSibling;var ic=btn.querySelector('.vsr-toggle-icon');var isOpen=d.classList.contains('open');d.classList.toggle('open');ic.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';btn.querySelector('.vsr-toggle-label').textContent=isOpen?'Show ${clean.length} sources':'Hide sources';})(this)">
     <span class="vsr-toggle-left">
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -1504,8 +1498,12 @@ const searchHTML = `<style>
     <div class="vsr-grid">${cards}</div>
     <button class="vsr-deep" onclick="(function(){var ta=document.querySelector('.input-field');if(ta){ta.value='Search deeper on: ${q.replace(/'/g,"\\'").replace(/"/g,'&quot;')}';ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();}})()">↻ Search deeper</button>
   </div>
+  <div class="vsr-abox">
+    <div class="vsr-alabel">✦ Vortis summary</div>
+    <div class="vsr-atext">${finalText}</div>
+    <div class="vsr-chips">${chips}</div>
+  </div>
 </div>`;
-
 pushHistory(convHistory, 'assistant', finalText);
 addMsg('vortis', searchHTML, false);
     } else {
