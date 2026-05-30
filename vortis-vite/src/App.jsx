@@ -1184,16 +1184,6 @@ const saveChat = useCallback(async (msgsToSave) => {
   } catch(_) {}
 }, []);
 
-  const saveChat = useCallback(async (msgsToSave) => {
-    if (!userUidRef.current) return;
-    try {
-      const firstUser = msgsToSave.find(m => m.type === 'user');
-      const preview = firstUser?.text?.slice(0, 45) || 'New chat';
-      const cleaned = msgsToSave.map(m => ({ ...m, text: m.text?.startsWith('__IMG_B64__') ? '__IMG_EXPIRED__' : m.text?.slice(0, 10000) }));
-      await setDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current), { preview, messages: cleaned, updated: new Date().toISOString() });
-      loadChats(userUidRef.current);
-    } catch(_) {}
-  }, []);
 
   const startNewChat = async () => {
     if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); if (snap.docs.length >= 10) { const oldest = snap.docs.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0]; if (oldest) await deleteDoc(oldest.ref); } } catch(_) {} }
