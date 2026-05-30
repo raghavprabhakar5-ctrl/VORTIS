@@ -1333,7 +1333,7 @@ CURRENT_TIME
 ═══════════════════════════════════════
 RESPONSE QUALITY RULES
 ═══════════════════════════════════════
-- **Always highlight key terms, important numbers, names, and critical facts using bold**
+- Use **bold** naturally to highlight key facts, important numbers, names, dates — only when it genuinely adds clarity, not on every word
 - Match response length to the question — short questions get short answers, complex ones get detailed answers
 - Use markdown naturally: **bold** for emphasis, bullet points for lists, headers for long structured responses
 - For code always use proper code blocks with the language specified
