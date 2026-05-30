@@ -1198,11 +1198,20 @@ export default function VortisAI() {
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
   const speakText = (t) => { try { synthRef.current.cancel(); const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim(); if (!clean) return; const u = new SpeechSynthesisUtterance(clean); u.rate = 0.9; u.pitch = 1; u.volume = 1; u.lang = 'en-US'; u.onerror = () => {}; synthRef.current.speak(u); } catch(_) {} };
 
-  const doSearch = async (query) => {
-    setProcessingStatus('searching');
-    try { const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'search', query, timestamp: Date.now() }) }); const data = await res.json(); if (data.success && data.results?.length > 0) return { success: true, results: data.results }; } catch(_) {} finally { setProcessingStatus(''); }
-    return { success: false, results: [] };
-  };
+ const doSearch = async (query) => {
+  setProcessingStatus('searching');
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'search', query, timestamp: Date.now() })
+    });
+    const data = await res.json();
+    if (data.success && data.results?.length > 0)
+      return { success: true, results: data.results, aiSummary: data.aiSummary || null };
+  } catch(_) {} finally { setProcessingStatus(''); }
+  return { success: false, results: [], aiSummary: null };
+};
 
   const extractImageUrl = (data) => {
     if (!data) return null;
@@ -1372,12 +1381,28 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
       return;
     }
 
-    const now = new Date();
-    const clean = sr.results
-      .slice(0, 8)
-      .map(r => ({ title: stripHtml(r.title), snippet: stripHtml(r.snippet), source: stripHtml(r.source||'Web'), date: r.date||'' }))
-      .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
-      .slice(0, 6);
+  
+  const clean = sr.results
+  .slice(0, 8)
+  .map(r => {
+    let source = stripHtml(r.source || '');
+    if (!source || source === 'AI' || source === 'Web') {
+      try {
+        const url = r.link || r.url || r.href || '';
+        source = new URL(url).hostname.replace('www.', '') || 'Web';
+      } catch(_) {
+        source = 'Web';
+      }
+    }
+    return {
+      title: stripHtml(r.title),
+      snippet: stripHtml(r.snippet),
+      source,
+      date: r.date || ''
+    };
+  })
+  .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
+  .slice(0, 6);
 
     if (!clean.length) {
       setProcessingStatus('thinking');
@@ -1388,77 +1413,30 @@ NEVER: Do not mention today's date unless the user explicitly asks. Do not end e
     }
 
     // Build a rich context block for the AI to synthesize — just like Claude does internally
-    const snippet = clean.map((r, i) => `[${i+1}] ${r.source}${r.date ? ` (${r.date})` : ''}: ${r.title}. ${r.snippet.slice(0, 400)}`).join('\n');
 
     pushHistory(convHistory, 'assistant', `[Searched web for: "${q}" — found ${clean.length} sources]`);
 
-    setProcessingStatus('thinking');
+    const ft = sr.aiSummary || "I found some results but couldn't summarize them. Please try again.";
 
-    try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: await getAuthHeader(),
-        body: JSON.stringify({
-          action: 'chat',
-          prompt: `REPLY IN THE SAME LANGUAGE AS THE USER. You just searched the web for: "${q}".
-Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}.
-Using ONLY the search results below, write a clear, direct, conversational answer.
-- Include specific names, numbers, dates, and facts from the results
-- Write naturally like you're explaining to a friend — no headers, no bullet points unless genuinely needed
-- Do NOT mention that you searched or cite source numbers
-- Do NOT add any preamble like "Based on the search results..."
-- Just answer directly and naturally
-- If the results are about a person, event, or news — summarize what happened clearly
-- If results conflict, mention the most credible/recent info`,
-          history: [{ role: 'user', content: `Search results:\n${snippet}\n\nAnswer the question: ${q}` }]
-        })
-      });
+setProcessingStatus('');
 
-      if (!res.ok) {
-        addMsg('vortis', "I searched but had trouble summarizing the results. Try asking again.", false);
-        setProcessingStatus('');
-        setIsProcessing(false);
-        return;
-      }
-
-      const rd = res.body.getReader();
-      const dc = new TextDecoder();
-      let ft = '';
-      setIsStreaming(true);
-      setStreamText('');
-
-      while (true) {
-        const { done, value } = await rd.read();
-        if (done) break;
-        for (const line of dc.decode(value).split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6);
-          if (raw === '[DONE]') break;
-          try { const p = JSON.parse(raw); if (p.content) { ft += p.content; setStreamText(ft); } } catch(_) {}
-        }
-      }
-
-    setIsStreaming(false);
-    setStreamText('');
-    setProcessingStatus('');
-
-    const finalText = ft.trim();
-    if (finalText) {
-     const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
-const chips = clean.map((r, i) =>
-  `<div class="vsr-chip"><span class="vsr-dot" style="background:${dotColors[i % dotColors.length]}"></span>${r.source}</div>`
-).join('');
-const cards = clean.map((r, i) => `
-  <div class="vsr-card">
-    <div class="vsr-card-top">
-      <div class="vsr-fav">${(r.source||'?')[0].toUpperCase()}</div>
-      <span class="vsr-site">${r.source}${r.date ? ' · ' + r.date : ''}</span>
-    </div>
-    <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
-    <div class="vsr-snip">${r.snippet}</div>
-  </div>`
-).join('');
-const searchHTML = `<style>
+const finalText = ft.trim();
+if (finalText) {
+  const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
+  const chips = clean.map((r, i) =>
+    `<div class="vsr-chip"><span class="vsr-dot" style="background:${dotColors[i % dotColors.length]}"></span>${r.source}</div>`
+  ).join('');
+  const cards = clean.map((r, i) => `
+    <div class="vsr-card">
+      <div class="vsr-card-top">
+        <div class="vsr-fav">${(r.source||'?')[0].toUpperCase()}</div>
+        <span class="vsr-site">${r.source}${r.date ? ' · ' + r.date : ''}</span>
+      </div>
+      <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
+      <div class="vsr-snip">${r.snippet}</div>
+    </div>`
+  ).join('');
+  const searchHTML = `<style>
 .vsr-wrap{font-size:14px}
 .vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px}
 .vsr-toggle:hover{background:var(--bg3);border-color:rgba(99,102,241,.35);color:var(--text1)}
@@ -1504,21 +1482,14 @@ const searchHTML = `<style>
     <div class="vsr-chips">${chips}</div>
   </div>
 </div>`;
-pushHistory(convHistory, 'assistant', finalText);
-addMsg('vortis', searchHTML, false);
-    } else {
-      addMsg('vortis', "I found some results but couldn't summarize them. Please try again.", false);
-    }
+  pushHistory(convHistory, 'assistant', finalText);
+  addMsg('vortis', searchHTML, false);
+} else {
+  addMsg('vortis', "I found some results but couldn't summarize them. Please try again.", false);
+}
 
-  } catch(_) {
-    setIsStreaming(false);
-    setStreamText('');
-    setProcessingStatus('');
-    addMsg('vortis', "Something went wrong while searching. Please try again.", false);
-  }
-
-  setIsProcessing(false);
-  setProcessingStatus('');
+setIsProcessing(false);
+setProcessingStatus('');
 };
 
   const handleCmd = async (cmd) => {
