@@ -281,7 +281,7 @@ input,textarea,select{font-size:16px}
 .md-content li{margin-left:14px;padding:3px 0;color:var(--text2);line-height:1.7}
 .md-content a{color:var(--indigo);text-underline-offset:2px}
 .md-content blockquote{border-left:3px solid var(--indigo);padding:8px 13px;margin:10px 0;background:rgba(99,102,241,.05);border-radius:0 9px 9px 0;color:var(--text2)}
-.md-content strong{color:var(--text1);font-weight:600}
+.md-content strong{color:var(--indigo);font-weight:700}
 pre.code-block{background:${isDark?'#080814':'#f0f0f8'};border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:${isDark?'#a5f3fc':'#2d2d8a'};margin:8px 0;white-space:pre-wrap;word-break:break-all}
 code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:${isDark?'#a5b4fc':'#4338ca'}}
 .ai-img-card{position:relative;display:inline-block;border-radius:12px;overflow:hidden;border:1px solid var(--border2);max-width:min(400px,100%);width:100%;cursor:pointer;transition:transform .2s,box-shadow .2s;background:var(--bg3)}
@@ -1301,13 +1301,14 @@ You have 3 special commands. When you use them:
 GENERATE_IMAGE: <description>
 ──────────────────────────────────────
 → Use when user wants an image created, drawn, or generated
-→ If user gives enough detail (subject + any hint), generate IMMEDIATELY
-→ Only ask ONE follow-up question if description is extremely vague (e.g. just "image" or "draw something")
-→ If user says "just make it", "go ahead", "surprise me" — generate immediately with best judgment
+→ NEVER generate an image without any description at all
+→ If user gives even a small hint or subject, generate immediately — do not ask follow-up questions
+→ If user wants to proceed without more detail, generate immediately using best judgment
+→ Only ask what to generate if user gives absolutely nothing with zero context
+→ Never ask more than one question about the image
 → For follow-ups like "now make him smile" or "same but at night" — ALWAYS output the FULL new description
 → NEVER use this for: analyzing, describing, or reading an existing uploaded image
 → NEVER write "generating image..." or any variation — just silently output the command
-
 ──────────────────────────────────────
 WEB_SEARCH: <query>
 ──────────────────────────────────────
