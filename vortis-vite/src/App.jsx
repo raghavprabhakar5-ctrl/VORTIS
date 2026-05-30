@@ -538,33 +538,37 @@ const SelectionReply = ({ onReply }) => {
       pointerEvents: 'all'
     }}>
       <button
-        onMouseDown={e => {
-          e.preventDefault();
-          e.stopPropagation();
-          onReply(`> "${sel}"\n\n`);
-          window.getSelection()?.removeAllRanges();
-          setPos(null);
-          setSel('');
-        }}
-        style={{
-          background: 'linear-gradient(135deg,var(--indigo),var(--violet))',
-          border: 'none',
-          color: 'white',
-          padding: '7px 14px',
-          borderRadius: 8,
-          fontSize: 12,
-          fontWeight: 700,
-          cursor: 'pointer',
-          fontFamily: 'Geist,sans-serif',
-          boxShadow: '0 4px 20px rgba(99,102,241,.5)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-          whiteSpace: 'nowrap',
-          userSelect: 'none'
-        }}
-      >
-        ↩ Reply
+  onMouseDown={e => {
+    e.preventDefault();
+    e.stopPropagation();
+    onReply(`> "${sel}"\n\n`);
+    window.getSelection()?.removeAllRanges();
+    setPos(null);
+    setSel('');
+  }}
+       style={{
+  background: '#111120',
+  border: '1px solid #2a2a4a',
+  color: '#e8e8f8',
+  padding: '6px 14px',
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'Geist,sans-serif',
+  boxShadow: '0 2px 12px rgba(0,0,0,.4)',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  whiteSpace: 'nowrap',
+  userSelect: 'none'
+}}
+>
+  Reply
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 17 4 12 9 7"/>
+    <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
+  </svg>
       </button>
     </div>
   );
