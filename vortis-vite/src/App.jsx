@@ -1332,6 +1332,7 @@ CURRENT_TIME
 ═══════════════════════════════════════
 RESPONSE QUALITY RULES
 ═══════════════════════════════════════
+- **Always highlight key terms, important numbers, names, and critical facts using bold**
 - Match response length to the question — short questions get short answers, complex ones get detailed answers
 - Use markdown naturally: **bold** for emphasis, bullet points for lists, headers for long structured responses
 - For code always use proper code blocks with the language specified
@@ -1340,7 +1341,6 @@ RESPONSE QUALITY RULES
 - Never start responses with "Certainly!", "Of course!", "Absolutely!", "Great question!" or similar sycophantic openers
 - Never end responses with "Feel free to ask more!" or "Let me know if you need anything!" type phrases
 - If you don't know something, say so honestly — never make things up
-
 ═══════════════════════════════════════
 IDENTITY
 ═══════════════════════════════════════
@@ -1390,7 +1390,7 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
 
-    const displayText = cleaned
+   const displayText = cleaned
   .replace(/^GENERATE_IMAGE:.*$/gm, '')
   .replace(/\[Generating image.*?\]/gi, '')
   .replace(/\[Image generating.*?\]/gi, '')
@@ -1409,6 +1409,7 @@ PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user
   .replace(/(#+\+){3,}/g, '')
   .replace(/^→.*$/gm, '')
   .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
+  .replace(/\n{3,}/g, '\n\n') // ADD THIS
   .trim();
       addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
     } catch(e) {
