@@ -480,6 +480,74 @@ const AIImageCard = ({ src, onRetry }) => {
   );
 };
 
+
+const SelectionReply = ({ onReply }) => {
+  const [pos, setPos] = React.useState(null);
+  const [sel, setSel] = React.useState('');
+
+  React.useEffect(() => {
+    const handler = () => {
+      const selection = window.getSelection();
+      const text = selection?.toString().trim();
+      if (text && text.length > 2) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        setSel(text);
+        setPos({ top: rect.top + window.scrollY - 44, left: rect.left + rect.width / 2 });
+      } else {
+        setPos(null);
+        setSel('');
+      }
+    };
+    document.addEventListener('mouseup', handler);
+    document.addEventListener('touchend', handler);
+    return () => {
+      document.removeEventListener('mouseup', handler);
+      document.removeEventListener('touchend', handler);
+    };
+  }, []);
+
+  if (!pos || !sel) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: pos.top,
+      left: pos.left,
+      transform: 'translateX(-50%)',
+      zIndex: 9999,
+      animation: 'fadeUp .15s ease'
+    }}>
+      <button
+        onMouseDown={e => {
+          e.preventDefault();
+          onReply(`> "${sel}"\n\n`);
+          window.getSelection()?.removeAllRanges();
+          setPos(null);
+        }}
+        style={{
+          background: 'linear-gradient(135deg,var(--indigo),var(--violet))',
+          border: 'none',
+          color: 'white',
+          padding: '6px 12px',
+          borderRadius: 8,
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontFamily: 'Geist,sans-serif',
+          boxShadow: '0 4px 14px rgba(99,102,241,.4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 5,
+          whiteSpace: 'nowrap'
+        }}
+      >
+        ↩ Reply
+      </button>
+    </div>
+  );
+};
+
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -1420,6 +1488,7 @@ STRICT RULES
 - Respond in the same language the user writes in — if they write in Hindi, respond in Hindi etc.
 
 PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
       setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
