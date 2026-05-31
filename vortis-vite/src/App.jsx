@@ -1254,24 +1254,32 @@ export default function VortisAI() {
 const saveChat = useCallback(async (msgsToSave) => {
   if (!userUidRef.current) return;
   try {
-    const firstUser = msgsToSave.find(m => m.type === 'user');
-    if (!firstUser) return;
+    const userMessages = msgsToSave.filter(m => m.type === 'user');
+    if (userMessages.length === 0) return;
 
     let preview = null;
+
+    // Check existing title in Firestore
     try {
       const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
-     const existingPreview = existing.exists() ? existing.data().preview : null;
-const userMessages = msgsToSave.filter(m => m.type === 'user').map(m => m.text);
-const hasRealContent = userMessages.some(m => m.trim().split(/\s+/).length > 3);
-
-if (existingPreview && existingPreview !== 'New Conversation' && hasRealContent) {
-  preview = existingPreview; // only lock title if real content exists
-}
+      const existingPreview = existing.exists() ? existing.data().preview : null;
+      // Only reuse if it's a real title — not a placeholder
+      if (existingPreview && existingPreview !== 'New Conversation') {
+        preview = existingPreview;
+      }
     } catch(_) {}
 
-    // Generate title only once (first save)
+    // Don't have a real title yet — decide whether to generate one
     if (!preview) {
-      preview = await generateChatTitle(msgsToSave) || firstUser.text.slice(0, 45);
+      const hasRealContent = userMessages.some(m => m.trim().split(/\s+/).length > 3);
+      
+      if (!hasRealContent) {
+        // Only greetings so far — save placeholder, don't generate yet
+        preview = 'New Conversation';
+      } else {
+        // Real content exists — generate proper title now
+        preview = await generateChatTitle(msgsToSave) || userMessages[0].text.slice(0, 45);
+      }
     }
 
     const cleaned = msgsToSave.map(m => ({
@@ -1288,7 +1296,6 @@ if (existingPreview && existingPreview !== 'New Conversation' && hasRealContent)
     loadChats(userUidRef.current);
   } catch(_) {}
 }, []);
-
 
   const startNewChat = async () => {
     if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); if (snap.docs.length >= 10) { const oldest = snap.docs.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0]; if (oldest) await deleteDoc(oldest.ref); } } catch(_) {} }
