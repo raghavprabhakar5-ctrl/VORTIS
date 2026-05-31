@@ -1254,32 +1254,22 @@ export default function VortisAI() {
 const saveChat = useCallback(async (msgsToSave) => {
   if (!userUidRef.current) return;
   try {
-    const userMessages = msgsToSave.filter(m => m.type === 'user');
-    if (userMessages.length === 0) return;
+    const firstUser = msgsToSave.find(m => m.type === 'user');
+    if (!firstUser) return;
 
     let preview = null;
-
-    // Check existing title in Firestore
     try {
       const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
       const existingPreview = existing.exists() ? existing.data().preview : null;
-      // Only reuse if it's a real title — not a placeholder
+      
+      // Only reuse title if it's a real title — not placeholder
       if (existingPreview && existingPreview !== 'New Conversation') {
         preview = existingPreview;
       }
     } catch(_) {}
 
-    // Don't have a real title yet — decide whether to generate one
     if (!preview) {
-      const hasRealContent = userMessages.some(m => m.trim().split(/\s+/).length > 3);
-      
-      if (!hasRealContent) {
-        // Only greetings so far — save placeholder, don't generate yet
-        preview = 'New Conversation';
-      } else {
-        // Real content exists — generate proper title now
-        preview = await generateChatTitle(msgsToSave) || userMessages[0].text.slice(0, 45);
-      }
+      preview = await generateChatTitle(msgsToSave) || firstUser.text.slice(0, 45);
     }
 
     const cleaned = msgsToSave.map(m => ({
