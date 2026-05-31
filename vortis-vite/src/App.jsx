@@ -1213,15 +1213,23 @@ export default function VortisAI() {
   };
 
 
-  const generateChatTitle = async (firstUserMsg) => {
+  const generateChatTitle = async (messages) => {
   try {
+    const userMessages = messages
+      .filter(m => m.type === 'user')
+      .map(m => m.text)
+      .slice(0, 5)
+      .join(' | ');
+
+    if (!userMessages) return null;
+
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'Generate a short 3-5 word chat title. Output ONLY the title, nothing else. No quotes, no punctuation at the end.',
-        history: [{ role: 'user', content: firstUserMsg }]
+        prompt: `Based on these user messages, generate a short 3-5 word chat title that captures the MAIN TOPIC. If the messages are just greetings with no real topic yet, return "New Conversation". Output ONLY the title, nothing else. No quotes, no punctuation at the end.\n\nMessages: ${userMessages}`,
+        history: []
       })
     });
     if (!res.ok) return null;
@@ -1249,18 +1257,17 @@ const saveChat = useCallback(async (msgsToSave) => {
     const firstUser = msgsToSave.find(m => m.type === 'user');
     if (!firstUser) return;
 
-    // Check if title already exists for this chat
     let preview = null;
     try {
       const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
-      if (existing.exists() && existing.data().preview && existing.data().preview !== 'New chat') {
+      if (existing.exists() && existing.data().preview && existing.data().preview !== 'New Conversation') {
         preview = existing.data().preview; // reuse existing title
       }
     } catch(_) {}
 
     // Generate title only once (first save)
     if (!preview) {
-      preview = await generateChatTitle(firstUser.text) || firstUser.text.slice(0, 45);
+      preview = await generateChatTitle(msgsToSave) || firstUser.text.slice(0, 45);
     }
 
     const cleaned = msgsToSave.map(m => ({
