@@ -353,12 +353,17 @@ async function classifyMessage(groq, message) {
 }
 
 async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
-  const lastMsg = messages[messages.length - 1]?.content || '';
- const maxTokens = useQuality ? 2000 : 800;
- const cfMaxTok  = 1200;
+  const cfMaxTok = 1200;
+
+  // Get actual last user message — skip system messages
+  const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+
   // Classify first — tiny fast call
   const complexity = await classifyMessage(groq, lastMsg);
   const useQuality = complexity === 'complex';
+
+  // maxTokens defined AFTER useQuality
+  const maxTokens = useQuality ? 2000 : 800;
 
   let combined = null, usedProvider = null;
 
@@ -411,7 +416,6 @@ async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
 
   return { text: combined, provider: usedProvider };
 }
-
 // ═════════════════════════════════════════════════════════════
 // ── MAIN HANDLER
 // ═════════════════════════════════════════════════════════════
