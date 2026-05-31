@@ -1253,9 +1253,11 @@ const saveChat = useCallback(async (msgsToSave) => {
     let preview = null;
     try {
       const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
-      if (existing.exists() && existing.data().preview && existing.data().preview !== 'New chat') {
-        preview = existing.data().preview; // reuse existing title
-      }
+     if (existing.exists() && existing.data().preview && 
+     existing.data().preview !== 'New chat' && 
+     existing.data().preview !== 'New Conversation') {  // ← add this
+     preview = existing.data().preview;
+  }
     } catch(_) {}
 
     // Generate title only once (first save)
