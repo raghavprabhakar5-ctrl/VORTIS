@@ -1261,9 +1261,13 @@ const saveChat = useCallback(async (msgsToSave) => {
     } catch(_) {}
 
     // Generate title only once (first save)
-    if (!preview) {
-      preview = await generateChatTitle(firstUser.text) || firstUser.text.slice(0, 45);
-    }
+   if (!preview) {
+  const allUserText = msgsToSave
+    .filter(m => m.type === 'user')
+    .map(m => m.text)
+    .join(' | ');
+  preview = await generateChatTitle(allUserText) || firstUser.text.slice(0, 45);
+}
 
     const cleaned = msgsToSave.map(m => ({
       ...m,
