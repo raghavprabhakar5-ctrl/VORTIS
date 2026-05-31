@@ -1213,23 +1213,15 @@ export default function VortisAI() {
   };
 
 
-  const generateChatTitle = async (messages) => {
+  const generateChatTitle = async (firstUserMsg) => {
   try {
-    const userMessages = messages
-      .filter(m => m.type === 'user')
-      .map(m => m.text)
-      .slice(0, 5)
-      .join(' | ');
-
-    if (!userMessages) return null;
-
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: `Based on these user messages, generate a short 3-5 word chat title that captures the MAIN TOPIC. If the messages are just greetings with no real topic yet, return "New Conversation". Output ONLY the title, nothing else. No quotes, no punctuation at the end.\n\nMessages: ${userMessages}`,
-        history: []
+        prompt: 'You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. No quotes, no punctuation.',
+        history: [{ role: 'user', content: firstUserMsg }]
       })
     });
     if (!res.ok) return null;
@@ -1257,19 +1249,18 @@ const saveChat = useCallback(async (msgsToSave) => {
     const firstUser = msgsToSave.find(m => m.type === 'user');
     if (!firstUser) return;
 
+    // Check if title already exists for this chat
     let preview = null;
     try {
       const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
-      const existingPreview = existing.exists() ? existing.data().preview : null;
-      
-      // Only reuse title if it's a real title — not placeholder
-      if (existingPreview && existingPreview !== 'New Conversation') {
-        preview = existingPreview;
+      if (existing.exists() && existing.data().preview && existing.data().preview !== 'New chat') {
+        preview = existing.data().preview; // reuse existing title
       }
     } catch(_) {}
 
+    // Generate title only once (first save)
     if (!preview) {
-      preview = await generateChatTitle(msgsToSave) || firstUser.text.slice(0, 45);
+      preview = await generateChatTitle(firstUser.text) || firstUser.text.slice(0, 45);
     }
 
     const cleaned = msgsToSave.map(m => ({
@@ -1286,6 +1277,7 @@ const saveChat = useCallback(async (msgsToSave) => {
     loadChats(userUidRef.current);
   } catch(_) {}
 }, []);
+
 
   const startNewChat = async () => {
     if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); if (snap.docs.length >= 10) { const oldest = snap.docs.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0]; if (oldest) await deleteDoc(oldest.ref); } } catch(_) {} }
