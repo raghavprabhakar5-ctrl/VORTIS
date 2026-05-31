@@ -328,42 +328,68 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
-async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
-  
-  // Detect if question needs deep thinking
-  const lastMsg = messages[messages.length - 1]?.content || '';
-  const needsDeepThink = /\b(solve|calculate|prove|explain in detail|step by step|derive|integrate|differentiate|algorithm|debug|analyze|compare|research|write a (long|detailed|full|complete))\b/i.test(lastMsg);
+async function classifyMessage(groq, message) {
+  try {
+    const result = await Promise.race([
+      groq.chat.completions.create({
+        model: GROQ_CHAT_PRIMARY,
+        messages: [
+          {
+            role: 'system',
+            content: 'How much thinking does this message need? Reply ONLY "simple" or "complex". Simple = can be answered in 1-3 sentences without deep thinking. Complex = needs long explanation, multiple steps, deep research, code, math, or detailed analysis.'
+          },
+          { role: 'user', content: message }
+        ],
+        max_tokens: 5,
+        temperature: 0
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+    ]);
+    const label = result.choices?.[0]?.message?.content?.trim().toLowerCase();
+    return label?.includes('simple') ? 'simple' : 'complex';
+  } catch(_) {
+    return 'complex'; // safe fallback
+  }
+}
 
-  const firstModel  = GROQ_CHAT_PRIMARY;   // always try fast first
-  const secondModel = needsDeepThink ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY; // quality only if needed
-  const maxTokens   = 2000;
-  const cfMaxTok    = 1200;
+async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
+  const lastMsg = messages[messages.length - 1]?.content || '';
+ const maxTokens = useQuality ? 2000 : 800;
+ const cfMaxTok  = 1200;
+  // Classify first — tiny fast call
+  const complexity = await classifyMessage(groq, lastMsg);
+  const useQuality = complexity === 'complex';
 
   let combined = null, usedProvider = null;
 
-  // 1. Fast model first
+  // 1. Simple → fast model only
+  //    Complex → quality model directly
+  const modelToUse = useQuality ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const timeout    = useQuality ? 25000 : 15000;
+
   try {
     const result = await Promise.race([
-      groq.chat.completions.create({ model: firstModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+      groq.chat.completions.create({ model: modelToUse, messages, max_tokens: maxTokens, temperature: 0.7 }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
     ]);
     const text = result.choices?.[0]?.message?.content || null;
-    if (isValidResponse(text)) { combined = text; usedProvider = firstModel; }
-  } catch (e) { console.error(`Fast model failed: ${e.message}`); }
+    if (isValidResponse(text)) { combined = text; usedProvider = modelToUse; }
+  } catch (e) { console.error(`Primary model failed: ${e.message}`); }
 
-  // 2. Quality model if fast failed OR question needs deep thinking
-  if (!combined || needsDeepThink) {
+  // 2. If chosen model failed — try the other one as fallback
+  if (!combined) {
+    const fallbackModel = useQuality ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY;
     try {
       const result = await Promise.race([
-        groq.chat.completions.create({ model: secondModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000)),
+        groq.chat.completions.create({ model: fallbackModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
       ]);
       const text = result.choices?.[0]?.message?.content || null;
-      if (isValidResponse(text)) { combined = text; usedProvider = secondModel; }
-    } catch (e) { console.error(`Quality model failed: ${e.message}`); }
+      if (isValidResponse(text)) { combined = text; usedProvider = fallbackModel; }
+    } catch (e) { console.error(`Fallback model failed: ${e.message}`); }
   }
 
-  // 3. Cloudflare fallback
+  // 3. Cloudflare fallback — only if both groq models fail
   if (!combined) {
     for (const model of CF_CHAT_MODELS) {
       try {
