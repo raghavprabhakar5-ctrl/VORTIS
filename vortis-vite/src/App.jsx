@@ -497,11 +497,14 @@ const SelectionReply = ({ onReply }) => {
   const [sel, setSel] = React.useState('');
 
   React.useEffect(() => {
-    const handler = () => {
-      setTimeout(() => {
-        const selection = window.getSelection();
-        const text = selection?.toString().trim();
-        if (text && text.length > 2) {
+   const handler = () => {
+  setTimeout(() => {
+    const selection = window.getSelection();
+    const text = selection?.toString().trim();
+    // Only show Reply if selection is inside an AI bubble
+    const anchorNode = selection?.anchorNode;
+    const isInsideAIBubble = anchorNode?.parentElement?.closest('.bubble-ai');
+    if (text && text.length > 2 && isInsideAIBubble) {
           const range = selection.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           setSel(text);
@@ -552,7 +555,7 @@ const SelectionReply = ({ onReply }) => {
   onMouseDown={e => {
     e.preventDefault();
     e.stopPropagation();
-    onReply(`> "${sel}"\n\n`);
+    onReply(`> ${sel}\n\n`);
     window.getSelection()?.removeAllRanges();
     setPos(null);
     setSel('');
@@ -2318,6 +2321,14 @@ setProcessingStatus('');
                   </div>
                 </div>
               )}
+               {input.startsWith('> ') && (
+  <div style={{ padding: '8px 14px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
+      <span style={{ fontSize: 12, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flex: 1, lineHeight: 1.5 }}>{input.replace(/^> /, '').replace(/\n\n$/, '')}</span>
+      <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
+    </div>
+  </div>
+)}
               {pendingImage && (
                 <div style={{ padding: '10px 14px 6px', display: 'flex', alignItems: 'center', gap: 10 }}>
                   <img src={pendingImage.base64} alt="Preview" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', border: '1px solid rgba(99,102,241,.3)' }}/>
