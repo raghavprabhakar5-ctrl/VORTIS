@@ -284,7 +284,7 @@ input,textarea,select{font-size:16px}
 .md-content table{width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;margin:10px 0;font-size:13px;display:block;overflow-x:auto}
 .md-content th{background:rgba(99,102,241,.12);padding:8px 12px;text-align:left;color:var(--text1);font-weight:600}
 .md-content td{padding:7px 12px;color:var(--text2);border-bottom:1px solid var(--border)}
-.md-content li{margin-left:14px;padding:3px 0;color:var(--text1);line-height:1.7}
+.md-content li{margin-left:14px;padding:3px 0;color:var(--text1);line-height:1.7;margin-bottom:4px}
 .md-content a{color:var(--indigo);text-underline-offset:2px}
 .md-content blockquote{border-left:3px solid var(--indigo);padding:8px 13px;margin:10px 0;background:rgba(99,102,241,.05);border-radius:0 9px 9px 0;color:var(--text2)}
 .md-content strong { color: var(--text1); font-weight: 700; }
@@ -399,7 +399,7 @@ const md = (text, dark = true) => {
   });
   h = h.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, content) => `<h${hashes.length}>${content}</h${hashes.length}>`);
   h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--indigo);font-weight:700">$1</strong>');
   h = h.replace(/\*(.+?)\*/g, '<em style="color:var(--text2)">$1</em>');
   h = h.replace(/`{3}(\w*)\n?([\s\S]*?)`{3}/g, function(_, lang, code) {
     var escaped = code.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -419,9 +419,10 @@ const md = (text, dark = true) => {
   h = h.replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+  h = h.replace(/(<\/li>)\s*\n\n\s*(<li>)/g, '$1$2');
   h = h.replace(/\n\n/g, '<br/><br/>');
   h = h.replace(/\n/g, '<br/>');
-  return h;
+return h;
 };
 
 const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
