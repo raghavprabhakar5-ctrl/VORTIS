@@ -2324,7 +2324,7 @@ setProcessingStatus('');
                {input.startsWith('> ') && (
   <div style={{ padding: '8px 14px 0' }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
-      <span style={{ fontSize: 12, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flex: 1, lineHeight: 1.5 }}>{input.replace(/^> /, '').replace(/\n\n$/, '')}</span>
+      <span style={{ fontSize: 12, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flex: 1, lineHeight: 1.5 }}>Replying to: "{input.replace(/^> /, '').replace(/\n\n$/, '').trim()}"</span>
       <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
     </div>
   </div>
@@ -2337,35 +2337,36 @@ setProcessingStatus('');
                 </div>
               )}
               <textarea
-                ref={textareaRef}
-                value={input}
-                onChange={e => {
-                  const val = e.target.value;
-                  setInput(val);
-                  autoResize(e);
-                }}
-                onPaste={e => {
-                  const text = e.clipboardData.getData('text');
-                  const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text);
-                  if (isCode && text.length > 100) {
-                    e.preventDefault();
-                    setPendingCode({ content: text, lines: text.split('\n').length });
-                  }
-                }}
-                onKeyDown={onKey}
-                disabled={isProcessing}
-                placeholder={
-                  imgGenMode ? `Describe the image… (${imgGenStyle})` :
-                  researchMode === 'deep' ? 'What should I research in depth?' :
-                  pendingImage ? 'Ask something about this image…' :
-                  'Message Vortis…'
-                }
-                rows={1}
-                className="input-field"
-              />
-              <div className="input-actions-row">
-                <button className={`ia-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)}>
-                  <Plus size={13}/><span>Add</span>
+  ref={textareaRef}
+  value={input.startsWith('> ') ? '' : input}
+  onChange={e => {
+    const val = input.startsWith('> ') ? '> ' + e.target.value : e.target.value;
+    setInput(val);
+    autoResize(e);
+  }}
+  onPaste={e => {
+    const text = e.clipboardData.getData('text');
+    const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text);
+    if (isCode && text.length > 100) {
+      e.preventDefault();
+      setPendingCode({ content: text, lines: text.split('\n').length });
+    }
+  }}
+  onKeyDown={onKey}
+  disabled={isProcessing}
+  placeholder={
+    input.startsWith('> ') ? 'Type your reply…' :
+    imgGenMode ? `Describe the image… (${imgGenStyle})` :
+    researchMode === 'deep' ? 'What should I research in depth?' :
+    pendingImage ? 'Ask something about this image…' :
+    'Message Vortis…'
+  }
+  rows={1}
+  className="input-field"
+/>
+      <div className="input-actions-row">
+         <button className={`ia-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)}>
+             <Plus size={13}/><span>Add</span>
                 </button>
                 <div className="ia-right">
                   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
