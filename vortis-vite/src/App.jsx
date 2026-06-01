@@ -4,9 +4,7 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, Faceb
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 // Import the sans-serif font
 import 'geist/font/sans';
-
-// Import the mono font (optional)
-import 'geist/font/mono';
+import 'geist/font/mono'; 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import './index.css';
