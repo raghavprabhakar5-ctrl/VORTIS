@@ -508,10 +508,10 @@ const SelectionReply = ({ onReply }) => {
           const range = selection.getRangeAt(0);
           const rect = range.getBoundingClientRect();
           setSel(text);
-          setPos({
-            top: rect.top - 50,
-            left: Math.min(Math.max(rect.left + rect.width / 2, 80), window.innerWidth - 80)
-          });
+         setPos({
+  top: rect.top - 44,
+  left: Math.min(Math.max(rect.left + rect.width / 2, 80), window.innerWidth - 80)
+});
         } else {
           setPos(null);
           setSel('');
@@ -543,14 +543,14 @@ const SelectionReply = ({ onReply }) => {
 
   return (
     <div style={{
-      position: 'fixed',
-      top: Math.max(pos.top, 10),
-      left: pos.left,
-      transform: 'translateX(-50%)',
-      zIndex: 99999,
-      animation: 'fadeUp .15s ease',
-      pointerEvents: 'all'
-    }}>
+  position: 'fixed',
+  top: Math.max(pos.top, 10),
+  left: pos.left,
+  transform: 'translateX(-50%)',
+  zIndex: 99999,
+  pointerEvents: 'all',
+  willChange: 'transform',
+}}>
       <button
   onMouseDown={e => {
     e.preventDefault();
@@ -564,9 +564,9 @@ const SelectionReply = ({ onReply }) => {
   background: '#1e1e2e',
   border: '1px solid rgba(255,255,255,0.12)',
   color: 'white',
-  padding: '7px 16px',
   borderRadius: 8,
-  fontSize: 13,
+  padding: '8px 18px',
+  fontSize: 13.5,
   fontWeight: 600,
   cursor: 'pointer',
   fontFamily: 'Geist,sans-serif',
@@ -2325,7 +2325,7 @@ setProcessingStatus('');
   <div style={{ padding: '8px 14px 0' }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-  <span style={{ fontSize: 10, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '.06em', flexShrink: 0 }}>REPLYING TO</span>
+  <span style={{ fontSize: 10, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '.06em', flexShrink: 0 }}>REPLYING TO: </span>
   <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'JetBrains Mono', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{input.replace(/^> /, '').replace(/\n\n$/, '').trim()}</span>
 </div>
       <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
