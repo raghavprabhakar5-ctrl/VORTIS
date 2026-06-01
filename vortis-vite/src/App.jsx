@@ -1565,7 +1565,7 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
    
-  const displayText = cleaned
+ const displayText = cleaned
   // Image commands
   .replace(/^GENERATE_IMAGE:.*$/gim, '')
   .replace(/^GENERATE_IMAGE\s*$/gim, '')
@@ -1588,9 +1588,27 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
   // System labels
   .replace(/^assistant\s*$/gim, '')
   .replace(/^assistant:\s*$/gim, '')
+  .replace(/^assistant\s+/gim, '')
+  .replace(/^assistant:\s+/gim, '')
+  .replace(/^assistant>\s*/gim, '')
+
   .replace(/^system\s*$/gim, '')
   .replace(/^system:\s*$/gim, '')
+  .replace(/^system\s+/gim, '')
+  .replace(/^system:\s+/gim, '')
+  .replace(/^system>\s*/gim, '')
+
+  .replace(/^user\s*$/gim, '')
   .replace(/^user:\s*$/gim, '')
+  .replace(/^user\s+/gim, '')
+  .replace(/^user:\s+/gim, '')
+  .replace(/^user>\s*/gim, '')
+
+  .replace(/^human\s*$/gim, '')
+  .replace(/^human:\s*$/gim, '')
+  .replace(/^human\s+/gim, '')
+  .replace(/^human:\s+/gim, '')
+  .replace(/^human>\s*/gim, '')
 
   // Misc internal messages
   .replace(/^CURRENT_TIME\s*$/gim, '')
