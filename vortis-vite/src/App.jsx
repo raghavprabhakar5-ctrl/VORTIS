@@ -1470,7 +1470,6 @@ GENERATE_IMAGE: <description>
 → Use when user wants an image created, drawn, or generated
 → NEVER generate an image without any description at all
 → If user gives even a small hint or subject, generate immediately — do not ask follow-up questions
-→ If user wants to proceed without more detail, generate immediately using best judgment
 → Only ask what to generate if user gives absolutely nothing with zero context
 → Never ask more than one question about the image
 → For follow-ups like "now make him smile" or "same but at night" — ALWAYS output the FULL new description
