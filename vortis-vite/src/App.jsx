@@ -2325,7 +2325,7 @@ setProcessingStatus('');
                {input.startsWith('> ') && (
   <div style={{ padding: '8px 14px 0' }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
-      <span style={{ fontSize: 12, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flex: 1, lineHeight: 1.5 }}>Replying to: "{input.replace(/^> /, '').replace(/\n\n$/, '').trim()}"</span>
+      <span style={{ fontSize: 12, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flex: 1, lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', textOverflow: 'ellipsis' }}>↩ {input.replace(/^> /, '').replace(/\n\n$/, '').trim()}</span>
       <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
     </div>
   </div>
