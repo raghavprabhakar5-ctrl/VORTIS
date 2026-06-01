@@ -561,26 +561,25 @@ const SelectionReply = ({ onReply }) => {
     setSel('');
   }}
       style={{
-  background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
-  border: 'none',
+  background: '#1e1e2e',
+  border: '1px solid rgba(255,255,255,0.12)',
   color: 'white',
-  padding: '8px 18px',
-  borderRadius: 20,
+  padding: '7px 16px',
+  borderRadius: 8,
   fontSize: 13,
-  fontWeight: 700,
+  fontWeight: 600,
   cursor: 'pointer',
   fontFamily: 'Geist,sans-serif',
-  boxShadow: '0 4px 20px rgba(99,102,241,.5)',
+  boxShadow: '0 2px 12px rgba(0,0,0,.4)',
   display: 'flex',
   alignItems: 'center',
-  gap: 7,
+  gap: 6,
   whiteSpace: 'nowrap',
   userSelect: 'none',
-  letterSpacing: '.02em'
 }}
 >
   Reply
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+ <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--text1)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 17 4 12 9 7"/>
     <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
   </svg>
@@ -2325,7 +2324,10 @@ setProcessingStatus('');
                {input.startsWith('> ') && (
   <div style={{ padding: '8px 14px 0' }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
-      <span style={{ fontSize: 12, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flex: 1, lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', textOverflow: 'ellipsis' }}>↩ {input.replace(/^> /, '').replace(/\n\n$/, '').trim()}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+  <span style={{ fontSize: 10, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '.06em', flexShrink: 0 }}>REPLYING TO</span>
+  <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'JetBrains Mono', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{input.replace(/^> /, '').replace(/\n\n$/, '').trim()}</span>
+</div>
       <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
     </div>
   </div>
