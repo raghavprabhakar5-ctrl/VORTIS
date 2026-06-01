@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-// Import the sans-serif font
-import 'geist/font/sans';
-import 'geist/font/mono'; 
+import "@fontsource/geist-sans"; // Defaults to weight 400
+import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
+import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import './index.css';
