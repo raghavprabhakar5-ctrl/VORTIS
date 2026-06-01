@@ -560,22 +560,23 @@ const SelectionReply = ({ onReply }) => {
     setPos(null);
     setSel('');
   }}
-       style={{
-  background: '#111120',
-  border: '1px solid #2a2a4a',
-  color: '#e8e8f8',
-  padding: '6px 14px',
-  borderRadius: 8,
+      style={{
+  background: 'linear-gradient(135deg,#4f46e5,#7c3aed)',
+  border: 'none',
+  color: 'white',
+  padding: '8px 18px',
+  borderRadius: 20,
   fontSize: 13,
-  fontWeight: 600,
+  fontWeight: 700,
   cursor: 'pointer',
   fontFamily: 'Geist,sans-serif',
-  boxShadow: '0 2px 12px rgba(0,0,0,.4)',
+  boxShadow: '0 4px 20px rgba(99,102,241,.5)',
   display: 'flex',
   alignItems: 'center',
-  gap: 6,
+  gap: 7,
   whiteSpace: 'nowrap',
-  userSelect: 'none'
+  userSelect: 'none',
+  letterSpacing: '.02em'
 }}
 >
   Reply
