@@ -530,6 +530,7 @@ try {
     const geo = await geoRes.json();
     if (geo.city && geo.country_name) {
       userLocation = `${geo.city}, ${geo.region}, ${geo.country_name}`;
+      res.write(`data: ${JSON.stringify({ content: combined, engine: engineLabel, location: userLocation })}\n\n`);
     }
   }
 } catch(_) {}

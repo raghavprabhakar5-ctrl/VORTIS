@@ -880,6 +880,7 @@ export default function VortisAI() {
   const [researchMode, setResearchMode] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [sessionLocation, setSessionLocation] = useState('');
   const [streamText, setStreamText] = useState('');
   const [lastMethod, setLastMethod] = useState('text');
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth > 768);
@@ -1036,13 +1037,20 @@ export default function VortisAI() {
       const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'chat', prompt: `You are a memory manager. Output ONLY a raw JSON array of permanent personal facts the user stated about themselves. Rules:\n- Save: name, age, location, job, skills, hobbies, interests, education, preferences\n- NEVER save temporary states, questions asked, or AI response content\n- Return [] if nothing qualifies\nExisting:\n${existingText}\nUser said: "${userMsg}"\nOutput: ["memory"] or []`, history: [{ role: 'user', content: 'Return JSON array only.' }] }) });
       if (!res.ok) return;
       const rd = res.body.getReader(); const dc = new TextDecoder(); let raw = '';
-      while (true) { const { done, value } = await rd.read(); if (done) break; for (const line of dc.decode(value).split('\n')) { if (!line.startsWith('data: ')) continue; const chunk = line.slice(6); if (chunk === '[DONE]') break; try { const p = JSON.parse(chunk); if (p.content) raw += p.content; } catch(_) {} } }
+      while (true) { const { done, value } = await rd.read(); if (done) break; for (const line of dc.decode(value).split('\n')) { if (!line.startsWith('data: ')) continue; const chunk = line.slice(6); if (chunk === '[DONE]') break; try { const p = JSON.parse(chunk); if (p.content) raw += p.content; if (p.location && !sessionLocation) setSessionLocation(p.location); } catch(_) {} } }
       const cleaned = raw.trim().replace(/```json|```/g, '').trim();
       const start = cleaned.indexOf('['); const end = cleaned.lastIndexOf(']');
       if (start === -1 || end === -1) return;
       const parsed = JSON.parse(cleaned.slice(start, end + 1));
       if (!Array.isArray(parsed)) return;
       for (const mem of parsed) { if (typeof mem === 'string' && mem.length > 5 && mem.length < 150) addMemory(mem); }
+      const isLocationMemory = (text) => 
+  /\b(located in|from|lives in|based in|city|country|region)\b/i.test(text);
+
+for (const mem of parsed) {
+  if (typeof mem === 'string' && mem.length > 5 && mem.length < 150 && !isLocationMemory(mem)) 
+    addMemory(mem);
+}
     } catch(_) {}
   }, [addMemory]);
 
@@ -1371,10 +1379,14 @@ const saveChat = useCallback(async (msgsToSave) => {
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
+    const userLang = navigator.language || 'en-US';
+    const gl = userLang.includes('-') ? userLang.split('-')[1].toLowerCase() : 'us';
+    const hl = userLang.split('-')[0];
+
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'search', query, timestamp: Date.now() })
+      body: JSON.stringify({ action: 'search', query, gl, hl, timestamp: Date.now() })
     });
     const data = await res.json();
     if (data.success && data.results?.length > 0)
@@ -1481,19 +1493,17 @@ GENERATE_IMAGE: <description>
 ──────────────────────────────────────
 WEB_SEARCH: <query>
 ──────────────────────────────────────
-→ ALWAYS search for: live scores, match results, current news, weather, stock prices, recent events, sports, trending topics, new movie/song releases, current world leaders, prices, any 2024/2025/2026 events
-→ ALWAYS search for: anything about a specific person's recent work, new songs, albums, movies, shows
-→ Search automatically whenever fresh/live data is needed — do NOT answer from memory for current events
-→ Decide the query yourself — NEVER ask the user what to search
-→ Make queries SPECIFIC — include names, today's date for sports/live events
-→ Today's date for queries: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
-→ NEVER guess, hallucinate, or make up scores, results, news, song names, album names — ALWAYS search first
-→ NEVER answer questions about recent songs, artists, movies, sports results from memory — ALWAYS search
-→ The WEB_SEARCH: command MUST be on its own line, nothing else on that line
-→ NEVER write "Web search:", "[Web search:", "[Searched:", "[Searching..." or ANY variation in your response
-→ NEVER mention that you searched — just answer naturally with the results
-→ If you find yourself about to answer a current events question WITHOUT having output WEB_SEARCH: first — STOP and search instead
-
+──────────────────────────────────────
+WEB_SEARCH: <query>
+──────────────────────────────────────
+→ ONLY search for things that change over time: live scores, breaking news, today's weather, current stock prices, recent events, new song/movie releases
+→ NEVER search for: greetings, coding, math, explanations, definitions, creative writing, general knowledge, questions about yourself
+→ NEVER search if you already know the answer
+→ NEVER guess or make up scores, news, results — search instead
+→ Make queries specific, include today's date for live events
+→ Today's date: ${now.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
+→ NEVER mention that you searched — answer naturally
+→ The WEB_SEARCH: command must be on its own line
 ──────────────────────────────────────
 CURRENT_TIME
 ──────────────────────────────────────
