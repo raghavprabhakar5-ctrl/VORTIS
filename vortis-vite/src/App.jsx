@@ -2102,7 +2102,7 @@ setProcessingStatus('');
             <div onClick={() => setShowArtifacts(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 79, backdropFilter: 'blur(4px)' }}/>
             <div style={{ position: 'fixed', right: 0, top: 0, bottom: 0, width: 'min(320px,100vw)', background: 'var(--sb-bg)', borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column', zIndex: 80, animation: 'slideInRight .2s ease', boxShadow: '-8px 0 40px rgba(0,0,0,.3)' }}>
               <div style={{ padding: '14px 14px 10px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Sparkles size={15} color="var(--indigo)"/><span style={{ fontSize: 13.5, fontWeight: 600 }}>Artifacts</span>{artifacts.length > 0 && <span style={{ fontSize: 10.5, background: 'rgba(99,102,241,.12)', color: 'var(--indigo)', padding: '1px 7px', borderRadius: 20, fontFamily: 'JetBrains Mono' }}>{artifacts.length}</span>}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Sparkles size={15} color="var(--indigo)"/><span style={{ fontSize: 13.5, fontWeight: 600 }}>Artifacts</span>{artifacts.length > 0 && <span style={{ fontSize: 10.5,background: 'transparent', color: 'var(--indigo)', padding: '1px 7px', borderRadius: 20, fontFamily: 'JetBrains Mono' }}>{artifacts.length}</span>}</div>
                 <button className="hdr-btn" onClick={() => setShowArtifacts(false)}><X size={15}/></button>
               </div>
               <div className="scr" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
