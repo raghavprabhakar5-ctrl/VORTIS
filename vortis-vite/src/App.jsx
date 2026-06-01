@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import 'geist/dist/geist.css';
+import 'geist/dist/fonts/geist-sans/style.css';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -136,7 +136,7 @@ const cleanGitHubName = (raw) => {
 };
 
 const makeStyles = (isDark) => `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --app-bg:${isDark?'#080810':'#f0f0f5'};
