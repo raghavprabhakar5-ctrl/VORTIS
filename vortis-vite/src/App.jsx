@@ -2,13 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import './index.css';
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-
-<ReactMarkdown remarkPlugins={[remarkGfm]}>
-  {message.content}
-</ReactMarkdown>
+import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
   Copy, Check, Image as ImageIcon, FileText,
