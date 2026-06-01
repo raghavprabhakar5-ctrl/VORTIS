@@ -492,7 +492,7 @@ const AIImageCard = ({ src, onRetry }) => {
 };
 
 
-const SelectionReply = ({ onReply, isDark }) => {
+const SelectionReply = ({ onReply }) => {
   const [pos, setPos] = React.useState(null);
   const [sel, setSel] = React.useState('');
 
@@ -560,23 +560,24 @@ const SelectionReply = ({ onReply, isDark }) => {
     setPos(null);
     setSel('');
   }}
-     style={{
-  background: isDark ? 'white' : 'var(--indigo)',
-  border: 'none',
-  color: isDark ? 'var(--indigo)' : 'white',
-  padding: '8px 18px',
+      style={{
+  background: '#1e1e2e',
+  border: '1px solid rgba(255,255,255,0.12)',
+  color: 'white',
   borderRadius: 8,
+  padding: '8px 18px',
   fontSize: 13.5,
   fontWeight: 600,
   cursor: 'pointer',
   fontFamily: 'Geist,sans-serif',
-  boxShadow: isDark ? '0 4px 16px rgba(255,255,255,.1)' : '0 4px 16px rgba(99,102,241,.3)',
+  boxShadow: '0 2px 12px rgba(0,0,0,.4)',
   display: 'flex',
   alignItems: 'center',
   gap: 6,
   whiteSpace: 'nowrap',
   userSelect: 'none',
-}}>
+}}
+>
   Reply
  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 17 4 12 9 7"/>
@@ -1898,7 +1899,8 @@ setProcessingStatus('');
 
   return (
   <div className="v-app">
-   <SelectionReply isDark={isDark} onReply={(text) => {
+    <SelectionReply onReply={(text) => {
+      setInput(text);
       setTimeout(() => {
         textareaRef.current?.focus();
         if (textareaRef.current) {
