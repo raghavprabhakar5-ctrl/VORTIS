@@ -168,6 +168,7 @@ const makeStyles = (isDark) => `
 @keyframes borderPulse{0%,100%{border-color:rgba(99,102,241,.3)}50%{border-color:rgba(99,102,241,.7)}}
 @keyframes typingDot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 html{-webkit-text-size-adjust:100%;height:100%}
+*{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{height:100%;overflow:hidden}
 body,.v-app{font-family:'Geist',sans-serif}
 input,textarea,select{font-size:16px}
@@ -259,7 +260,7 @@ input,textarea,select{font-size:16px}
 .rc-time{font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace}
 .msg-wrap{animation:fadeIn .15s ease}
 .bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:14px;color:#e0e7ff;line-height:1.65;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
-.bubble-ai{font-size:14.5px;color:var(--text1);line-height:1.85;max-width:94%}
+.bubble-ai{font-size:14.5px;color:var(--text1);line-height:1.85;max-width:94%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .bubble-sys{font-size:11px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'JetBrains Mono',monospace;display:inline-flex;align-items:center;gap:6px}
 .ai-name{font-size:15px;font-weight:700;color:var(--text1);letter-spacing:.03em}
 .action-btn{width:28px;height:28px;border-radius:6px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all .12s;-webkit-tap-highlight-color:transparent}
