@@ -1565,27 +1565,41 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
    
-   const displayText = cleaned
-  .replace(/^GENERATE_IMAGE:.*$/gm, '')
+  const displayText = cleaned
+  // Image commands
+  .replace(/^GENERATE_IMAGE:.*$/gim, '')
+  .replace(/^GENERATE_IMAGE\s*$/gim, '')
+  .replace(/^IMAGE_GENERATION\s*$/gim, '')
   .replace(/\[Generating image.*?\]/gi, '')
   .replace(/\[Image generating.*?\]/gi, '')
-  .replace(/generating (the |an |a )?image.{0,60}/gi, '')
-  .replace(/^WEB_SEARCH:.*$/gm, '')
+
+  // Search commands
+  .replace(/^WEB_SEARCH:.*$/gim, '')
   .replace(/\[Web search:.*?\]/gi, '')
   .replace(/\[Searched web for:.*?\]/gi, '')
   .replace(/\[Searching.*?\]/gi, '')
   .replace(/Web search:.*?(?=\n|$)/gi, '')
-  .replace(/^CURRENT_TIME\s*$/gm, '')
+
+  // Internal tool tags
+  .replace(/<think>[\s\S]*?<\/think>/gi, '')
+  .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
+  .replace(/<tool>[\s\S]*?<\/tool>/gi, '')
+
+  // System labels
+  .replace(/^assistant\s*$/gim, '')
+  .replace(/^assistant:\s*$/gim, '')
+  .replace(/^system\s*$/gim, '')
+  .replace(/^system:\s*$/gim, '')
+  .replace(/^user:\s*$/gim, '')
+
+  // Misc internal messages
+  .replace(/^CURRENT_TIME\s*$/gim, '')
   .replace(/\[Document loaded.*?\]/gi, '')
   .replace(/\[Reading document.*?\]/gi, '')
   .replace(/\[Analyzing image.*?\]/gi, '')
   .replace(/\[Vision.*?\]/gi, '')
-  .replace(/^#{5,}\s*$/gm, '')
-  .replace(/(#+\+){3,}/g, '')
-  .replace(/^→.*$/gm, '')
-  .replace(/^\s*<think>[\s\S]*?<\/think>\s*/gm, '')
-  .replace(/^assistant\s*$/gim, '')
-  .replace(/^system\s*$/gim, '')
+
+  // Cleanup spacing
   .replace(/\n{3,}/g, '\n\n')
   .replace(/^\s*\n/, '')
   .trim();
