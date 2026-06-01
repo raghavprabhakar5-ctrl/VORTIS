@@ -416,7 +416,12 @@ const md = (text, dark = true) => {
   });
   h = h.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
   h = h.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  h = h.replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>');
+  h = h.replace(/((?:^\s*[-*+]\s+.+$\n?)+)/gm, match => {
+  const items = match.trim().split('\n').map(line =>
+    `<li style="padding:7px 0;border-bottom:1px solid var(--border)">${line.replace(/^\s*[-*+]\s+/, '')}</li>`
+  ).join('');
+  return `<div style="margin:10px 0;border-radius:10px;overflow:hidden;border:1px solid var(--border)"><div style="display:flex;align-items:center;padding:6px 12px;background:rgba(99,102,241,.08);border-bottom:1px solid var(--border)"><span style="font-size:11px;color:var(--indigo);font-family:JetBrains Mono,monospace;letter-spacing:.08em">list</span></div><ul style="margin:0;padding:4px 16px 4px 32px;background:var(--bg2)">${items}</ul></div>`;
+});
   h = h.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
   h = h.replace(/(<\/li>)\s*\n\n\s*(<li>)/g, '$1$2');
