@@ -283,7 +283,7 @@ input,textarea,select{font-size:16px}
 .md-content li{margin-left:14px;padding:3px 0;color:var(--text2);line-height:1.7}
 .md-content a{color:var(--indigo);text-underline-offset:2px}
 .md-content blockquote{border-left:3px solid var(--indigo);padding:8px 13px;margin:10px 0;background:rgba(99,102,241,.05);border-radius:0 9px 9px 0;color:var(--text2)}
-.md-content strong{color:var(--indigo);font-weight:700}
+.md-content strong { color: var(--text1); font-weight: 700; }
 pre.code-block{background:${isDark?'#080814':'#f0f0f8'};border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:${isDark?'#a5f3fc':'#2d2d8a'};margin:8px 0;white-space:pre-wrap;word-break:break-all}
 code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--indigo)}
 .ai-img-card{position:relative;display:inline-block;border-radius:12px;overflow:hidden;border:1px solid var(--border2);max-width:min(400px,100%);width:100%;cursor:pointer;transition:transform .2s,box-shadow .2s;background:var(--bg3)}
@@ -383,40 +383,94 @@ const md = (text, dark = true) => {
   const t = text.trim();
   if (t.startsWith('<') && !t.startsWith('<p') && !t.startsWith('<div')) return t;
   let h = t;
+
+  // Tables
   h = h.replace(/\|(.+)\n\|[\s\-|:]+\n((?:\|.+\n?)*)/g, match => {
     const lines = match.trim().split('\n');
     if (lines.length < 3) return match;
     const heads = lines[0].split('|').map(x => x.trim()).filter(Boolean);
     const rows = [];
-    for (let i = 2; i < lines.length; i++) { const cells = lines[i].split('|').map(x => x.trim()).filter(Boolean); if (cells.length) rows.push(cells); }
-    let tb = `<table><thead><tr>`; heads.forEach(h2 => { tb += `<th>${h2}</th>`; }); tb += '</tr></thead><tbody>';
+    for (let i = 2; i < lines.length; i++) {
+      const cells = lines[i].split('|').map(x => x.trim()).filter(Boolean);
+      if (cells.length) rows.push(cells);
+    }
+    let tb = `<table><thead><tr>`;
+    heads.forEach(h2 => { tb += `<th>${h2}</th>`; });
+    tb += '</tr></thead><tbody>';
     rows.forEach(r => { tb += '<tr>'; r.forEach(c => { tb += `<td>${c}</td>`; }); tb += '</tr>'; });
     return tb + '</tbody></table>';
   });
-  h = h.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, content) => `<h${hashes.length}>${content}</h${hashes.length}>`);
-  h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  h = h.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--indigo);background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);border-radius:4px;padding:1px 6px;font-weight:700;">$1</strong>');
-  h = h.replace(/\*(.+?)\*/g, '<em style="color:var(--text2)">$1</em>');
+
+  // Headings
+  h = h.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, content) =>
+    `<h${hashes.length}>${content}</h${hashes.length}>`
+  );
+
+  // Code blocks (before inline code)
   h = h.replace(/`{3}(\w*)\n?([\s\S]*?)`{3}/g, function(_, lang, code) {
-    var escaped = code.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    var id = 'cb_' + Math.random().toString(36).slice(2,8);
-    var label = lang || 'code';
-    var bg = dark ? '#080814' : '#f0f0f8';
-    var fg = dark ? '#a5f3fc' : '#2d2d8a';
-    return '<div data-cb="1" style="position:relative;margin:10px 0;border-radius:10px;overflow:hidden;border:1px solid var(--border)">'
-      + '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:rgba(99,102,241,.08);border-bottom:1px solid var(--border)">'
-      + '<span style="font-size:11px;color:var(--indigo);font-family:JetBrains Mono,monospace;letter-spacing:.08em">' + label + '</span>'
-      + '<button id="' + id + '" onclick="(function(btn){try{var w=btn.closest(\'[data-cb]\');var c=w?w.querySelector(\'code\'):null;var t=c?(c.textContent||c.innerText||\'\'):\'\';if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){btn.textContent=\'Copied!\';btn.style.color=\'#10b981\';setTimeout(function(){btn.textContent=\'Copy\';btn.style.color=\'\';},2000);});}else{var a=document.createElement(\'textarea\');a.value=t;document.body.appendChild(a);a.select();document.execCommand(\'copy\');document.body.removeChild(a);btn.textContent=\'Copied!\';btn.style.color=\'#10b981\';setTimeout(function(){btn.textContent=\'Copy\';btn.style.color=\'\';},2000);}}catch(e){}})(this)" style="background:none;border:1px solid var(--border2);color:var(--text3);font-family:JetBrains Mono,monospace;font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;transition:all .15s">Copy</button>'
+    const escaped = code.trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const id = 'cb_' + Math.random().toString(36).slice(2, 8);
+    const label = lang || 'code';
+    const bg = dark ? '#0d0d1a' : '#f4f4f8';
+    const fg = dark ? '#a5f3fc' : '#1e1e6e';
+    return (
+      '<div data-cb="1" style="position:relative;margin:12px 0;border-radius:10px;overflow:hidden;border:1px solid var(--border)">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;background:rgba(99,102,241,.07);border-bottom:1px solid var(--border)">'
+      + `<span style="font-size:11px;color:var(--indigo);font-family:'JetBrains Mono',monospace;letter-spacing:.08em">${label}</span>`
+      + `<button id="${id}" onclick="(function(btn){try{var w=btn.closest('[data-cb]');var c=w?w.querySelector('code'):null;var txt=c?(c.textContent||c.innerText||''):'';if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(function(){btn.textContent='Copied!';btn.style.color='#10b981';setTimeout(function(){btn.textContent='Copy';btn.style.color='';},2000);});}else{var a=document.createElement('textarea');a.value=txt;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);btn.textContent='Copied!';btn.style.color='#10b981';setTimeout(function(){btn.textContent='Copy';btn.style.color='';},2000);}}catch(e){}})(this)" style="background:none;border:1px solid var(--border2);color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;">Copy</button>`
       + '</div>'
-      + '<pre style="margin:0;padding:14px 16px;overflow-x:auto;background:' + bg + ';font-family:JetBrains Mono,monospace;font-size:13px;line-height:1.65;color:' + fg + '"><code>' + escaped + '</code></pre></div>';
+      + `<pre style="margin:0;padding:16px;overflow-x:auto;background:${bg};font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7;color:${fg}"><code>${escaped}</code></pre></div>`
+    );
   });
+
+  // Inline code
   h = h.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+
+  // Bold + italic
+  h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  // Bold — plain, no colored background
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic
+  h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Links
   h = h.replace(/\[(.+?)\]\((.+?)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  h = h.replace(/^\s*[-*+]\s+(.+)$/gm, '<li>$1</li>');
-  h = h.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
+
+  // Blockquotes
   h = h.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
-  h = h.replace(/\n\n/g, '<br/>');
-  h = h.replace(/\n/g, '<br/>');
+
+  // Horizontal rule
+  h = h.replace(/^[-*_]{3,}$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:14px 0"/>');
+
+  // Ordered lists — group consecutive <li> into <ol>
+  h = h.replace(/((?:^\s*\d+\.\s+.+\n?)+)/gm, match => {
+    const items = match.trim().split('\n').map(line =>
+      `<li>${line.replace(/^\s*\d+\.\s+/, '')}</li>`
+    ).join('');
+    return `<ol style="margin:8px 0;padding-left:22px;display:flex;flex-direction:column;gap:4px">${items}</ol>`;
+  });
+
+  // Unordered lists — group consecutive bullet lines into <ul>
+  h = h.replace(/((?:^\s*[-*+]\s+.+\n?)+)/gm, match => {
+    const items = match.trim().split('\n').map(line =>
+      `<li>${line.replace(/^\s*[-*+]\s+/, '')}</li>`
+    ).join('');
+    return `<ul style="margin:8px 0;padding-left:22px;display:flex;flex-direction:column;gap:4px">${items}</ul>`;
+  });
+
+  // Paragraphs — split on double newlines, wrap non-block content in <p>
+  const blockTags = /^<(h[1-6]|ul|ol|pre|blockquote|table|div|hr)/;
+  h = h
+    .split(/\n\n+/)
+    .map(block => {
+      const trimmed = block.trim();
+      if (!trimmed) return '';
+      if (blockTags.test(trimmed)) return trimmed;
+      // Single newlines inside a paragraph → <br>
+      return `<p style="margin:0 0 10px;line-height:1.8;color:var(--text2)">${trimmed.replace(/\n/g, '<br/>')}</p>`;
+    })
+    .join('\n');
 
   return h;
 };
