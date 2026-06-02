@@ -1419,73 +1419,72 @@ const saveChat = useCallback(async (msgsToSave) => {
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
   const detector = LanguageDetectorBuilder.fromAllLanguages().build();
 
-  const speakText = async (t) => {
+ // 1. Create the instance outside the component so it persists across renders
+const detector = LanguageDetectorBuilder.fromAllLanguages().build();
+
+const speakText = async (t) => {
   try {
-    // 1. Reset any playing audio tracks
     const existingAudio = document.getElementById('local-tts-player');
     if (existingAudio) {
       existingAudio.pause();
       existingAudio.remove();
     }
 
-    // 2. Clean input data
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    // 3. AI Smart Language Detection (No messy manual word lists!)
-    const detectedIsoCode = detector.detectLanguageOf(clean); 
+    // 2. Call the instance safely, and convert to uppercase to match your switch cases
+    const detectedResult = detector.detectLanguageOf(clean); 
+    const detectedIsoCode = detectedResult ? detectedResult.toUpperCase() : 'EN'; 
     
-    // 4. Map the detected language directly to the best Piper AI Voice Model
     let selectedVoiceId;
 
     switch (detectedIsoCode) {
-      case 'HI': // Hindi
-        selectedVoiceId = 'en_IN-spicor-medium'; // Handled by Indian-English/Hinglish model
+      case 'HI':
+        selectedVoiceId = 'en_IN-spicor-medium';
         break;
-      case 'EN': // English
-        selectedVoiceId = 'en_GB-alan-medium'; // Clean UK Male
+      case 'EN':
+        selectedVoiceId = 'en_GB-alan-medium';
         break;
-      case 'ES': // Spanish
+      case 'ES':
         selectedVoiceId = 'es_ES-davefx-medium';
         break;
-      case 'FR': // French
+      case 'FR':
         selectedVoiceId = 'fr_FR-siwis-medium';
         break;
-      case 'DE': // German
+      case 'DE':
         selectedVoiceId = 'de_DE-thorsten-medium';
         break;
-      case 'IT': // Italian
+      case 'IT':
         selectedVoiceId = 'it_IT-riccardo-x_low';
         break;
-      case 'PT': // Portuguese
+      case 'PT':
         selectedVoiceId = 'pt_BR-faber-medium';
         break;
-      case 'RU': // Russian
+      case 'RU':
         selectedVoiceId = 'ru_RU-dmitri-medium';
         break;
-      case 'ZH': // Chinese
+      case 'ZH':
         selectedVoiceId = 'zh_CN-chaowen-medium';
         break;
-      case 'AR': // Arabic
+      case 'AR':
         selectedVoiceId = 'ar_JO-kareem-medium';
         break;
-      case 'JA': // Japanese
+      case 'JA':
         selectedVoiceId = 'ja_JP-reiko-medium';
         break;
-      case 'KO': // Korean
+      case 'KO':
         selectedVoiceId = 'ko_KR-kyuri-medium';
         break;
       default:
-        selectedVoiceId = 'en_GB-alan-medium'; // Safe fallback
+        selectedVoiceId = 'en_GB-alan-medium';
     }
 
-    // 5. Generate Audio Waves locally (Piper auto-caches the model files in browser storage)
     const wavBlob = await tts.predict({ 
       text: clean, 
       voiceId: selectedVoiceId 
     });
 
-    // 6. Output to User
     const audio = new Audio();
     audio.id = 'local-tts-player';
     audio.src = URL.createObjectURL(wavBlob);
