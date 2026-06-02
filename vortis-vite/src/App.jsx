@@ -803,17 +803,19 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
                   </div>
                   <Toggle checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}/>
                 </div>
-              </div>
-              <div style={{ ...rowStyle, borderBottom: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div style={{ ...iconStyle, background: 'rgba(99,102,241,.1)' }}><Volume2 size={14} color="var(--indigo)"/></div>
-            <div>
-          <div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Hinglish voice</div>
-        <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Use Indian accent (Ravi) for English</div>
-      </div>
+                <div style={rowStyle}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+    <div style={{ ...iconStyle, background: 'rgba(99,102,241,.1)' }}>
+      <Volume2 size={14} color="var(--indigo)"/>
     </div>
-  <Toggle checked={hinglishMode} onChange={e => { setHinglishMode(e.target.checked); localStorage.setItem('vortis_hinglish', e.target.checked); }}/>
+    <div>
+      <div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Hinglish voice mode</div>
+      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Use Indian accent (Ravi) instead of UK</div>
+    </div>
   </div>
+  <Toggle checked={hinglishMode} onChange={e => { setHinglishMode(e.target.checked); localStorage.setItem('vortis_hinglish', e.target.checked); }}/>
+</div>
+              </div>
             </>
           )}
           {tab === 'shortcuts' && (
