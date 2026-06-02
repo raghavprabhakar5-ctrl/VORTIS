@@ -1410,7 +1410,13 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
-  const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
+ const addMsg = (type, text, speak = false) => { 
+  const msg = { id: Date.now() + Math.random(), type, text }; 
+  setMessages(prev => [...prev, msg]); 
+  if (type === 'vortis') preloadTTS(text); // preload in background
+  if (speak && autoSpeak && type === 'vortis') speakText(text); 
+  return msg; 
+};
 
  const detectLangVoice = (text, gender = 'male') => {
   const low = text.toLowerCase();
@@ -1544,33 +1550,61 @@ const saveChat = useCallback(async (msgsToSave) => {
   return v('english');
 };
 
- const speakText = async (t) => {
+const ttsCache = useRef(new Map());
+
+const speakText = async (t) => {
   try {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    if (ttsCache.current.has(`${ttsGender}_${clean}`)) {
-      const el = new Audio(ttsCache.current.get(`${ttsGender}_${clean}`));
+    // Check cache first — instant replay
+    if (ttsCache.current.has(clean)) {
+      const cached = ttsCache.current.get(clean);
+      const el = new Audio(cached);
       el.play();
       return;
     }
 
-    const voice = detectLangVoice(clean, ttsGender);
+    const voice = detectLangVoice(clean);
+    const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'tts', text: clean, voice })
+    });
+
+    const { audio } = await res.json();
+    const src = `data:audio/mp3;base64,${audio}`;
+    
+    // Cache it
+    ttsCache.current.set(clean, src);
+    // Keep cache small — max 20 entries
+    if (ttsCache.current.size > 20) {
+      const firstKey = ttsCache.current.keys().next().value;
+      ttsCache.current.delete(firstKey);
+    }
+
+    const el = new Audio(src);
+    el.play();
+  } catch(_) {}
+};
+
+// Preload TTS as soon as AI finishes responding
+// Add this inside addMsg when type === 'vortis' and autoSpeak is on:
+const preloadTTS = useCallback(async (text) => {
+  if (!autoSpeak) return;
+  const clean = text.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
+  if (!clean || ttsCache.current.has(clean)) return;
+  try {
+    const voice = detectLangVoice(clean);
     const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
     const { audio } = await res.json();
-    const src = `data:audio/mp3;base64,${audio}`;
-    ttsCache.current.set(`${ttsGender}_${clean}`, src);
-    if (ttsCache.current.size > 20) {
-      ttsCache.current.delete(ttsCache.current.keys().next().value);
-    }
-    const el = new Audio(src);
-    el.play();
+    ttsCache.current.set(clean, `data:audio/mp3;base64,${audio}`);
   } catch(_) {}
-};
+}, [autoSpeak]);
 
  const doSearch = async (query) => {
   setProcessingStatus('searching');
