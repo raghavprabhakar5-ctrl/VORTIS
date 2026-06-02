@@ -63,7 +63,7 @@ const getAuthHeader = async () => {
 // =========================================================================
 // MAIN COMPONENT ENTRYPOINT
 // =========================================================================
-export default function App() {
+export default function VortisAI() { // Renamed from App to match your original main component
   
   // Storage persistence check runs once on initial mount
   useEffect(() => {
@@ -79,7 +79,6 @@ export default function App() {
     </div>
   );
 }
-
 const pushHistory = (historyRef, role, content) => {
   const clean = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 4000);
   if (!clean) return;
