@@ -1374,14 +1374,20 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
- const speakText = (t) => {
+ const speakText = async (t) => {
   try {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-    if (window.responsiveVoice) {
-      window.responsiveVoice.cancel();
-      window.responsiveVoice.speak(clean, "UK English Female", { rate: 0.9, pitch: 1, volume: 1 });
-    }
+
+    const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'tts', text: clean, voice: 'en-US-AriaNeural' })
+    });
+
+    const { audio } = await res.json();
+    const el = new Audio(`data:audio/mp3;base64,${audio}`);
+    el.play();
   } catch(_) {}
 };
 

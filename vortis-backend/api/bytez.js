@@ -56,6 +56,7 @@ const RATE_LIMITS = {
   image:  { window: 60000, max: 5 },
   search: { window: 60000, max: 20 },
   vision: { window: 60000, max: 5 },
+  tts: { window: 60000, max: 20 },
 };
 
 setInterval(() => {
@@ -459,7 +460,7 @@ export default async function handler(req, res) {
     const action = sanitizeString(body.action || '', 20);
 
     if (!action) return res.status(400).json({ error: 'Missing action' });
-    if (!['chat', 'search', 'image', 'vision'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
+    if (!['chat', 'search', 'image', 'vision', 'tts'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
     const prompt  = sanitizeString(body.prompt  || '', 15000);
@@ -471,6 +472,24 @@ export default async function handler(req, res) {
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
 
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
+
+
+// ╔══════════════════════════════════════╗
+// ║  TTS                                 ║
+// ╚══════════════════════════════════════╝
+if (action === 'tts') {
+  const text  = sanitizeString(body.text  || '', 500);
+  const voice = sanitizeString(body.voice || 'en-US-AriaNeural', 60);
+  if (!text) return res.status(400).json({ error: 'Missing text' });
+
+  const { EdgeTTS } = await import('@andresaya/edge-tts');
+  const tts = new EdgeTTS();
+  await tts.synthesize(text, voice, { outputFormat: 'audio-24khz-96kbitrate-mono-mp3' });
+  const base64 = await tts.toBase64();
+
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({ audio: base64 });
+}
 
     // ╔══════════════════════════════════════╗
     // ║  CHAT                                ║
