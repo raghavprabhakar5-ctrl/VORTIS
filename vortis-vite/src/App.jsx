@@ -1374,39 +1374,47 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
- const speakText = async (t) => {
+ const speakText = (t) => {
   try {
     window.speechSynthesis.cancel();
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
     const u = new SpeechSynthesisUtterance(clean);
-    const voices = window.speechSynthesis.getVoices();
+    const setVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const isHindi = /[\u0900-\u097F]/.test(clean);
+      const isJapanese = /[\u3040-\u30FF]/.test(clean);
+      const isKorean = /[\uAC00-\uD7AF]/.test(clean);
+      const isChinese = /[\u4E00-\u9FFF]/.test(clean);
+      const isRussian = /[\u0400-\u04FF]/.test(clean);
 
-    let detectedLang = 'en';
-    // Try Chrome's built-in language detector
-    if ('translation' in self && 'createDetector' in self.translation) {
-      const detector = await self.translation.createDetector();
-      const results = await detector.detect(clean);
-      if (results?.[0]) detectedLang = results[0].detectedLanguage;
-    }
+      let voice;
+      if (isHindi) {
+        voice = voices.find(v => v.name === 'Google हिन्दी');
+        u.lang = 'hi-IN';
+      } else if (isJapanese) {
+        voice = voices.find(v => v.name === 'Google 日本語');
+      } else if (isKorean) {
+        voice = voices.find(v => v.name === 'Google 한국의');
+      } else if (isChinese) {
+        voice = voices.find(v => v.name.includes('Google 普通话'));
+      } else if (isRussian) {
+        voice = voices.find(v => v.name === 'Google русский');
+      } else {
+        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
+                voices.find(v => v.name === 'Google UK English Male');
+        u.lang = 'en-GB';
+      }
 
-    const voiceMap = {
-      'hi': voices.find(v => v.name === 'Google हिन्दी'),
-      'ja': voices.find(v => v.name === 'Google 日本語'),
-      'ko': voices.find(v => v.name === 'Google 한국의'),
-      'de': voices.find(v => v.name === 'Google Deutsch'),
-      'fr': voices.find(v => v.name === 'Google français'),
-      'ru': voices.find(v => v.name === 'Google русский'),
-      'es': voices.find(v => v.name.includes('Google español')),
+      if (voice) u.voice = voice;
+      u.rate = 0.9;
+      u.pitch = 1;
+      u.volume = 1;
+      window.speechSynthesis.speak(u);
     };
-
-   const voice = voiceMap[detectedLang] ||
-  voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
-  voices.find(v => v.name === 'Google UK English Male');
-  
-    if (voice) { u.voice = voice; u.lang = voice.lang; }
-    u.rate = 0.9; u.pitch = 1; u.volume = 1;
-    window.speechSynthesis.speak(u);
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length) setVoice();
+    else window.speechSynthesis.onvoiceschanged = setVoice;
   } catch(_) {}
 };
 
