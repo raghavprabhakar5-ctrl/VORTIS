@@ -1406,7 +1406,7 @@ const saveChat = useCallback(async (msgsToSave) => {
       }
 
       if (voice) u.voice = voice;
-      u.rate = 0.9;
+      u.rate = 0.75;
       u.pitch = 1;
       u.volume = 1;
       window.speechSynthesis.speak(u);
