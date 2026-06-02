@@ -1382,16 +1382,34 @@ const saveChat = useCallback(async (msgsToSave) => {
     const u = new SpeechSynthesisUtterance(clean);
     const setVoice = () => {
       const voices = window.speechSynthesis.getVoices();
-      const voice =
+      
+      // Detect language from text
+      const isHindi = /[\u0900-\u097F]/.test(clean);
+      const isJapanese = /[\u3040-\u30FF]/.test(clean);
+      const isKorean = /[\uAC00-\uD7AF]/.test(clean);
+      const isChinese = /[\u4E00-\u9FFF]/.test(clean);
+      const isRussian = /[\u0400-\u04FF]/.test(clean);
+      const isGerman = /[äöüÄÖÜß]/.test(clean);
+      const isSpanish = /[áéíóúñÁÉÍÓÚÑ¿¡]/.test(clean);
+      const isFrench = /[àâæçéèêëîïôœùûüÿÀÂÆÇÉÈÊËÎÏÔŒÙÛÜŸ]/.test(clean);
+
+      let voice;
+      if (isHindi) voice = voices.find(v => v.name === 'Google हिन्दी');
+      else if (isJapanese) voice = voices.find(v => v.name === 'Google 日本語');
+      else if (isKorean) voice = voices.find(v => v.name === 'Google 한국의');
+      else if (isChinese) voice = voices.find(v => v.name.includes('Google 普通话'));
+      else if (isRussian) voice = voices.find(v => v.name === 'Google русский');
+      else if (isGerman) voice = voices.find(v => v.name === 'Google Deutsch');
+      else if (isSpanish) voice = voices.find(v => v.name.includes('Google español'));
+      else if (isFrench) voice = voices.find(v => v.name === 'Google français');
+      else voice =
         voices.find(v => v.name === 'Google UK English Male') ||
-        voices.find(v => v.name === 'Microsoft George - English (United Kingdom)') ||
-        voices.find(v => v.name === 'Google UK English Female') ||
-        voices.find(v => v.lang === 'en-GB');
-      if (voice) u.voice = voice;
+        voices.find(v => v.name === 'Microsoft George - English (United Kingdom)');
+
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
       u.rate = 0.9;
       u.pitch = 1;
       u.volume = 1;
-      u.lang = 'en-GB';
       window.speechSynthesis.speak(u);
     };
     const voices = window.speechSynthesis.getVoices();
