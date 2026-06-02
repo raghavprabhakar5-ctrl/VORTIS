@@ -1374,7 +1374,15 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
-  const speakText = (t) => { try { synthRef.current.cancel(); const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim(); if (!clean) return; const u = new SpeechSynthesisUtterance(clean); u.rate = 0.9; u.pitch = 1; u.volume = 1; u.lang = 'en-US'; u.onerror = () => {}; synthRef.current.speak(u); } catch(_) {} };
+ const speakText = (t) => {
+  try {
+    synthRef.current.cancel();
+    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 200);
+    if (!clean) return;
+    const audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(clean)}&tl=en&client=tw-ob`);
+    audio.play().catch(() => {});
+  } catch(_) {}
+};
 
  const doSearch = async (query) => {
   setProcessingStatus('searching');
