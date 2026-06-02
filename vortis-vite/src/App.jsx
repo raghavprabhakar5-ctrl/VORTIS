@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import "@fontsource/geist-sans"; // Defaults to weight 400
-import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
-import "@fontsource/geist-mono"; // Optional: Monospace font
+import "@fontsource/geist-sans"; 
+import "@fontsource/geist-sans/700.css"; 
+import "@fontsource/geist-mono"; 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import * as tts from '@the-vedantic-coder/piper-tts-web';
@@ -23,20 +23,62 @@ import {
   Shield, Lock, Cpu, Edit2, Brain, Trash2
 } from 'lucide-react';
 
+// =========================================================================
+// UTILITIES & GLOBAL CONFIGURATIONS (OUTSIDE COMPONENT TO PREVENT RE-RENDERS)
+// =========================================================================
+
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
+/**
+ * Requests persistent storage from the browser to ensure locally cached
+ * voice models for Piper TTS don't get cleared under low disk space conditions.
+ */
+const requestPersistentStorage = async () => {
+  if (navigator.storage && navigator.storage.persist) {
+    const isPersisted = await navigator.storage.persist();
+    console.log(`Is storage persistent? ${isPersisted ? "Yes, safe from auto-clear!" : "No, best-effort only."}`);
+  }
+};
+
+/**
+ * Dynamically fetches the current user's Firebase ID token and constructs
+ * authenticated headers for your Vercel backend.
+ */
 const getAuthHeader = async () => {
   try {
     const auth = getAuth();
     const token = await auth.currentUser?.getIdToken(true);
-    if (token) return {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-App-Key': 'vortis-2026'
-    };
+    if (token) {
+      return {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-App-Key': 'vortis-2026'
+      };
+    }
   } catch (_) {}
   return { 'Content-Type': 'application/json', 'X-App-Key': 'vortis-2026' };
 };
+
+
+// =========================================================================
+// MAIN COMPONENT ENTRYPOINT
+// =========================================================================
+export default function App() {
+  
+  // Storage persistence check runs once on initial mount
+  useEffect(() => {
+    requestPersistentStorage();
+  }, []);
+
+  // ... rest of your state declarations (useState, useRef, etc.) ...
+  const [messages, setMessages] = useState([]);
+
+  return (
+    <div className="app-container">
+      {/* Your Vortis AI UI layout */}
+    </div>
+  );
+}
 
 const pushHistory = (historyRef, role, content) => {
   const clean = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 4000);
