@@ -1550,8 +1550,6 @@ const saveChat = useCallback(async (msgsToSave) => {
   return v('english');
 };
 
-const ttsCache = useRef(new Map());
-
 const speakText = async (t) => {
   try {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
