@@ -1440,18 +1440,20 @@ const speakText = (t) => {
         voice = voices.find(v => v.name === 'Google italiano');
         u.lang = 'it-IT';
       } else {
-        // English / Hinglish
-        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
-                voices.find(v => v.name === 'Google UK English Male');
-        u.lang = 'en-IN';
-      }
+  // English variants
+  const isAmerican = /\b(y'all|gonna|wanna|gotta|dude|bro|awesome|totally|like|literally)\b/i.test(clean);
+  voice = isAmerican
+    ? voices.find(v => v.name === 'Microsoft David - English (United States)')
+    : voices.find(v => v.name === 'Microsoft George - English (United Kingdom)');
+  u.lang = isAmerican ? 'en-US' : 'en-GB';
+}
 
       if (voice) u.voice = voice;
-u.rate = hinglishMode ? 0.75 : 0.9;
-u.pitch = 1;
-u.volume = 1;
-window.speechSynthesis.speak(u);
-};
+      u.rate = 0.9;
+      u.pitch = 1;
+      u.volume = 1;
+      window.speechSynthesis.speak(u);
+    };
     const voices = window.speechSynthesis.getVoices();
     if (voices.length) setVoice();
     else window.speechSynthesis.onvoiceschanged = setVoice;
