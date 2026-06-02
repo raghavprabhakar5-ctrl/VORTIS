@@ -1395,7 +1395,7 @@ const speakText = async (t) => {
 const detectedIsoCode = franc(clean, { minLength: 3 });
 
 // 4. Map detected language to Piper voice
-let selectedVoiceId;
+const selectedVoiceId = 'en_US-lessac-medium';
 
 switch (detectedIsoCode) {
   case 'hin':
