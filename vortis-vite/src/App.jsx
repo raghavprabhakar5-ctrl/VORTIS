@@ -2337,7 +2337,7 @@ setProcessingStatus('');
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
   <span style={{ fontSize: 10, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '.06em', flexShrink: 0 }}>REPLYING TO: </span>
-  <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'JetBrains Mono', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{input.replace(/^> /, '').replace(/\n\n$/, '').trim()}</span>
+ <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'JetBrains Mono', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{input.match(/^> (.+?)\n\n/s)?.[1]?.trim() || ''}</span>
 </div>
       <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
     </div>
