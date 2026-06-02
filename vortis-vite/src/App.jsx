@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import "@fontsource/geist-sans"; // Defaults to weight 400
-import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
-import "@fontsource/geist-mono"; // Optional: Monospace font
+import "@fontsource/geist-sans";
+import "@fontsource/geist-sans/700.css";
+import "@fontsource/geist-mono";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import * as tts from '@the-vedantic-coder/piper-tts-web';
-import { LanguageDetectorBuilder } from 'languagedetector-wasm';
+import { franc } from 'franc';
 import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
@@ -1376,7 +1376,7 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
-  const detector = LanguageDetectorBuilder.fromAllLanguages().build();
+ 
 
 const speakText = async (t) => {
   try {
@@ -1391,52 +1391,64 @@ const speakText = async (t) => {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    // 3. AI Smart Language Detection (No messy manual word lists!)
-    const detectedIsoCode = detector.detectLanguageOf(clean); 
-    
-    // 4. Map the detected language directly to the best Piper AI Voice Model
-    let selectedVoiceId;
+    // 3. AI Language Detection
+const detectedIsoCode = franc(clean);
 
-    switch (detectedIsoCode) {
-      case 'HI': // Hindi
-        selectedVoiceId = 'en_IN-spicor-medium'; // Handled by Indian-English/Hinglish model
-        break;
-      case 'EN': // English
-        selectedVoiceId = 'en_GB-alan-medium'; // Clean UK Male
-        break;
-      case 'ES': // Spanish
-        selectedVoiceId = 'es_ES-davefx-medium';
-        break;
-      case 'FR': // French
-        selectedVoiceId = 'fr_FR-siwis-medium';
-        break;
-      case 'DE': // German
-        selectedVoiceId = 'de_DE-thorsten-medium';
-        break;
-      case 'IT': // Italian
-        selectedVoiceId = 'it_IT-riccardo-x_low';
-        break;
-      case 'PT': // Portuguese
-        selectedVoiceId = 'pt_BR-faber-medium';
-        break;
-      case 'RU': // Russian
-        selectedVoiceId = 'ru_RU-dmitri-medium';
-        break;
-      case 'ZH': // Chinese
-        selectedVoiceId = 'zh_CN-chaowen-medium';
-        break;
-      case 'AR': // Arabic
-        selectedVoiceId = 'ar_JO-kareem-medium';
-        break;
-      case 'JA': // Japanese
-        selectedVoiceId = 'ja_JP-reiko-medium';
-        break;
-      case 'KO': // Korean
-        selectedVoiceId = 'ko_KR-kyuri-medium';
-        break;
-      default:
-        selectedVoiceId = 'en_GB-alan-medium'; // Safe fallback
-    }
+// 4. Map detected language to Piper voice
+let selectedVoiceId;
+
+switch (detectedIsoCode) {
+  case 'hin':
+    selectedVoiceId = 'en_IN-spicor-medium';
+    break;
+
+  case 'eng':
+    selectedVoiceId = 'en_GB-alan-medium';
+    break;
+
+  case 'spa':
+    selectedVoiceId = 'es_ES-davefx-medium';
+    break;
+
+  case 'fra':
+    selectedVoiceId = 'fr_FR-siwis-medium';
+    break;
+
+  case 'deu':
+    selectedVoiceId = 'de_DE-thorsten-medium';
+    break;
+
+  case 'ita':
+    selectedVoiceId = 'it_IT-riccardo-x_low';
+    break;
+
+  case 'por':
+    selectedVoiceId = 'pt_BR-faber-medium';
+    break;
+
+  case 'rus':
+    selectedVoiceId = 'ru_RU-dmitri-medium';
+    break;
+
+  case 'cmn':
+      selectedVoiceId = 'zh_CN-chaowen-medium';
+      break;
+
+  case 'arb':
+      selectedVoiceId = 'ar_JO-kareem-medium';
+      break;
+
+  case 'jpn':
+      selectedVoiceId = 'ja_JP-reiko-medium';
+      break;
+
+  case 'kor':
+      selectedVoiceId = 'ko_KR-kyuri-medium';
+      break;
+
+  default:
+      selectedVoiceId = 'en_GB-alan-medium';
+}
 
     // 5. Generate Audio Waves locally (Piper auto-caches the model files in browser storage)
     const wavBlob = await tts.predict({ 
