@@ -518,7 +518,7 @@ export default async function handler(req, res) {
           }
         }
 
-      // ── GEO LOOKUP ──
+     // ── GEO LOOKUP ──
 let userLocation = '';
 try {
   const geoRes = await fetchWithTimeout(
@@ -530,11 +530,9 @@ try {
     const geo = await geoRes.json();
     if (geo.city && geo.country_name) {
       userLocation = `${geo.city}, ${geo.region}, ${geo.country_name}`;
-      res.write(`data: ${JSON.stringify({ content: combined, engine: engineLabel, location: userLocation })}\n\n`);
     }
   }
 } catch(_) {}
-
 // ── IDENTITY + SYSTEM PROMPT ──
 
  const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.\n\nRESPONSE STYLE: Be concise and to the point. Short answers for simple questions (1-3 sentences max). For lists use max 5-6 bullet points. For technical/how-to questions keep it under 200 words. Only go long when explicitly asked for detail or when doing math steps/code. Never pad, repeat, or over-explain. Always finish your answer completely — never stop mid-sentence.\n\n`;
