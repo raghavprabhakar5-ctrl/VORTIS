@@ -1376,11 +1376,12 @@ const saveChat = useCallback(async (msgsToSave) => {
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
  const speakText = (t) => {
   try {
-    synthRef.current.cancel();
-    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 200);
+    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-    const audio = new Audio(`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(clean)}&tl=en&client=tw-ob`);
-    audio.play().catch(() => {});
+    if (window.responsiveVoice) {
+      window.responsiveVoice.cancel();
+      window.responsiveVoice.speak(clean, "UK English Male", { rate: 0.9, pitch: 1, volume: 1 });
+    }
   } catch(_) {}
 };
 
