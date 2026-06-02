@@ -1557,54 +1557,28 @@ const speakText = async (t) => {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    // Check cache first — instant replay
-    if (ttsCache.current.has(clean)) {
-      const cached = ttsCache.current.get(clean);
-      const el = new Audio(cached);
+    if (ttsCache.current.has(`${ttsGender}_${clean}`)) {
+      const el = new Audio(ttsCache.current.get(`${ttsGender}_${clean}`));
       el.play();
       return;
     }
 
-    const voice = detectLangVoice(clean);
+    const voice = detectLangVoice(clean, ttsGender);
     const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
-
     const { audio } = await res.json();
     const src = `data:audio/mp3;base64,${audio}`;
-    
-    // Cache it
-    ttsCache.current.set(clean, src);
-    // Keep cache small — max 20 entries
+    ttsCache.current.set(`${ttsGender}_${clean}`, src);
     if (ttsCache.current.size > 20) {
-      const firstKey = ttsCache.current.keys().next().value;
-      ttsCache.current.delete(firstKey);
+      ttsCache.current.delete(ttsCache.current.keys().next().value);
     }
-
     const el = new Audio(src);
     el.play();
   } catch(_) {}
 };
-
-// Preload TTS as soon as AI finishes responding
-// Add this inside addMsg when type === 'vortis' and autoSpeak is on:
-const preloadTTS = useCallback(async (text) => {
-  if (!autoSpeak) return;
-  const clean = text.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
-  if (!clean || ttsCache.current.has(clean)) return;
-  try {
-    const voice = detectLangVoice(clean);
-    const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'tts', text: clean, voice })
-    });
-    const { audio } = await res.json();
-    ttsCache.current.set(clean, `data:audio/mp3;base64,${audio}`);
-  } catch(_) {}
-}, [autoSpeak]);
 
  const doSearch = async (query) => {
   setProcessingStatus('searching');
