@@ -2,13 +2,11 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import "@fontsource/geist-sans";
-import "@fontsource/geist-sans/700.css";
-import "@fontsource/geist-mono";
+import "@fontsource/geist-sans"; // Defaults to weight 400
+import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
+import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import * as tts from '@the-vedantic-coder/piper-tts-web';
-import { franc } from 'franc';
 import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
@@ -1376,59 +1374,17 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
- 
-
-const speakText = async (t) => {
+ const speakText = (t) => {
   try {
-    console.log("=== TTS DEBUG START ===");
-
-    // 1. Stop old audio
-    const existingAudio = document.getElementById('local-tts-player');
-    if (existingAudio) {
-      existingAudio.pause();
-      existingAudio.remove();
-    }
-
-    // 2. Clean text
-    const clean = t
-      .replace(/<[^>]*>/g, '')
-      .replace(/[|*`#>_~]/g, '')
-      .trim()
-      .slice(0, 500);
-
-    console.log("Clean text:", clean);
-
+    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-
-    // 3. CHECK AVAILABLE VOICES (THIS IS THE IMPORTANT PART)
-    if (tts.listVoices) {
-      const voices = await tts.listVoices();
-      console.log("AVAILABLE VOICES:", voices);
-    } else {
-      console.log("tts.listVoices NOT AVAILABLE");
+    if (window.responsiveVoice) {
+      window.responsiveVoice.cancel();
+      window.responsiveVoice.speak(clean, "UK English Female", { rate: 0.9, pitch: 1, volume: 1 });
     }
-
-    // 4. Try simple TTS
-    console.log("Calling tts.predict...");
-
-    const wavBlob = await tts.predict({
-      text: clean,
-      voiceId: 'en_US-lessac-medium'
-    });
-
-    console.log("TTS SUCCESS");
-
-    const audio = new Audio();
-    audio.id = 'local-tts-player';
-    audio.src = URL.createObjectURL(wavBlob);
-    audio.play();
-
-    console.log("=== TTS DEBUG END ===");
-
-  } catch (error) {
-    console.error("❌ Local Audio Engine Error:", error);
-  }
+  } catch(_) {}
 };
+
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
