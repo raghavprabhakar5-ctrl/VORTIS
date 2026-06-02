@@ -17,8 +17,8 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'qwen/qwen3-32b';
-const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
+const GROQ_CHAT_PRIMARY = 'llama-3.1-8b-instant';
+const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -373,7 +373,7 @@ async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
   // 1. Simple → fast model only
   //    Complex → quality model directly
   const modelToUse = useQuality ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const timeout    = useQuality ? 25000 : 15000;
+  const timeout = useQuality ? 20000 : 10000;
 
   try {
     const result = await Promise.race([
