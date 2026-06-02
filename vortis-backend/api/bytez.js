@@ -1,11 +1,29 @@
-export default async function handler(req, res) {
+export const config = {
+  maxDuration: 60,
+  api: {
+    bodyParser: {
+      sizeLimit: '2mb',
+    },
+  },
+};
 
-  // 🔥 CORS FIX (REQUIRED)
+import admin from 'firebase-admin';
+import crypto from 'crypto';
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(
+      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    ),
+  });
+}
+
+export default async function handler(req, res) {
+  // CORS FIX (IMPORTANT)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // 🔥 handle preflight request
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -18,33 +36,38 @@ export default async function handler(req, res) {
     const { text, voice = 'en-US-AriaNeural' } = req.body;
 
     if (!text) {
-      return res.status(400).json({ error: 'Text prompt is required' });
+      return res.status(400).json({ error: 'Text required' });
     }
 
-    const file = `/tmp/${crypto.randomUUID()}.mp3`;
-    const safeText = text.replace(/"/g, '\\"');
+    const clean = text.replace(/"/g, '\\"').slice(0, 500);
 
-    const cmd = `npx edge-tts --text "${safeText}" --voice "${voice}" --write-media "${file}"`;
-
-    await new Promise((resolve, reject) => {
-      exec(cmd, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
+    // 🔥 EDGE TTS VIA HTTP (NO EXEC, NO CRASH)
+    const response = await fetch("https://edge-tts-api.vercel.app/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: clean,
+        voice: voice
+      })
     });
 
-    const audioBuffer = fs.readFileSync(file);
+    if (!response.ok) {
+      throw new Error("TTS API failed");
+    }
+
+    const audioBuffer = await response.arrayBuffer();
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
 
-    return res.status(200).send(audioBuffer);
+    return res.status(200).send(Buffer.from(audioBuffer));
 
   } catch (error) {
-    console.error('TTS Generation Error:', error);
-    return res.status(500).json({ error: 'Failed to synthesize speech' });
+    console.error('TTS Error:', error);
+    return res.status(500).json({ error: 'TTS failed' });
   }
 }
+
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'qwen/qwen3-32b';
 const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
