@@ -1440,9 +1440,7 @@ const saveChat = useCallback(async (msgsToSave) => {
         voice = voices.find(v => v.name === 'Google italiano');
         u.lang = 'it-IT';
       } else {
-        // English / Hinglish
-        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
-                voices.find(v => v.name === 'Google UK English Male');
+        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') 
         u.lang = 'en-IN';
       }
 
