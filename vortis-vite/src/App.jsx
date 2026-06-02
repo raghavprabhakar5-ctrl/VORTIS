@@ -1392,7 +1392,7 @@ const speakText = async (t) => {
     if (!clean) return;
 
     // 3. AI Language Detection
-const detectedIsoCode = franc(clean);
+const detectedIsoCode = franc(clean, { minLength: 3 });
 
 // 4. Map detected language to Piper voice
 let selectedVoiceId;
