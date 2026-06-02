@@ -14,6 +14,7 @@
     "@fontsource/geist-sans": "^5.2.5",
     "@heyputer/puter.js": "^2.2.2",
     "@supabase/supabase-js": "^2.89.0",
+    "@the-vedantic-coder/piper-tts-web": "^1.0.10",
     "@vercel/analytics": "^2.0.1",
     "firebase": "^12.7.0",
     "firebase-admin": "^13.8.0",

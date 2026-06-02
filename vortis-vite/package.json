@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource/geist-mono": "^5.2.8",
     "@fontsource/geist-sans": "^5.2.5",
+    "@the-vedantic-coder/piper-tts-web": "^1.0.10",
     "@vercel/analytics": "^2.0.1",
     "firebase": "^12.13.0",
     "lucide-react": "^1.16.0",

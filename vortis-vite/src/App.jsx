@@ -7,6 +7,8 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import * as tts from '@the-vedantic-coder/piper-tts-web';
+import { LanguageDetectorBuilder } from 'languagedetector-wasm';
 import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
@@ -1374,101 +1376,84 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
- const speakText = (t) => {
+  const detector = LanguageDetectorBuilder.fromAllLanguages().build();
+
+  const speakText = async (t) => {
   try {
-    window.speechSynthesis.cancel();
-    
-    // Clean markdown/HTML and limit length
+    // 1. Reset any playing audio tracks
+    const existingAudio = document.getElementById('local-tts-player');
+    if (existingAudio) {
+      existingAudio.pause();
+      existingAudio.remove();
+    }
+
+    // 2. Clean input data
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    const u = new SpeechSynthesisUtterance(clean);
+    // 3. AI Smart Language Detection (No messy manual word lists!)
+    const detectedIsoCode = detector.detectLanguageOf(clean); 
+    
+    // 4. Map the detected language directly to the best Piper AI Voice Model
+    let selectedVoiceId;
 
-    const setVoice = () => {
-      const voices = window.speechSynthesis.getVoices();
-      
-      // 1. Script-based detection
-      const hasHindiScript = /[\u0900-\u097F]/.test(clean);
-      const isJapanese = /[\u3040-\u30FF]/.test(clean);
-      const isKorean = /[\uAC00-\uD7AF]/.test(clean);
-      const isChinese = /[\u4E00-\u9FFF]/.test(clean);
-      const isRussian = /[\u0400-\u04FF]/.test(clean);
-      const isArabic = /[\u0600-\u06FF]/.test(clean);
+    switch (detectedIsoCode) {
+      case 'HI': // Hindi
+        selectedVoiceId = 'en_IN-spicor-medium'; // Handled by Indian-English/Hinglish model
+        break;
+      case 'EN': // English
+        selectedVoiceId = 'en_GB-alan-medium'; // Clean UK Male
+        break;
+      case 'ES': // Spanish
+        selectedVoiceId = 'es_ES-davefx-medium';
+        break;
+      case 'FR': // French
+        selectedVoiceId = 'fr_FR-siwis-medium';
+        break;
+      case 'DE': // German
+        selectedVoiceId = 'de_DE-thorsten-medium';
+        break;
+      case 'IT': // Italian
+        selectedVoiceId = 'it_IT-riccardo-x_low';
+        break;
+      case 'PT': // Portuguese
+        selectedVoiceId = 'pt_BR-faber-medium';
+        break;
+      case 'RU': // Russian
+        selectedVoiceId = 'ru_RU-dmitri-medium';
+        break;
+      case 'ZH': // Chinese
+        selectedVoiceId = 'zh_CN-chaowen-medium';
+        break;
+      case 'AR': // Arabic
+        selectedVoiceId = 'ar_JO-kareem-medium';
+        break;
+      case 'JA': // Japanese
+        selectedVoiceId = 'ja_JP-reiko-medium';
+        break;
+      case 'KO': // Korean
+        selectedVoiceId = 'ko_KR-kyuri-medium';
+        break;
+      default:
+        selectedVoiceId = 'en_GB-alan-medium'; // Safe fallback
+    }
 
-      // Clean punctuation for accurate word-matching
-      const words = clean.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").split(/\s+/);
-      
-      // Common Hinglish words written in Latin script
-      const hinglishWords = [
-        'kya', 'hai', 'aap', 'kaise', 'ho', 'bhai', 'na', 'yaar', 'haan', 'nahi', 
-        'ko', 'se', 'ka', 'ki', 'me', 'mein', 'ek', 'kuch', 'bhi', 'toh', 'aur', 
-        'gaya', 'kar', 'raha', 'chal', 'ab', 'tak', 'jaisa', 'waisa', 'karo'
-      ];
+    // 5. Generate Audio Waves locally (Piper auto-caches the model files in browser storage)
+    const wavBlob = await tts.predict({ 
+      text: clean, 
+      voiceId: selectedVoiceId 
+    });
 
-      const germanWords = ['ich','bin','du','bist','ist','sind','wie','was','der','die'];
-      const frenchWords = ['je','tu','il','elle','nous','vous','ils','elles','est','sont'];
-      const spanishWords = ['yo','tu','el','ella','nosotros','vosotros','ellos','hola','gracias'];
-      const portugueseWords = ['eu','tu','ele','ela','nos','vos','eles','elas','obrigado'];
-      const italianWords = ['io','tu','lui','lei','noi','voi','loro','ciao','grazie'];
+    // 6. Output to User
+    const audio = new Audio();
+    audio.id = 'local-tts-player';
+    audio.src = URL.createObjectURL(wavBlob);
+    audio.play();
 
-      const isGerman = /[äöüÄÖÜß]/.test(clean) || words.filter(w => germanWords.includes(w)).length >= 2;
-      const isFrench = /[àâæçéèêëîïôœùûüÿ]/.test(clean) || words.filter(w => frenchWords.includes(w)).length >= 2;
-      const isSpanish = /[áéíóúñ¿¡]/.test(clean) || words.filter(w => spanishWords.includes(w)).length >= 2;
-      const isPortuguese = /[ãõ]/.test(clean) || words.filter(w => portugueseWords.includes(w)).length >= 2;
-      const isItalian = words.filter(w => italianWords.includes(w)).length >= 3;
-      
-      // Detect if Latin text contains Hinglish vocabulary
-      const isHinglish = words.filter(w => hinglishWords.includes(w)).length >= 1;
-
-      let targetLang = 'en-GB';
-      let preferredVoiceNames = ['Google UK English Male'];
-
-      // Priority 1: Non-Latin scripts & European languages
-      if (isJapanese) { targetLang = 'ja-JP'; preferredVoiceNames = ['Google 日本語']; }
-      else if (isKorean) { targetLang = 'ko-KR'; preferredVoiceNames = ['Google 한국의']; }
-      else if (isChinese) { targetLang = 'zh-CN'; preferredVoiceNames = ['Google 普通话', 'Google Mandarin']; }
-      else if (isRussian) { targetLang = 'ru-RU'; preferredVoiceNames = ['Google русский']; }
-      else if (isArabic) { targetLang = 'ar'; preferredVoiceNames = []; }
-      else if (isGerman) { targetLang = 'de-DE'; preferredVoiceNames = ['Google Deutsch']; }
-      else if (isFrench) { targetLang = 'fr-FR'; preferredVoiceNames = ['Google français']; }
-      else if (isSpanish) { targetLang = 'es-ES'; preferredVoiceNames = ['Google español']; }
-      else if (isPortuguese) { targetLang = 'pt-BR'; preferredVoiceNames = ['Google português']; }
-      else if (isItalian) { targetLang = 'it-IT'; preferredVoiceNames = ['Google italiano']; }
-      
-      // Priority 2: If Hindi script OR Hinglish text is caught, route to Hindi voice
-      else if (hasHindiScript || isHinglish) { 
-        targetLang = 'hi-IN'; 
-        preferredVoiceNames = ['Google हिन्दी', 'Microsoft Hemant - Hindi (India)']; 
-      }
-      
-      // Priority 3: Default is strictly pure English (UK Male)
-      else {
-        targetLang = 'en-GB';
-        preferredVoiceNames = ['Google UK English Male', 'Microsoft Oliver - English (United Kingdom)'];
-      }
-
-      u.lang = targetLang;
-
-      // Find best voice match
-      let voice = voices.find(v => preferredVoiceNames.includes(v.name)) || 
-                  voices.find(v => v.lang.toLowerCase() === targetLang.toLowerCase()) ||
-                  voices.find(v => v.lang.toLowerCase().startsWith(targetLang.split('-')[0]));
-
-      if (voice) u.voice = voice;
-      
-      u.rate = 0.95; // Slightly adjusted for natural cadence
-      u.pitch = 1;
-      u.volume = 1;
-      
-      window.speechSynthesis.speak(u);
-    };
-
-    const voices = window.speechSynthesis.getVoices();
-    if (voices.length) setVoice();
-    else window.speechSynthesis.onvoiceschanged = setVoice;
-  } catch(_) {}
+  } catch (error) {
+    console.error("Local Audio Engine Error:", error);
+  }
 };
-
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
