@@ -1410,13 +1410,22 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
- const addMsg = (type, text, speak = false) => { 
-  const msg = { id: Date.now() + Math.random(), type, text }; 
-  setMessages(prev => [...prev, msg]); 
-  if (type === 'vortis') preloadTTS(text); // preload in background
-  if (speak && autoSpeak && type === 'vortis') speakText(text); 
-  return msg; 
-};
+ const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
+const preloadTTS = useCallback(async (text) => {
+  if (!autoSpeak) return;
+  const clean = text.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
+  if (!clean || ttsCache.current.has(`${ttsGender}_${clean}`)) return;
+  try {
+    const voice = detectLangVoice(clean, ttsGender);
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'tts', text: clean, voice })
+    });
+    const { audio } = await res.json();
+    ttsCache.current.set(`${ttsGender}_${clean}`, `data:audio/mp3;base64,${audio}`);
+  } catch(_) {}
+}, [autoSpeak, ttsGender]);
 
  const detectLangVoice = (text, gender = 'male') => {
   const low = text.toLowerCase();
