@@ -1379,17 +1379,14 @@ const saveChat = useCallback(async (msgsToSave) => {
     window.speechSynthesis.cancel();
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-    
     const u = new SpeechSynthesisUtterance(clean);
-    
     const setVoice = () => {
       const voices = window.speechSynthesis.getVoices();
-      const voice = 
+      const voice =
         voices.find(v => v.name === 'Google UK English Male') ||
+        voices.find(v => v.name === 'Microsoft George - English (United Kingdom)') ||
         voices.find(v => v.name === 'Google UK English Female') ||
-        voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) ||
-        voices.find(v => v.lang === 'en-GB') ||
-        voices.find(v => v.lang.startsWith('en'));
+        voices.find(v => v.lang === 'en-GB');
       if (voice) u.voice = voice;
       u.rate = 0.9;
       u.pitch = 1;
@@ -1397,7 +1394,6 @@ const saveChat = useCallback(async (msgsToSave) => {
       u.lang = 'en-GB';
       window.speechSynthesis.speak(u);
     };
-
     const voices = window.speechSynthesis.getVoices();
     if (voices.length) setVoice();
     else window.speechSynthesis.onvoiceschanged = setVoice;
