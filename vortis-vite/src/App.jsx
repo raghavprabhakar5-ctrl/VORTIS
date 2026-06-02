@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import "@fontsource/geist-sans"; 
-import "@fontsource/geist-sans/700.css"; 
-import "@fontsource/geist-mono"; 
+import "@fontsource/geist-sans"; // Defaults to weight 400
+import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
+import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import * as tts from '@the-vedantic-coder/piper-tts-web';
@@ -23,62 +23,21 @@ import {
   Shield, Lock, Cpu, Edit2, Brain, Trash2
 } from 'lucide-react';
 
-// =========================================================================
-// UTILITIES & GLOBAL CONFIGURATIONS (OUTSIDE COMPONENT TO PREVENT RE-RENDERS)
-// =========================================================================
-
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
-/**
- * Requests persistent storage from the browser to ensure locally cached
- * voice models for Piper TTS don't get cleared under low disk space conditions.
- */
-const requestPersistentStorage = async () => {
-  if (navigator.storage && navigator.storage.persist) {
-    const isPersisted = await navigator.storage.persist();
-    console.log(`Is storage persistent? ${isPersisted ? "Yes, safe from auto-clear!" : "No, best-effort only."}`);
-  }
-};
-
-/**
- * Dynamically fetches the current user's Firebase ID token and constructs
- * authenticated headers for your Vercel backend.
- */
 const getAuthHeader = async () => {
   try {
     const auth = getAuth();
     const token = await auth.currentUser?.getIdToken(true);
-    if (token) {
-      return {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-        'X-App-Key': 'vortis-2026'
-      };
-    }
+    if (token) return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      'X-App-Key': 'vortis-2026'
+    };
   } catch (_) {}
   return { 'Content-Type': 'application/json', 'X-App-Key': 'vortis-2026' };
 };
 
-
-// =========================================================================
-// MAIN COMPONENT ENTRYPOINT
-// =========================================================================
-export default function VortisAI() { // Renamed from App to match your original main component
-  
-  // Storage persistence check runs once on initial mount
-  useEffect(() => {
-    requestPersistentStorage();
-  }, []);
-
-  // ... rest of your state declarations (useState, useRef, etc.) ...
-  const [messages, setMessages] = useState([]);
-
-  return (
-    <div className="app-container">
-      {/* Your Vortis AI UI layout */}
-    </div>
-  );
-}
 const pushHistory = (historyRef, role, content) => {
   const clean = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 4000);
   if (!clean) return;
@@ -1419,72 +1378,73 @@ const saveChat = useCallback(async (msgsToSave) => {
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
   const detector = LanguageDetectorBuilder.fromAllLanguages().build();
 
- // 1. Create the instance outside the component so it persists across renders
-const detector = LanguageDetectorBuilder.fromAllLanguages().build();
-
 const speakText = async (t) => {
   try {
+    // 1. Reset any playing audio tracks
     const existingAudio = document.getElementById('local-tts-player');
     if (existingAudio) {
       existingAudio.pause();
       existingAudio.remove();
     }
 
+    // 2. Clean input data
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    // 2. Call the instance safely, and convert to uppercase to match your switch cases
-    const detectedResult = detector.detectLanguageOf(clean); 
-    const detectedIsoCode = detectedResult ? detectedResult.toUpperCase() : 'EN'; 
+    // 3. AI Smart Language Detection (No messy manual word lists!)
+    const detectedIsoCode = detector.detectLanguageOf(clean); 
     
+    // 4. Map the detected language directly to the best Piper AI Voice Model
     let selectedVoiceId;
 
     switch (detectedIsoCode) {
-      case 'HI':
-        selectedVoiceId = 'en_IN-spicor-medium';
+      case 'HI': // Hindi
+        selectedVoiceId = 'en_IN-spicor-medium'; // Handled by Indian-English/Hinglish model
         break;
-      case 'EN':
-        selectedVoiceId = 'en_GB-alan-medium';
+      case 'EN': // English
+        selectedVoiceId = 'en_GB-alan-medium'; // Clean UK Male
         break;
-      case 'ES':
+      case 'ES': // Spanish
         selectedVoiceId = 'es_ES-davefx-medium';
         break;
-      case 'FR':
+      case 'FR': // French
         selectedVoiceId = 'fr_FR-siwis-medium';
         break;
-      case 'DE':
+      case 'DE': // German
         selectedVoiceId = 'de_DE-thorsten-medium';
         break;
-      case 'IT':
+      case 'IT': // Italian
         selectedVoiceId = 'it_IT-riccardo-x_low';
         break;
-      case 'PT':
+      case 'PT': // Portuguese
         selectedVoiceId = 'pt_BR-faber-medium';
         break;
-      case 'RU':
+      case 'RU': // Russian
         selectedVoiceId = 'ru_RU-dmitri-medium';
         break;
-      case 'ZH':
+      case 'ZH': // Chinese
         selectedVoiceId = 'zh_CN-chaowen-medium';
         break;
-      case 'AR':
+      case 'AR': // Arabic
         selectedVoiceId = 'ar_JO-kareem-medium';
         break;
-      case 'JA':
+      case 'JA': // Japanese
         selectedVoiceId = 'ja_JP-reiko-medium';
         break;
-      case 'KO':
+      case 'KO': // Korean
         selectedVoiceId = 'ko_KR-kyuri-medium';
         break;
       default:
-        selectedVoiceId = 'en_GB-alan-medium';
+        selectedVoiceId = 'en_GB-alan-medium'; // Safe fallback
     }
 
+    // 5. Generate Audio Waves locally (Piper auto-caches the model files in browser storage)
     const wavBlob = await tts.predict({ 
       text: clean, 
       voiceId: selectedVoiceId 
     });
 
+    // 6. Output to User
     const audio = new Audio();
     audio.id = 'local-tts-player';
     audio.src = URL.createObjectURL(wavBlob);
