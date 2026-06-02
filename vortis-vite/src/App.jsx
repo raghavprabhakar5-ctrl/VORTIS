@@ -1441,7 +1441,8 @@ const saveChat = useCallback(async (msgsToSave) => {
     clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
     aiTimeoutRef.current = setTimeout(() => setShowAITimeout(true), 30000);
     try {
-      pushHistory(convHistory, 'user', userInput);
+     const cleanInput = userInput.replace(/^>.*?\n\n/s, '').trim();
+     pushHistory(convHistory, 'user', cleanInput || userInput);
       const now = new Date(); const userName = profile.name ? profile.name.split(' ')[0] : null;
       let memoriesContext = '';
       if (memories.length > 0) memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules: Only mention memories when genuinely relevant. Sound natural, never list them.`;
