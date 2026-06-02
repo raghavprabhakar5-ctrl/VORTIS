@@ -1374,37 +1374,15 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
- const speakText = async (t) => {
+ const speakText = (t) => {
   try {
-    const clean = t
-      .replace(/<[^>]*>/g, '')
-      .replace(/[|*`#>_~]/g, '')
-      .trim()
-      .slice(0, 500);
-
+    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-
-    const res = await fetch("https://vortis-backend.vercel.app/api/bytez", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        mode: "tts",
-        text: clean,
-        voice: "en-US-AriaNeural"
-      })
-    });
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    const audio = new Audio(url);
-    audio.play();
-
-  } catch (err) {
-    console.error("Speech Error:", err);
-  }
+    if (window.responsiveVoice) {
+      window.responsiveVoice.cancel();
+      window.responsiveVoice.speak(clean, "UK English Female", { rate: 0.9, pitch: 1, volume: 1 });
+    }
+  } catch(_) {}
 };
 
  const doSearch = async (query) => {

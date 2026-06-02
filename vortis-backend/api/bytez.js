@@ -8,64 +8,12 @@ export const config = {
 };
 
 import admin from 'firebase-admin';
-import crypto from 'crypto';
+import Groq from 'groq-sdk';
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(
-      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    ),
+    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
   });
-}
-
-export default async function handler(req, res) {
-  // CORS FIX (IMPORTANT)
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const { text, voice = 'en-US-AriaNeural' } = req.body;
-
-    if (!text) {
-      return res.status(400).json({ error: 'Text required' });
-    }
-
-    const clean = text.replace(/"/g, '\\"').slice(0, 500);
-
-    // 🔥 EDGE TTS VIA HTTP (NO EXEC, NO CRASH)
-    const response = await fetch("https://edge-tts-api.vercel.app/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text: clean,
-        voice: voice
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error("TTS API failed");
-    }
-
-    const audioBuffer = await response.arrayBuffer();
-
-    res.setHeader('Content-Type', 'audio/mpeg');
-    res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
-
-    return res.status(200).send(Buffer.from(audioBuffer));
-
-  } catch (error) {
-    console.error('TTS Error:', error);
-    return res.status(500).json({ error: 'TTS failed' });
-  }
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
