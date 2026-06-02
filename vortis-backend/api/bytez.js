@@ -17,9 +17,8 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'llama-3.1-8b-instant';
-const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
-
+const GROQ_CHAT_PRIMARY = 'qwen/qwen3-32b';
+const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
