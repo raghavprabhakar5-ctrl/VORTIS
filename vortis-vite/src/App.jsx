@@ -1451,10 +1451,11 @@ switch (detectedIsoCode) {
 }
 
     // 5. Generate Audio Waves locally (Piper auto-caches the model files in browser storage)
-    const wavBlob = await tts.predict({ 
-      text: clean, 
-      voiceId: selectedVoiceId 
-    });
+   const wavBlob = await tts.predict({
+  text: clean,
+  voiceId: 'en_US-lessac-medium',
+  forceDownload: false
+});
 
     // 6. Output to User
     const audio = new Audio();
