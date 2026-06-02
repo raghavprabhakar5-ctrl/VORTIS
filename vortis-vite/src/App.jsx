@@ -1400,10 +1400,10 @@ const saveChat = useCallback(async (msgsToSave) => {
       'es': voices.find(v => v.name.includes('Google español')),
     };
 
-    const voice = voiceMap[detectedLang] ||
-      voices.find(v => v.name === 'Google UK English Male') ||
-      voices.find(v => v.name === 'Microsoft George - English (United Kingdom)');
-
+   const voice = voiceMap[detectedLang] ||
+  voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
+  voices.find(v => v.name === 'Google UK English Male');
+  
     if (voice) { u.voice = voice; u.lang = voice.lang; }
     u.rate = 0.9; u.pitch = 1; u.volume = 1;
     window.speechSynthesis.speak(u);
