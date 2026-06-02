@@ -1380,7 +1380,9 @@ const saveChat = useCallback(async (msgsToSave) => {
 
 const speakText = async (t) => {
   try {
-    // 1. Stop previous audio
+    console.log("=== TTS DEBUG START ===");
+
+    // 1. Stop old audio
     const existingAudio = document.getElementById('local-tts-player');
     if (existingAudio) {
       existingAudio.pause();
@@ -1394,26 +1396,37 @@ const speakText = async (t) => {
       .trim()
       .slice(0, 500);
 
+    console.log("Clean text:", clean);
+
     if (!clean) return;
 
-    // 3. Language detection (optional, not used for voice anymore)
-    const detectedIsoCode = franc(clean, { minLength: 3 });
-    console.log("Detected language:", detectedIsoCode);
+    // 3. CHECK AVAILABLE VOICES (THIS IS THE IMPORTANT PART)
+    if (tts.listVoices) {
+      const voices = await tts.listVoices();
+      console.log("AVAILABLE VOICES:", voices);
+    } else {
+      console.log("tts.listVoices NOT AVAILABLE");
+    }
 
-    // 4. TTS (SAFE FIXED VERSION)
+    // 4. Try simple TTS
+    console.log("Calling tts.predict...");
+
     const wavBlob = await tts.predict({
       text: clean,
       voiceId: 'en_US-lessac-medium'
     });
 
-    // 5. Play audio
+    console.log("TTS SUCCESS");
+
     const audio = new Audio();
     audio.id = 'local-tts-player';
     audio.src = URL.createObjectURL(wavBlob);
     audio.play();
 
+    console.log("=== TTS DEBUG END ===");
+
   } catch (error) {
-    console.error("Local Audio Engine Error:", error);
+    console.error("❌ Local Audio Engine Error:", error);
   }
 };
  const doSearch = async (query) => {
