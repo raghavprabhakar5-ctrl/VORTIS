@@ -1401,9 +1401,8 @@ const saveChat = useCallback(async (msgsToSave) => {
       } else if (isRussian) {
         voice = voices.find(v => v.name === 'Google русский');
       } else {
-        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
-                voices.find(v => v.name === 'Google UK English Male');
-        u.lang = 'en-GB';
+        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') 
+        u.lang = 'en-IN';
       }
 
       if (voice) u.voice = voice;
