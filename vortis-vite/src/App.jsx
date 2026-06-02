@@ -1374,7 +1374,7 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
-const speakText = (t) => {
+  const speakText = (t) => {
   try {
     window.speechSynthesis.cancel();
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
@@ -1440,14 +1440,11 @@ const speakText = (t) => {
         voice = voices.find(v => v.name === 'Google italiano');
         u.lang = 'it-IT';
       } else {
-  const isIndian = navigator.language?.includes('IN') || 
-                   navigator.languages?.some(l => l.includes('IN'));
-  voice = isIndian 
-    ? voices.find(v => v.name === 'Microsoft Ravi - English (India)')
-    : voices.find(v => v.name === 'Google UK English Male') ||
-      voices.find(v => v.name === 'Microsoft George - English (United Kingdom)');
-  u.lang = isIndian ? 'en-IN' : 'en-GB';
-}
+        // English / Hinglish
+        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
+                voices.find(v => v.name === 'Google UK English Male');
+        u.lang = 'en-IN';
+      }
 
       if (voice) u.voice = voice;
       u.rate = 0.9;
