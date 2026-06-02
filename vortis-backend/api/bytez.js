@@ -1,26 +1,15 @@
-export const config = {
-  maxDuration: 60,
-  api: {
-    bodyParser: {
-      sizeLimit: '2mb',
-    },
-  },
-};
-
-import admin from 'firebase-admin';
-import { exec } from "child_process";
-import fs from "fs";
-import crypto from "crypto";
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(
-      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    ),
-  });
-}
-
 export default async function handler(req, res) {
+
+  // 🔥 CORS FIX (REQUIRED)
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // 🔥 handle preflight request
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -56,7 +45,6 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to synthesize speech' });
   }
 }
-
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'qwen/qwen3-32b';
 const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
