@@ -1376,16 +1376,31 @@ const saveChat = useCallback(async (msgsToSave) => {
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
  const speakText = (t) => {
   try {
+    window.speechSynthesis.cancel();
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-    const speak = () => {
-      if (window.responsiveVoice) {
-        window.responsiveVoice.cancel();
-        window.responsiveVoice.speak(clean, "UK English Male", { rate: 0.9, pitch: 1, volume: 1 });
-      }
+    
+    const u = new SpeechSynthesisUtterance(clean);
+    
+    const setVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const voice = 
+        voices.find(v => v.name === 'Google UK English Male') ||
+        voices.find(v => v.name === 'Google UK English Female') ||
+        voices.find(v => v.name.includes('Google') && v.lang.startsWith('en')) ||
+        voices.find(v => v.lang === 'en-GB') ||
+        voices.find(v => v.lang.startsWith('en'));
+      if (voice) u.voice = voice;
+      u.rate = 0.9;
+      u.pitch = 1;
+      u.volume = 1;
+      u.lang = 'en-GB';
+      window.speechSynthesis.speak(u);
     };
-    if (window.responsiveVoice) speak();
-    else window.addEventListener('load', speak, { once: true });
+
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length) setVoice();
+    else window.speechSynthesis.onvoiceschanged = setVoice;
   } catch(_) {}
 };
 
