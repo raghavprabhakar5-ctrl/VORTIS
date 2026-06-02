@@ -1447,11 +1447,11 @@ const speakText = (t) => {
       }
 
       if (voice) u.voice = voice;
-      u.rate = 0.9;
-      u.pitch = 1;
-      u.volume = 1;
-      window.speechSynthesis.speak(u);
-    };
+u.rate = hinglishMode ? 0.75 : 0.9;
+u.pitch = 1;
+u.volume = 1;
+window.speechSynthesis.speak(u);
+};
     const voices = window.speechSynthesis.getVoices();
     if (voices.length) setVoice();
     else window.speechSynthesis.onvoiceschanged = setVoice;
