@@ -1378,10 +1378,14 @@ const saveChat = useCallback(async (msgsToSave) => {
   try {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
-    if (window.responsiveVoice) {
-      window.responsiveVoice.cancel();
-      window.responsiveVoice.speak(clean, "UK English Male", { rate: 0.9, pitch: 1, volume: 1 });
-    }
+    const speak = () => {
+      if (window.responsiveVoice) {
+        window.responsiveVoice.cancel();
+        window.responsiveVoice.speak(clean, "UK English Male", { rate: 0.9, pitch: 1, volume: 1 });
+      }
+    };
+    if (window.responsiveVoice) speak();
+    else window.addEventListener('load', speak, { once: true });
   } catch(_) {}
 };
 
