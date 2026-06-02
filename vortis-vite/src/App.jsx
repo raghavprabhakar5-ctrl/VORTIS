@@ -1380,74 +1380,33 @@ const saveChat = useCallback(async (msgsToSave) => {
 
 const speakText = async (t) => {
   try {
+    // 1. Stop previous audio
     const existingAudio = document.getElementById('local-tts-player');
     if (existingAudio) {
       existingAudio.pause();
       existingAudio.remove();
     }
 
-    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
+    // 2. Clean text
+    const clean = t
+      .replace(/<[^>]*>/g, '')
+      .replace(/[|*`#>_~]/g, '')
+      .trim()
+      .slice(0, 500);
+
     if (!clean) return;
 
+    // 3. Language detection (optional, not used for voice anymore)
     const detectedIsoCode = franc(clean, { minLength: 3 });
+    console.log("Detected language:", detectedIsoCode);
 
-    let selectedVoiceId = 'en_US-lessac-medium';
-
-    switch (detectedIsoCode) {
-      case 'hin':
-        selectedVoiceId = 'en_IN-spicor-medium';
-        break;
-
-      case 'eng':
-        selectedVoiceId = 'en_GB-alan-medium';
-        break;
-
-      case 'spa':
-        selectedVoiceId = 'es_ES-davefx-medium';
-        break;
-
-      case 'fra':
-        selectedVoiceId = 'fr_FR-siwis-medium';
-        break;
-
-      case 'deu':
-        selectedVoiceId = 'de_DE-thorsten-medium';
-        break;
-
-      case 'ita':
-        selectedVoiceId = 'it_IT-riccardo-x_low';
-        break;
-
-      case 'por':
-        selectedVoiceId = 'pt_BR-faber-medium';
-        break;
-
-      case 'rus':
-        selectedVoiceId = 'ru_RU-dmitri-medium';
-        break;
-
-      case 'cmn':
-        selectedVoiceId = 'zh_CN-chaowen-medium';
-        break;
-
-      case 'arb':
-        selectedVoiceId = 'ar_JO-kareem-medium';
-        break;
-
-      case 'jpn':
-        selectedVoiceId = 'ja_JP-reiko-medium';
-        break;
-
-      case 'kor':
-        selectedVoiceId = 'ko_KR-kyuri-medium';
-        break;
-    }
-
+    // 4. TTS (SAFE FIXED VERSION)
     const wavBlob = await tts.predict({
       text: clean,
-      voiceId: selectedVoiceId
+      voiceId: 'en_US-lessac-medium'
     });
 
+    // 5. Play audio
     const audio = new Audio();
     audio.id = 'local-tts-player';
     audio.src = URL.createObjectURL(wavBlob);
