@@ -8,12 +8,53 @@ export const config = {
 };
 
 import admin from 'firebase-admin';
-import Groq from 'groq-sdk';
+import { exec } from "child_process";
+import fs from "fs";
+import crypto from "crypto";
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+    credential: admin.credential.cert(
+      JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    ),
   });
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { text, voice = 'en-US-AriaNeural' } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ error: 'Text prompt is required' });
+    }
+
+    const file = `/tmp/${crypto.randomUUID()}.mp3`;
+    const safeText = text.replace(/"/g, '\\"');
+
+    const cmd = `npx edge-tts --text "${safeText}" --voice "${voice}" --write-media "${file}"`;
+
+    await new Promise((resolve, reject) => {
+      exec(cmd, (err) => {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+
+    const audioBuffer = fs.readFileSync(file);
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', 'inline; filename="speech.mp3"');
+
+    return res.status(200).send(audioBuffer);
+
+  } catch (error) {
+    console.error('TTS Generation Error:', error);
+    return res.status(500).json({ error: 'Failed to synthesize speech' });
+  }
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────

@@ -16,6 +16,8 @@
     "@supabase/supabase-js": "^2.89.0",
     "@the-vedantic-coder/piper-tts-web": "^1.0.10",
     "@vercel/analytics": "^2.0.1",
+    "edge-tts": "^1.0.1",
+    "edge-tts-universal": "^1.4.0",
     "firebase": "^12.7.0",
     "firebase-admin": "^13.8.0",
     "franc": "^6.2.0",

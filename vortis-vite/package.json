@@ -14,6 +14,8 @@
     "@fontsource/geist-sans": "^5.2.5",
     "@the-vedantic-coder/piper-tts-web": "^1.0.10",
     "@vercel/analytics": "^2.0.1",
+    "edge-tts": "^1.0.1",
+    "edge-tts-universal": "^1.4.0",
     "firebase": "^12.13.0",
     "franc": "^6.2.0",
     "lucide-react": "^1.16.0",
