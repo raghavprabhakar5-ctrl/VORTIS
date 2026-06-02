@@ -1374,6 +1374,83 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
+
+  const detectLangVoice = (text) => {
+  // ── Unicode script detection (non-Latin) ──
+  if (/[\u0900-\u097F]/.test(text)) return 'hi-IN-SwaraNeural';           // Hindi
+  if (/[\u0980-\u09FF]/.test(text)) return 'bn-BD-NabanitaNeural';        // Bengali
+  if (/[\u0A00-\u0A7F]/.test(text)) return 'pa-IN-OjasNeural';            // Punjabi
+  if (/[\u0A80-\u0AFF]/.test(text)) return 'gu-IN-DhwaniNeural';          // Gujarati
+  if (/[\u0B00-\u0B7F]/.test(text)) return 'or-IN-SubhasiniNeural';       // Odia
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'ta-IN-PallaviNeural';         // Tamil
+  if (/[\u0C00-\u0C7F]/.test(text)) return 'te-IN-MohanNeural';           // Telugu
+  if (/[\u0C80-\u0CFF]/.test(text)) return 'kn-IN-SapnaNeural';           // Kannada
+  if (/[\u0D00-\u0D7F]/.test(text)) return 'ml-IN-SobhanaNeural';         // Malayalam
+  if (/[\u0D80-\u0DFF]/.test(text)) return 'si-LK-ThiliniNeural';         // Sinhala
+  if (/[\u0E00-\u0E7F]/.test(text)) return 'th-TH-PremwadeeNeural';       // Thai
+  if (/[\u0E80-\u0EFF]/.test(text)) return 'lo-LA-KeomanyNeural';         // Lao
+  if (/[\u1000-\u109F]/.test(text)) return 'my-MM-ThihaNeural';           // Burmese
+  if (/[\u1780-\u17FF]/.test(text)) return 'km-KH-SreymomNeural';         // Khmer
+  if (/[\u1C50-\u1C7F]/.test(text)) return 'hi-IN-SwaraNeural';           // Ol Chiki → Hindi fallback
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja-JP-NanamiNeural'; // Japanese
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko-KR-SunHiNeural';           // Korean
+  if (/[\u4E00-\u9FFF]/.test(text)) {
+    // Distinguish Chinese vs Japanese kanji
+    if (/[\u3040-\u30FF]/.test(text)) return 'ja-JP-NanamiNeural';
+    return 'zh-CN-XiaoxiaoNeural';                                         // Chinese
+  }
+  if (/[\u0400-\u04FF]/.test(text)) {
+    if (/[\u0456\u0457\u0491\u0490]/.test(text)) return 'uk-UA-PolinaNeural';  // Ukrainian
+    if (/[\u045E\u040E]/.test(text))              return 'be-BY-SegaNeural';    // Belarusian
+    if (/[\u0452\u0453\u0458\u0459\u045A\u045B\u045C\u045F]/.test(text)) return 'sr-RS-SopieNeural'; // Serbian
+    if (/[\u044A\u044C]/.test(text) && /\b(и|на|не|что|это|как|от|за|все|так)\b/.test(text)) return 'ru-RU-SvetlanaNeural'; // Russian
+    return 'ru-RU-SvetlanaNeural';
+  }
+  if (/[\u0370-\u03FF]/.test(text)) return 'el-GR-AthinaNeural';          // Greek
+  if (/[\u0600-\u06FF]/.test(text)) {
+    if (/[\u06BE\u06C1\u06C2\u06D2\u06BA]/.test(text)) return 'ur-PK-UzmaNeural'; // Urdu
+    if (/[\u06F0-\u06F9]/.test(text)) return 'fa-IR-DilaraNeural';                 // Persian/Farsi
+    return 'ar-SA-ZariyahNeural';                                                   // Arabic
+  }
+  if (/[\u0590-\u05FF]/.test(text)) return 'he-IL-HilaNeural';            // Hebrew
+  if (/[\u10A0-\u10FF]/.test(text)) return 'ka-GE-EkaNeural';             // Georgian
+  if (/[\u0530-\u058F]/.test(text)) return 'hy-AM-AnahitNeural';          // Armenian
+  if (/[\u1200-\u137F]/.test(text)) return 'am-ET-AmehaNeural';           // Amharic
+  if (/[\u0F00-\u0FFF]/.test(text)) return 'hi-IN-SwaraNeural';           // Tibetan fallback
+
+  // ── Latin-script language detection by common words ──
+  const low = text.toLowerCase();
+
+  if (/\b(bonjour|merci|oui|non|je suis|nous|vous|est-ce|les|des|une|pour|avec|dans|sur|par)\b/.test(low)) return 'fr-FR-DeniseNeural';
+  if (/\b(hola|gracias|sí|como|esto|para|una|los|las|por|pero|también|qué|cómo|muy|esto)\b/.test(low)) return 'es-ES-ElviraNeural';
+  if (/\b(ciao|grazie|sono|come|questo|per|non|che|gli|della|dello|degli|delle|siamo)\b/.test(low)) return 'it-IT-ElsaNeural';
+  if (/\b(hallo|danke|ich|das|ist|ein|eine|nicht|und|oder|aber|mit|wir|sie|haben|werden)\b/.test(low)) return 'de-DE-KatjaNeural';
+  if (/\b(olá|obrigado|obrigada|sim|não|como|para|uma|por|com|são|está|isso|aqui)\b/.test(low)) return 'pt-BR-FranciscaNeural';
+  if (/\b(hej|tack|och|det|att|som|för|med|han|hon|men|kan|ska|inte|vara)\b/.test(low)) return 'sv-SE-SofieNeural';
+  if (/\b(hei|takk|og|det|at|som|for|med|han|hun|men|kan|skal|ikke|være)\b/.test(low)) return 'nb-NO-PernilleNeural';
+  if (/\b(hej|tak|og|det|at|som|for|med|han|hun|men|kan|skal|ikke|være|også)\b/.test(low)) return 'da-DK-ChristelNeural';
+  if (/\b(hei|kiitos|ja|on|se|ei|en|ole|että|kuin|kun|jos|niin|olla)\b/.test(low)) return 'fi-FI-NooraNeural';
+  if (/\b(hallo|dank|het|een|van|dat|zijn|met|worden|voor|niet|wel|ook|maar|als)\b/.test(low)) return 'nl-NL-ColetteNeural';
+  if (/\b(cześć|dziękuję|tak|nie|jest|jak|dla|przez|ale|tego|się|pan|pani)\b/.test(low)) return 'pl-PL-ZofiaNeural';
+  if (/\b(ahoj|děkuji|ano|ne|jak|pro|ale|tento|jsem|jsou|bylo|nebo|také)\b/.test(low)) return 'cs-CZ-VlastaNeural';
+  if (/\b(szia|köszönöm|igen|nem|és|hogy|van|egy|az|ez|nem|most|már)\b/.test(low)) return 'hu-HU-NoemiNeural';
+  if (/\b(bună|mulțumesc|da|nu|și|că|este|sunt|pentru|din|mai|ca|sau)\b/.test(low)) return 'ro-RO-AlinaNeural';
+  if (/\b(zdravo|hvala|da|ne|i|je|za|ali|što|kako|nije|ima|još|ovaj)\b/.test(low)) return 'hr-HR-GabrijelaNeural';
+  if (/\b(tere|aitäh|jah|ei|ja|on|see|kas|ning|aga|nii|kui|olen)\b/.test(low)) return 'et-EE-AnuNeural';
+  if (/\b(labas|ačiū|taip|ne|ir|yra|tai|kaip|bet|dar|arba|tik)\b/.test(low)) return 'lt-LT-OnaNeural';
+  if (/\b(sveiki|paldies|jā|nē|un|ir|tas|kā|bet|arī|vai|no|par)\b/.test(low)) return 'lv-LV-EveritaNeural';
+  if (/\b(مرحبا|شكراً|نعم|لا|هذا|كيف|ماذا|في|من|إلى|على|عند)\b/.test(text)) return 'ar-SA-ZariyahNeural';
+  if (/\b(merhaba|teşekkür|evet|hayır|bu|bir|ve|ile|için|ben|biz|değil)\b/.test(low)) return 'tr-TR-EmelNeural';
+  if (/\b(xin chào|cảm ơn|vâng|không|và|là|của|trong|được|có|cho|với)\b/.test(low)) return 'vi-VN-HoaiMyNeural';
+  if (/\b(kamusta|salamat|oo|hindi|at|ng|sa|ang|mga|para|pero|kaya)\b/.test(low)) return 'fil-PH-BlessicaNeural';
+  if (/\b(halo|terima kasih|ya|tidak|dan|adalah|untuk|dengan|ini|itu|juga|bisa)\b/.test(low)) return 'id-ID-GadisNeural';
+  if (/\b(hello|selamat|terima kasih|ya|tidak|dan|untuk|dengan|ini|itu|saya|kami)\b/.test(low) && /\b(lah|mah|lor|sia|kan)\b/.test(low)) return 'ms-MY-YasminNeural';
+  if (/\b(sawubona|ngiyabonga|yebo|cha|futhi|uma|noma|kodwa|ukuthi)\b/.test(low)) return 'zu-ZA-ThandoNeural';
+  if (/\b(dumela|ke a leboga|ee|nnyaa|le|ga|go|ba|ke|se|re)\b/.test(low)) return 'af-ZA-AdriNeural';
+
+  // Default → English
+  return 'en-US-AriaNeural';
+};
  const speakText = async (t) => {
   try {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
@@ -1382,7 +1459,7 @@ const saveChat = useCallback(async (msgsToSave) => {
     const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
       method: 'POST',
       headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'tts', text: clean, voice: 'en-US-AriaNeural' })
+      body: JSON.stringify({ action: 'tts', text: clean, voice: detectLangVoice(clean) })
     });
 
     const { audio } = await res.json();
