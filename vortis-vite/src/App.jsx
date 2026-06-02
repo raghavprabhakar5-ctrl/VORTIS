@@ -1460,7 +1460,7 @@ You have the following capabilities:
 - **Math**: Solve equations, show step-by-step working with LaTeX
 - **Deep Research**: Write thorough multi-paragraph research on any topic
 
-Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. Current year: ${now.getFullYear()}. Never say a wrong year. If unsure about anything current, use WEB_SEARCH.
+Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. Current time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})} — it is ${now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening'} right now. Current year: ${now.getFullYear()}. Never say a wrong year. When suggesting messages for the user to send, always use the correct greeting based on this time — never write "Good morning/afternoon" with a slash. If unsure about anything current, use WEB_SEARCH.
 ${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally — not every message.` : ''}${memoriesContext}
 
 MATH FORMATTING: Always use LaTeX for any math.
@@ -1549,8 +1549,9 @@ STRICT RULES
 ═══════════════════════════════════════
 - Never reference the user's family members (mother, father, maa, baap, etc.) in any context
 - Never use casual/slang family terms in any language
+- When suggesting messages for the user to send, always use the correct greeting based on current time — never write "Good morning/afternoon/evening" with a slash. Use the actual time of day provided above.
 - Always maintain respectful, professional-friendly tone
-- If user uses offensive language, respond calmly and redirect
+- If user asks to add abusive language, politely decline but automatically offer a frustrated/firm version instead. Never just say "I can't help" — always provide an alternative.
 - Never mention today's date unless the user explicitly asks
 - Never use family references even as metaphors or examples
 - Respond in the same language the user writes in.
@@ -2351,12 +2352,12 @@ setProcessingStatus('');
               )}
               <textarea
   ref={textareaRef}
-  value={input.startsWith('> ') ? '' : input}
-  onChange={e => {
-    const val = input.startsWith('> ') ? '> ' + e.target.value : e.target.value;
-    setInput(val);
-    autoResize(e);
-  }}
+  value={input.startsWith('> ') ? input.replace(/^>.*?\n\n/s, '') : input}
+onChange={e => {
+  const quote = input.match(/^(>.*?\n\n)/s)?.[1] || '';
+  setInput(quote + e.target.value);
+  autoResize(e);
+}}
   onPaste={e => {
     const text = e.clipboardData.getData('text');
     const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text);
