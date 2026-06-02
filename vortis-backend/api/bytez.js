@@ -477,9 +477,6 @@ export default async function handler(req, res) {
 // ╔══════════════════════════════════════╗
 // ║  TTS                                 ║
 // ╚══════════════════════════════════════╝
-// ╔══════════════════════════════════════╗
-// ║  TTS                                 ║
-// ╚══════════════════════════════════════╝
 if (action === 'tts') {
   const text  = sanitizeString(body.text  || '', 500);
   const voice = sanitizeString(body.voice || 'en-US-AriaNeural', 60);
