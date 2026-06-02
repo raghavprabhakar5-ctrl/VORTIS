@@ -1374,7 +1374,7 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
   const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
-const speakText = (t) => {
+ const speakText = (t) => {
   try {
     window.speechSynthesis.cancel();
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
@@ -1382,28 +1382,11 @@ const speakText = (t) => {
     const u = new SpeechSynthesisUtterance(clean);
     const setVoice = () => {
       const voices = window.speechSynthesis.getVoices();
-      
-      // Script-based detection
       const isHindi = /[\u0900-\u097F]/.test(clean);
       const isJapanese = /[\u3040-\u30FF]/.test(clean);
       const isKorean = /[\uAC00-\uD7AF]/.test(clean);
       const isChinese = /[\u4E00-\u9FFF]/.test(clean);
       const isRussian = /[\u0400-\u04FF]/.test(clean);
-      const isArabic = /[\u0600-\u06FF]/.test(clean);
-
-      // Word-based detection for Latin script languages
-      const words = clean.toLowerCase().split(/\s+/);
-      const germanWords = ['ich','bin','du','bist','ist','sind','wie','was','der','die','das','ein','eine','nicht','mit','und','auf','guten','morgen','tag','abend','bitte','danke','hallo','kann','mir','dir','helfen','nein','ja','tschuss','sprechen','machen','gehen','kommen','haben','wir','ihr','sie','es'];
-      const frenchWords = ['je','tu','il','elle','nous','vous','ils','elles','est','sont','avec','pour','dans','sur','une','les','des','que','qui','bonjour','merci','oui','non','bonsoir','comment','voila','tres','bien','mais','mon','ton','son'];
-      const spanishWords = ['yo','tu','el','ella','nosotros','vosotros','ellos','hola','gracias','por','favor','como','esta','bien','buenos','dias','tardes','noches','que','hay','donde','cuando','quien','porque','pero','para','con','sin'];
-      const portugueseWords = ['eu','tu','ele','ela','nos','vos','eles','elas','obrigado','bom','dia','boa','tarde','noite','como','esta','sim','nao','por','favor','para','com','mas','que','quando','onde'];
-      const italianWords = ['io','tu','lui','lei','noi','voi','loro','ciao','grazie','buon','giorno','sera','notte','come','stai','bene','male','si','no','per','con','che','chi','dove','quando','perche'];
-
-      const isGerman = /[äöüÄÖÜß]/.test(clean) || words.filter(w => germanWords.includes(w)).length >= 2;
-      const isFrench = /[àâæçéèêëîïôœùûüÿ]/.test(clean) || words.filter(w => frenchWords.includes(w)).length >= 2;
-      const isSpanish = /[áéíóúñ¿¡]/.test(clean) || words.filter(w => spanishWords.includes(w)).length >= 2;
-      const isPortuguese = /[ãõ]/.test(clean) || words.filter(w => portugueseWords.includes(w)).length >= 2;
-      const isItalian = words.filter(w => italianWords.includes(w)).length >= 3;
 
       let voice;
       if (isHindi) {
@@ -1411,42 +1394,17 @@ const speakText = (t) => {
         u.lang = 'hi-IN';
       } else if (isJapanese) {
         voice = voices.find(v => v.name === 'Google 日本語');
-        u.lang = 'ja-JP';
       } else if (isKorean) {
         voice = voices.find(v => v.name === 'Google 한국의');
-        u.lang = 'ko-KR';
       } else if (isChinese) {
         voice = voices.find(v => v.name.includes('Google 普通话'));
-        u.lang = 'zh-CN';
       } else if (isRussian) {
         voice = voices.find(v => v.name === 'Google русский');
-        u.lang = 'ru-RU';
-      } else if (isArabic) {
-        voice = voices.find(v => v.lang === 'ar');
-        u.lang = 'ar';
-      } else if (isGerman) {
-        voice = voices.find(v => v.name === 'Google Deutsch');
-        u.lang = 'de-DE';
-      } else if (isFrench) {
-        voice = voices.find(v => v.name === 'Google français');
-        u.lang = 'fr-FR';
-      } else if (isSpanish) {
-        voice = voices.find(v => v.name.includes('Google español'));
-        u.lang = 'es-ES';
-      } else if (isPortuguese) {
-        voice = voices.find(v => v.name.includes('Google português'));
-        u.lang = 'pt-BR';
-      } else if (isItalian) {
-        voice = voices.find(v => v.name === 'Google italiano');
-        u.lang = 'it-IT';
       } else {
-  // English variants
-  const isAmerican = /\b(y'all|gonna|wanna|gotta|dude|bro|awesome|totally|like|literally)\b/i.test(clean);
-  voice = isAmerican
-    ? voices.find(v => v.name === 'Microsoft David - English (United States)')
-    : voices.find(v => v.name === 'Microsoft George - English (United Kingdom)');
-  u.lang = isAmerican ? 'en-US' : 'en-GB';
-}
+        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
+                voices.find(v => v.name === 'Google UK English Male');
+        u.lang = 'en-GB';
+      }
 
       if (voice) u.voice = voice;
       u.rate = 0.9;
