@@ -1440,11 +1440,14 @@ const speakText = (t) => {
         voice = voices.find(v => v.name === 'Google italiano');
         u.lang = 'it-IT';
       } else {
-        // English / Hinglish
-        voice = voices.find(v => v.name === 'Microsoft Ravi - English (India)') ||
-                voices.find(v => v.name === 'Google UK English Male');
-        u.lang = 'en-IN';
-      }
+  const isIndian = navigator.language?.includes('IN') || 
+                   navigator.languages?.some(l => l.includes('IN'));
+  voice = isIndian 
+    ? voices.find(v => v.name === 'Microsoft Ravi - English (India)')
+    : voices.find(v => v.name === 'Google UK English Male') ||
+      voices.find(v => v.name === 'Microsoft George - English (United Kingdom)');
+  u.lang = isIndian ? 'en-IN' : 'en-GB';
+}
 
       if (voice) u.voice = voice;
       u.rate = 0.9;
