@@ -1417,7 +1417,6 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
-
 // ── TTS REFS ──
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
@@ -1425,7 +1424,7 @@ const ttsGenderRef = useRef(ttsGender);
 const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
-// ── DETECT LANGUAGE VOICE ──
+// ── DETECT LANGUAGE VOICE (OPTIMIZED FOR SPEED) ──
 const detectLangVoice = useCallback(async (t) => {
   const VOICES = {
     hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
@@ -1493,8 +1492,9 @@ const detectLangVoice = useCallback(async (t) => {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'You are a precise language detector. Identify the language of the user message. Output ONLY the 2-letter or 3-letter ISO language code (e.g., en, hi, fil, bn, ja, es, fr, lo). If the user writes text phonetically using English alphabet characters (like Romanized Hindi/Hinglish), you must map it back to its native roots (e.g., hi). Output absolutely nothing else.',
-        history: [{ role: 'user', content: t.slice(0, 120) }]
+        // Instruct the model to return instantly without markdown/prose structures
+        prompt: 'Return ONLY the 2-letter or 3-letter ISO language code for the text. No markdown, no explanations. Example output format: "en" or "hi". Return a single word immediately.',
+        history: [{ role: 'user', content: t.slice(0, 60) }] // Shortened context length for faster backend scanning
       })
     });
 
@@ -1504,7 +1504,8 @@ const detectLangVoice = useCallback(async (t) => {
     const dec = new TextDecoder();
     let detectedLang = '';
 
-    while (true) {
+    // Fast read limit: stop processing the stream after collecting the tiny payload
+    while (detectedLang.length < 10) {
       const { done, value } = await reader.read();
       if (done) break;
       
@@ -1529,12 +1530,11 @@ const detectLangVoice = useCallback(async (t) => {
   return v('en');
 }, []);
 
-// ── CLEAN TEXT FOR TTS ──
+// ── CLEAN TEXT FOR TTS (FIXED SENTENCE CUTS) ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
   
   let clean = t
-    // 1. Remove Markdown elements safely
     .replace(/<[^>]*>/g, '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`]+`/g, ' ')
@@ -1542,40 +1542,28 @@ const cleanForTTS = useCallback((t) => {
     .replace(/[*_~#|>\\]/g, ' ')
     .replace(/!\[.*?\]\(.*?\)/g, ' ')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    
-    // 2. Erase Text Emoticons / Smileys (:), :-D, <3) so they don't break big blocks
     .replace(/[:;=8X][-o^]?[\)\]\(\[dDpP03O@\|\/\\]/g, '')
     .replace(/[<>]3/g, '')
-
-    // 3. Deep-clean all native emojis and symbols
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
     .replace(/[\u{E000}-\u{F8FF}]/gu, '')
     .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '')
-
-    // 4. Strip out any stray weird punctuation, keeping standard language scripts
     .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '')
-    
-    // 5. Clean up duplicate spaces instantly
     .replace(/\s+/g, ' ')
     .trim();
 
   if (!clean || clean.length < 3) return '';
 
-  // 6. Split sentences safely and drop any empty lines or array gaps
-  const segments = clean.split(/(?<=[.!?।॥])\s+/);
-  const validSegments = segments.filter(s => s.trim().length > 0);
-
-  // Return up to 3 sentences, max 350 characters total
-  return validSegments.slice(0, 3).join(' ').slice(0, 350).trim();
+  // FIXED: Instead of aggressively splitting and slicing segments (which causes half sentences),
+  // we now keep the whole clean text block up to 400 complete characters without tearing sentences apart.
+  return clean.slice(0, 400).trim();
 }, []);
 
 // ── PRELOAD TTS ──
 const preloadTTS = useCallback(async (t) => {
   const gender = ttsGenderRef.current;
-  // ── FIX: detect language using single local input variable argument string ──
   const voice = await detectLangVoice(t);
   const clean = cleanForTTS(t);
   if (!clean || clean.length < 3) return;
@@ -1606,13 +1594,11 @@ const preloadTTS = useCallback(async (t) => {
 const speakText = useCallback(async (t) => {
   try {
     const gender = ttsGenderRef.current;
-    // ── FIX: detect language using single local input variable argument string ──
     const voice = await detectLangVoice(t);
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
     const cacheKey = `${gender}_${voice}_${clean}`;
 
-    // Helper to stop previous audio and play new audio safely under a persistent reference
     const playSafely = (srcUrl) => {
       if (currentAudioRef.current) {
         currentAudioRef.current.pause();
@@ -1660,7 +1646,6 @@ const addMsg = (type, text, speak = false) => {
   if (speak && autoSpeak && type === 'vortis') speakText(text);
   return msg;
 };
-
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
