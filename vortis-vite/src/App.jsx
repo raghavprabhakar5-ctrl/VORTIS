@@ -1480,72 +1480,96 @@ const detectLangVoice = async (text, gender = 'male') => {
     af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
     en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
- const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
+const gender = ttsGenderRef.current;
+  const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
 
-  // Quick safety check for completely empty text
-  if (!text || text.trim().length < 2) return v('en');
+  if (!t || t.trim().length < 2) return v('en');
 
   try {
-    // Let the AI decide the language via a structured JSON API call
-    const res = await fetch('/api/detect-language', {
+    const res = await fetch(API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: 'You are a precise language detector. Identify the language of the user message. Output ONLY the 2-letter or 3-letter ISO language code (e.g., en, hi, fil, bn, ja, es, fr, lo). If the user writes text phonetically using English alphabet characters (like Romanized Hindi/Hinglish), you must map it back to its native roots (e.g., hi). Output absolutely nothing else.',
+        history: [{ role: 'user', content: t.slice(0, 120) }]
+      })
     });
 
-    if (res.ok) {
-      const { lang } = await res.json(); 
-      // If the AI returns 'fr', it maps immediately to your French voice assets
-      if (VOICES[lang]) return v(lang);
+    if (!res.ok) return v('en');
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let detectedLang = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try { 
+          const p = JSON.parse(raw); 
+          if (p.content) detectedLang += p.content; 
+        } catch(_) {}
+      }
     }
+
+    const cleanLang = detectedLang.trim().toLowerCase().replace(/[^a-z]/g, '');
+
+    if (VOICES[cleanLang]) {
+      return v(cleanLang);
+    }
+
   } catch (error) {
-    console.error("AI language detection failed, falling back to English:", error);
+    console.error("AI language stream failed:", error);
   }
 
-  // Fallback to English if the network or AI request fails
   return v('en');
 };
-
 // ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
-  return t
-    // 1. Strip markdown, HTML, and code snippets completely
+  
+  let clean = t
+    // 1. Remove Markdown elements safely
     .replace(/<[^>]*>/g, '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`[^`]+`/g, ' ')
-    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/\*\*?\*?(.+?)\*\*?\*?/g, '$1')
     .replace(/[*_~#|>\\]/g, ' ')
     .replace(/!\[.*?\]\(.*?\)/g, ' ')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     
-    // 2. WIPE TEXT-BASED SMILEYS / EMOTICONS (e.g., :), :-D, <3, :P)
-    .replace(/[:;=8X][-o^]?[\)\]\(\[dDpP03O@\|\/\\]/g, '') 
-    .replace(/[<>]3/g, '') // Removes <3
-    
-    // 3. Comprehensive Native Emoji & Symbol Purge
+    // 2. Erase Text Emoticons / Smileys (:), :-D, <3) so they don't break big blocks
+    .replace(/[:;=8X][-o^]?[\)\]\(\[dDpP03O@\|\/\\]/g, '')
+    .replace(/[<>]3/g, '')
+
+    // 3. Deep-clean all native emojis and symbols
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[\u{E000}-\u{F8FF}]/gu, '') 
-    .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '') 
+    .replace(/[\u{E000}-\u{F8FF}]/gu, '')
+    .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '')
 
-    // 4. Clean out everything except valid letters, numbers, and voice punctuation
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '') 
+    // 4. Strip out any stray weird punctuation, keeping standard language scripts
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '')
     
-    // 5. Clean up extra spaces left behind by the deleted smileys
+    // 5. Clean up duplicate spaces instantly
     .replace(/\s+/g, ' ')
-    .trim()
-    
-    // 6. Sentence safety check (Provides a fallback if splitting yields nothing)
-    .split(/(?<=[.!?।॥])\s+/)
-    .filter(sentence => sentence.trim().length > 0) // Drops empty fragments
-    .slice(0, 3)
-    .join(' ')
-    .slice(0, 350);
+    .trim();
+
+  if (!clean || clean.length < 3) return '';
+
+  // 6. Split sentences safely and drop any empty lines or array gaps
+  const segments = clean.split(/(?<=[.!?।॥])\s+/);
+  const validSegments = segments.filter(s => s.trim().length > 0);
+
+  // Return up to 3 sentences, max 350 characters total
+  return validSegments.slice(0, 3).join(' ').slice(0, 350).trim();
 }, []);
 
 // ── PRELOAD TTS ──
