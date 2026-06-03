@@ -1425,111 +1425,77 @@ useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
 // ── DETECT LANGUAGE VOICE ──
 const detectLangVoice = async (text, gender = 'male') => {
-  const VOICES = {
-    hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
-    bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
-    pa: ['pa-IN-OjasNeural',      'pa-IN-OjasNeural'],
-    gu: ['gu-IN-NiranjanNeural',  'gu-IN-DhwaniNeural'],
-    ta: ['ta-IN-ValluvarNeural',  'ta-IN-PallaviNeural'],
-    te: ['te-IN-MohanNeural',     'te-IN-ShrutiNeural'],
-    kn: ['kn-IN-GaganNeural',     'kn-IN-SapnaNeural'],
-    ml: ['ml-IN-MidhunNeural',    'ml-IN-SobhanaNeural'],
-    si: ['si-LK-SameeraNeural',   'si-LK-ThiliniNeural'],
-    th: ['th-TH-NiwatNeural',     'th-TH-PremwadeeNeural'],
-    lo: ['lo-LA-ChanthavongNeural','lo-LA-KeomanyNeural'],
-    my: ['my-MM-ThihaNeural',     'my-MM-NilarNeural'],
-    km: ['km-KH-PisethNeural',    'km-KH-SreymomNeural'],
-    am: ['am-ET-AmehaNeural',     'am-ET-MekdesNeural'],
-    ka: ['ka-GE-GiorgiNeural',    'ka-GE-EkaNeural'],
-    hy: ['hy-AM-HaykNeural',      'hy-AM-AnahitNeural'],
-    he: ['he-IL-AvriNeural',      'he-IL-HilaNeural'],
-    el: ['el-GR-NestorasNeural',  'el-GR-AthinaNeural'],
-    ja: ['ja-JP-KeitaNeural',     'ja-JP-NanamiNeural'],
-    ko: ['ko-KR-InJoonNeural',    'ko-KR-SunHiNeural'],
-    zh: ['zh-CN-YunxiNeural',     'zh-CN-XiaoxiaoNeural'],
-    ru: ['ru-RU-DmitryNeural',    'ru-RU-SvetlanaNeural'],
-    uk: ['uk-UA-OstapNeural',     'uk-UA-PolinaNeural'],
-    sr: ['sr-RS-NicholasNeural',  'sr-RS-SopieNeural'],
-    ar: ['ar-SA-HamedNeural',     'ar-SA-ZariyahNeural'],
-    ur: ['ur-PK-AsadNeural',      'ur-PK-UzmaNeural'],
-    fa: ['fa-IR-FaridNeural',     'fa-IR-DilaraNeural'],
-    fr: ['fr-FR-HenriNeural',     'fr-FR-DeniseNeural'],
-    es: ['es-ES-AlvaroNeural',    'es-ES-ElviraNeural'],
-    it: ['it-IT-DiegoNeural',     'it-IT-ElsaNeural'],
-    de: ['de-DE-ConradNeural',    'de-DE-KatjaNeural'],
-    pt: ['pt-BR-AntonioNeural',   'pt-BR-FranciscaNeural'],
-    sv: ['sv-SE-MattiasNeural',   'sv-SE-SofieNeural'],
-    nb: ['nb-NO-FinnNeural',      'nb-NO-PernilleNeural'],
-    da: ['da-DK-JeppeNeural',     'da-DK-ChristelNeural'],
-    fi: ['fi-FI-HarriNeural',     'fi-FI-NooraNeural'],
-    nl: ['nl-NL-MaartenNeural',   'nl-NL-ColetteNeural'],
-    pl: ['pl-PL-MarekNeural',     'pl-PL-ZofiaNeural'],
-    cs: ['cs-CZ-AntoninNeural',   'cs-CZ-VlastaNeural'],
-    hu: ['hu-HU-TamasNeural',     'hu-HU-NoemiNeural'],
-    ro: ['ro-RO-EmilNeural',      'ro-RO-AlinaNeural'],
-    hr: ['hr-HR-SreckoNeural',    'hr-HR-GabrijelaNeural'],
-    et: ['et-EE-KertNeural',      'et-EE-AnuNeural'],
-    lt: ['lt-LT-LeonasNeural',    'lt-LT-OnaNeural'],
-    lv: ['lv-LV-NilsNeural',      'lv-LV-EveritaNeural'],
-    tr: ['tr-TR-AhmetNeural',     'tr-TR-EmelNeural'],
-    vi: ['vi-VN-NamMinhNeural',   'vi-VN-HoaiMyNeural'],
-    fil:['fil-PH-AngeloNeural',   'fil-PH-BlessicaNeural'],
-    id: ['id-ID-ArdiNeural',      'id-ID-GadisNeural'],
-    ms: ['ms-MY-OsmanNeural',     'ms-MY-YasminNeural'],
-    af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
-    en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
+  const VOICE_MAP = {
+    'hi': ['hi-IN-MadhurNeural', 'hi-IN-SwaraNeural'],
+    'en': ['en-US-GuyNeural', 'en-US-AriaNeural'],
+    'fr': ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural'],
+    'es': ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural'],
+    'de': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
+    'ja': ['ja-JP-KeitaNeural', 'ja-JP-NanamiNeural'],
+    'zh': ['zh-CN-YunxiNeural', 'zh-CN-XiaoxiaoNeural'],
+    'ar': ['ar-SA-HamedNeural', 'ar-SA-ZariyahNeural'],
+    'ru': ['ru-RU-DmitryNeural', 'ru-RU-SvetlanaNeural'],
+    'pt': ['pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural'],
+    'ko': ['ko-KR-InJoonNeural', 'ko-KR-SunHiNeural'],
+    'ta': ['ta-IN-ValluvarNeural', 'ta-IN-PallaviNeural'],
+    'te': ['te-IN-MohanNeural', 'te-IN-ShrutiNeural'],
+    'bn': ['bn-BD-PradeepNeural', 'bn-BD-NabanitaNeural'],
+    'ur': ['ur-PK-AsadNeural', 'ur-PK-UzmaNeural'],
+    'it': ['it-IT-DiegoNeural', 'it-IT-ElsaNeural'],
+    'nl': ['nl-NL-MaartenNeural', 'nl-NL-ColetteNeural'],
+    'tr': ['tr-TR-AhmetNeural', 'tr-TR-EmelNeural'],
+    'pl': ['pl-PL-MarekNeural', 'pl-PL-ZofiaNeural'],
+    'vi': ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'],
+    'id': ['id-ID-ArdiNeural', 'id-ID-GadisNeural'],
+    'ms': ['ms-MY-OsmanNeural', 'ms-MY-YasminNeural'],
+    'th': ['th-TH-NiwatNeural', 'th-TH-PremwadeeNeural'],
+    'ml': ['ml-IN-MidhunNeural', 'ml-IN-SobhanaNeural'],
+    'kn': ['kn-IN-GaganNeural', 'kn-IN-SapnaNeural'],
+    'gu': ['gu-IN-NiranjanNeural', 'gu-IN-DhwaniNeural'],
+    'pa': ['pa-IN-OjasNeural', 'pa-IN-OjasNeural'],
   };
-  const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
-  if (/[\u0900-\u097F]/.test(text)) return v('hi');
-  if (/[\u0980-\u09FF]/.test(text)) return v('bn');
-  if (/[\u0A00-\u0A7F]/.test(text)) return v('pa');
-  if (/[\u0A80-\u0AFF]/.test(text)) return v('gu');
-  if (/[\u0B80-\u0BFF]/.test(text)) return v('ta');
-  if (/[\u0C00-\u0C7F]/.test(text)) return v('te');
-  if (/[\u0C80-\u0CFF]/.test(text)) return v('kn');
-  if (/[\u0D00-\u0D7F]/.test(text)) return v('ml');
-  if (/[\u0D80-\u0DFF]/.test(text)) return v('si');
-  if (/[\u0E00-\u0E7F]/.test(text)) return v('th');
-  if (/[\u0E80-\u0EFF]/.test(text)) return v('lo');
-  if (/[\u1000-\u109F]/.test(text)) return v('my');
-  if (/[\u1780-\u17FF]/.test(text)) return v('km');
-  if (/[\u1200-\u137F]/.test(text)) return v('am');
-  if (/[\u10A0-\u10FF]/.test(text)) return v('ka');
-  if (/[\u0530-\u058F]/.test(text)) return v('hy');
-  if (/[\u0590-\u05FF]/.test(text)) return v('he');
-  if (/[\u0370-\u03FF]/.test(text)) return v('el');
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return v('ja');
-  if (/[\uAC00-\uD7AF]/.test(text)) return v('ko');
-  if (/[\u4E00-\u9FFF]/.test(text)) {
-    if (/[\u3040-\u30FF]/.test(text)) return v('ja');
-    return v('zh');
-  }
-  if (/[\u0400-\u04FF]/.test(text)) {
-    if (/[\u0456\u0457\u0491\u0490]/.test(text)) return v('uk');
-    if (/[\u0452\u0453\u0458\u0459\u045A\u045B\u045C\u045F]/.test(text)) return v('sr');
-    return v('ru');
-  }
-  if (/[\u0600-\u06FF]/.test(text)) {
-    if (/[\u06BE\u06C1\u06C2\u06D2\u06BA]/.test(text)) return v('ur');
-    if (/[\u06F0-\u06F9]/.test(text)) return v('fa');
-    return v('ar');
-  }
-  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi|acha|bilkul|zaroor|hoga|hain|tha|thi)\b/i.test(text)) return v('hi');
-  try {
-    const mod = await getTinyld();
-    if (mod) {
-      const results = mod.detectAll ? mod.detectAll(text) : null;
-      if (results?.length > 0) {
-        const best = results.find(r => r.lang && VOICES[r.lang]);
-        if (best) return v(best.lang);
-      }
-      const detected = mod.detect(text);
-      if (detected && detected !== 'und' && VOICES[detected]) return v(detected);
-    }
-  } catch(_) {}
-  return v('en');
-};
 
+  const fallback = VOICE_MAP['en'][gender === 'female' ? 1 : 0];
+
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: `Detect the language of this text. Reply with ONLY a single 2-letter ISO 639-1 language code (like: en, hi, fr, es, de, ja, zh, ar, ru, pt, ko, ta, te, bn, ur, it, nl, tr, pl, vi, id, ms, th, ml, kn, gu, pa). No explanation. No punctuation. Just the code. If mixed languages or uncertain, reply: en\n\nText: "${text.slice(0, 150)}"`,
+        history: []
+      })
+    });
+
+    if (!res.ok) return fallback;
+
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let raw = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6).trim();
+        if (chunk === '[DONE]' || !chunk) continue;
+        try {
+          const p = JSON.parse(chunk);
+          if (p.content) raw += p.content;
+        } catch(_) {}
+      }
+    }
+
+    const detected = raw.trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+    const voice = VOICE_MAP[detected];
+    return voice ? voice[gender === 'female' ? 1 : 0] : fallback;
+
+  } catch(_) {
+    return fallback;
+  }
+};
 // ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
@@ -1540,18 +1506,20 @@ const cleanForTTS = useCallback((t) => {
     .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
+    .replace(/#{1,6}\s/g, '')
     .replace(/[*_~#|>\\]/g, '')
     .replace(/!\[.*?\]\(.*?\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{2700}-\u{27BF}]/gu, '')
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
     .replace(/[^\w\s.,!?;:'"()\-–—]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .split(/(?<=[.!?])\s+/)
-    .slice(0, 2)
-    .join(' ')
-    .slice(0, 250);
+    .slice(0, 800);
 }, []);
 
 // ── PRELOAD TTS ──
