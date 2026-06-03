@@ -494,44 +494,39 @@ if (action === 'tts') {
   if (!cleanText || cleanText.length < 2)
     return res.status(200).json({ audio: '' });
 
-  const { EdgeTTS } = await import('@andresaya/edge-tts');
-
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const tts = new EdgeTTS(); // fresh instance every attempt — this is the fix
-      await tts.synthesize(cleanText, voice, {
-        outputFormat: 'audio-16khz-32kbitrate-mono-mp3'
-      });
-      const audio = await tts.toBase64();
-
-      if (audio && audio.length > 100) {
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        return res.status(200).json({ audio });
-      }
-      console.log(`TTS attempt ${attempt} empty, retrying...`);
-    } catch(e) {
-      console.log(`TTS attempt ${attempt} failed: ${e.message}`);
-    }
-    // Small delay between retries
-    if (attempt < 3) await new Promise(r => setTimeout(r, 400 * attempt));
-  }
-
-  // Final fallback — try English voice if non-English voice failed
   try {
-    const tts = new EdgeTTS();
-    await tts.synthesize(cleanText, 'en-US-GuyNeural', {
-      outputFormat: 'audio-16khz-32kbitrate-mono-mp3'
-    });
-    const audio = await tts.toBase64();
-    if (audio && audio.length > 100) {
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.status(200).json({ audio });
-    }
-  } catch(e) {
-    console.error('TTS fallback failed:', e.message);
-  }
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_16KHZ_32KBITRATE_MONO_MP3);
 
-  return res.status(500).json({ error: 'TTS synthesis failed after 3 attempts' });
+    const chunks = [];
+    await Promise.race([
+      new Promise((resolve, reject) => {
+        const readable = tts.toStream(cleanText);
+        readable.on('data', chunk => chunks.push(chunk));
+        readable.on('end', resolve);
+        readable.on('error', reject);
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('TTS timeout after 15s')), 15000)
+      )
+    ]);
+
+    const audio = Buffer.concat(chunks).toString('base64');
+    if (!audio || audio.length < 100)
+      throw new Error('Empty audio returned');
+
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.status(200).json({ audio });
+
+  } catch(e) {
+    console.error('TTS error:', e.message);
+    // If msedge-tts also gets blocked by Microsoft, log it clearly
+    if (e.message.includes('timeout') || e.message.includes('ECONNREFUSED') || e.message.includes('socket')) {
+      console.error('TTS: Microsoft Edge TTS servers blocking datacenter IP');
+    }
+    return res.status(500).json({ error: 'TTS failed: ' + e.message });
+  }
 }
 
     // ╔══════════════════════════════════════╗
