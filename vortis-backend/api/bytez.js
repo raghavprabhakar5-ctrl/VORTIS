@@ -513,7 +513,7 @@ if (action === 'tts') {
     console.log('TTS attempt 1 failed:', e.message);
   }
 
-  // ── ATTEMPT 2: msedge-tts fallback ──
+  // ── ATTEMPT 2: msedge-tts ──
   try {
     const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
     const tts = new MsEdgeTTS();
@@ -536,7 +536,6 @@ if (action === 'tts') {
     console.log('TTS attempt 2 failed:', e.message);
   }
 
-  // ── ALL FAILED — return empty so client stays silent ──
   return res.status(200).json({ audio: '' });
 }
 

@@ -1527,11 +1527,12 @@ const preloadTTS = useCallback(async (text) => {
   const gender = ttsGenderRef.current;
   const clean = cleanForTTS(text);
   if (!clean || clean.length < 3) return;
+  const voice = gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural';
   const cacheKey = `${gender}_${clean}`;
   if (ttsCache.current.has(cacheKey)) return;
   if (ttsPending.current.has(cacheKey)) return;
+
   try {
-    const voice = await detectLangVoice(clean, gender);
     const promise = fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1539,6 +1540,7 @@ const preloadTTS = useCallback(async (text) => {
     }).then(async (res) => {
       if (!res.ok) throw new Error('TTS failed');
       const { audio } = await res.json();
+      if (!audio || audio.length < 100) throw new Error('Empty audio');
       const src = `data:audio/mp3;base64,${audio}`;
       ttsCache.current.set(cacheKey, src);
       ttsPending.current.delete(cacheKey);
@@ -1546,7 +1548,10 @@ const preloadTTS = useCallback(async (text) => {
         ttsCache.current.delete(ttsCache.current.keys().next().value);
       }
       return src;
-    }).catch((e) => { ttsPending.current.delete(cacheKey); throw e; });
+    }).catch((e) => {
+      ttsPending.current.delete(cacheKey);
+      throw e;
+    });
     ttsPending.current.set(cacheKey, promise);
   } catch(_) {}
 }, [cleanForTTS]);
@@ -1557,27 +1562,33 @@ const speakText = useCallback(async (t) => {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
+    const voice = gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural';
     const cacheKey = `${gender}_${clean}`;
+
     if (ttsCache.current.has(cacheKey)) {
-      new Audio(ttsCache.current.get(cacheKey)).play();
+      const src = ttsCache.current.get(cacheKey);
+      if (!src) return;
+      new Audio(src).play().catch(() => {});
       return;
     }
-    if (ttsPending.current.has(cacheKey)) {
-      const src = await ttsPending.current.get(cacheKey);
-      new Audio(src).play();
-      return;
-    }
-    const voice = await detectLangVoice(clean, gender);
+
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
+
     if (!res.ok) return;
-    const { audio } = await res.json();
-    const src = `data:audio/mp3;base64,${audio}`;
+
+    const data = await res.json();
+
+    // guard — if audio is empty or missing, do nothing
+    if (!data.audio || data.audio.length < 100) return;
+
+    const src = `data:audio/mp3;base64,${data.audio}`;
     ttsCache.current.set(cacheKey, src);
-    new Audio(src).play();
+    new Audio(src).play().catch(() => {});
+
   } catch(_) {}
 }, [cleanForTTS]);
 
