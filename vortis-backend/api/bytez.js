@@ -477,37 +477,24 @@ export default async function handler(req, res) {
 // ╔══════════════════════════════════════╗
 // ║  TTS                                 ║
 // ╚══════════════════════════════════════╝
-import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
-
-// inside handler:
 if (action === 'tts') {
   const text  = sanitizeString(body.text  || '', 500);
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  try {
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+  const { EdgeTTS } = await import('@andresaya/edge-tts');
+  const tts = new EdgeTTS();
+  await tts.synthesize(text, voice, { 
+    outputFormat: 'audio-24khz-48kbitrate-mono-mp3' // smaller = faster
+  });
+  const base64 = await tts.toBase64();
 
-    const chunks = [];
-    await new Promise((resolve, reject) => {
-      const readable = tts.toStream(text);
-      readable.on('data', chunk => chunks.push(chunk));
-      readable.on('end', resolve);
-      readable.on('error', reject);
-    });
+  // Set aggressive cache headers so same text doesn't re-generate
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({ audio: base64 });
+} 
 
-    const buffer = Buffer.concat(chunks);
-    const base64 = buffer.toString('base64');
-    if (!base64) return res.status(500).json({ error: 'TTS failed' });
-
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.status(200).json({ audio: base64 });
-  } catch(e) {
-    console.error('TTS ERROR:', e.message);
-    return res.status(500).json({ error: e.message });
-  }
-}
     // ╔══════════════════════════════════════╗
     // ║  CHAT                                ║
     // ╚══════════════════════════════════════╝
