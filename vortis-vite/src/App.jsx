@@ -1417,7 +1417,7 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
- // ── TTS REFS ──
+// ── TTS REFS ──
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
 const ttsGenderRef = useRef(ttsGender);
@@ -1480,6 +1480,8 @@ const detectLangVoice = async (text, gender = 'male') => {
     en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
   const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
+
+  // ── Script-based detection (works on ORIGINAL text before any cleaning) ──
   if (/[\u0900-\u097F]/.test(text)) return v('hi');
   if (/[\u0980-\u09FF]/.test(text)) return v('bn');
   if (/[\u0A00-\u0A7F]/.test(text)) return v('pa');
@@ -1514,19 +1516,36 @@ const detectLangVoice = async (text, gender = 'male') => {
     if (/[\u06F0-\u06F9]/.test(text)) return v('fa');
     return v('ar');
   }
-  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi|acha|bilkul|zaroor|hoga|hain|tha|thi)\b/i.test(text)) return v('hi');
+
+  // ── Romanized language detection ──
+  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi|acha|bilkul|zaroor|hoga|hain|tha|thi|mujhe|tumhe|karo|kuch|mera|tera|unka)\b/i.test(text)) return v('hi');
+  if (/\b(je|suis|est|sont|nous|vous|ils|elles|avec|pour|dans|mais|aussi|très|bien|tout|cette|comme)\b/i.test(text)) return v('fr');
+  if (/\b(ich|bin|ist|sind|wir|sie|mit|für|das|die|der|und|auch|sehr|gut|alle|diese|wie|aber)\b/i.test(text)) return v('de');
+  if (/\b(yo|soy|es|son|nosotros|con|para|pero|también|muy|bien|todo|esta|como|que|los|las)\b/i.test(text)) return v('es');
+  if (/\b(io|sono|è|siamo|con|per|ma|anche|molto|bene|tutto|questa|come|che|gli|una)\b/i.test(text)) return v('it');
+  if (/\b(eu|sou|é|são|nós|com|para|mas|também|muito|bem|tudo|esta|como|que|os|as)\b/i.test(text)) return v('pt');
+  if (/\b(ik|ben|is|zijn|wij|met|voor|maar|ook|zeer|goed|alle|deze|hoe|dat|een)\b/i.test(text)) return v('nl');
+  if (/\b(ja|är|inte|och|han|hon|det|att|som|för|med|men|här|kan|vi|de)\b/i.test(text)) return v('sv');
+  if (/\b(ben|bir|bu|değil|için|ama|çok|iyi|her|nasıl|ne|da|de|ile|gibi)\b/i.test(text)) return v('tr');
+  if (/\b(saya|adalah|tidak|dengan|untuk|tapi|juga|sangat|baik|semua|ini|itu|bagaimana|apa)\b/i.test(text)) return v('id');
+  if (/\b(ako|ang|ng|sa|na|mga|hindi|para|pero|kaya|ito|iyon|paano|ano)\b/i.test(text)) return v('fil');
+
+  // ── tinyld fallback ──
   try {
     const mod = await getTinyld();
     if (mod) {
+      // Try detectAll first for better accuracy
       const results = mod.detectAll ? mod.detectAll(text) : null;
       if (results?.length > 0) {
-        const best = results.find(r => r.lang && VOICES[r.lang]);
+        const best = results.find(r => r.lang && VOICES[r.lang] && (r.accuracy || r.confidence || 1) > 0.3);
         if (best) return v(best.lang);
       }
-      const detected = mod.detect(text);
+      // Fallback to single detect
+      const detected = mod.detect ? mod.detect(text) : null;
       if (detected && detected !== 'und' && VOICES[detected]) return v(detected);
     }
   } catch(_) {}
+
   return v('en');
 };
 
@@ -1543,12 +1562,18 @@ const cleanForTTS = useCallback((t) => {
     .replace(/[*_~#|>\\]/g, '')
     .replace(/!\[.*?\]\(.*?\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Strip emojis
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[^\w\s.,!?;:'"()\-–—]/g, ' ')
+    .replace(/[★✦•→←↑↓◆◇○●©®™]/g, '')
+    // ── FIX: use \p{L}\p{N} to preserve ALL language scripts ──
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .split(/(?<=[.!?])\s+/)
+    // Take first 2 sentences max, 250 chars
+    .split(/(?<=[.!?।॥])\s+/)
     .slice(0, 2)
     .join(' ')
     .slice(0, 250);
@@ -1557,13 +1582,14 @@ const cleanForTTS = useCallback((t) => {
 // ── PRELOAD TTS ──
 const preloadTTS = useCallback(async (text) => {
   const gender = ttsGenderRef.current;
+  // ── FIX: detect language from ORIGINAL text, before cleaning ──
+  const voice = await detectLangVoice(text, gender);
   const clean = cleanForTTS(text);
   if (!clean || clean.length < 3) return;
-  const cacheKey = `${gender}_${clean}`;
+  const cacheKey = `${gender}_${voice}_${clean}`;
   if (ttsCache.current.has(cacheKey)) return;
   if (ttsPending.current.has(cacheKey)) return;
   try {
-    const voice = await detectLangVoice(clean, gender);
     const promise = fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1587,9 +1613,11 @@ const preloadTTS = useCallback(async (text) => {
 const speakText = useCallback(async (t) => {
   try {
     const gender = ttsGenderRef.current;
+    // ── FIX: detect language from ORIGINAL text, before cleaning ──
+    const voice = await detectLangVoice(t, gender);
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
-    const cacheKey = `${gender}_${clean}`;
+    const cacheKey = `${gender}_${voice}_${clean}`;
     if (ttsCache.current.has(cacheKey)) {
       new Audio(ttsCache.current.get(cacheKey)).play();
       return;
@@ -1599,7 +1627,6 @@ const speakText = useCallback(async (t) => {
       new Audio(src).play();
       return;
     }
-    const voice = await detectLangVoice(clean, gender);
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
