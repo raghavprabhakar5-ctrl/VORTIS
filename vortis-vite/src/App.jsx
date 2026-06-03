@@ -1500,26 +1500,21 @@ const detectLangVoice = async (text, gender = 'male') => {
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
   return t
-    .replace(/<[^>]*>/g, '')
+    .replace(/<[^>]*>/g, ' ')
     .replace(/```[\s\S]*?```/g, 'code block')
     .replace(/`[^`]+`/g, '')
-    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/#{1,6}\s/g, '')
-    .replace(/[*_~#|>\\]/g, '')
-    .replace(/!\[.*?\]\(.*?\)/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u2600-\u27BF]/g, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{2700}-\u{27BF}]/gu, '')
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')
-    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
-    .replace(/[^\w\s.,!?;:'"()\-–—]/g, ' ')
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[★✦•→←↑↓◆◇○●]/g, '')
+    .replace(/\[.*?\]\(.*?\)/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 800);
+    .slice(0, 400);
 }, []);
 
 // ── PRELOAD TTS ──
@@ -1563,32 +1558,25 @@ const speakText = useCallback(async (t) => {
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
     const voice = gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural';
-    const cacheKey = `${gender}_${clean}`;
-
-    if (ttsCache.current.has(cacheKey)) {
-      const src = ttsCache.current.get(cacheKey);
-      if (!src) return;
-      new Audio(src).play().catch(() => {});
-      return;
-    }
-
+    
+    // DEBUG — remove after fixing
+    console.log('TTS sending:', { action: 'tts', text: clean.slice(0, 50), voice });
+    
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
 
+    console.log('TTS response status:', res.status);
     if (!res.ok) return;
 
     const data = await res.json();
-
-    // guard — if audio is empty or missing, do nothing
     if (!data.audio || data.audio.length < 100) return;
 
     const src = `data:audio/mp3;base64,${data.audio}`;
-    ttsCache.current.set(cacheKey, src);
+    ttsCache.current.set(`${gender}_${clean}`, src);
     new Audio(src).play().catch(() => {});
-
   } catch(_) {}
 }, [cleanForTTS]);
 
