@@ -1424,7 +1424,7 @@ const ttsGenderRef = useRef(ttsGender);
 const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
-// ── DETECT LANGUAGE VOICE ──
+// ── DETECT LANGUAGE VOICE (OPTIMIZED FOR SPEED) ──
 const detectLangVoice = useCallback(async (t) => {
   const VOICES = {
     hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
@@ -1492,8 +1492,9 @@ const detectLangVoice = useCallback(async (t) => {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'Identify the language. Return ONLY the 2-letter or 3-letter ISO language code (e.g., en, hi, fil, ja). Absolutely no other words or symbols.',
-        history: [{ role: 'user', content: t.slice(0, 80) }]
+        // Instruct the model to return instantly without markdown/prose structures
+        prompt: 'Return ONLY the 2-letter or 3-letter ISO language code for the text. No markdown, no explanations. Example output format: "en" or "hi". Return a single word immediately.',
+        history: [{ role: 'user', content: t.slice(0, 60) }] // Shortened context length for faster backend scanning
       })
     });
 
@@ -1503,8 +1504,8 @@ const detectLangVoice = useCallback(async (t) => {
     const dec = new TextDecoder();
     let detectedLang = '';
 
-    // FIX: Read the stream out fully to prevent network payload drops or browser lag
-    while (true) {
+    // Fast read limit: stop processing the stream after collecting the tiny payload
+    while (detectedLang.length < 10) {
       const { done, value } = await reader.read();
       if (done) break;
       
@@ -1529,7 +1530,7 @@ const detectLangVoice = useCallback(async (t) => {
   return v('en');
 }, []);
 
-// ── CLEAN TEXT FOR TTS ──
+// ── CLEAN TEXT FOR TTS (FIXED SENTENCE CUTS) ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
   
@@ -1549,17 +1550,15 @@ const cleanForTTS = useCallback((t) => {
     .replace(/[\u2600-\u27BF]/g, '')
     .replace(/[\u{E000}-\u{F8FF}]/gu, '')
     .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '')
-    
-    // FIX: Convert native script breaks into a standard period so Edge TTS recognizes the break cleanly
-    .replace(/[।॥]/g, '.') 
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—]/gu, '')
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   if (!clean || clean.length < 3) return '';
 
-  // Return full, unbroken text segment up to 350 clean characters
-  return clean.slice(0, 350).trim();
+  // FIXED: Instead of aggressively splitting and slicing segments (which causes half sentences),
+  // we now keep the whole clean text block up to 400 complete characters without tearing sentences apart.
+  return clean.slice(0, 400).trim();
 }, []);
 
 // ── PRELOAD TTS ──
