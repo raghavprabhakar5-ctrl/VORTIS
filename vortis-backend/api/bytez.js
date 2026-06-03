@@ -482,6 +482,7 @@ if (action === 'tts') {
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
+  // Clean text — remove emojis and symbols that cause TTS to fail
   const cleanText = text
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
@@ -494,29 +495,23 @@ if (action === 'tts') {
   if (!cleanText || cleanText.length < 2)
     return res.status(200).json({ audio: '' });
 
+  // ── ATTEMPT 1: @andresaya/edge-tts (your original working code) ──
   try {
-    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_16KHZ_32KBITRATE_MONO_MP3);
-
-    // toStream() returns a custom object — use toBuffer() instead
-    const audioBuffer = await Promise.race([
-      tts.toBuffer(cleanText),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('TTS timeout')), 15000)
-      )
-    ]);
-
-    if (!audioBuffer || audioBuffer.length < 100)
-      throw new Error('Empty audio');
-
-    const audio = audioBuffer.toString('base64');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.status(200).json({ audio });
-
+    const { EdgeTTS } = await import('@andresaya/edge-tts');
+    const tts = new EdgeTTS(); // fresh instance
+    await tts.synthesize(cleanText, voice, {
+      outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
+    });
+    const base64 = await tts.toBase64();
+    if (base64 && base64.length > 100) {
+      console.log('TTS: @andresaya/edge-tts worked');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Content-Type', 'application/json');
+      return res.status(200).json({ audio: base64 });
+    }
+    throw new Error('Empty audio');
   } catch(e) {
-    console.error('TTS error:', e.message);
-    return res.status(500).json({ error: 'TTS failed: ' + e.message });
+    console.log('TTS attempt 1 (@andresaya) failed:', e.message);
   }
 }
 
