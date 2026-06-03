@@ -9,7 +9,6 @@ export const config = {
 
 import admin from 'firebase-admin';
 import Groq from 'groq-sdk';
-import * as EdgeTTS from 'edge-tts';
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -479,35 +478,23 @@ export default async function handler(req, res) {
 // ║  TTS                                 ║
 // ╚══════════════════════════════════════╝
 if (action === 'tts') {
-  const text = sanitizeString(body.text || '', 500);
+  const text  = sanitizeString(body.text  || '', 500);
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
+  if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  if (!text) {
-    return res.status(400).json({ error: 'Missing text' });
-  }
+  const { EdgeTTS } = await import('@andresaya/edge-tts');
+  const tts = new EdgeTTS();
+  await tts.synthesize(text, voice, { 
+    outputFormat: 'audio-24khz-48kbitrate-mono-mp3' // smaller = faster
+  });
+  const base64 = await tts.toBase64();
 
-  try {
-    const audioBuffer = await EdgeTTS.tts(text, { voice });
+  // Set aggressive cache headers so same text doesn't re-generate
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({ audio: base64 });
+} 
 
-    if (!audioBuffer) {
-      return res.status(500).json({ error: 'TTS failed' });
-    }
-
-    const base64 = Buffer.from(audioBuffer).toString('base64');
-
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-
-    return res.status(200).json({
-      audio: base64
-    });
-
-  } catch (e) {
-    console.error('TTS ERROR:', e);
-    return res.status(500).json({
-      error: e.message || String(e)
-    });
-  }
-}
     // ╔══════════════════════════════════════╗
     // ║  CHAT                                ║
     // ╚══════════════════════════════════════╝
