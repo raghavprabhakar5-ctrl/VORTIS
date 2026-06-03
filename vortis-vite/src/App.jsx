@@ -1542,29 +1542,38 @@ const speakText = async (t) => {
     const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
     if (!clean) return;
 
-    if (ttsCache.current.has(`${ttsGender}_${clean}`)) {
-      const el = new Audio(ttsCache.current.get(`${ttsGender}_${clean}`));
-      el.play();
+    const cacheKey = `${ttsGender}_${clean}`;
+    if (ttsCache.current.has(cacheKey)) {
+      try {
+        const el = new Audio(ttsCache.current.get(cacheKey));
+        await el.play();
+      } catch(_) {}
       return;
     }
 
     const voice = await detectLangVoice(clean, ttsGender);
-    const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
+    const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
-    const { audio } = await res.json();
-    const src = `data:audio/mp3;base64,${audio}`;
-    ttsCache.current.set(`${ttsGender}_${clean}`, src);
+
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.audio) return;
+
+    const src = `data:audio/mpeg;base64,${data.audio}`;
+
+    ttsCache.current.set(cacheKey, src);
     if (ttsCache.current.size > 20) {
       ttsCache.current.delete(ttsCache.current.keys().next().value);
     }
+
     const el = new Audio(src);
-    el.play();
+    el.onerror = () => {};
+    await el.play();
   } catch(_) {}
 };
-
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
