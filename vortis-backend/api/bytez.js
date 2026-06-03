@@ -482,19 +482,30 @@ if (action === 'tts') {
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  const { EdgeTTS } = await import('@andresaya/edge-tts');
-  const tts = new EdgeTTS();
-  await tts.synthesize(text, voice, { 
-    outputFormat: 'audio-24khz-48kbitrate-mono-mp3' // smaller = faster
-  });
-  const base64 = await tts.toBase64();
-
-  // Set aggressive cache headers so same text doesn't re-generate
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.setHeader('Content-Type', 'application/json');
-  return res.status(200).json({ audio: base64 });
-} 
-
+  try {
+    const { EdgeTTS } = await import('@andresaya/edge-tts');
+    const tts = new EdgeTTS();
+    
+    // Stream directly instead of waiting for full base64
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    
+    await tts.synthesize(text, voice, { 
+      outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
+    });
+    
+    const base64 = await tts.toBase64();
+    const buffer = Buffer.from(base64, 'base64');
+    
+    // Send as binary audio directly
+    res.setHeader('Content-Length', buffer.length);
+    res.end(buffer);
+  } catch(e) {
+    console.error('TTS error:', e);
+    return res.status(500).json({ error: 'TTS failed' });
+  }
+}
     // ╔══════════════════════════════════════╗
     // ║  CHAT                                ║
     // ╚══════════════════════════════════════╝

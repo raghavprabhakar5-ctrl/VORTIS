@@ -23,6 +23,13 @@ import {
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
+// ── TINYLD — cached language detector (loaded once, reused forever) ──
+let _tinyld = null;
+const getTinyld = async () => {
+  if (_tinyld) return _tinyld;
+  try { const mod = await import('tinyld'); _tinyld = mod; return mod; } catch(_) { return null; }
+};
+
 const getAuthHeader = async () => {
   try {
     const auth = getAuth();
@@ -1410,24 +1417,14 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
- const addMsg = (type, text, speak = false) => { const msg = { id: Date.now() + Math.random(), type, text }; setMessages(prev => [...prev, msg]); if (speak && autoSpeak && type === 'vortis') speakText(text); return msg; };
-const preloadTTS = useCallback(async (text) => {
-  if (!autoSpeak) return;
-  const clean = text.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
-  if (!clean || ttsCache.current.has(`${ttsGender}_${clean}`)) return;
-  try {
-    const voice = await detectLangVoice(clean, ttsGender);
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'tts', text: clean, voice })
-    });
-    const { audio } = await res.json();
-    ttsCache.current.set(`${ttsGender}_${clean}`, `data:audio/mp3;base64,${audio}`);
-  } catch(_) {}
-}, [autoSpeak, ttsGender]);
+ // ── TTS REFS ──
+const ttsCache = useRef(new Map());
+const ttsPending = useRef(new Map());
+const ttsGenderRef = useRef(ttsGender);
+useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
- const detectLangVoice = async (text, gender = 'male') => {
+// ── DETECT LANGUAGE VOICE ──
+const detectLangVoice = async (text, gender = 'male') => {
   const VOICES = {
     hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
     bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
@@ -1482,10 +1479,7 @@ const preloadTTS = useCallback(async (text) => {
     af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
     en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
-
   const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
-
-  // Unicode script detection first — always accurate
   if (/[\u0900-\u097F]/.test(text)) return v('hi');
   if (/[\u0980-\u09FF]/.test(text)) return v('bn');
   if (/[\u0A00-\u0A7F]/.test(text)) return v('pa');
@@ -1520,51 +1514,120 @@ const preloadTTS = useCallback(async (text) => {
     if (/[\u06F0-\u06F9]/.test(text)) return v('fa');
     return v('ar');
   }
-
-  // Hinglish — detect before tinyld since it's mixed script
-  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi)\b/i.test(text)) return v('hi');
-
-  // For Latin script — use tinyld for proper statistical detection
+  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi|acha|bilkul|zaroor|hoga|hain|tha|thi)\b/i.test(text)) return v('hi');
   try {
-    const { detect } = await import('tinyld');
-    const detected = detect(text);
-    if (detected && detected !== 'und' && VOICES[detected]) {
-      return v(detected);
+    const mod = await getTinyld();
+    if (mod) {
+      const results = mod.detectAll ? mod.detectAll(text) : null;
+      if (results?.length > 0) {
+        const best = results.find(r => r.lang && VOICES[r.lang]);
+        if (best) return v(best.lang);
+      }
+      const detected = mod.detect(text);
+      if (detected && detected !== 'und' && VOICES[detected]) return v(detected);
     }
   } catch(_) {}
-
   return v('en');
 };
 
-const ttsCache = useRef(new Map());
-const speakText = async (t) => {
-  try {
-    const clean = t.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
-    if (!clean) return;
+// ── CLEAN TEXT FOR TTS ──
+const cleanForTTS = useCallback((t) => {
+  if (!t) return '';
+  return t
+    .replace(/<[^>]*>/g, '')
+    .replace(/```[\s\S]*?```/g, 'code block')
+    .replace(/`[^`]+`/g, '')
+    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/[*_~#|>\\]/g, '')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[^\w\s.,!?;:'"()\-–—]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .slice(0, 2)
+    .join(' ')
+    .slice(0, 250);
+}, []);
 
-    if (ttsCache.current.has(`${ttsGender}_${clean}`)) {
-      const el = new Audio(ttsCache.current.get(`${ttsGender}_${clean}`));
-      el.play();
+// ── PRELOAD TTS ──
+const preloadTTS = useCallback(async (text) => {
+  const gender = ttsGenderRef.current;
+  const clean = cleanForTTS(text);
+  if (!clean || clean.length < 3) return;
+  const cacheKey = `${gender}_${clean}`;
+  if (ttsCache.current.has(cacheKey)) return;
+  if (ttsPending.current.has(cacheKey)) return;
+  try {
+    const voice = await detectLangVoice(clean, gender);
+    const promise = fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'tts', text: clean, voice })
+    }).then(async (res) => {
+      if (!res.ok) throw new Error('TTS failed');
+      const { audio } = await res.json();
+      const src = `data:audio/mp3;base64,${audio}`;
+      ttsCache.current.set(cacheKey, src);
+      ttsPending.current.delete(cacheKey);
+      if (ttsCache.current.size > 30) {
+        ttsCache.current.delete(ttsCache.current.keys().next().value);
+      }
+      return src;
+    }).catch((e) => { ttsPending.current.delete(cacheKey); throw e; });
+    ttsPending.current.set(cacheKey, promise);
+  } catch(_) {}
+}, [cleanForTTS]);
+
+// ── SPEAK TEXT ──
+const speakText = useCallback(async (t) => {
+  try {
+    const gender = ttsGenderRef.current;
+    const clean = cleanForTTS(t);
+    if (!clean || clean.length < 3) return;
+    const cacheKey = `${gender}_${clean}`;
+    if (ttsCache.current.has(cacheKey)) {
+      new Audio(ttsCache.current.get(cacheKey)).play();
       return;
     }
-
-    const voice = await detectLangVoice(clean, ttsGender);
-    const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
+    if (ttsPending.current.has(cacheKey)) {
+      const src = await ttsPending.current.get(cacheKey);
+      new Audio(src).play();
+      return;
+    }
+    const voice = await detectLangVoice(clean, gender);
+    const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
+    if (!res.ok) return;
     const { audio } = await res.json();
     const src = `data:audio/mp3;base64,${audio}`;
-    ttsCache.current.set(`${ttsGender}_${clean}`, src);
-    if (ttsCache.current.size > 20) {
-      ttsCache.current.delete(ttsCache.current.keys().next().value);
-    }
-    const el = new Audio(src);
-    el.play();
+    ttsCache.current.set(cacheKey, src);
+    new Audio(src).play();
   } catch(_) {}
-};
+}, [cleanForTTS]);
 
+// ── ADD MESSAGE ──
+const addMsg = (type, text, speak = false) => {
+  const msg = { id: Date.now() + Math.random(), type, text };
+  setMessages(prev => [...prev, msg]);
+  if (
+    type === 'vortis' && text && text.length > 2 &&
+    !text.startsWith('__IMG') &&
+    !text.includes('__IMG_LOADING__') &&
+    !text.startsWith('<style>')
+  ) {
+    preloadTTS(text);
+  }
+  if (speak && autoSpeak && type === 'vortis') speakText(text);
+  return msg;
+};
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
