@@ -1417,15 +1417,14 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
-// ── TTS REFS ──
+ // ── TTS REFS ──
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
 const ttsGenderRef = useRef(ttsGender);
-const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
-// ── DETECT LANGUAGE VOICE (OPTIMIZED FOR SPEED) ──
-const detectLangVoice = useCallback(async (t) => {
+// ── DETECT LANGUAGE VOICE ──
+const detectLangVoice = async (text, gender = 'male') => {
   const VOICES = {
     hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
     bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
@@ -1480,97 +1479,91 @@ const detectLangVoice = useCallback(async (t) => {
     af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
     en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
-
-  const currentGender = ttsGenderRef.current;
-  const v = (lang) => (VOICES[lang] || VOICES['en'])[currentGender === 'female' ? 1 : 0];
-
-  if (!t || t.trim().length < 2) return v('en');
-
-  try {
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({
-        action: 'chat',
-        // Instruct the model to return instantly without markdown/prose structures
-        prompt: 'Return ONLY the 2-letter or 3-letter ISO language code for the text. No markdown, no explanations. Example output format: "en" or "hi". Return a single word immediately.',
-        history: [{ role: 'user', content: t.slice(0, 60) }] // Shortened context length for faster backend scanning
-      })
-    });
-
-    if (!res.ok) return v('en');
-
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let detectedLang = '';
-
-    // Fast read limit: stop processing the stream after collecting the tiny payload
-    while (detectedLang.length < 10) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      for (const line of dec.decode(value).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try { 
-          const p = JSON.parse(raw); 
-          if (p.content) detectedLang += p.content; 
-        } catch(_) {}
-      }
-    }
-
-    const cleanLang = detectedLang.trim().toLowerCase().replace(/[^a-z]/g, '');
-    if (VOICES[cleanLang]) return v(cleanLang);
-
-  } catch (error) {
-    console.error("AI language stream failed:", error);
+  const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
+  if (/[\u0900-\u097F]/.test(text)) return v('hi');
+  if (/[\u0980-\u09FF]/.test(text)) return v('bn');
+  if (/[\u0A00-\u0A7F]/.test(text)) return v('pa');
+  if (/[\u0A80-\u0AFF]/.test(text)) return v('gu');
+  if (/[\u0B80-\u0BFF]/.test(text)) return v('ta');
+  if (/[\u0C00-\u0C7F]/.test(text)) return v('te');
+  if (/[\u0C80-\u0CFF]/.test(text)) return v('kn');
+  if (/[\u0D00-\u0D7F]/.test(text)) return v('ml');
+  if (/[\u0D80-\u0DFF]/.test(text)) return v('si');
+  if (/[\u0E00-\u0E7F]/.test(text)) return v('th');
+  if (/[\u0E80-\u0EFF]/.test(text)) return v('lo');
+  if (/[\u1000-\u109F]/.test(text)) return v('my');
+  if (/[\u1780-\u17FF]/.test(text)) return v('km');
+  if (/[\u1200-\u137F]/.test(text)) return v('am');
+  if (/[\u10A0-\u10FF]/.test(text)) return v('ka');
+  if (/[\u0530-\u058F]/.test(text)) return v('hy');
+  if (/[\u0590-\u05FF]/.test(text)) return v('he');
+  if (/[\u0370-\u03FF]/.test(text)) return v('el');
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return v('ja');
+  if (/[\uAC00-\uD7AF]/.test(text)) return v('ko');
+  if (/[\u4E00-\u9FFF]/.test(text)) {
+    if (/[\u3040-\u30FF]/.test(text)) return v('ja');
+    return v('zh');
   }
-
+  if (/[\u0400-\u04FF]/.test(text)) {
+    if (/[\u0456\u0457\u0491\u0490]/.test(text)) return v('uk');
+    if (/[\u0452\u0453\u0458\u0459\u045A\u045B\u045C\u045F]/.test(text)) return v('sr');
+    return v('ru');
+  }
+  if (/[\u0600-\u06FF]/.test(text)) {
+    if (/[\u06BE\u06C1\u06C2\u06D2\u06BA]/.test(text)) return v('ur');
+    if (/[\u06F0-\u06F9]/.test(text)) return v('fa');
+    return v('ar');
+  }
+  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi|acha|bilkul|zaroor|hoga|hain|tha|thi)\b/i.test(text)) return v('hi');
+  try {
+    const mod = await getTinyld();
+    if (mod) {
+      const results = mod.detectAll ? mod.detectAll(text) : null;
+      if (results?.length > 0) {
+        const best = results.find(r => r.lang && VOICES[r.lang]);
+        if (best) return v(best.lang);
+      }
+      const detected = mod.detect(text);
+      if (detected && detected !== 'und' && VOICES[detected]) return v(detected);
+    }
+  } catch(_) {}
   return v('en');
-}, []);
+};
 
-// ── CLEAN TEXT FOR TTS (FIXED SENTENCE CUTS) ──
+// ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
-  
-  let clean = t
+  return t
     .replace(/<[^>]*>/g, '')
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/`[^`]+`/g, ' ')
-    .replace(/\*\*?\*?(.+?)\*\*?\*?/g, '$1')
-    .replace(/[*_~#|>\\]/g, ' ')
-    .replace(/!\[.*?\]\(.*?\)/g, ' ')
+    .replace(/```[\s\S]*?```/g, 'code block')
+    .replace(/`[^`]+`/g, '')
+    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/[*_~#|>\\]/g, '')
+    .replace(/!\[.*?\]\(.*?\)/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/[:;=8X][-o^]?[\)\]\(\[dDpP03O@\|\/\\]/g, '')
-    .replace(/[<>]3/g, '')
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[\u{E000}-\u{F8FF}]/gu, '')
-    .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '')
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '')
+    .replace(/[^\w\s.,!?;:'"()\-–—]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!clean || clean.length < 3) return '';
-
-  // FIXED: Instead of aggressively splitting and slicing segments (which causes half sentences),
-  // we now keep the whole clean text block up to 400 complete characters without tearing sentences apart.
-  return clean.slice(0, 400).trim();
+    .trim()
+    .split(/(?<=[.!?])\s+/)
+    .slice(0, 2)
+    .join(' ')
+    .slice(0, 250);
 }, []);
 
 // ── PRELOAD TTS ──
-const preloadTTS = useCallback(async (t) => {
+const preloadTTS = useCallback(async (text) => {
   const gender = ttsGenderRef.current;
-  const voice = await detectLangVoice(t);
-  const clean = cleanForTTS(t);
+  const clean = cleanForTTS(text);
   if (!clean || clean.length < 3) return;
-  const cacheKey = `${gender}_${voice}_${clean}`;
+  const cacheKey = `${gender}_${clean}`;
   if (ttsCache.current.has(cacheKey)) return;
   if (ttsPending.current.has(cacheKey)) return;
   try {
+    const voice = await detectLangVoice(clean, gender);
     const promise = fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1588,36 +1581,25 @@ const preloadTTS = useCallback(async (t) => {
     }).catch((e) => { ttsPending.current.delete(cacheKey); throw e; });
     ttsPending.current.set(cacheKey, promise);
   } catch(_) {}
-}, [cleanForTTS, detectLangVoice]);
+}, [cleanForTTS]);
 
 // ── SPEAK TEXT ──
 const speakText = useCallback(async (t) => {
   try {
     const gender = ttsGenderRef.current;
-    const voice = await detectLangVoice(t);
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
-    const cacheKey = `${gender}_${voice}_${clean}`;
-
-    const playSafely = (srcUrl) => {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current.src = "";
-      }
-      const audioPlayback = new Audio(srcUrl);
-      currentAudioRef.current = audioPlayback;
-      audioPlayback.play().catch(e => console.log("Playback interrupted safely:", e));
-    };
-
+    const cacheKey = `${gender}_${clean}`;
     if (ttsCache.current.has(cacheKey)) {
-      playSafely(ttsCache.current.get(cacheKey));
+      new Audio(ttsCache.current.get(cacheKey)).play();
       return;
     }
     if (ttsPending.current.has(cacheKey)) {
       const src = await ttsPending.current.get(cacheKey);
-      playSafely(src);
+      new Audio(src).play();
       return;
     }
+    const voice = await detectLangVoice(clean, gender);
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1627,9 +1609,9 @@ const speakText = useCallback(async (t) => {
     const { audio } = await res.json();
     const src = `data:audio/mp3;base64,${audio}`;
     ttsCache.current.set(cacheKey, src);
-    playSafely(src);
+    new Audio(src).play();
   } catch(_) {}
-}, [cleanForTTS, detectLangVoice]);
+}, [cleanForTTS]);
 
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
