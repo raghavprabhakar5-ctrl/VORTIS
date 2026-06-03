@@ -1424,7 +1424,7 @@ const ttsGenderRef = useRef(ttsGender);
 const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
-// ── DETECT LANGUAGE VOICE (OPTIMIZED FOR SPEED) ──
+// ── DETECT LANGUAGE VOICE ──
 const detectLangVoice = useCallback(async (t) => {
   const VOICES = {
     hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
@@ -1492,9 +1492,8 @@ const detectLangVoice = useCallback(async (t) => {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        // Instruct the model to return instantly without markdown/prose structures
-        prompt: 'Return ONLY the 2-letter or 3-letter ISO language code for the text. No markdown, no explanations. Example output format: "en" or "hi". Return a single word immediately.',
-        history: [{ role: 'user', content: t.slice(0, 60) }] // Shortened context length for faster backend scanning
+        prompt: 'Identify the language. Return ONLY the 2-letter or 3-letter ISO language code (e.g., en, hi, fil, ja). Absolutely no other words or symbols.',
+        history: [{ role: 'user', content: t.slice(0, 60) }]
       })
     });
 
@@ -1504,8 +1503,7 @@ const detectLangVoice = useCallback(async (t) => {
     const dec = new TextDecoder();
     let detectedLang = '';
 
-    // Fast read limit: stop processing the stream after collecting the tiny payload
-    while (detectedLang.length < 10) {
+    while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       
@@ -1530,7 +1528,7 @@ const detectLangVoice = useCallback(async (t) => {
   return v('en');
 }, []);
 
-// ── CLEAN TEXT FOR TTS (FIXED SENTENCE CUTS) ──
+// ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
   
@@ -1550,15 +1548,13 @@ const cleanForTTS = useCallback((t) => {
     .replace(/[\u2600-\u27BF]/g, '')
     .replace(/[\u{E000}-\u{F8FF}]/gu, '')
     .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '')
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '')
+    .replace(/[।॥]/g, '.') 
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—]/gu, '')
     .replace(/\s+/g, ' ')
     .trim();
 
   if (!clean || clean.length < 3) return '';
-
-  // FIXED: Instead of aggressively splitting and slicing segments (which causes half sentences),
-  // we now keep the whole clean text block up to 400 complete characters without tearing sentences apart.
-  return clean.slice(0, 400).trim();
+  return clean.slice(0, 350).trim();
 }, []);
 
 // ── PRELOAD TTS ──
@@ -1590,14 +1586,12 @@ const preloadTTS = useCallback(async (t) => {
   } catch(_) {}
 }, [cleanForTTS, detectLangVoice]);
 
-// ── SPEAK TEXT ──
+// ── SPEAK TEXT (OPTIMIZED FOR ULTRA-LOW LATENCY) ──
 const speakText = useCallback(async (t) => {
   try {
     const gender = ttsGenderRef.current;
-    const voice = await detectLangVoice(t);
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
-    const cacheKey = `${gender}_${voice}_${clean}`;
 
     const playSafely = (srcUrl) => {
       if (currentAudioRef.current) {
@@ -1609,6 +1603,25 @@ const speakText = useCallback(async (t) => {
       audioPlayback.play().catch(e => console.log("Playback interrupted safely:", e));
     };
 
+    // SPEED BOOST 1: Detect basic Latin/English layouts locally instantly
+    // If text only contains standard English letters/numbers, bypass AI detection wait entirely
+    const isEnglishOnly = /^[\s.,!?;:'"()A-Za-z0-9\-–—]*$/.test(clean);
+    let voicePromise;
+
+    if (isEnglishOnly) {
+      voicePromise = Promise.resolve(gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural');
+    } else {
+      // Start checking language background thread immediately
+      voicePromise = detectLangVoice(t);
+    }
+
+    // SPEED BOOST 2: Setup an execution timeout race condition
+    // If the language identification API takes more than 550ms, fall back instantly to avoid lag.
+    const timeoutPromise = new Promise(res => setTimeout(() => res(gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural'), 550));
+    const voice = await Promise.race([voicePromise, timeoutPromise]);
+
+    const cacheKey = `${gender}_${voice}_${clean}`;
+
     if (ttsCache.current.has(cacheKey)) {
       playSafely(ttsCache.current.get(cacheKey));
       return;
@@ -1618,6 +1631,7 @@ const speakText = useCallback(async (t) => {
       playSafely(src);
       return;
     }
+
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
