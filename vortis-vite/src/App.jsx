@@ -1525,12 +1525,36 @@ const detectLangVoice = (text, gender = 'male') => {
   const fallback = VOICE_MAP['en'][gender === 'female' ? 1 : 0];
 
   try {
-    // Hindi — Unicode is 100% reliable, always check first
+    // 1. Devanagari script → always Hindi
     if (/[\u0900-\u097F]/.test(text)) {
       return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
     }
 
-    // tinyld for all other languages
+    // 2. Hinglish detection — romanized Hindi words in Latin script
+    const hinglishWords = [
+      'yaar','kya','hai','hain','mera','tera','apna','karo','karta','karti',
+      'nahi','nhi','hoga','hogi','bhai','dost','acha','accha','thik','theek',
+      'bohot','bahut','kyun','kyu','kab','kahan','kaisa','kaisi','wala','wali',
+      'matlab','samajh','suno','bolo','bol','dekho','dekh','lag','raha','rahi',
+      'tha','thi','the','mere','tere','uska','uski','unka','humara','tumhara',
+      'phir','fir','toh','tho','sirf','bas','lekin','par','aur','ya','bhi',
+      'abhi','kuch','sab','woh','wo','ye','yeh','iska','iski','hum','tum',
+      'main','mai','mujhe','tumhe','usse','unhe','pata','chal','hua','hui',
+      'kr','ho','jao','aa','lo','le','de','kar','ab','na','hi','bhot',
+    ];
+    const lower = text.toLowerCase();
+    const words = lower.split(/\s+/);
+    const hinglishCount = words.filter(w => hinglishWords.includes(w)).length;
+    // If 2+ Hinglish words found, use Hindi voice
+    if (hinglishCount >= 2) {
+      return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    }
+    // If 1 Hinglish word + text is short, still use Hindi
+    if (hinglishCount >= 1 && words.length <= 12) {
+      return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    }
+
+    // 3. tinyld for all other languages
     const detected = detect(text) || 'en';
     const voices = VOICE_MAP[detected];
     return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
@@ -1557,7 +1581,6 @@ const cleanForTTS = useCallback((t) => {
     .replace(/\[.*?\]\(.*?\)/g, '')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 400);
 }, []);
 
 // ── PRELOAD TTS ──
@@ -1603,22 +1626,44 @@ const speakText = useCallback(async (t) => {
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
 
-    const voice = detectLangVoice(clean, gender); // sync, no await
+    // Split into chunks of ~300 chars at sentence boundaries
+    const chunks = [];
+    const sentences = clean.match(/[^.!?]+[.!?]*/g) || [clean];
+    let current = '';
+    for (const sentence of sentences) {
+      if ((current + sentence).length > 300 && current.length > 0) {
+        chunks.push(current.trim());
+        current = sentence;
+      } else {
+        current += sentence;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
 
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'tts', text: clean, voice })
-    });
+    // Play chunks sequentially
+    for (const chunk of chunks) {
+      if (!chunk) continue;
+      const voice = detectLangVoice(chunk, gender);
+      try {
+        const res = await fetch(API, {
+          method: 'POST',
+          headers: await getAuthHeader(),
+          body: JSON.stringify({ action: 'tts', text: chunk, voice })
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data.audio || data.audio.length < 100) continue;
 
-    if (!res.ok) return;
-    const data = await res.json();
-    if (!data.audio || data.audio.length < 100) return;
-
-    const src = `data:audio/mp3;base64,${data.audio}`;
-    ttsCache.current.set(`${gender}_${clean}`, src);
-    new Audio(src).play().catch(() => {});
-  } catch(_) {}
+        // Wait for this chunk to finish before playing next
+        await new Promise((resolve) => {
+          const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play().catch(resolve);
+        });
+      } catch (_) {}
+    }
+  } catch (_) {}
 }, [cleanForTTS]);
 
 // ── ADD MESSAGE ──
