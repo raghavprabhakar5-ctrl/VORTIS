@@ -482,19 +482,33 @@ if (action === 'tts') {
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
+  // Clean text for SSML
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+  // Wrap in SSML for better natural pronunciation
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
+    <voice name="${voice}">
+      <prosody rate="0%" pitch="0%" volume="loud">
+        ${escaped}
+      </prosody>
+    </voice>
+  </speak>`;
+
   const { EdgeTTS } = await import('@andresaya/edge-tts');
   const tts = new EdgeTTS();
-  await tts.synthesize(text, voice, { 
-    outputFormat: 'audio-24khz-48kbitrate-mono-mp3' // smaller = faster
+  await tts.synthesize(ssml, voice, { 
+    outputFormat: 'audio-16khz-32kbitrate-mono-mp3'
   });
   const base64 = await tts.toBase64();
 
-  // Set aggressive cache headers so same text doesn't re-generate
   res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.setHeader('Content-Type', 'application/json');
   return res.status(200).json({ audio: base64 });
-} 
-
+}
     // ╔══════════════════════════════════════╗
     // ║  CHAT                                ║
     // ╚══════════════════════════════════════╝
