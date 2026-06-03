@@ -1521,23 +1521,28 @@ const cleanForTTS = useCallback((t) => {
     .replace(/!\[.*?\]\(.*?\)/g, ' ')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     
-    // 2. Comprehensive Emoji & Symbol Purge (Wipes out arrows, dots, shapes, and pictographs)
+    // 2. WIPE TEXT-BASED SMILEYS / EMOTICONS (e.g., :), :-D, <3, :P)
+    .replace(/[:;=8X][-o^]?[\)\]\(\[dDpP03O@\|\/\\]/g, '') 
+    .replace(/[<>]3/g, '') // Removes <3
+    
+    // 3. Comprehensive Native Emoji & Symbol Purge
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[\u{E000}-\u{F8FF}]/gu, '') // Private use icons/symbols
+    .replace(/[\u{E000}-\u{F8FF}]/gu, '') 
     .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '') 
 
-    // 3. Keep ONLY letters across all scripts, numbers, and voice-safe punctuation
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '') // Changed to '' so symbols disappear instead of becoming spaces
+    // 4. Clean out everything except valid letters, numbers, and voice punctuation
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '') 
     
-    // 4. Collapse all duplicate whitespace into a single space
+    // 5. Clean up extra spaces left behind by the deleted smileys
     .replace(/\s+/g, ' ')
     .trim()
     
-    // 5. Smart Sentence Splitter (Grabs up to 3 clear sentences, extends limit to 350 to prevent cut-offs)
+    // 6. Sentence safety check (Provides a fallback if splitting yields nothing)
     .split(/(?<=[.!?।॥])\s+/)
+    .filter(sentence => sentence.trim().length > 0) // Drops empty fragments
     .slice(0, 3)
     .join(' ')
     .slice(0, 350);
