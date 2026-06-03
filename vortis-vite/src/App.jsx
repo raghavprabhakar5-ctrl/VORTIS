@@ -1510,30 +1510,37 @@ const detectLangVoice = async (text, gender = 'male') => {
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
   return t
+    // 1. Strip markdown, HTML, and code snippets completely
     .replace(/<[^>]*>/g, '')
-    .replace(/```[\s\S]*?```/g, 'code block')
-    .replace(/`[^`]+`/g, '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]+`/g, ' ')
     .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
-    .replace(/[*_~#|>\\]/g, '')
-    .replace(/!\[.*?\]\(.*?\)/g, '')
+    .replace(/[*_~#|>\\]/g, ' ')
+    .replace(/!\[.*?\]\(.*?\)/g, ' ')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Strip emojis
+    
+    // 2. Comprehensive Emoji & Symbol Purge (Wipes out arrows, dots, shapes, and pictographs)
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[★✦•→←↑↓◆◇○●©®™]/g, '')
-    // ── FIX: use \p{L}\p{N} to preserve ALL language scripts ──
-    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, ' ')
+    .replace(/[\u{E000}-\u{F8FF}]/gu, '') // Private use icons/symbols
+    .replace(/[★✦•→←↑↓◆◇○●©®™◊▪▫▬▲▼◄►■□⬦⬧]/g, '') 
+
+    // 3. Keep ONLY letters across all scripts, numbers, and voice-safe punctuation
+    .replace(/[^\p{L}\p{N}\s.,!?;:'"()\-–—।॥]/gu, '') // Changed to '' so symbols disappear instead of becoming spaces
+    
+    // 4. Collapse all duplicate whitespace into a single space
     .replace(/\s+/g, ' ')
     .trim()
-    // Take first 2 sentences max, 250 chars
+    
+    // 5. Smart Sentence Splitter (Grabs up to 3 clear sentences, extends limit to 350 to prevent cut-offs)
     .split(/(?<=[.!?।॥])\s+/)
-    .slice(0, 2)
+    .slice(0, 3)
     .join(' ')
-    .slice(0, 250);
+    .slice(0, 350);
 }, []);
 
 // ── PRELOAD TTS ──
