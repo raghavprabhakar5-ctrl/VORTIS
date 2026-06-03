@@ -1416,7 +1416,7 @@ const preloadTTS = useCallback(async (text) => {
   const clean = text.replace(/<[^>]*>/g, '').replace(/[|*`#>_~]/g, '').trim().slice(0, 500);
   if (!clean || ttsCache.current.has(`${ttsGender}_${clean}`)) return;
   try {
-    const voice = detectLangVoice(clean, ttsGender);
+    const voice = await detectLangVoice(clean, ttsGender);
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1427,136 +1427,113 @@ const preloadTTS = useCallback(async (text) => {
   } catch(_) {}
 }, [autoSpeak, ttsGender]);
 
- const detectLangVoice = (text, gender = 'male') => {
-  const low = text.toLowerCase();
-  
+ const detectLangVoice = async (text, gender = 'male') => {
   const VOICES = {
-    // [male, female]
-    hinglish: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
-    hindi:    ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
-    bengali:  ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
-    punjabi:  ['pa-IN-OjasNeural',      'pa-IN-OjasNeural'],
-    gujarati: ['gu-IN-NiranjanNeural',  'gu-IN-DhwaniNeural'],
-    odia:     ['or-IN-SubhasiniNeural', 'or-IN-SubhasiniNeural'],
-    tamil:    ['ta-IN-ValluvarNeural',  'ta-IN-PallaviNeural'],
-    telugu:   ['te-IN-MohanNeural',     'te-IN-ShrutiNeural'],
-    kannada:  ['kn-IN-GaganNeural',     'kn-IN-SapnaNeural'],
-    malayalam:['ml-IN-MidhunNeural',    'ml-IN-SobhanaNeural'],
-    sinhala:  ['si-LK-SameeraNeural',  'si-LK-ThiliniNeural'],
-    thai:     ['th-TH-NiwatNeural',     'th-TH-PremwadeeNeural'],
-    lao:      ['lo-LA-ChanthavongNeural','lo-LA-KeomanyNeural'],
-    burmese:  ['my-MM-ThihaNeural',     'my-MM-NilarNeural'],
-    khmer:    ['km-KH-PisethNeural',    'km-KH-SreymomNeural'],
-    amharic:  ['am-ET-AmehaNeural',     'am-ET-MekdesNeural'],
-    georgian: ['ka-GE-GiorgiNeural',    'ka-GE-EkaNeural'],
-    armenian: ['hy-AM-HaykNeural',      'hy-AM-AnahitNeural'],
-    hebrew:   ['he-IL-AvriNeural',      'he-IL-HilaNeural'],
-    greek:    ['el-GR-NestorasNeural',  'el-GR-AthinaNeural'],
-    japanese: ['ja-JP-KeitaNeural',     'ja-JP-NanamiNeural'],
-    korean:   ['ko-KR-InJoonNeural',    'ko-KR-SunHiNeural'],
-    chinese:  ['zh-CN-YunxiNeural',     'zh-CN-XiaoxiaoNeural'],
-    russian:  ['ru-RU-DmitryNeural',    'ru-RU-SvetlanaNeural'],
-    ukrainian:['uk-UA-OstapNeural',     'uk-UA-PolinaNeural'],
-    serbian:  ['sr-RS-NicholasNeural',  'sr-RS-SopieNeural'],
-    arabic:   ['ar-SA-HamedNeural',     'ar-SA-ZariyahNeural'],
-    urdu:     ['ur-PK-AsadNeural',      'ur-PK-UzmaNeural'],
-    persian:  ['fa-IR-FaridNeural',     'fa-IR-DilaraNeural'],
-    french:   ['fr-FR-HenriNeural',     'fr-FR-DeniseNeural'],
-    spanish:  ['es-ES-AlvaroNeural',    'es-ES-ElviraNeural'],
-    italian:  ['it-IT-DiegoNeural',     'it-IT-ElsaNeural'],
-    german:   ['de-DE-ConradNeural',    'de-DE-KatjaNeural'],
-    portuguese:['pt-BR-AntonioNeural',  'pt-BR-FranciscaNeural'],
-    swedish:  ['sv-SE-MattiasNeural',   'sv-SE-SofieNeural'],
-    norwegian:['nb-NO-FinnNeural',      'nb-NO-PernilleNeural'],
-    danish:   ['da-DK-JeppeNeural',     'da-DK-ChristelNeural'],
-    finnish:  ['fi-FI-HarriNeural',     'fi-FI-NooraNeural'],
-    dutch:    ['nl-NL-MaartenNeural',   'nl-NL-ColetteNeural'],
-    polish:   ['pl-PL-MarekNeural',     'pl-PL-ZofiaNeural'],
-    czech:    ['cs-CZ-AntoninNeural',   'cs-CZ-VlastaNeural'],
-    hungarian:['hu-HU-TamasNeural',     'hu-HU-NoemiNeural'],
-    romanian: ['ro-RO-EmilNeural',      'ro-RO-AlinaNeural'],
-    croatian: ['hr-HR-SreckoNeural',    'hr-HR-GabrijelaNeural'],
-    estonian: ['et-EE-KertNeural',      'et-EE-AnuNeural'],
-    lithuanian:['lt-LT-LeonasNeural',   'lt-LT-OnaNeural'],
-    latvian:  ['lv-LV-NilsNeural',      'lv-LV-EveritaNeural'],
-    turkish:  ['tr-TR-AhmetNeural',     'tr-TR-EmelNeural'],
-    vietnamese:['vi-VN-NamMinhNeural',  'vi-VN-HoaiMyNeural'],
-    filipino: ['fil-PH-AngeloNeural',   'fil-PH-BlessicaNeural'],
-    indonesian:['id-ID-ArdiNeural',     'id-ID-GadisNeural'],
-    malay:    ['ms-MY-OsmanNeural',     'ms-MY-YasminNeural'],
-    afrikaans:['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
-    english:  ['en-US-GuyNeural',       'en-US-AriaNeural'],
+    hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
+    bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
+    pa: ['pa-IN-OjasNeural',      'pa-IN-OjasNeural'],
+    gu: ['gu-IN-NiranjanNeural',  'gu-IN-DhwaniNeural'],
+    ta: ['ta-IN-ValluvarNeural',  'ta-IN-PallaviNeural'],
+    te: ['te-IN-MohanNeural',     'te-IN-ShrutiNeural'],
+    kn: ['kn-IN-GaganNeural',     'kn-IN-SapnaNeural'],
+    ml: ['ml-IN-MidhunNeural',    'ml-IN-SobhanaNeural'],
+    si: ['si-LK-SameeraNeural',   'si-LK-ThiliniNeural'],
+    th: ['th-TH-NiwatNeural',     'th-TH-PremwadeeNeural'],
+    lo: ['lo-LA-ChanthavongNeural','lo-LA-KeomanyNeural'],
+    my: ['my-MM-ThihaNeural',     'my-MM-NilarNeural'],
+    km: ['km-KH-PisethNeural',    'km-KH-SreymomNeural'],
+    am: ['am-ET-AmehaNeural',     'am-ET-MekdesNeural'],
+    ka: ['ka-GE-GiorgiNeural',    'ka-GE-EkaNeural'],
+    hy: ['hy-AM-HaykNeural',      'hy-AM-AnahitNeural'],
+    he: ['he-IL-AvriNeural',      'he-IL-HilaNeural'],
+    el: ['el-GR-NestorasNeural',  'el-GR-AthinaNeural'],
+    ja: ['ja-JP-KeitaNeural',     'ja-JP-NanamiNeural'],
+    ko: ['ko-KR-InJoonNeural',    'ko-KR-SunHiNeural'],
+    zh: ['zh-CN-YunxiNeural',     'zh-CN-XiaoxiaoNeural'],
+    ru: ['ru-RU-DmitryNeural',    'ru-RU-SvetlanaNeural'],
+    uk: ['uk-UA-OstapNeural',     'uk-UA-PolinaNeural'],
+    sr: ['sr-RS-NicholasNeural',  'sr-RS-SopieNeural'],
+    ar: ['ar-SA-HamedNeural',     'ar-SA-ZariyahNeural'],
+    ur: ['ur-PK-AsadNeural',      'ur-PK-UzmaNeural'],
+    fa: ['fa-IR-FaridNeural',     'fa-IR-DilaraNeural'],
+    fr: ['fr-FR-HenriNeural',     'fr-FR-DeniseNeural'],
+    es: ['es-ES-AlvaroNeural',    'es-ES-ElviraNeural'],
+    it: ['it-IT-DiegoNeural',     'it-IT-ElsaNeural'],
+    de: ['de-DE-ConradNeural',    'de-DE-KatjaNeural'],
+    pt: ['pt-BR-AntonioNeural',   'pt-BR-FranciscaNeural'],
+    sv: ['sv-SE-MattiasNeural',   'sv-SE-SofieNeural'],
+    nb: ['nb-NO-FinnNeural',      'nb-NO-PernilleNeural'],
+    da: ['da-DK-JeppeNeural',     'da-DK-ChristelNeural'],
+    fi: ['fi-FI-HarriNeural',     'fi-FI-NooraNeural'],
+    nl: ['nl-NL-MaartenNeural',   'nl-NL-ColetteNeural'],
+    pl: ['pl-PL-MarekNeural',     'pl-PL-ZofiaNeural'],
+    cs: ['cs-CZ-AntoninNeural',   'cs-CZ-VlastaNeural'],
+    hu: ['hu-HU-TamasNeural',     'hu-HU-NoemiNeural'],
+    ro: ['ro-RO-EmilNeural',      'ro-RO-AlinaNeural'],
+    hr: ['hr-HR-SreckoNeural',    'hr-HR-GabrijelaNeural'],
+    et: ['et-EE-KertNeural',      'et-EE-AnuNeural'],
+    lt: ['lt-LT-LeonasNeural',    'lt-LT-OnaNeural'],
+    lv: ['lv-LV-NilsNeural',      'lv-LV-EveritaNeural'],
+    tr: ['tr-TR-AhmetNeural',     'tr-TR-EmelNeural'],
+    vi: ['vi-VN-NamMinhNeural',   'vi-VN-HoaiMyNeural'],
+    fil:['fil-PH-AngeloNeural',   'fil-PH-BlessicaNeural'],
+    id: ['id-ID-ArdiNeural',      'id-ID-GadisNeural'],
+    ms: ['ms-MY-OsmanNeural',     'ms-MY-YasminNeural'],
+    af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
+    en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
 
-  const v = (lang) => VOICES[lang][gender === 'female' ? 1 : 0];
+  const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
 
-  // Hinglish
-  if (/\b(kya|hai|hain|nahi|nahin|bhai|yaar|aaj|kal|agar|toh|phir|lekin|aur|mera|tera|apna|hoga|kuch|bahut|sab|bolo|pata|kaise|accha|theek|bilkul|matlab|samjhe|lagta|raha|wala|abhi|baad|pehle|sirf|bas|chal|chalo|dost|yeh|woh|isko|usko|mere|tere|humara|tumhara|unka|inka|kyun|isliye|tabhi|jab|tab|kaun|kahan|kitna|bohot|thoda|zyada|kam|sahi|galat|achha|bura|naya|purana|chhota|bada|ghar|kaam|log|cheez|baat|din|raat|subah|shaam|pyaar|dil|zindagi|duniya|paise|khaana|paani)\b/.test(low)) return v('hinglish');
-
-  // Unicode scripts
-  if (/[\u0900-\u097F]/.test(text)) return v('hindi');
-  if (/[\u0980-\u09FF]/.test(text)) return v('bengali');
-  if (/[\u0A00-\u0A7F]/.test(text)) return v('punjabi');
-  if (/[\u0A80-\u0AFF]/.test(text)) return v('gujarati');
-  if (/[\u0B00-\u0B7F]/.test(text)) return v('odia');
-  if (/[\u0B80-\u0BFF]/.test(text)) return v('tamil');
-  if (/[\u0C00-\u0C7F]/.test(text)) return v('telugu');
-  if (/[\u0C80-\u0CFF]/.test(text)) return v('kannada');
-  if (/[\u0D00-\u0D7F]/.test(text)) return v('malayalam');
-  if (/[\u0D80-\u0DFF]/.test(text)) return v('sinhala');
-  if (/[\u0E00-\u0E7F]/.test(text)) return v('thai');
-  if (/[\u0E80-\u0EFF]/.test(text)) return v('lao');
-  if (/[\u1000-\u109F]/.test(text)) return v('burmese');
-  if (/[\u1780-\u17FF]/.test(text)) return v('khmer');
-  if (/[\u1200-\u137F]/.test(text)) return v('amharic');
-  if (/[\u10A0-\u10FF]/.test(text)) return v('georgian');
-  if (/[\u0530-\u058F]/.test(text)) return v('armenian');
-  if (/[\u0590-\u05FF]/.test(text)) return v('hebrew');
-  if (/[\u0370-\u03FF]/.test(text)) return v('greek');
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return v('japanese');
-  if (/[\uAC00-\uD7AF]/.test(text)) return v('korean');
+  // Unicode script detection first — always accurate
+  if (/[\u0900-\u097F]/.test(text)) return v('hi');
+  if (/[\u0980-\u09FF]/.test(text)) return v('bn');
+  if (/[\u0A00-\u0A7F]/.test(text)) return v('pa');
+  if (/[\u0A80-\u0AFF]/.test(text)) return v('gu');
+  if (/[\u0B80-\u0BFF]/.test(text)) return v('ta');
+  if (/[\u0C00-\u0C7F]/.test(text)) return v('te');
+  if (/[\u0C80-\u0CFF]/.test(text)) return v('kn');
+  if (/[\u0D00-\u0D7F]/.test(text)) return v('ml');
+  if (/[\u0D80-\u0DFF]/.test(text)) return v('si');
+  if (/[\u0E00-\u0E7F]/.test(text)) return v('th');
+  if (/[\u0E80-\u0EFF]/.test(text)) return v('lo');
+  if (/[\u1000-\u109F]/.test(text)) return v('my');
+  if (/[\u1780-\u17FF]/.test(text)) return v('km');
+  if (/[\u1200-\u137F]/.test(text)) return v('am');
+  if (/[\u10A0-\u10FF]/.test(text)) return v('ka');
+  if (/[\u0530-\u058F]/.test(text)) return v('hy');
+  if (/[\u0590-\u05FF]/.test(text)) return v('he');
+  if (/[\u0370-\u03FF]/.test(text)) return v('el');
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return v('ja');
+  if (/[\uAC00-\uD7AF]/.test(text)) return v('ko');
   if (/[\u4E00-\u9FFF]/.test(text)) {
-    if (/[\u3040-\u30FF]/.test(text)) return v('japanese');
-    return v('chinese');
+    if (/[\u3040-\u30FF]/.test(text)) return v('ja');
+    return v('zh');
   }
   if (/[\u0400-\u04FF]/.test(text)) {
-    if (/[\u0456\u0457\u0491\u0490]/.test(text)) return v('ukrainian');
-    if (/[\u0452\u0453\u0458\u0459\u045A\u045B\u045C\u045F]/.test(text)) return v('serbian');
-    return v('russian');
+    if (/[\u0456\u0457\u0491\u0490]/.test(text)) return v('uk');
+    if (/[\u0452\u0453\u0458\u0459\u045A\u045B\u045C\u045F]/.test(text)) return v('sr');
+    return v('ru');
   }
   if (/[\u0600-\u06FF]/.test(text)) {
-    if (/[\u06BE\u06C1\u06C2\u06D2\u06BA]/.test(text)) return v('urdu');
-    if (/[\u06F0-\u06F9]/.test(text)) return v('persian');
-    return v('arabic');
+    if (/[\u06BE\u06C1\u06C2\u06D2\u06BA]/.test(text)) return v('ur');
+    if (/[\u06F0-\u06F9]/.test(text)) return v('fa');
+    return v('ar');
   }
 
-  // Latin scripts
-  if (/\b(bonjour|merci|oui|non|je|nous|vous|les|des|une|pour|avec)\b/.test(low)) return v('french');
-  if (/\b(hola|gracias|sí|como|esto|para|una|los|las|por|pero|también)\b/.test(low)) return v('spanish');
-  if (/\b(ciao|grazie|sono|come|questo|per|non|che|gli|della|siamo)\b/.test(low)) return v('italian');
-  if (/\b(hallo|danke|ich|das|ist|ein|eine|nicht|und|oder|aber|mit)\b/.test(low)) return v('german');
-  if (/\b(olá|obrigado|sim|não|como|para|uma|por|com|são|está)\b/.test(low)) return v('portuguese');
-  if (/\b(hej|tack|och|det|att|som|för|med|han|men|kan|ska)\b/.test(low)) return v('swedish');
-  if (/\b(hei|takk|og|det|at|som|for|med|han|men|kan|skal|ikke)\b/.test(low)) return v('norwegian');
-  if (/\b(hej|tak|og|det|at|som|for|med|han|men|kan|skal|også)\b/.test(low)) return v('danish');
-  if (/\b(hei|kiitos|ja|on|se|ei|en|ole|että|kuin|kun|jos)\b/.test(low)) return v('finnish');
-  if (/\b(hallo|dank|het|een|van|dat|zijn|met|voor|niet|ook|maar)\b/.test(low)) return v('dutch');
-  if (/\b(cześć|dziękuję|tak|nie|jest|jak|dla|przez|ale|się)\b/.test(low)) return v('polish');
-  if (/\b(ahoj|děkuji|ano|ne|jak|pro|ale|jsem|jsou|bylo)\b/.test(low)) return v('czech');
-  if (/\b(szia|köszönöm|igen|nem|és|hogy|van|egy|az|ez)\b/.test(low)) return v('hungarian');
-  if (/\b(bună|mulțumesc|da|nu|și|că|este|sunt|pentru)\b/.test(low)) return v('romanian');
-  if (/\b(zdravo|hvala|da|ne|je|za|ali|što|kako)\b/.test(low)) return v('croatian');
-  if (/\b(tere|aitäh|jah|ei|ja|on|see|kas|ning)\b/.test(low)) return v('estonian');
-  if (/\b(labas|ačiū|taip|ne|ir|yra|tai|kaip)\b/.test(low)) return v('lithuanian');
-  if (/\b(sveiki|paldies|jā|nē|un|ir|tas|kā)\b/.test(low)) return v('latvian');
-  if (/\b(merhaba|teşekkür|evet|hayır|bu|bir|ve|için)\b/.test(low)) return v('turkish');
-  if (/\b(xin chào|cảm ơn|vâng|không|và|là|của)\b/.test(low)) return v('vietnamese');
-  if (/\b(kamusta|salamat|oo|hindi|at|ng|sa|ang)\b/.test(low)) return v('filipino');
-  if (/\b(halo|terima kasih|ya|tidak|dan|untuk|dengan)\b/.test(low)) return v('indonesian');
-  if (/\b(lah|mah|lor|sia|kan)\b/.test(low)) return v('malay');
-  if (/\b(dumela|ke a leboga|ee|nnyaa|le|ga|go)\b/.test(low)) return v('afrikaans');
+  // Hinglish — detect before tinyld since it's mixed script
+  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi)\b/i.test(text)) return v('hi');
 
-  return v('english');
+  // For Latin script — use tinyld for proper statistical detection
+  try {
+    const { detect } = await import('tinyld');
+    const detected = detect(text);
+    if (detected && detected !== 'und' && VOICES[detected]) {
+      return v(detected);
+    }
+  } catch(_) {}
+
+  return v('en');
 };
 
 const ttsCache = useRef(new Map());
@@ -1571,7 +1548,7 @@ const speakText = async (t) => {
       return;
     }
 
-    const voice = detectLangVoice(clean, ttsGender);
+    const voice = await detectLangVoice(clean, ttsGender);
     const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
       method: 'POST',
       headers: await getAuthHeader(),
