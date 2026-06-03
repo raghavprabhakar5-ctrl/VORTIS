@@ -482,37 +482,62 @@ if (action === 'tts') {
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  // Clean text — remove emojis and symbols that cause TTS to fail
   const cleanText = text
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[★✦•→←↑↓◆◇○●©®™]/g, '')
+    .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .slice(0, 400);
 
   if (!cleanText || cleanText.length < 2)
     return res.status(200).json({ audio: '' });
 
-  // ── ATTEMPT 1: @andresaya/edge-tts (your original working code) ──
+  // ── ATTEMPT 1: @andresaya/edge-tts ──
   try {
     const { EdgeTTS } = await import('@andresaya/edge-tts');
-    const tts = new EdgeTTS(); // fresh instance
+    const tts = new EdgeTTS();
     await tts.synthesize(cleanText, voice, {
       outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
     });
     const base64 = await tts.toBase64();
     if (base64 && base64.length > 100) {
-      console.log('TTS: @andresaya/edge-tts worked');
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      res.setHeader('Content-Type', 'application/json');
       return res.status(200).json({ audio: base64 });
     }
     throw new Error('Empty audio');
   } catch(e) {
-    console.log('TTS attempt 1 (@andresaya) failed:', e.message);
+    console.log('TTS attempt 1 failed:', e.message);
   }
+
+  // ── ATTEMPT 2: msedge-tts fallback ──
+  try {
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const readable = tts.toStream(cleanText);
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+      readable.on('data', chunk => chunks.push(chunk));
+      readable.on('end', resolve);
+      readable.on('error', reject);
+      setTimeout(() => reject(new Error('stream timeout')), 10000);
+    });
+    const buf = Buffer.concat(chunks);
+    if (buf.length > 100) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).json({ audio: buf.toString('base64') });
+    }
+    throw new Error('Empty buffer');
+  } catch(e) {
+    console.log('TTS attempt 2 failed:', e.message);
+  }
+
+  // ── ALL FAILED — return empty so client stays silent ──
+  return res.status(200).json({ audio: '' });
 }
 
     // ╔══════════════════════════════════════╗
