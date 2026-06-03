@@ -10,7 +10,7 @@ export const config = {
 import admin from 'firebase-admin';
 import Groq from 'groq-sdk';
 import * as EdgeTTS from 'edge-tts';
-console.log('EDGE TTS:', EdgeTTS);
+console.log("EDGE TTS EXPORTS:", EdgeTTS);
 
 if (!admin.apps.length) {
   admin.initializeApp({
