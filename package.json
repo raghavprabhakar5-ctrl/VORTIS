@@ -24,6 +24,7 @@
     "franc": "^6.2.0",
     "groq-sdk": "^1.1.2",
     "lucide-react": "^0.562.0",
+    "msedge-tts": "^2.0.5",
     "puter": "^1.0.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
