@@ -482,29 +482,56 @@ if (action === 'tts') {
   const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  // Strip emojis and special chars before TTS
   const cleanText = text
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u2600-\u27BF]/g, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    .replace(/[★✦•→←↑↓◆◇○●]/g, '')
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[★✦•→←↑↓◆◇○●©®™]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 
-  if (!cleanText || cleanText.length < 2) 
+  if (!cleanText || cleanText.length < 2)
     return res.status(200).json({ audio: '' });
 
   const { EdgeTTS } = await import('@andresaya/edge-tts');
-  const tts = new EdgeTTS();
-  
-  await tts.synthesize(cleanText, voice, { 
-    outputFormat: 'audio-16khz-32kbitrate-mono-mp3'  // smaller = faster
-  });
-  const base64 = await tts.toBase64();
 
-  res.setHeader('Cache-Control', 'public, max-age=86400');
-  res.setHeader('Content-Type', 'application/json');
-  return res.status(200).json({ audio: base64 });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const tts = new EdgeTTS(); // fresh instance every attempt — this is the fix
+      await tts.synthesize(cleanText, voice, {
+        outputFormat: 'audio-16khz-32kbitrate-mono-mp3'
+      });
+      const audio = await tts.toBase64();
+
+      if (audio && audio.length > 100) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.status(200).json({ audio });
+      }
+      console.log(`TTS attempt ${attempt} empty, retrying...`);
+    } catch(e) {
+      console.log(`TTS attempt ${attempt} failed: ${e.message}`);
+    }
+    // Small delay between retries
+    if (attempt < 3) await new Promise(r => setTimeout(r, 400 * attempt));
+  }
+
+  // Final fallback — try English voice if non-English voice failed
+  try {
+    const tts = new EdgeTTS();
+    await tts.synthesize(cleanText, 'en-US-GuyNeural', {
+      outputFormat: 'audio-16khz-32kbitrate-mono-mp3'
+    });
+    const audio = await tts.toBase64();
+    if (audio && audio.length > 100) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).json({ audio });
+    }
+  } catch(e) {
+    console.error('TTS fallback failed:', e.message);
+  }
+
+  return res.status(500).json({ error: 'TTS synthesis failed after 3 attempts' });
 }
 
     // ╔══════════════════════════════════════╗
