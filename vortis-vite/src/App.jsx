@@ -1423,8 +1423,28 @@ const ttsPending = useRef(new Map());
 const ttsGenderRef = useRef(ttsGender);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
+// ── DETECT LANGUAGE BY SCRIPT (Unicode ranges) ──
+const detectByScript = (text) => {
+  if (/[\u0900-\u097F]/.test(text)) return 'hi';  // Devanagari → Hindi
+  if (/[\u0600-\u06FF]/.test(text)) return 'ur';  // Arabic script → Urdu
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';  // Chinese
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja'; // Japanese
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';  // Korean
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru';  // Cyrillic → Russian
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'ta';  // Tamil
+  if (/[\u0C00-\u0C7F]/.test(text)) return 'te';  // Telugu
+  if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';  // Malayalam
+  if (/[\u0C80-\u0CFF]/.test(text)) return 'kn';  // Kannada
+  if (/[\u0A80-\u0AFF]/.test(text)) return 'gu';  // Gujarati
+  if (/[\u0A00-\u0A7F]/.test(text)) return 'pa';  // Punjabi/Gurmukhi
+  if (/[\u0980-\u09FF]/.test(text)) return 'bn';  // Bengali
+  if (/[\u0E00-\u0E7F]/.test(text)) return 'th';  // Thai
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar';  // Arabic
+  return 'en'; // default
+};
+
 // ── DETECT LANGUAGE VOICE ──
-const detectLangVoice = async (text, gender = 'male') => {
+const detectLangVoice = (text, gender = 'male') => {
   const VOICE_MAP = {
     'hi': ['hi-IN-MadhurNeural', 'hi-IN-SwaraNeural'],
     'en': ['en-US-GuyNeural', 'en-US-AriaNeural'],
@@ -1455,47 +1475,12 @@ const detectLangVoice = async (text, gender = 'male') => {
     'pa': ['pa-IN-OjasNeural', 'pa-IN-OjasNeural'],
   };
 
+  const detected = detectByScript(text);
   const fallback = VOICE_MAP['en'][gender === 'female' ? 1 : 0];
-
-  try {
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({
-        action: 'chat',
-        prompt: `Detect the language of this text. Reply with ONLY a single 2-letter ISO 639-1 language code (like: en, hi, fr, es, de, ja, zh, ar, ru, pt, ko, ta, te, bn, ur, it, nl, tr, pl, vi, id, ms, th, ml, kn, gu, pa). No explanation. No punctuation. Just the code. If mixed languages or uncertain, reply: en\n\nText: "${text.slice(0, 150)}"`,
-        history: []
-      })
-    });
-
-    if (!res.ok) return fallback;
-
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let raw = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of dec.decode(value).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const chunk = line.slice(6).trim();
-        if (chunk === '[DONE]' || !chunk) continue;
-        try {
-          const p = JSON.parse(chunk);
-          if (p.content) raw += p.content;
-        } catch(_) {}
-      }
-    }
-
-    const detected = raw.trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
-    const voice = VOICE_MAP[detected];
-    return voice ? voice[gender === 'female' ? 1 : 0] : fallback;
-
-  } catch(_) {
-    return fallback;
-  }
+  const voices = VOICE_MAP[detected];
+  return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
 };
+
 // ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
@@ -1522,12 +1507,13 @@ const preloadTTS = useCallback(async (text) => {
   const gender = ttsGenderRef.current;
   const clean = cleanForTTS(text);
   if (!clean || clean.length < 3) return;
-  const voice = gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural';
   const cacheKey = `${gender}_${clean}`;
   if (ttsCache.current.has(cacheKey)) return;
   if (ttsPending.current.has(cacheKey)) return;
 
   try {
+    const voice = detectLangVoice(clean, gender); // sync, no await
+
     const promise = fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1547,6 +1533,7 @@ const preloadTTS = useCallback(async (text) => {
       ttsPending.current.delete(cacheKey);
       throw e;
     });
+
     ttsPending.current.set(cacheKey, promise);
   } catch(_) {}
 }, [cleanForTTS]);
@@ -1557,20 +1544,16 @@ const speakText = useCallback(async (t) => {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
-    const voice = gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural';
-    
-    // DEBUG — remove after fixing
-    console.log('TTS sending:', { action: 'tts', text: clean.slice(0, 50), voice });
-    
+
+    const voice = detectLangVoice(clean, gender); // sync, no await
+
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'tts', text: clean, voice })
     });
 
-    console.log('TTS response status:', res.status);
     if (!res.ok) return;
-
     const data = await res.json();
     if (!data.audio || data.audio.length < 100) return;
 
