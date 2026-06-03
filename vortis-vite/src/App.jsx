@@ -7,6 +7,7 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { detect } from 'tinyld';
 import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
@@ -1446,41 +1447,98 @@ const detectByScript = (text) => {
 // ── DETECT LANGUAGE VOICE ──
 const detectLangVoice = (text, gender = 'male') => {
   const VOICE_MAP = {
+    // ── Indian Languages ──
     'hi': ['hi-IN-MadhurNeural', 'hi-IN-SwaraNeural'],
-    'en': ['en-US-GuyNeural', 'en-US-AriaNeural'],
-    'fr': ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural'],
-    'es': ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural'],
-    'de': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
-    'ja': ['ja-JP-KeitaNeural', 'ja-JP-NanamiNeural'],
-    'zh': ['zh-CN-YunxiNeural', 'zh-CN-XiaoxiaoNeural'],
-    'ar': ['ar-SA-HamedNeural', 'ar-SA-ZariyahNeural'],
-    'ru': ['ru-RU-DmitryNeural', 'ru-RU-SvetlanaNeural'],
-    'pt': ['pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural'],
-    'ko': ['ko-KR-InJoonNeural', 'ko-KR-SunHiNeural'],
     'ta': ['ta-IN-ValluvarNeural', 'ta-IN-PallaviNeural'],
     'te': ['te-IN-MohanNeural', 'te-IN-ShrutiNeural'],
-    'bn': ['bn-BD-PradeepNeural', 'bn-BD-NabanitaNeural'],
-    'ur': ['ur-PK-AsadNeural', 'ur-PK-UzmaNeural'],
-    'it': ['it-IT-DiegoNeural', 'it-IT-ElsaNeural'],
-    'nl': ['nl-NL-MaartenNeural', 'nl-NL-ColetteNeural'],
-    'tr': ['tr-TR-AhmetNeural', 'tr-TR-EmelNeural'],
-    'pl': ['pl-PL-MarekNeural', 'pl-PL-ZofiaNeural'],
-    'vi': ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'],
-    'id': ['id-ID-ArdiNeural', 'id-ID-GadisNeural'],
-    'ms': ['ms-MY-OsmanNeural', 'ms-MY-YasminNeural'],
-    'th': ['th-TH-NiwatNeural', 'th-TH-PremwadeeNeural'],
     'ml': ['ml-IN-MidhunNeural', 'ml-IN-SobhanaNeural'],
     'kn': ['kn-IN-GaganNeural', 'kn-IN-SapnaNeural'],
     'gu': ['gu-IN-NiranjanNeural', 'gu-IN-DhwaniNeural'],
     'pa': ['pa-IN-OjasNeural', 'pa-IN-OjasNeural'],
+    'bn': ['bn-BD-PradeepNeural', 'bn-BD-NabanitaNeural'],
+    'ur': ['ur-PK-AsadNeural', 'ur-PK-UzmaNeural'],
+    'mr': ['mr-IN-ManoharNeural', 'mr-IN-AarohiNeural'],
+
+    // ── European Languages ──
+    'en': ['en-US-GuyNeural', 'en-US-AriaNeural'],
+    'fr': ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural'],
+    'de': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
+    'es': ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural'],
+    'pt': ['pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural'],
+    'it': ['it-IT-DiegoNeural', 'it-IT-ElsaNeural'],
+    'nl': ['nl-NL-MaartenNeural', 'nl-NL-ColetteNeural'],
+    'pl': ['pl-PL-MarekNeural', 'pl-PL-ZofiaNeural'],
+    'ru': ['ru-RU-DmitryNeural', 'ru-RU-SvetlanaNeural'],
+    'tr': ['tr-TR-AhmetNeural', 'tr-TR-EmelNeural'],
+    'sv': ['sv-SE-MattiasNeural', 'sv-SE-SofieNeural'],
+    'no': ['nb-NO-FinnNeural', 'nb-NO-PernilleNeural'],
+    'da': ['da-DK-JeppeNeural', 'da-DK-ChristelNeural'],
+    'fi': ['fi-FI-HarriNeural', 'fi-FI-NooraNeural'],
+    'cs': ['cs-CZ-AntoninNeural', 'cs-CZ-VlastaNeural'],
+    'sk': ['sk-SK-LukasNeural', 'sk-SK-ViktoriaNeural'],
+    'ro': ['ro-RO-EmilNeural', 'ro-RO-AlinaNeural'],
+    'hu': ['hu-HU-TamasNeural', 'hu-HU-NoemiNeural'],
+    'el': ['el-GR-NestorasNeural', 'el-GR-AthinaNeural'],
+    'bg': ['bg-BG-BorislavNeural', 'bg-BG-KalinaNeural'],
+    'hr': ['hr-HR-SreckoNeural', 'hr-HR-GabrijelaNeural'],
+    'uk': ['uk-UA-OstapNeural', 'uk-UA-PolinaNeural'],
+    'ca': ['ca-ES-EnricNeural', 'ca-ES-JoanaNeural'],
+
+    // ── East Asian ──
+    'zh': ['zh-CN-YunxiNeural', 'zh-CN-XiaoxiaoNeural'],
+    'ja': ['ja-JP-KeitaNeural', 'ja-JP-NanamiNeural'],
+    'ko': ['ko-KR-InJoonNeural', 'ko-KR-SunHiNeural'],
+    'zh-TW': ['zh-TW-YunJheNeural', 'zh-TW-HsiaoChenNeural'],
+
+    // ── Southeast Asian ──
+    'vi': ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'],
+    'id': ['id-ID-ArdiNeural', 'id-ID-GadisNeural'],
+    'ms': ['ms-MY-OsmanNeural', 'ms-MY-YasminNeural'],
+    'th': ['th-TH-NiwatNeural', 'th-TH-PremwadeeNeural'],
+    'fil': ['fil-PH-AngeloNeural', 'fil-PH-BlessicaNeural'],
+
+    // ── Middle Eastern ──
+    'ar': ['ar-SA-HamedNeural', 'ar-SA-ZariyahNeural'],
+    'he': ['he-IL-AvriNeural', 'he-IL-HilaNeural'],
+    'fa': ['fa-IR-FaridNeural', 'fa-IR-DilaraNeural'],
+
+    // ── African ──
+    'sw': ['sw-KE-RafikiNeural', 'sw-KE-ZuriNeural'],
+    'af': ['af-ZA-WillemNeural', 'af-ZA-AdriNeural'],
+    'am': ['am-ET-AmehaNeural', 'am-ET-MekdesNeural'],
+    'zu': ['zu-ZA-ThandoNeural', 'zu-ZA-UThandoNeural'],
+
+    // ── Central/South Asian ──
+    'az': ['az-AZ-BabekNeural', 'az-AZ-BanuNeural'],
+    'kk': ['kk-KZ-DauletNeural', 'kk-KZ-AigulNeural'],
+    'uz': ['uz-UZ-SardorNeural', 'uz-UZ-MadinaNeural'],
+
+    // ── Americas ──
+    'es-MX': ['es-MX-JorgeNeural', 'es-MX-DaliaNeural'],
+    'es-US': ['es-US-AlonsoNeural', 'es-US-PalomaNeural'],
+    'fr-CA': ['fr-CA-JeanNeural', 'fr-CA-SylvieNeural'],
+    'en-GB': ['en-GB-RyanNeural', 'en-GB-SoniaNeural'],
+    'en-AU': ['en-AU-WilliamNeural', 'en-AU-NatashaNeural'],
+    'en-IN': ['en-IN-PrabhatNeural', 'en-IN-NeerjaNeural'],
   };
 
-  const detected = detectByScript(text);
   const fallback = VOICE_MAP['en'][gender === 'female' ? 1 : 0];
-  const voices = VOICE_MAP[detected];
-  return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
-};
 
+  try {
+    // Hindi — Unicode is 100% reliable, always check first
+    if (/[\u0900-\u097F]/.test(text)) {
+      return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    }
+
+    // tinyld for all other languages
+    const detected = detect(text) || 'en';
+    const voices = VOICE_MAP[detected];
+    return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
+
+  } catch(_) {
+    return fallback;
+  }
+};
 // ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
