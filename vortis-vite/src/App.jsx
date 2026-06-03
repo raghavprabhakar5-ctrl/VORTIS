@@ -1421,6 +1421,7 @@ const saveChat = useCallback(async (msgsToSave) => {
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
 const ttsGenderRef = useRef(ttsGender);
+const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
 // ── DETECT LANGUAGE VOICE ──
@@ -1479,73 +1480,29 @@ const detectLangVoice = async (text, gender = 'male') => {
     af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
     en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
-  const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
+ const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
 
-  // ── Script-based detection (works on ORIGINAL text before any cleaning) ──
-  if (/[\u0900-\u097F]/.test(text)) return v('hi');
-  if (/[\u0980-\u09FF]/.test(text)) return v('bn');
-  if (/[\u0A00-\u0A7F]/.test(text)) return v('pa');
-  if (/[\u0A80-\u0AFF]/.test(text)) return v('gu');
-  if (/[\u0B80-\u0BFF]/.test(text)) return v('ta');
-  if (/[\u0C00-\u0C7F]/.test(text)) return v('te');
-  if (/[\u0C80-\u0CFF]/.test(text)) return v('kn');
-  if (/[\u0D00-\u0D7F]/.test(text)) return v('ml');
-  if (/[\u0D80-\u0DFF]/.test(text)) return v('si');
-  if (/[\u0E00-\u0E7F]/.test(text)) return v('th');
-  if (/[\u0E80-\u0EFF]/.test(text)) return v('lo');
-  if (/[\u1000-\u109F]/.test(text)) return v('my');
-  if (/[\u1780-\u17FF]/.test(text)) return v('km');
-  if (/[\u1200-\u137F]/.test(text)) return v('am');
-  if (/[\u10A0-\u10FF]/.test(text)) return v('ka');
-  if (/[\u0530-\u058F]/.test(text)) return v('hy');
-  if (/[\u0590-\u05FF]/.test(text)) return v('he');
-  if (/[\u0370-\u03FF]/.test(text)) return v('el');
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return v('ja');
-  if (/[\uAC00-\uD7AF]/.test(text)) return v('ko');
-  if (/[\u4E00-\u9FFF]/.test(text)) {
-    if (/[\u3040-\u30FF]/.test(text)) return v('ja');
-    return v('zh');
-  }
-  if (/[\u0400-\u04FF]/.test(text)) {
-    if (/[\u0456\u0457\u0491\u0490]/.test(text)) return v('uk');
-    if (/[\u0452\u0453\u0458\u0459\u045A\u045B\u045C\u045F]/.test(text)) return v('sr');
-    return v('ru');
-  }
-  if (/[\u0600-\u06FF]/.test(text)) {
-    if (/[\u06BE\u06C1\u06C2\u06D2\u06BA]/.test(text)) return v('ur');
-    if (/[\u06F0-\u06F9]/.test(text)) return v('fa');
-    return v('ar');
-  }
+  // Quick safety check for completely empty text
+  if (!text || text.trim().length < 2) return v('en');
 
-  // ── Romanized language detection ──
-  if (/\b(kya|hai|nahi|bhai|yaar|toh|phir|lekin|bahut|theek|matlab|lagta|wala|abhi|zyada|khaana|paani|ghar|dost|pyaar|zindagi|acha|bilkul|zaroor|hoga|hain|tha|thi|mujhe|tumhe|karo|kuch|mera|tera|unka)\b/i.test(text)) return v('hi');
-  if (/\b(je|suis|est|sont|nous|vous|ils|elles|avec|pour|dans|mais|aussi|très|bien|tout|cette|comme)\b/i.test(text)) return v('fr');
-  if (/\b(ich|bin|ist|sind|wir|sie|mit|für|das|die|der|und|auch|sehr|gut|alle|diese|wie|aber)\b/i.test(text)) return v('de');
-  if (/\b(yo|soy|es|son|nosotros|con|para|pero|también|muy|bien|todo|esta|como|que|los|las)\b/i.test(text)) return v('es');
-  if (/\b(io|sono|è|siamo|con|per|ma|anche|molto|bene|tutto|questa|come|che|gli|una)\b/i.test(text)) return v('it');
-  if (/\b(eu|sou|é|são|nós|com|para|mas|também|muito|bem|tudo|esta|como|que|os|as)\b/i.test(text)) return v('pt');
-  if (/\b(ik|ben|is|zijn|wij|met|voor|maar|ook|zeer|goed|alle|deze|hoe|dat|een)\b/i.test(text)) return v('nl');
-  if (/\b(ja|är|inte|och|han|hon|det|att|som|för|med|men|här|kan|vi|de)\b/i.test(text)) return v('sv');
-  if (/\b(ben|bir|bu|değil|için|ama|çok|iyi|her|nasıl|ne|da|de|ile|gibi)\b/i.test(text)) return v('tr');
-  if (/\b(saya|adalah|tidak|dengan|untuk|tapi|juga|sangat|baik|semua|ini|itu|bagaimana|apa)\b/i.test(text)) return v('id');
-  if (/\b(ako|ang|ng|sa|na|mga|hindi|para|pero|kaya|ito|iyon|paano|ano)\b/i.test(text)) return v('fil');
-
-  // ── tinyld fallback ──
   try {
-    const mod = await getTinyld();
-    if (mod) {
-      // Try detectAll first for better accuracy
-      const results = mod.detectAll ? mod.detectAll(text) : null;
-      if (results?.length > 0) {
-        const best = results.find(r => r.lang && VOICES[r.lang] && (r.accuracy || r.confidence || 1) > 0.3);
-        if (best) return v(best.lang);
-      }
-      // Fallback to single detect
-      const detected = mod.detect ? mod.detect(text) : null;
-      if (detected && detected !== 'und' && VOICES[detected]) return v(detected);
-    }
-  } catch(_) {}
+    // Let the AI decide the language via a structured JSON API call
+    const res = await fetch('/api/detect-language', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
 
+    if (res.ok) {
+      const { lang } = await res.json(); 
+      // If the AI returns 'fr', it maps immediately to your French voice assets
+      if (VOICES[lang]) return v(lang);
+    }
+  } catch (error) {
+    console.error("AI language detection failed, falling back to English:", error);
+  }
+
+  // Fallback to English if the network or AI request fails
   return v('en');
 };
 
@@ -1618,13 +1575,25 @@ const speakText = useCallback(async (t) => {
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
     const cacheKey = `${gender}_${voice}_${clean}`;
+
+    // Helper to stop previous audio and play new audio safely under a persistent reference
+    const playSafely = (srcUrl) => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.src = "";
+      }
+      const audioPlayback = new Audio(srcUrl);
+      currentAudioRef.current = audioPlayback;
+      audioPlayback.play().catch(e => console.log("Playback interrupted safely:", e));
+    };
+
     if (ttsCache.current.has(cacheKey)) {
-      new Audio(ttsCache.current.get(cacheKey)).play();
+      playSafely(ttsCache.current.get(cacheKey));
       return;
     }
     if (ttsPending.current.has(cacheKey)) {
       const src = await ttsPending.current.get(cacheKey);
-      new Audio(src).play();
+      playSafely(src);
       return;
     }
     const res = await fetch(API, {
@@ -1636,7 +1605,7 @@ const speakText = useCallback(async (t) => {
     const { audio } = await res.json();
     const src = `data:audio/mp3;base64,${audio}`;
     ttsCache.current.set(cacheKey, src);
-    new Audio(src).play();
+    playSafely(src);
   } catch(_) {}
 }, [cleanForTTS]);
 
