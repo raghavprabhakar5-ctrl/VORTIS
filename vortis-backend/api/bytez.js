@@ -499,32 +499,23 @@ if (action === 'tts') {
     const tts = new MsEdgeTTS();
     await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_16KHZ_32KBITRATE_MONO_MP3);
 
-    const chunks = [];
-    await Promise.race([
-      new Promise((resolve, reject) => {
-        const readable = tts.toStream(cleanText);
-        readable.on('data', chunk => chunks.push(chunk));
-        readable.on('end', resolve);
-        readable.on('error', reject);
-      }),
+    // toStream() returns a custom object — use toBuffer() instead
+    const audioBuffer = await Promise.race([
+      tts.toBuffer(cleanText),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('TTS timeout after 15s')), 15000)
+        setTimeout(() => reject(new Error('TTS timeout')), 15000)
       )
     ]);
 
-    const audio = Buffer.concat(chunks).toString('base64');
-    if (!audio || audio.length < 100)
-      throw new Error('Empty audio returned');
+    if (!audioBuffer || audioBuffer.length < 100)
+      throw new Error('Empty audio');
 
+    const audio = audioBuffer.toString('base64');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.status(200).json({ audio });
 
   } catch(e) {
     console.error('TTS error:', e.message);
-    // If msedge-tts also gets blocked by Microsoft, log it clearly
-    if (e.message.includes('timeout') || e.message.includes('ECONNREFUSED') || e.message.includes('socket')) {
-      console.error('TTS: Microsoft Edge TTS servers blocking datacenter IP');
-    }
     return res.status(500).json({ error: 'TTS failed: ' + e.message });
   }
 }
