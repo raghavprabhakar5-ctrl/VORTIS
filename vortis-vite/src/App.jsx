@@ -1424,67 +1424,72 @@ const ttsGenderRef = useRef(ttsGender);
 const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
+// ── GLOBAL VOICES CONFIGURATION ──
+const VOICES = {
+  hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
+  bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
+  pa: ['pa-IN-OjasNeural',      'pa-IN-OjasNeural'],
+  gu: ['gu-IN-NiranjanNeural',  'gu-IN-DhwaniNeural'],
+  ta: ['ta-IN-ValluvarNeural',  'ta-IN-PallaviNeural'],
+  te: ['te-IN-MohanNeural',     'te-IN-ShrutiNeural'],
+  kn: ['kn-IN-GaganNeural',     'kn-IN-SapnaNeural'],
+  ml: ['ml-IN-MidhunNeural',    'ml-IN-SobhanaNeural'],
+  si: ['si-LK-SameeraNeural',   'si-LK-ThiliniNeural'],
+  th: ['th-TH-NiwatNeural',     'th-TH-PremwadeeNeural'],
+  lo: ['lo-LA-ChanthavongNeural','lo-LA-KeomanyNeural'],
+  my: ['my-MM-ThihaNeural',     'my-MM-NilarNeural'],
+  km: ['km-KH-PisethNeural',    'km-KH-SreymomNeural'],
+  am: ['am-ET-AmehaNeural',     'am-ET-MekdesNeural'],
+  ka: ['ka-GE-GiorgiNeural',    'ka-GE-EkaNeural'],
+  hy: ['hy-AM-HaykNeural',      'hy-AM-AnahitNeural'],
+  he: ['he-IL-AvriNeural',      'he-IL-HilaNeural'],
+  el: ['el-GR-NestorasNeural',  'el-GR-AthinaNeural'],
+  ja: ['ja-JP-KeitaNeural',     'ja-JP-NanamiNeural'],
+  ko: ['ko-KR-InJoonNeural',    'ko-KR-SunHiNeural'],
+  zh: ['zh-CN-YunxiNeural',     'zh-CN-XiaoxiaoNeural'],
+  ru: ['ru-RU-DmitryNeural',    'ru-RU-SvetlanaNeural'],
+  uk: ['uk-UA-OstapNeural',     'uk-UA-PolinaNeural'],
+  sr: ['sr-RS-NicholasNeural',  'sr-RS-SopieNeural'],
+  ar: ['ar-SA-HamedNeural',     'ar-SA-ZariyahNeural'],
+  ur: ['ur-PK-AsadNeural',      'ur-PK-UzmaNeural'],
+  fa: ['fa-IR-FaridNeural',     'fa-IR-DilaraNeural'],
+  fr: ['fr-FR-HenriNeural',     'fr-FR-DeniseNeural'],
+  es: ['es-ES-AlvaroNeural',    'es-ES-ElviraNeural'],
+  it: ['it-IT-DiegoNeural',     'it-IT-ElsaNeural'],
+  de: ['de-DE-ConradNeural',    'de-DE-KatjaNeural'],
+  pt: ['pt-BR-AntonioNeural',   'pt-BR-FranciscaNeural'],
+  sv: ['sv-SE-MattiasNeural',   'sv-SE-SofieNeural'],
+  nb: ['nb-NO-FinnNeural',      'nb-NO-PernilleNeural'],
+  da: ['da-DK-JeppeNeural',     'da-DK-ChristelNeural'],
+  fi: ['fi-FI-HarriNeural',     'fi-FI-NooraNeural'],
+  nl: ['nl-NL-MaartenNeural',   'nl-NL-ColetteNeural'],
+  pl: ['pl-PL-MarekNeural',     'pl-PL-ZofiaNeural'],
+  cs: ['cs-CZ-AntoninNeural',   'cs-CZ-VlastaNeural'],
+  hu: ['hu-HU-TamasNeural',     'hu-HU-NoemiNeural'],
+  ro: ['ro-RO-EmilNeural',      'ro-RO-AlinaNeural'],
+  hr: ['hr-HR-SreckoNeural',    'hr-HR-GabrijelaNeural'],
+  et: ['et-EE-KertNeural',      'et-EE-AnuNeural'],
+  lt: ['lt-LT-LeonasNeural',    'lt-LT-OnaNeural'],
+  lv: ['lv-LV-NilsNeural',      'lv-LV-EveritaNeural'],
+  tr: ['tr-TR-AhmetNeural',     'tr-TR-EmelNeural'],
+  vi: ['vi-VN-NamMinhNeural',   'vi-VN-HoaiMyNeural'],
+  fil:['fil-PH-AngeloNeural',   'fil-PH-BlessicaNeural'],
+  id: ['id-ID-ArdiNeural',      'id-ID-GadisNeural'],
+  ms: ['ms-MY-OsmanNeural',     'ms-MY-YasminNeural'],
+  af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
+  en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
+};
+
+// Helper function to match the language to a voice based on active gender ref
+const getVoiceForLang = (lang) => {
+  const currentGender = ttsGenderRef.current;
+  const selectedLang = VOICES[lang] ? lang : 'en';
+  return VOICES[selectedLang][currentGender === 'female' ? 1 : 0];
+};
+
 // ── DETECT LANGUAGE VOICE ──
 const detectLangVoice = useCallback(async (t) => {
-  const VOICES = {
-    hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
-    bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
-    pa: ['pa-IN-OjasNeural',      'pa-IN-OjasNeural'],
-    gu: ['gu-IN-NiranjanNeural',  'gu-IN-DhwaniNeural'],
-    ta: ['ta-IN-ValluvarNeural',  'ta-IN-PallaviNeural'],
-    te: ['te-IN-MohanNeural',     'te-IN-ShrutiNeural'],
-    kn: ['kn-IN-GaganNeural',     'kn-IN-SapnaNeural'],
-    ml: ['ml-IN-MidhunNeural',    'ml-IN-SobhanaNeural'],
-    si: ['si-LK-SameeraNeural',   'si-LK-ThiliniNeural'],
-    th: ['th-TH-NiwatNeural',     'th-TH-PremwadeeNeural'],
-    lo: ['lo-LA-ChanthavongNeural','lo-LA-KeomanyNeural'],
-    my: ['my-MM-ThihaNeural',     'my-MM-NilarNeural'],
-    km: ['km-KH-PisethNeural',    'km-KH-SreymomNeural'],
-    am: ['am-ET-AmehaNeural',     'am-ET-MekdesNeural'],
-    ka: ['ka-GE-GiorgiNeural',    'ka-GE-EkaNeural'],
-    hy: ['hy-AM-HaykNeural',      'hy-AM-AnahitNeural'],
-    he: ['he-IL-AvriNeural',      'he-IL-HilaNeural'],
-    el: ['el-GR-NestorasNeural',  'el-GR-AthinaNeural'],
-    ja: ['ja-JP-KeitaNeural',     'ja-JP-NanamiNeural'],
-    ko: ['ko-KR-InJoonNeural',    'ko-KR-SunHiNeural'],
-    zh: ['zh-CN-YunxiNeural',     'zh-CN-XiaoxiaoNeural'],
-    ru: ['ru-RU-DmitryNeural',    'ru-RU-SvetlanaNeural'],
-    uk: ['uk-UA-OstapNeural',     'uk-UA-PolinaNeural'],
-    sr: ['sr-RS-NicholasNeural',  'sr-RS-SopieNeural'],
-    ar: ['ar-SA-HamedNeural',     'ar-SA-ZariyahNeural'],
-    ur: ['ur-PK-AsadNeural',      'ur-PK-UzmaNeural'],
-    fa: ['fa-IR-FaridNeural',     'fa-IR-DilaraNeural'],
-    fr: ['fr-FR-HenriNeural',     'fr-FR-DeniseNeural'],
-    es: ['es-ES-AlvaroNeural',    'es-ES-ElviraNeural'],
-    it: ['it-IT-DiegoNeural',     'it-IT-ElsaNeural'],
-    de: ['de-DE-ConradNeural',    'de-DE-KatjaNeural'],
-    pt: ['pt-BR-AntonioNeural',   'pt-BR-FranciscaNeural'],
-    sv: ['sv-SE-MattiasNeural',   'sv-SE-SofieNeural'],
-    nb: ['nb-NO-FinnNeural',      'nb-NO-PernilleNeural'],
-    da: ['da-DK-JeppeNeural',     'da-DK-ChristelNeural'],
-    fi: ['fi-FI-HarriNeural',     'fi-FI-NooraNeural'],
-    nl: ['nl-NL-MaartenNeural',   'nl-NL-ColetteNeural'],
-    pl: ['pl-PL-MarekNeural',     'pl-PL-ZofiaNeural'],
-    cs: ['cs-CZ-AntoninNeural',   'cs-CZ-VlastaNeural'],
-    hu: ['hu-HU-TamasNeural',     'hu-HU-NoemiNeural'],
-    ro: ['ro-RO-EmilNeural',      'ro-RO-AlinaNeural'],
-    hr: ['hr-HR-SreckoNeural',    'hr-HR-GabrijelaNeural'],
-    et: ['et-EE-KertNeural',      'et-EE-AnuNeural'],
-    lt: ['lt-LT-LeonasNeural',    'lt-LT-OnaNeural'],
-    lv: ['lv-LV-NilsNeural',      'lv-LV-EveritaNeural'],
-    tr: ['tr-TR-AhmetNeural',     'tr-TR-EmelNeural'],
-    vi: ['vi-VN-NamMinhNeural',   'vi-VN-HoaiMyNeural'],
-    fil:['fil-PH-AngeloNeural',   'fil-PH-BlessicaNeural'],
-    id: ['id-ID-ArdiNeural',      'id-ID-GadisNeural'],
-    ms: ['ms-MY-OsmanNeural',     'ms-MY-YasminNeural'],
-    af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
-    en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
-  };
-
-  const currentGender = ttsGenderRef.current;
-  const v = (lang) => (VOICES[lang] || VOICES['en'])[currentGender === 'female' ? 1 : 0];
-
-  if (!t || t.trim().length < 2) return v('en');
+  if (!t || t.trim().length < 2) return getVoiceForLang('en');
 
   try {
     const res = await fetch(API, {
@@ -1492,40 +1497,34 @@ const detectLangVoice = useCallback(async (t) => {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'Identify the language. Return ONLY the 2-letter or 3-letter ISO language code (e.g., en, hi, fil, ja). Absolutely no other words or symbols.',
-        history: [{ role: 'user', content: t.slice(0, 60) }]
+        prompt: 'Identify the language of the user text. Reply with ONLY the raw 2-letter or 3-letter ISO language code lowercase. Do not wrap in JSON. Do not write markdown. Example: "hi" or "en". No extra text.',
+        history: [{ role: 'user', content: t.slice(0, 100) }]
       })
     });
 
-    if (!res.ok) return v('en');
+    if (!res.ok) return getVoiceForLang('en');
 
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
+    const rawText = await res.text();
     let detectedLang = '';
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      for (const line of dec.decode(value).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try { 
-          const p = JSON.parse(raw); 
-          if (p.content) detectedLang += p.content; 
-        } catch(_) {}
-      }
+    for (const line of rawText.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const raw = line.slice(6).trim();
+      if (raw === '[DONE]' || !raw) continue;
+      try { 
+        const p = JSON.parse(raw); 
+        if (p.content) detectedLang += p.content; 
+      } catch(_) {}
     }
 
     const cleanLang = detectedLang.trim().toLowerCase().replace(/[^a-z]/g, '');
-    if (VOICES[cleanLang]) return v(cleanLang);
+    return getVoiceForLang(cleanLang);
 
   } catch (error) {
-    console.error("AI language stream failed:", error);
+    console.error("AI language detector broke:", error);
   }
 
-  return v('en');
+  return getVoiceForLang('en');
 }, []);
 
 // ── CLEAN TEXT FOR TTS ──
@@ -1560,7 +1559,15 @@ const cleanForTTS = useCallback((t) => {
 // ── PRELOAD TTS ──
 const preloadTTS = useCallback(async (t) => {
   const gender = ttsGenderRef.current;
-  const voice = await detectLangVoice(t);
+  const hasInternationalScript = /[^\u0000-\u007F]/.test(t);
+  let voice;
+  
+  if (!hasInternationalScript && /^[\s.,!?;:'"()A-Za-z0-9\-–—]*$/.test(t)) {
+    voice = getVoiceForLang('en');
+  } else {
+    voice = await detectLangVoice(t);
+  }
+
   const clean = cleanForTTS(t);
   if (!clean || clean.length < 3) return;
   const cacheKey = `${gender}_${voice}_${clean}`;
@@ -1586,7 +1593,7 @@ const preloadTTS = useCallback(async (t) => {
   } catch(_) {}
 }, [cleanForTTS, detectLangVoice]);
 
-// ── SPEAK TEXT (OPTIMIZED FOR ULTRA-LOW LATENCY) ──
+// ── SPEAK TEXT ──
 const speakText = useCallback(async (t) => {
   try {
     const gender = ttsGenderRef.current;
@@ -1603,22 +1610,16 @@ const speakText = useCallback(async (t) => {
       audioPlayback.play().catch(e => console.log("Playback interrupted safely:", e));
     };
 
-    // SPEED BOOST 1: Detect basic Latin/English layouts locally instantly
-    // If text only contains standard English letters/numbers, bypass AI detection wait entirely
-    const isEnglishOnly = /^[\s.,!?;:'"()A-Za-z0-9\-–—]*$/.test(clean);
-    let voicePromise;
+    const hasInternationalScript = /[^\u0000-\u007F]/.test(t);
+    let voice;
 
-    if (isEnglishOnly) {
-      voicePromise = Promise.resolve(gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural');
+    if (!hasInternationalScript && /^[\s.,!?;:'"()A-Za-z0-9\-–—]*$/.test(clean)) {
+      voice = getVoiceForLang('en');
     } else {
-      // Start checking language background thread immediately
-      voicePromise = detectLangVoice(t);
+      const voicePromise = detectLangVoice(t);
+      const timeoutPromise = new Promise(res => setTimeout(() => res(getVoiceForLang('en')), 1800));
+      voice = await Promise.race([voicePromise, timeoutPromise]);
     }
-
-    // SPEED BOOST 2: Setup an execution timeout race condition
-    // If the language identification API takes more than 550ms, fall back instantly to avoid lag.
-    const timeoutPromise = new Promise(res => setTimeout(() => res(gender === 'female' ? 'en-US-AriaNeural' : 'en-US-GuyNeural'), 550));
-    const voice = await Promise.race([voicePromise, timeoutPromise]);
 
     const cacheKey = `${gender}_${voice}_${clean}`;
 
