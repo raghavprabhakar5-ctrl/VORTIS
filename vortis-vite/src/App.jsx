@@ -1417,6 +1417,7 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
+
 // ── TTS REFS ──
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
@@ -1425,7 +1426,7 @@ const currentAudioRef = useRef(null);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
 // ── DETECT LANGUAGE VOICE ──
-const detectLangVoice = async (text, gender = 'male') => {
+const detectLangVoice = useCallback(async (t) => {
   const VOICES = {
     hi: ['hi-IN-MadhurNeural',    'hi-IN-SwaraNeural'],
     bn: ['bn-BD-PradeepNeural',   'bn-BD-NabanitaNeural'],
@@ -1480,8 +1481,9 @@ const detectLangVoice = async (text, gender = 'male') => {
     af: ['af-ZA-WillemNeural',    'af-ZA-AdriNeural'],
     en: ['en-US-GuyNeural',       'en-US-AriaNeural'],
   };
-const gender = ttsGenderRef.current;
-  const v = (lang) => (VOICES[lang] || VOICES['en'])[gender === 'female' ? 1 : 0];
+
+  const currentGender = ttsGenderRef.current;
+  const v = (lang) => (VOICES[lang] || VOICES['en'])[currentGender === 'female' ? 1 : 0];
 
   if (!t || t.trim().length < 2) return v('en');
 
@@ -1518,17 +1520,15 @@ const gender = ttsGenderRef.current;
     }
 
     const cleanLang = detectedLang.trim().toLowerCase().replace(/[^a-z]/g, '');
-
-    if (VOICES[cleanLang]) {
-      return v(cleanLang);
-    }
+    if (VOICES[cleanLang]) return v(cleanLang);
 
   } catch (error) {
     console.error("AI language stream failed:", error);
   }
 
   return v('en');
-};
+}, []);
+
 // ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
@@ -1573,11 +1573,11 @@ const cleanForTTS = useCallback((t) => {
 }, []);
 
 // ── PRELOAD TTS ──
-const preloadTTS = useCallback(async (text) => {
+const preloadTTS = useCallback(async (t) => {
   const gender = ttsGenderRef.current;
-  // ── FIX: detect language from ORIGINAL text, before cleaning ──
-  const voice = await detectLangVoice(text, gender);
-  const clean = cleanForTTS(text);
+  // ── FIX: detect language using single local input variable argument string ──
+  const voice = await detectLangVoice(t);
+  const clean = cleanForTTS(t);
   if (!clean || clean.length < 3) return;
   const cacheKey = `${gender}_${voice}_${clean}`;
   if (ttsCache.current.has(cacheKey)) return;
@@ -1600,14 +1600,14 @@ const preloadTTS = useCallback(async (text) => {
     }).catch((e) => { ttsPending.current.delete(cacheKey); throw e; });
     ttsPending.current.set(cacheKey, promise);
   } catch(_) {}
-}, [cleanForTTS]);
+}, [cleanForTTS, detectLangVoice]);
 
 // ── SPEAK TEXT ──
 const speakText = useCallback(async (t) => {
   try {
     const gender = ttsGenderRef.current;
-    // ── FIX: detect language from ORIGINAL text, before cleaning ──
-    const voice = await detectLangVoice(t, gender);
+    // ── FIX: detect language using single local input variable argument string ──
+    const voice = await detectLangVoice(t);
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
     const cacheKey = `${gender}_${voice}_${clean}`;
@@ -1643,7 +1643,7 @@ const speakText = useCallback(async (t) => {
     ttsCache.current.set(cacheKey, src);
     playSafely(src);
   } catch(_) {}
-}, [cleanForTTS]);
+}, [cleanForTTS, detectLangVoice]);
 
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
@@ -1660,6 +1660,7 @@ const addMsg = (type, text, speak = false) => {
   if (speak && autoSpeak && type === 'vortis') speakText(text);
   return msg;
 };
+
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
