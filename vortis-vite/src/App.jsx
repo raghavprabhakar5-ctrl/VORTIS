@@ -1754,9 +1754,6 @@ GENERATE_IMAGE: <description>
 ──────────────────────────────────────
 WEB_SEARCH: <query>
 ──────────────────────────────────────
-──────────────────────────────────────
-WEB_SEARCH: <query>
-──────────────────────────────────────
 → ONLY search for things that change over time: live scores, breaking news, today's weather, current stock prices, recent events, new song/movie releases
 → NEVER search for: greetings, coding, math, explanations, definitions, creative writing, general knowledge, questions about yourself
 → NEVER search if you already know the answer
@@ -1766,9 +1763,14 @@ WEB_SEARCH: <query>
 → NEVER mention that you searched — answer naturally
 → The WEB_SEARCH: command must be on its own line
 ──────────────────────────────────────
-CURRENT_TIME
+CURRENT_TIME & DATE 
 ──────────────────────────────────────
-→ Output ONLY this command (nothing else) when user asks what time or date it is
+- Output ONLY this command (nothing else) when user asks what time or date it is
+- Only show time/date when the user directly requests it. 
+- No time/date in the beginning of responses
+- No time/date in the middle of responses
+- No time/date at the end of responses
+- No hidden or automatic time insertion 
 
 ═══════════════════════════════════════
 RESPONSE QUALITY RULES
