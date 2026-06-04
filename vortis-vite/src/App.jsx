@@ -1662,22 +1662,57 @@ const stopSpeaking = useCallback(() => {
 }, []);
 
 const speakText = useCallback(async (t) => {
-  // If already speaking — stop it first (toggle behavior)
+  // ── Hard guard: if already fetching/playing, kill everything and return ──
   if (isSpeakingRef.current) {
     stopSpeaking();
     return;
   }
 
+  // ── Set flag IMMEDIATELY before any await ──
+  isSpeakingRef.current = true;
+
   try {
-    isSpeakingRef.current = true;
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) { isSpeakingRef.current = false; return; }
 
     const voice = detectLangVoice(clean, gender);
+    const cacheKey = `${gender}_${clean}`;
 
-    // Get cached auth — no round trip if token still valid
+    // ── Check cache first — if preload already ran, play instantly ──
+    const cached = ttsCache.current.get(cacheKey);
+    if (cached) {
+      const audio = new Audio(cached);
+      currentAudiosRef.current = [audio];
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
+      return;
+    }
+
+    // ── If a preload fetch is in flight, await it ──
+    const pending = ttsPending.current.get(cacheKey);
+    if (pending) {
+      const src = await pending;
+      if (!isSpeakingRef.current) return; // cancelled while waiting
+      if (src) {
+        const audio = new Audio(src);
+        currentAudiosRef.current = [audio];
+        await new Promise((resolve) => {
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play().catch(resolve);
+        });
+      }
+      return;
+    }
+
+    // ── No cache, no pending — fetch now ──
+    const MAX = 800;
     const headers = await getCachedAuthHeader();
+    if (!isSpeakingRef.current) return;
 
     const fetchChunk = (text) =>
       fetch(API, {
@@ -1689,21 +1724,21 @@ const speakText = useCallback(async (t) => {
         .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
         .catch(() => null);
 
-    const MAX = 800;
-
     if (clean.length <= MAX) {
       const src = await fetchChunk(clean);
-      // Check if cancelled while fetching
-      if (!isSpeakingRef.current || !src) { isSpeakingRef.current = false; return; }
+      if (!isSpeakingRef.current || !src) return;
+      if (src) ttsCache.current.set(cacheKey, src);
       const audio = new Audio(src);
       currentAudiosRef.current = [audio];
-      audio.onended = () => { isSpeakingRef.current = false; currentAudiosRef.current = []; };
-      audio.onerror = () => { isSpeakingRef.current = false; currentAudiosRef.current = []; };
-      audio.play().catch(() => { isSpeakingRef.current = false; });
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
       return;
     }
 
-    // Split long text
+    // ── Long text: pipeline chunks ──
     const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
     let cur = '';
@@ -1713,19 +1748,14 @@ const speakText = useCallback(async (t) => {
     }
     if (cur.trim()) chunks.push(cur.trim());
 
-    // Pipeline: fetch next while current plays
     let nextFetch = fetchChunk(chunks[0]);
 
     for (let i = 0; i < chunks.length; i++) {
-      // Cancelled mid-way — stop immediately
       if (!isSpeakingRef.current) return;
-
       const srcPromise = nextFetch;
       if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
-
       const src = await srcPromise;
       if (!isSpeakingRef.current || !src) continue;
-
       await new Promise((resolve) => {
         const audio = new Audio(src);
         currentAudiosRef.current = [audio];
@@ -1751,6 +1781,7 @@ const addMsg = (type, text, speak = false) => {
     !text.includes('__IMG_LOADING__') &&
     !text.startsWith('<style>')
   ) {
+    // Pre-warm immediately — fires the fetch in background
     preloadTTS(text);
   }
   if (speak && autoSpeak && type === 'vortis') speakText(text);
