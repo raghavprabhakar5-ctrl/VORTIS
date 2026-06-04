@@ -1534,7 +1534,7 @@ const detectLangVoice = (text, gender = 'male') => {
       return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
     }
 
-    // 2. Hinglish detection — romanized Hindi words in Latin script
+    // 2. Hinglish detection
     const hinglishWords = [
       'yaar','kya','hai','hain','mera','tera','apna','karo','karta','karti',
       'nahi','nhi','hoga','hogi','bhai','dost','acha','accha','thik','theek',
@@ -1549,16 +1549,27 @@ const detectLangVoice = (text, gender = 'male') => {
     const lower = text.toLowerCase();
     const words = lower.split(/\s+/);
     const hinglishCount = words.filter(w => hinglishWords.includes(w)).length;
-    // If 2+ Hinglish words found, use Hindi voice
-    if (hinglishCount >= 2) {
-      return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
-    }
-    // If 1 Hinglish word + text is short, still use Hindi
-    if (hinglishCount >= 1 && words.length <= 12) {
-      return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    if (hinglishCount >= 2) return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    if (hinglishCount >= 1 && words.length <= 12) return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+
+    // 3. ── ENGLISH LOCK — prevents tinyld from randomly picking en-IN, en-GB, en-AU ──
+    // tinyld often misidentifies plain English as regional variants.
+    // If text is mostly Latin script with no Hinglish words, treat as en-US.
+    const nonLatinRatio = (text.match(/[^\u0000-\u007F]/g) || []).length / text.length;
+    if (nonLatinRatio < 0.15) {
+      // Text is mostly ASCII/Latin — force consistent en-US or en-IN based on user preference
+      // We use en-IN for Indian users (detectable by Hinglish proximity) else en-US
+      const detected = detect(text) || 'en';
+      // Only allow non-English if tinyld is very confident (non-English Latin languages)
+      const allowedNonEnglish = ['fr','de','es','pt','it','nl','pl','tr','sv','no','da','fi','cs','sk','ro','hu','el','bg','hr','uk','ca','vi','id','ms','af'];
+      if (allowedNonEnglish.includes(detected)) {
+        return VOICE_MAP[detected]?.[gender === 'female' ? 1 : 0] || fallback;
+      }
+      // For anything detected as en, en-IN, en-GB, en-AU — use single consistent voice
+      return VOICE_MAP['en'][gender === 'female' ? 1 : 0]; // always en-US-GuyNeural / en-US-AriaNeural
     }
 
-    // 3. tinyld for all other languages
+    // 4. For non-Latin heavy text — use tinyld
     const detected = detect(text) || 'en';
     const voices = VOICE_MAP[detected];
     return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
