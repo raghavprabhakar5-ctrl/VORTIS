@@ -1422,6 +1422,11 @@ const saveChat = useCallback(async (msgsToSave) => {
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
 const ttsGenderRef = useRef(ttsGender);
+const currentAudiosRef = useRef([]);   
+const isSpeakingRef = useRef(false);   
+const authHeaderCache = useRef(null);  
+const authHeaderExpiry = useRef(0);    
+const ttsGenderRef = useRef(ttsGender);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
 // ── DETECT LANGUAGE BY SCRIPT (Unicode ranges) ──
@@ -1620,17 +1625,45 @@ const preloadTTS = useCallback(async (text) => {
 }, [cleanForTTS]);
 
 // ── SPEAK TEXT ──
+// ── CACHED AUTH — only refetches every 50 mins ──
+const getCachedAuthHeader = useCallback(async () => {
+  const now = Date.now();
+  if (authHeaderCache.current && now < authHeaderExpiry.current) {
+    return authHeaderCache.current;
+  }
+  const headers = await getAuthHeader();
+  authHeaderCache.current = headers;
+  authHeaderExpiry.current = now + 50 * 60 * 1000; // 50 min
+  return headers;
+}, []);
+
+const stopSpeaking = useCallback(() => {
+  // Kill all playing audio immediately
+  currentAudiosRef.current.forEach(a => {
+    a.pause();
+    a.src = '';
+  });
+  currentAudiosRef.current = [];
+  isSpeakingRef.current = false;
+}, []);
+
 const speakText = useCallback(async (t) => {
+  // If already speaking — stop it first (toggle behavior)
+  if (isSpeakingRef.current) {
+    stopSpeaking();
+    return;
+  }
+
   try {
+    isSpeakingRef.current = true;
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
-    if (!clean || clean.length < 3) return;
+    if (!clean || clean.length < 3) { isSpeakingRef.current = false; return; }
 
-    // Detect language ONCE from full text
     const voice = detectLangVoice(clean, gender);
 
-    // Get auth header ONCE, reuse for all chunks
-    const headers = await getAuthHeader();
+    // Get cached auth — no round trip if token still valid
+    const headers = await getCachedAuthHeader();
 
     const fetchChunk = (text) =>
       fetch(API, {
@@ -1642,54 +1675,57 @@ const speakText = useCallback(async (t) => {
         .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
         .catch(() => null);
 
-    // Under 800 chars → single call, no splits
     const MAX = 800;
+
     if (clean.length <= MAX) {
       const src = await fetchChunk(clean);
-      if (!src) return;
+      // Check if cancelled while fetching
+      if (!isSpeakingRef.current || !src) { isSpeakingRef.current = false; return; }
       const audio = new Audio(src);
-      audio.play().catch(() => {});
+      currentAudiosRef.current = [audio];
+      audio.onended = () => { isSpeakingRef.current = false; currentAudiosRef.current = []; };
+      audio.onerror = () => { isSpeakingRef.current = false; currentAudiosRef.current = []; };
+      audio.play().catch(() => { isSpeakingRef.current = false; });
       return;
     }
 
-    // Split long text into chunks
+    // Split long text
     const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
     let cur = '';
     for (const s of sentences) {
-      if ((cur + s).length > MAX && cur.length > 0) {
-        chunks.push(cur.trim());
-        cur = s;
-      } else {
-        cur += s;
-      }
+      if ((cur + s).length > MAX && cur.length > 0) { chunks.push(cur.trim()); cur = s; }
+      else cur += s;
     }
     if (cur.trim()) chunks.push(cur.trim());
 
-    // Pipeline: fetch chunk[i+1] while chunk[i] is PLAYING
-    // This eliminates gaps almost entirely
-    let nextFetch = fetchChunk(chunks[0]); // start fetching chunk 0 immediately
+    // Pipeline: fetch next while current plays
+    let nextFetch = fetchChunk(chunks[0]);
 
     for (let i = 0; i < chunks.length; i++) {
+      // Cancelled mid-way — stop immediately
+      if (!isSpeakingRef.current) return;
+
       const srcPromise = nextFetch;
+      if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
 
-      // Kick off next fetch immediately (don't wait for current to play)
-      if (i + 1 < chunks.length) {
-        nextFetch = fetchChunk(chunks[i + 1]);
-      }
-
-      const src = await srcPromise; // await only the current one
-      if (!src) continue;
+      const src = await srcPromise;
+      if (!isSpeakingRef.current || !src) continue;
 
       await new Promise((resolve) => {
         const audio = new Audio(src);
+        currentAudiosRef.current = [audio];
         audio.onended = resolve;
         audio.onerror = resolve;
         audio.play().catch(resolve);
       });
     }
   } catch (_) {}
-}, [cleanForTTS]);
+  finally {
+    isSpeakingRef.current = false;
+    currentAudiosRef.current = [];
+  }
+}, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
 
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
