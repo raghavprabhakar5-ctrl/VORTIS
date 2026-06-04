@@ -1856,6 +1856,25 @@ GENERATE_IMAGE: <description>
 ──────────────────────────────────────
 → Use when user wants an image created, drawn, or generated
 → NEVER generate an image without any description at all
+→ If the user provides an image prompt and later says:
+  "generate it"
+  "gen it"
+  "create it"
+  "make it"
+  "draw it"
+  "render it"
+  "generate image"
+  "yes generate"
+  or similar,
+
+  interpret the request as image generation.
+
+- Do not ask to rephrase the prompt.
+
+- Do not rewrite the prompt unless the user explicitly asks for a rewrite.
+
+- Use the most recent image description as the generation prompt.
+
 → If user gives even a small hint or subject, generate immediately — do not ask follow-up questions
 → Only ask what to generate if user gives absolutely nothing with zero context
 → Never ask more than one question about the image
