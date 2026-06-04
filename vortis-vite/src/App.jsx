@@ -559,7 +559,7 @@ const SelectionReply = ({ onReply }) => {
   pointerEvents: 'all',
   willChange: 'transform',
 }}>
-      <button
+     <button
   onMouseDown={e => {
     e.preventDefault();
     e.stopPropagation();
@@ -568,30 +568,30 @@ const SelectionReply = ({ onReply }) => {
     setPos(null);
     setSel('');
   }}
-      style={{
-  background: '#1e1e2e',
-  border: '1px solid rgba(255,255,255,0.12)',
-  color: 'white',
-  borderRadius: 8,
-  padding: '8px 18px',
-  fontSize: 13.5,
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontFamily: 'Geist,sans-serif',
-  boxShadow: '0 2px 12px rgba(0,0,0,.4)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  whiteSpace: 'nowrap',
-  userSelect: 'none',
-}}
+  style={{
+    background: 'rgba(99,102,241,0.12)',
+    border: '1px solid rgba(99,102,241,0.4)',
+    color: '#6366f1',
+    borderRadius: 8,
+    padding: '8px 18px',
+    fontSize: 13.5,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'Geist,sans-serif',
+    boxShadow: '0 2px 12px rgba(0,0,0,.4)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    whiteSpace: 'nowrap',
+    userSelect: 'none',
+  }}
 >
   Reply
- <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="9 17 4 12 9 7"/>
     <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
   </svg>
-      </button>
+</button>
     </div>
   );
 };
