@@ -139,77 +139,51 @@ function isComplexMessage(text) {
 
 // ── STREAMING callAI — sends tokens as they arrive ────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
-  const lastMsg   = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
   const isComplex = isComplexMessage(lastMsg);
-  const model     = isComplex ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const model = isComplex ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
   const maxTokens = isComplex ? 2000 : 800;
 
-  // ── Try Groq streaming first ──
-  try {
-    const stream = await groq.chat.completions.create({
-      model,
-      messages,
-      max_tokens:  maxTokens,
-      temperature: 0.7,
-      stream:      true,   // ← KEY: stream tokens as they arrive
-    });
+  // ── Try Groq streaming ──
+  for (const modelToTry of [model, isComplex ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
+    try {
+      const stream = await groq.chat.completions.create({
+        model: modelToTry,
+        messages,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+        stream: true,
+      });
 
-    let buffer = '';
-    for await (const chunk of stream) {
-      const token = chunk.choices?.[0]?.delta?.content;
-      if (!token) continue;
-      buffer += token;
-      // Send every token immediately — user sees text appear in real time
-      res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-    }
+      let buffer = '';
+      for await (const chunk of stream) {
+        const token = chunk.choices?.[0]?.delta?.content;
+        if (!token) continue;
+        buffer += token;
+        res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+      }
 
-    // If primary model gave nothing, fall through to fallback
-    if (buffer.trim().length > 2) {
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return true;
+      // ── KEY FIX: if buffer is empty or just whitespace, try next model ──
+      if (buffer.trim().length > 2) {
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return true;
+      }
+      console.warn(`Model ${modelToTry} returned empty — trying fallback`);
+    } catch (e) {
+      console.error(`Groq stream failed (${modelToTry}):`, e.message);
     }
-  } catch (e) {
-    console.error(`Groq stream failed (${model}):`, e.message);
   }
 
-  // ── Groq fallback: try the other model streaming ──
-  const fallbackModel = isComplex ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY;
-  try {
-    const stream = await groq.chat.completions.create({
-      model:       fallbackModel,
-      messages,
-      max_tokens:  maxTokens,
-      temperature: 0.7,
-      stream:      true,
-    });
-
-    let buffer = '';
-    for await (const chunk of stream) {
-      const token = chunk.choices?.[0]?.delta?.content;
-      if (!token) continue;
-      buffer += token;
-      res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-    }
-
-    if (buffer.trim().length > 2) {
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return true;
-    }
-  } catch (e) {
-    console.error(`Groq fallback stream failed:`, e.message);
-  }
-
-  // ── CF fallback: non-streaming but still sends chunks ──
+  // ── CF fallback ──
   for (const cfModel of CF_CHAT_MODELS) {
     try {
       const cfRes = await fetch(
         `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
         {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ messages, stream: false, max_tokens: 1200 }),
+          body: JSON.stringify({ messages, stream: false, max_tokens: 1200 }),
         }
       );
       if (!cfRes.ok) continue;

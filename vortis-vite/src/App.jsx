@@ -2033,30 +2033,15 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
   .replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, '')
   .replace(/<tool>[\s\S]*?<\/tool>/gi, '')
 
-  // System labels
+  // System labels — only strip when they are the ENTIRE line, not mid-sentence
   .replace(/^assistant\s*$/gim, '')
   .replace(/^assistant:\s*$/gim, '')
-  .replace(/^assistant\s+/gim, '')
-  .replace(/^assistant:\s+/gim, '')
-  .replace(/^assistant>\s*/gim, '')
-
   .replace(/^system\s*$/gim, '')
   .replace(/^system:\s*$/gim, '')
-  .replace(/^system\s+/gim, '')
-  .replace(/^system:\s+/gim, '')
-  .replace(/^system>\s*/gim, '')
-
   .replace(/^user\s*$/gim, '')
   .replace(/^user:\s*$/gim, '')
-  .replace(/^user\s+/gim, '')
-  .replace(/^user:\s+/gim, '')
-  .replace(/^user>\s*/gim, '')
-
   .replace(/^human\s*$/gim, '')
   .replace(/^human:\s*$/gim, '')
-  .replace(/^human\s+/gim, '')
-  .replace(/^human:\s+/gim, '')
-  .replace(/^human>\s*/gim, '')
 
   // Misc internal messages
   .replace(/^CURRENT_TIME\s*$/gim, '')
@@ -2069,7 +2054,15 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
   .replace(/\n{3,}/g, '\n\n')
   .replace(/^\s*\n/, '')
   .trim();
-      addMsg('vortis', displayText || "Could you rephrase that?", shouldSpeak);
+
+// ── SAFE FALLBACK: never lose real content ──
+const finalDisplay = displayText.length > 1
+  ? displayText
+  : full.trim().length > 1
+    ? full.trim()
+    : "Something went wrong — please try again.";
+
+addMsg('vortis', finalDisplay, shouldSpeak);
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
