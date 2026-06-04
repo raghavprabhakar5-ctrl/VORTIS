@@ -1626,42 +1626,67 @@ const speakText = useCallback(async (t) => {
     const clean = cleanForTTS(t);
     if (!clean || clean.length < 3) return;
 
-    // Split into chunks of ~300 chars at sentence boundaries
+    // Detect language ONCE from full text
+    const voice = detectLangVoice(clean, gender);
+
+    // Get auth header ONCE, reuse for all chunks
+    const headers = await getAuthHeader();
+
+    const fetchChunk = (text) =>
+      fetch(API, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'tts', text, voice })
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
+        .catch(() => null);
+
+    // Under 800 chars → single call, no splits
+    const MAX = 800;
+    if (clean.length <= MAX) {
+      const src = await fetchChunk(clean);
+      if (!src) return;
+      const audio = new Audio(src);
+      audio.play().catch(() => {});
+      return;
+    }
+
+    // Split long text into chunks
+    const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
-    const sentences = clean.match(/[^.!?]+[.!?]*/g) || [clean];
-    let current = '';
-    for (const sentence of sentences) {
-      if ((current + sentence).length > 300 && current.length > 0) {
-        chunks.push(current.trim());
-        current = sentence;
+    let cur = '';
+    for (const s of sentences) {
+      if ((cur + s).length > MAX && cur.length > 0) {
+        chunks.push(cur.trim());
+        cur = s;
       } else {
-        current += sentence;
+        cur += s;
       }
     }
-    if (current.trim()) chunks.push(current.trim());
+    if (cur.trim()) chunks.push(cur.trim());
 
-    // Play chunks sequentially
-    for (const chunk of chunks) {
-      if (!chunk) continue;
-      const voice = detectLangVoice(chunk, gender);
-      try {
-        const res = await fetch(API, {
-          method: 'POST',
-          headers: await getAuthHeader(),
-          body: JSON.stringify({ action: 'tts', text: chunk, voice })
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        if (!data.audio || data.audio.length < 100) continue;
+    // Pipeline: fetch chunk[i+1] while chunk[i] is PLAYING
+    // This eliminates gaps almost entirely
+    let nextFetch = fetchChunk(chunks[0]); // start fetching chunk 0 immediately
 
-        // Wait for this chunk to finish before playing next
-        await new Promise((resolve) => {
-          const audio = new Audio(`data:audio/mp3;base64,${data.audio}`);
-          audio.onended = resolve;
-          audio.onerror = resolve;
-          audio.play().catch(resolve);
-        });
-      } catch (_) {}
+    for (let i = 0; i < chunks.length; i++) {
+      const srcPromise = nextFetch;
+
+      // Kick off next fetch immediately (don't wait for current to play)
+      if (i + 1 < chunks.length) {
+        nextFetch = fetchChunk(chunks[i + 1]);
+      }
+
+      const src = await srcPromise; // await only the current one
+      if (!src) continue;
+
+      await new Promise((resolve) => {
+        const audio = new Audio(src);
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
     }
   } catch (_) {}
 }, [cleanForTTS]);

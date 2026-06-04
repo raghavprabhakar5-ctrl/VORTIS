@@ -17,46 +17,22 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
+const GROQ_CHAT_PRIMARY = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const GROQ_CHAT_QUALITY = 'meta-llama/llama-4-maverick-17b-128e-instruct';
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   '@cf/qwen/qwen3-30b-a3b-fp8',
 ];
 
-const CF_CODE_MODELS = [
-  '@cf/qwen/qwen3-30b-a3b-fp8',
-  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
-];
-
-const ENGINE_LABELS = {
-  groq_fast:    'Vortis α',
-  groq_quality: 'Vortis β',
-  cf_primary:   'Vortis γ',
-  cf_secondary: 'Vortis δ',
-  cf_code:      'Vortis ε',
-  unknown:      'Vortis',
-};
-
-function getEngineLabel(p) {
-  if (!p) return ENGINE_LABELS.unknown;
-  if (p.includes(GROQ_CHAT_PRIMARY))  return ENGINE_LABELS.groq_fast;
-  if (p.includes(GROQ_CHAT_QUALITY))  return ENGINE_LABELS.groq_quality;
-  if (p.includes(CF_CHAT_MODELS[0]))  return ENGINE_LABELS.cf_primary;
-  if (p.includes(CF_CHAT_MODELS[1]))  return ENGINE_LABELS.cf_secondary;
-  if (p.includes(CF_CODE_MODELS[0]))  return ENGINE_LABELS.cf_code;
-  return ENGINE_LABELS.unknown;
-}
-
 // ── RATE LIMITER ──────────────────────────────────────────────
 const rateLimiter = new Map();
 const RATE_LIMITS = {
   chat:   { window: 60000, max: 30 },
-  image:  { window: 60000, max: 5 },
+  image:  { window: 60000, max: 5  },
   search: { window: 60000, max: 20 },
-  vision: { window: 60000, max: 5 },
-  tts: { window: 60000, max: 20 },
+  vision: { window: 60000, max: 5  },
+  tts:    { window: 60000, max: 20 },
 };
 
 setInterval(() => {
@@ -138,7 +114,6 @@ function isValidResponse(text) {
   return !/rate.?limit|connection.?error|too many request|try again later|quota exceeded|service unavailable/i.test(text.trim());
 }
 
-// ── STRIP INTERNAL REASONING ──────────────────────────────────
 function stripInternalReasoning(text) {
   if (!text) return text;
   return text
@@ -148,55 +123,128 @@ function stripInternalReasoning(text) {
     .trim();
 }
 
-// ── DETECT IF MESSAGE NEEDS LIVE SEARCH ──────────────────────
-function needsWebSearch(text) {
-  const low = text.toLowerCase();
-  if (/\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|virat|kohli|rohit|dhoni|wicket|innings|over|scorecard)\b/.test(low)) return true;
-  if (/\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis|f1|formula 1)\b/.test(low)) return true;
-  if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent)\b/.test(low)) return true;
-  if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather)\b/.test(low)) return true;
-  if (/\b(2024|2025|2026)\b/.test(low)) return true;
-  if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
+// ── COMPLEXITY CHECK — no API call, instant ───────────────────
+// Replaces the old classifyMessage() which wasted a full round-trip
+function isComplexMessage(text) {
+  const low = text.toLowerCase().trim();
+  // Short greetings / simple questions → fast model
+  if (low.length < 40) return false;
+  if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|what time|what date|how are you|who are you|what is your name)\b/.test(low)) return false;
+  // Complex signals → quality model
+  if (/\b(explain|compare|analyze|research|write|code|debug|essay|story|poem|translate|summarize|step by step|how does|why does|difference between|pros and cons|calculate|solve|math|equation|algorithm|implement|function|class|component)\b/.test(low)) return true;
+  if (text.length > 200) return true;
+  if (/```|def |function |class |import |const |let |var /.test(text)) return true;
   return false;
 }
 
-function buildSearchQuery(userMessage) {
-  const now     = new Date();
-  const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
-  if (/\b(20\d\d|today|yesterday|this week)\b/i.test(userMessage)) return userMessage.slice(0, 200);
-  return `${userMessage.slice(0, 180)} ${dateStr}`;
+// ── STREAMING callAI — sends tokens as they arrive ────────────
+async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
+  const lastMsg   = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const isComplex = isComplexMessage(lastMsg);
+  const model     = isComplex ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const maxTokens = isComplex ? 2000 : 800;
+
+  // ── Try Groq streaming first ──
+  try {
+    const stream = await groq.chat.completions.create({
+      model,
+      messages,
+      max_tokens:  maxTokens,
+      temperature: 0.7,
+      stream:      true,   // ← KEY: stream tokens as they arrive
+    });
+
+    let buffer = '';
+    for await (const chunk of stream) {
+      const token = chunk.choices?.[0]?.delta?.content;
+      if (!token) continue;
+      buffer += token;
+      // Send every token immediately — user sees text appear in real time
+      res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+    }
+
+    // If primary model gave nothing, fall through to fallback
+    if (buffer.trim().length > 2) {
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return true;
+    }
+  } catch (e) {
+    console.error(`Groq stream failed (${model}):`, e.message);
+  }
+
+  // ── Groq fallback: try the other model streaming ──
+  const fallbackModel = isComplex ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY;
+  try {
+    const stream = await groq.chat.completions.create({
+      model:       fallbackModel,
+      messages,
+      max_tokens:  maxTokens,
+      temperature: 0.7,
+      stream:      true,
+    });
+
+    let buffer = '';
+    for await (const chunk of stream) {
+      const token = chunk.choices?.[0]?.delta?.content;
+      if (!token) continue;
+      buffer += token;
+      res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+    }
+
+    if (buffer.trim().length > 2) {
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return true;
+    }
+  } catch (e) {
+    console.error(`Groq fallback stream failed:`, e.message);
+  }
+
+  // ── CF fallback: non-streaming but still sends chunks ──
+  for (const cfModel of CF_CHAT_MODELS) {
+    try {
+      const cfRes = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
+        {
+          method:  'POST',
+          headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ messages, stream: false, max_tokens: 1200 }),
+        }
+      );
+      if (!cfRes.ok) continue;
+      const data = await cfRes.json();
+      const text = stripInternalReasoning(data.result?.response || '');
+      if (isValidResponse(text)) {
+        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return true;
+      }
+    } catch (e) {
+      console.log(`CF model error (${cfModel}):`, e.message);
+    }
+  }
+
+  return false;
 }
 
-// ── SERPER (Google Search API) ────────────────────────────────
+// ── SERPER ────────────────────────────────────────────────────
 async function fetchSerper(query) {
   const key = process.env.SERPER_API_KEY;
-  if (!key) {
-    console.warn('SERPER_API_KEY not set');
-    return [];
-  }
+  if (!key) return [];
   try {
     const res = await fetchWithTimeout(
       'https://google.serper.dev/search',
       {
         method:  'POST',
-        headers: {
-          'X-API-KEY':     key,
-          'Content-Type':  'application/json',
-        },
-        body: JSON.stringify({
-          q:   query,
-          num: 10,
-          hl:  'en',
-          gl:  'us',
-        }),
+        headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ q: query, num: 10, hl: 'en', gl: 'us' }),
       },
       8000
     );
-    if (!res.ok) {
-      console.error(`Serper error: ${res.status}`);
-      return [];
-    }
-    const data = await res.json();
+    if (!res.ok) return [];
+    const data    = await res.json();
     const organic = (data.organic || []).map(r => ({
       title:   r.title   || '',
       snippet: r.snippet || '',
@@ -246,8 +294,8 @@ async function fetchESPN(query) {
     for (const event of (data.events || []).slice(0, 5)) {
       const comp = event.competitions?.[0];
       if (!comp) continue;
-      const home      = comp.competitors?.find(c => c.homeAway === 'home');
-      const away      = comp.competitors?.find(c => c.homeAway === 'away');
+      const home = comp.competitors?.find(c => c.homeAway === 'home');
+      const away = comp.competitors?.find(c => c.homeAway === 'away');
       if (!home || !away) continue;
       const homeName  = home.team?.displayName || 'Home';
       const awayName  = away.team?.displayName || 'Away';
@@ -312,7 +360,7 @@ function scoreAndSort(results, query) {
     if (/\b(\d+\/\d+|\d+ runs?|wickets?|overs?|chasing|target|all out)\b/i.test(r.snippet)) score += 40;
     if (/\b(\d+\/\d+|\d+ runs?|wickets?|overs?)\b/i.test(r.title))                          score += 30;
     if (/\b(score|result|won|win|beats|beat|defeat|victory|final score)\b/i.test(r.title))   score += 25;
-    if (/espn/i.test(r.source))        score += 15;
+    if (/espn/i.test(r.source))                                                               score += 15;
     if (/\b(streaming|where to watch|preview|pitch report|fantasy|dream11)\b/i.test(r.title)) score -= 40;
     if (/\b(buy|price|review|discount|offer|deal)\b/i.test(r.title))                          score -= 50;
     if (r.date === today)          score += 15;
@@ -331,100 +379,29 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
-async function classifyMessage(groq, message) {
-  try {
-    const result = await Promise.race([
-      groq.chat.completions.create({
-        model: GROQ_CHAT_PRIMARY,
-        messages: [
-          {
-            role: 'system',
-            content: 'How much thinking does this message need? Reply ONLY "simple" or "complex". Simple = can be answered in 1-3 sentences without deep thinking. Complex = needs long explanation, multiple steps, deep research, code, math, or detailed analysis.'
-          },
-          { role: 'user', content: message }
-        ],
-        max_tokens: 5,
-        temperature: 0
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
-    ]);
-    const label = result.choices?.[0]?.message?.content?.trim().toLowerCase();
-    return label?.includes('simple') ? 'simple' : 'complex';
-  } catch(_) {
-    return 'complex'; // safe fallback
-  }
+function needsWebSearch(text) {
+  const low = text.toLowerCase();
+  if (/\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|virat|kohli|rohit|dhoni|wicket|innings|over|scorecard)\b/.test(low)) return true;
+  if (/\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis|f1|formula 1)\b/.test(low)) return true;
+  if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent)\b/.test(low)) return true;
+  if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather)\b/.test(low)) return true;
+  if (/\b(2024|2025|2026)\b/.test(low)) return true;
+  if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
+  return false;
 }
 
-async function callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT }) {
-  const cfMaxTok = 1200;
-
-  // Get actual last user message — skip system messages
-  const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
-
-  // Classify first — tiny fast call
-  const complexity = await classifyMessage(groq, lastMsg);
-  const useQuality = complexity === 'complex';
-
-  // maxTokens defined AFTER useQuality
-  const maxTokens = useQuality ? 2000 : 800;
-
-  let combined = null, usedProvider = null;
-
-  // 1. Simple → fast model only
-  //    Complex → quality model directly
-  const modelToUse = useQuality ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const timeout = useQuality ? 20000 : 10000;
-
-  try {
-    const result = await Promise.race([
-      groq.chat.completions.create({ model: modelToUse, messages, max_tokens: maxTokens, temperature: 0.7 }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeout)),
-    ]);
-    const text = result.choices?.[0]?.message?.content || null;
-    if (isValidResponse(text)) { combined = text; usedProvider = modelToUse; }
-  } catch (e) { console.error(`Primary model failed: ${e.message}`); }
-
-  // 2. If chosen model failed — try the other one as fallback
-  if (!combined) {
-    const fallbackModel = useQuality ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY;
-    try {
-      const result = await Promise.race([
-        groq.chat.completions.create({ model: fallbackModel, messages, max_tokens: maxTokens, temperature: 0.7 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
-      ]);
-      const text = result.choices?.[0]?.message?.content || null;
-      if (isValidResponse(text)) { combined = text; usedProvider = fallbackModel; }
-    } catch (e) { console.error(`Fallback model failed: ${e.message}`); }
-  }
-
-  // 3. Cloudflare fallback — only if both groq models fail
-  if (!combined) {
-    for (const model of CF_CHAT_MODELS) {
-      try {
-        const cfRes = await fetch(
-          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${model}`,
-          {
-            method:  'POST',
-            headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ messages, stream: false, max_tokens: cfMaxTok }),
-          }
-        );
-        if (!cfRes.ok) continue;
-        const data = await cfRes.json();
-        const text = data.result?.response || '';
-        if (isValidResponse(text)) { combined = text; usedProvider = model; break; }
-      } catch (e) { console.log(`CF model error: ${e.message}`); }
-    }
-  }
-
-  return { text: combined, provider: usedProvider };
+function buildSearchQuery(userMessage) {
+  const now     = new Date();
+  const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+  if (/\b(20\d\d|today|yesterday|this week)\b/i.test(userMessage)) return userMessage.slice(0, 200);
+  return `${userMessage.slice(0, 180)} ${dateStr}`;
 }
+
 // ═════════════════════════════════════════════════════════════
 // ── MAIN HANDLER
 // ═════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
 
-  // CORS
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://vortis-ai.vercel.app').split(',');
   const origin         = req.headers.origin || '';
   if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
@@ -449,7 +426,6 @@ export default async function handler(req, res) {
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    // AUTH
     const token  = req.headers.authorization?.split('Bearer ')[1];
     const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -470,141 +446,130 @@ export default async function handler(req, res) {
 
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
-
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
 
+    // ╔══════════════════════════════════════╗
+    // ║  TTS                                 ║
+    // ╚══════════════════════════════════════╝
+    if (action === 'tts') {
+      const text  = sanitizeString(body.text  || '', 500);
+      const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
+      if (!text) return res.status(400).json({ error: 'Missing text' });
 
-// ╔══════════════════════════════════════╗
-// ║  TTS                                 ║
-// ╚══════════════════════════════════════╝
-if (action === 'tts') {
-  const text  = sanitizeString(body.text  || '', 500);
-  const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
-  if (!text) return res.status(400).json({ error: 'Missing text' });
+      const cleanText = text
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+        .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+        .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
+        .replace(/[\u2600-\u27BF]/g, '')
+        .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 400);
 
-  const cleanText = text
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
-    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
-    .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 400);
+      if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
 
-  if (!cleanText || cleanText.length < 2)
-    return res.status(200).json({ audio: '' });
+      try {
+        const { EdgeTTS } = await import('@andresaya/edge-tts');
+        const tts = new EdgeTTS();
+        await tts.synthesize(cleanText, voice, { outputFormat: 'audio-24khz-48kbitrate-mono-mp3' });
+        const base64 = await tts.toBase64();
+        if (base64 && base64.length > 100) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: base64 });
+        }
+        throw new Error('Empty audio');
+      } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
 
-  // ── ATTEMPT 1: @andresaya/edge-tts ──
-  try {
-    const { EdgeTTS } = await import('@andresaya/edge-tts');
-    const tts = new EdgeTTS();
-    await tts.synthesize(cleanText, voice, {
-      outputFormat: 'audio-24khz-48kbitrate-mono-mp3'
-    });
-    const base64 = await tts.toBase64();
-    if (base64 && base64.length > 100) {
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.status(200).json({ audio: base64 });
+      try {
+        const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+        const tts = new MsEdgeTTS();
+        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        const readable = tts.toStream(cleanText);
+        const chunks = [];
+        await new Promise((resolve, reject) => {
+          readable.on('data', chunk => chunks.push(chunk));
+          readable.on('end', resolve);
+          readable.on('error', reject);
+          setTimeout(() => reject(new Error('stream timeout')), 10000);
+        });
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 100) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: buf.toString('base64') });
+        }
+        throw new Error('Empty buffer');
+      } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
+
+      return res.status(200).json({ audio: '' });
     }
-    throw new Error('Empty audio');
-  } catch(e) {
-    console.log('TTS attempt 1 failed:', e.message);
-  }
-
-  // ── ATTEMPT 2: msedge-tts ──
-  try {
-    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    const readable = tts.toStream(cleanText);
-    const chunks = [];
-    await new Promise((resolve, reject) => {
-      readable.on('data', chunk => chunks.push(chunk));
-      readable.on('end', resolve);
-      readable.on('error', reject);
-      setTimeout(() => reject(new Error('stream timeout')), 10000);
-    });
-    const buf = Buffer.concat(chunks);
-    if (buf.length > 100) {
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.status(200).json({ audio: buf.toString('base64') });
-    }
-    throw new Error('Empty buffer');
-  } catch(e) {
-    console.log('TTS attempt 2 failed:', e.message);
-  }
-
-  return res.status(200).json({ audio: '' });
-}
 
     // ╔══════════════════════════════════════╗
-    // ║  CHAT                                ║
+    // ║  CHAT  — true token streaming        ║
     // ╚══════════════════════════════════════╝
     if (action === 'chat') {
       if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Connection',    'keep-alive');
 
       try {
         const lastUserMsg = history[history.length - 1]?.content || '';
 
-        // ── AUTO SEARCH ──
-        let searchContext = '';
-        if (needsWebSearch(lastUserMsg)) {
-          try {
-            const sq        = buildSearchQuery(lastUserMsg);
-            const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
-            const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
-
-            const [serperResult, espnResult] = await Promise.allSettled([
-              fetchSerper(sq),
-              (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
-            ]);
-
-            let allRes = [
-              ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
-              ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
-            ];
-
-            allRes = cleanResults(allRes, sq);
-            allRes = deduplicate(allRes);
-            allRes = scoreAndSort(allRes, sq);
-
-            if (allRes.length > 0) {
+        // ── Auto-search and geo run in PARALLEL — not sequential ──
+        const [searchContext, userLocation] = await Promise.all([
+          // Web search — only if needed
+          (async () => {
+            if (!needsWebSearch(lastUserMsg)) return '';
+            try {
+              const sq        = buildSearchQuery(lastUserMsg);
+              const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
+              const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
+              const [serperResult, espnResult] = await Promise.allSettled([
+                fetchSerper(sq),
+                (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
+              ]);
+              let allRes = [
+                ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
+                ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
+              ];
+              allRes = cleanResults(allRes, sq);
+              allRes = deduplicate(allRes);
+              allRes = scoreAndSort(allRes, sq);
+              if (allRes.length === 0) return '';
               const snippets = allRes.slice(0, 6).map((r, i) =>
                 `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
               ).join('\n\n');
-              searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
+              return `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
+            } catch (e) {
+              console.error('Auto-search failed:', e.message);
+              return '';
             }
-          } catch (e) {
-            console.error('Auto-search failed:', e.message);
-          }
-        }
+          })(),
 
-     // ── GEO LOOKUP ──
-let userLocation = '';
-try {
-  const geoRes = await fetchWithTimeout(
-    `https://ipapi.co/${userIp}/json/`,
-    { headers: { 'User-Agent': BROWSER_UA } },
-    3000
-  );
-  if (geoRes.ok) {
-    const geo = await geoRes.json();
-    if (geo.city && geo.country_name) {
-      userLocation = `${geo.city}, ${geo.region}, ${geo.country_name}`;
-    }
-  }
-} catch(_) {}
-// ── IDENTITY + SYSTEM PROMPT ──
+          // Geo — fire and forget, 3s max, never blocks chat
+          (async () => {
+            try {
+              const geoRes = await fetchWithTimeout(
+                `https://ipapi.co/${userIp}/json/`,
+                { headers: { 'User-Agent': BROWSER_UA } },
+                3000
+              );
+              if (geoRes.ok) {
+                const geo = await geoRes.json();
+                if (geo.city && geo.country_name) return `${geo.city}, ${geo.region}, ${geo.country_name}`;
+              }
+            } catch(_) {}
+            return '';
+          })(),
+        ]);
 
-        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.\n\nRESPONSE STYLE: Be concise and to the point. Short answers for simple questions (1-3 sentences max). For lists use max 5-6 bullet points. For technical/how-to questions keep it under 200 words. Only go long when explicitly asked for detail or when doing math steps/code. Never pad, repeat, or over-explain. Always finish your answer completely — never stop mid-sentence.\n\nREFUSAL RULES: Never respond with only "I can't help with that" — always explain briefly why and give an alternative or honest opinion. If user asks about adding abusive words to a message, say something like "That's up to you, but strong language can backfire — the message I gave is already firm enough." Never refuse without giving any response.\n\n`;
-        const sysContent = identityOverride + prompt.trim().slice(0, 10000) + searchContext;
-        const messages   = [];
+        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.\n\nRESPONSE STYLE: Be concise and to the point. Short answers for simple questions (1-3 sentences max). For lists use max 5-6 bullet points. Keep it under 200 words unless asked for detail. Never pad, repeat, or over-explain. Always finish your answer completely.\n\nREFUSAL RULES: Never respond with only "I can't help with that" — always explain briefly why and give an alternative.\n\n`;
+        const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
+        const sysContent   = identityOverride + prompt.trim().slice(0, 10000) + locationNote + searchContext;
+
+        const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
         messages.push(...history);
 
@@ -612,22 +577,19 @@ try {
           return res.status(400).json({ error: 'Last message must be from user' });
         }
 
-        const { text: rawCombined, provider: usedProvider } = await callAI(groq, messages, { CF_TOKEN, CF_ACCOUNT });
-
-        if (!rawCombined) {
-          return res.status(429).json({ error: 'All AI providers busy. Try again in a moment.' });
+        const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
+        if (!ok) {
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ content: 'All AI providers are busy — please try again in a moment.' })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
         }
-
-        const combined    = stripInternalReasoning(rawCombined);
-        const engineLabel = getEngineLabel(usedProvider);
-
-        res.write(`data: ${JSON.stringify({ content: combined, engine: engineLabel })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
 
       } catch (error) {
         console.error('CHAT ERROR:', error.message);
         if (!res.headersSent) return res.status(500).json({ error: 'AI request failed' });
+        if (!res.writableEnded) { res.write('data: [DONE]\n\n'); res.end(); }
       }
       return;
     }
@@ -649,10 +611,10 @@ try {
         (isSports && !isCricket) ? fetchESPN(searchQuery) : Promise.resolve([]),
       ]);
 
-      const serper = serperResult.status === 'fulfilled' ? serperResult.value : [];
-      const espn   = espnResult.status   === 'fulfilled' ? espnResult.value   : [];
-
-      let allResults = [...espn, ...serper];
+      let allResults = [
+        ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
+        ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
+      ];
       allResults = cleanResults(allResults, searchQuery);
       allResults = deduplicate(allResults);
       allResults = scoreAndSort(allResults, searchQuery);
@@ -666,18 +628,18 @@ try {
         try {
           const result = await Promise.race([
             groq.chat.completions.create({
-              model:    GROQ_CHAT_QUALITY,
+              model:    GROQ_CHAT_PRIMARY,
               messages: [
                 {
                   role:    'system',
                   content: `Today is ${today}. Summarize these search results.\nRULES:\n- Use ONLY the results below.\n- Be specific: names, scores, dates, numbers.\n- 3-5 sentences. Direct and factual.\n- If results show a sports result, state it clearly.\n- Do NOT say "as of my knowledge".\n\nSEARCH RESULTS:\n${contextSnippets}`,
                 },
-                { role: 'user', content: `Summarize in 3-5 sentences. Be specific with names, numbers, scores, dates.` },
+                { role: 'user', content: `Summarize in 3-5 sentences.` },
               ],
-              max_tokens:  800,
+              max_tokens:  400,
               temperature: 0.2,
             }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 8000)),
           ]);
           const rawT = result.choices?.[0]?.message?.content || null;
           const t    = rawT ? stripInternalReasoning(rawT) : null;
@@ -685,23 +647,22 @@ try {
         } catch (e) { console.error('AI summary failed:', e.message); }
       }
 
-      // Knowledge fallback when zero results
       if (allResults.length === 0) {
         try {
           const fallback = await Promise.race([
             groq.chat.completions.create({
               model:    GROQ_CHAT_PRIMARY,
               messages: [
-                { role: 'system', content: `Today is ${new Date().toDateString()}. Answer factually in 2-3 sentences. If unsure about current info, say so and suggest the user checks Google.` },
+                { role: 'system', content: `Today is ${new Date().toDateString()}. Answer factually in 2-3 sentences.` },
                 { role: 'user',   content: searchQuery },
               ],
-              max_tokens: 600,
+              max_tokens: 400,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
           ]);
           const rawAnswer = fallback.choices?.[0]?.message?.content || null;
           const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
-          if (answer)allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+          if (answer) allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
 
@@ -718,7 +679,6 @@ try {
 
       try {
         const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
-
         const cfRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct`,
           {
@@ -729,53 +689,35 @@ try {
                 role: 'user',
                 content: [
                   { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-                  { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail. If there is a math problem, solve it completely step by step.', 500) },
+                  { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail.', 500) },
                 ],
               }],
               max_tokens: 2048,
             }),
           }
         );
-
         if (cfRes.ok) {
           const data = await cfRes.json();
           const description = data.result?.response || data.result?.description || null;
-          if (description && description.trim().length > 2) {
-            return res.status(200).json({ success: true, description });
-          }
+          if (description && description.trim().length > 2) return res.status(200).json({ success: true, description });
         }
 
-        // Fallback model
         const bytes = Array.from(Buffer.from(base64Data, 'base64'));
         const llavaRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
           {
             method:  'POST',
             headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: sanitizeString(prompt || 'Describe this image in detail.', 500),
-              image:  bytes,
-            }),
+            body:    JSON.stringify({ prompt: sanitizeString(prompt || 'Describe this image in detail.', 500), image: bytes }),
           }
         );
-
-        if (!llavaRes.ok) {
-          return res.status(200).json({ success: false, description: 'Could not analyze image — please try again.' });
-        }
-
+        if (!llavaRes.ok) return res.status(200).json({ success: false, description: 'Could not analyze image — please try again.' });
         const d = await llavaRes.json();
         const fallbackDesc = d.result?.description || d.result?.response || null;
-
-        return res.status(200).json({
-          success: true,
-          description: fallbackDesc && fallbackDesc.trim().length > 2
-            ? fallbackDesc
-            : 'Could not analyze image — please try again.',
-        });
-
+        return res.status(200).json({ success: true, description: fallbackDesc?.trim().length > 2 ? fallbackDesc : 'Could not analyze image.' });
       } catch (error) {
         console.error('VISION ERROR:', error.message);
-        return res.status(200).json({ success: false, description: 'Vision service unavailable — try describing the image instead.' });
+        return res.status(200).json({ success: false, description: 'Vision service unavailable.' });
       }
     }
 
@@ -785,18 +727,14 @@ try {
     if (action === 'image') {
       if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
       if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
-
       try {
         const seed   = Math.floor(Math.random() * 999999);
         const imgRes = await fetchWithTimeout(
           `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
           {
             method:  'POST',
-            headers: {
-              'Content-Type':   'application/json',
-              'x-worker-token': process.env.WORKER_SECRET,
-            },
-            body: JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
+            headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
+            body:    JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
           },
           25000
         );
@@ -804,11 +742,8 @@ try {
         const contentType = imgRes.headers.get('content-type') || '';
         if (contentType.includes('json')) return res.status(200).json(await imgRes.json());
         const responseText = await imgRes.text();
-        try {
-          return res.status(200).json(JSON.parse(responseText));
-        } catch {
-          return res.status(200).json({ success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` });
-        }
+        try { return res.status(200).json(JSON.parse(responseText)); }
+        catch { return res.status(200).json({ success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` }); }
       } catch (error) {
         console.error('IMAGE GEN ERROR:', error.message);
         return res.status(500).json({ error: 'Image generation failed' });
