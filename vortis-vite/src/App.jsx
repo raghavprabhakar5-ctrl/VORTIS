@@ -411,7 +411,7 @@ const md = (text, dark = true) => {
   return `<h${hashes.length} style="font-size:${size};font-weight:700;color:var(--text1);margin:16px 0 8px;letter-spacing:-.02em">${content}</h${hashes.length}>`;
 });
   h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
- h = h.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--text1);font-weight:700">$1</strong>');
+ h = h.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--indigo);font-weight:700">$1</strong>');
   h = h.replace(/\*(.+?)\*/g, '<em style="color:var(--text2)">$1</em>');
   h = h.replace(/`{3}(\w*)\n?([\s\S]*?)`{3}/g, function(_, lang, code) {
     var escaped = code.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
