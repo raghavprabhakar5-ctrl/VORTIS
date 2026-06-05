@@ -1128,6 +1128,15 @@ export default function VortisAI() {
   const [pendingCode, setPendingCode] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [showAITimeout, setShowAITimeout] = useState(false);
+  const cleanStream = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/^GENERATE_IMAGE:.*$/gim, '')
+    .replace(/^WEB_SEARCH:.*$/gim, '')
+    .replace(/^CURRENT_TIME\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
   const [memories, setMemories] = useState([]);
 
   const convHistory = useRef([]);
@@ -1226,29 +1235,45 @@ export default function VortisAI() {
   const deleteMemory = (id) => { setMemories(prev => { const updated = prev.filter(m => m.id !== id); saveMemoriesLS(updated); return updated; }); };
   const clearMemories = () => { setMemories([]); convHistory.current = []; try { localStorage.removeItem('vortis_memories'); } catch(_) {} };
 
-  const extractMemories = useCallback(async (userMsg, aiResponse, existingMemories) => {
-    if (userMsg.trim().length < 5) return;
-    const existingText = existingMemories.length > 0 ? existingMemories.slice(0, 30).map(m => `- ${m.text}`).join('\n') : 'none';
-    try {
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'chat', prompt: `You are a memory manager. Output ONLY a raw JSON array of permanent personal facts the user stated about themselves. Rules:\n- Save: name, age, location, job, skills, hobbies, interests, education, preferences\n- NEVER save temporary states, questions asked, or AI response content\n- Return [] if nothing qualifies\nExisting:\n${existingText}\nUser said: "${userMsg}"\nOutput: ["memory"] or []`, history: [{ role: 'user', content: 'Return JSON array only.' }] }) });
-      if (!res.ok) return;
-      const rd = res.body.getReader(); const dc = new TextDecoder(); let raw = '';
-      while (true) { const { done, value } = await rd.read(); if (done) break; for (const line of dc.decode(value).split('\n')) { if (!line.startsWith('data: ')) continue; const chunk = line.slice(6); if (chunk === '[DONE]') break; try { const p = JSON.parse(chunk); if (p.content) raw += p.content; if (p.location && !sessionLocation) setSessionLocation(p.location); } catch(_) {} } }
-      const cleaned = raw.trim().replace(/```json|```/g, '').trim();
-      const start = cleaned.indexOf('['); const end = cleaned.lastIndexOf(']');
-      if (start === -1 || end === -1) return;
-      const parsed = JSON.parse(cleaned.slice(start, end + 1));
-      if (!Array.isArray(parsed)) return;
-      for (const mem of parsed) { if (typeof mem === 'string' && mem.length > 5 && mem.length < 150) addMemory(mem); }
-      const isLocationMemory = (text) => 
-  /\b(located in|from|lives in|based in|city|country|region)\b/i.test(text);
-
-for (const mem of parsed) {
-  if (typeof mem === 'string' && mem.length > 5 && mem.length < 150 && !isLocationMemory(mem)) 
-    addMemory(mem);
-}
-    } catch(_) {}
-  }, [addMemory]);
+ const extractMemories = useCallback(async (userMsg, aiResponse, existingMemories) => {
+  if (!userMsg || userMsg.trim().length < 3) return;
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: `You extract personal facts from user messages. Output ONLY a JSON array of strings. Each string is a short fact about the user (name, job, location, hobby, skill, preference). Max 3 facts. Return [] if nothing qualifies. No explanation, no markdown, just the array.\n\nUser said: "${userMsg.slice(0, 300)}"`,
+        history: []
+      })
+    });
+    if (!res.ok) return;
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let raw = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const chunk = line.slice(6);
+        if (chunk === '[DONE]') break;
+        try { const p = JSON.parse(chunk); if (p.content) raw += p.content; } catch(_) {}
+      }
+    }
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start === -1 || end === -1) return;
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    if (!Array.isArray(parsed)) return;
+    for (const mem of parsed) {
+      if (typeof mem === 'string' && mem.length > 3 && mem.length < 120) {
+        addMemory(mem);
+      }
+    }
+  } catch(_) {}
+}, [addMemory]);
 
   const handleLogin = async (provider) => {
     setAuthLoading(true);
@@ -2874,7 +2899,7 @@ setProcessingStatus('');
                     <span style={{ fontSize: 10.5, color: 'var(--cyan)', fontFamily: 'JetBrains Mono' }}>typing…</span>
                   </div>
                   <div className="bubble-ai">
-                    <MsgContent text={streamText}/>
+                   <MsgContent text={cleanStream(streamText)}/>
                     <span className="cursor-blink"/>
                   </div>
                 </div>
