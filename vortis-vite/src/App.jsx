@@ -1723,23 +1723,55 @@ const detectLangVoice = (text, gender = 'male') => {
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
   return t
+    // Strip all HTML tags
     .replace(/<[^>]*>/g, ' ')
-    .replace(/```[\s\S]*?```/g, 'code block')
+    // Strip URLs
+    .replace(/https?:\/\/\S+/g, '')
+    // Strip markdown code blocks — say "code block" instead
+    .replace(/```[\s\S]*?```/g, ' code block ')
+    // Strip inline code
     .replace(/`[^`]+`/g, '')
+    // Strip markdown bold/italic — keep the text
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\[.*?\]\(.*?\)/g, '')
-    .replace(/https?:\/\/\S+/g, '')
+    .replace(/_{1,2}(.+?)_{1,2}/g, '$1')
+    // Strip headings markers
+    .replace(/#{1,6}\s+/g, '')
+    // Strip markdown links — keep label only
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Strip table pipes and dashes
+    .replace(/\|/g, ' ')
+    .replace(/^[-=]{3,}$/gm, '')
+    // Strip bullet markers
+    .replace(/^[\s]*[-*+]\s+/gm, '')
+    .replace(/^\s*\d+\.\s+/gm, '')
+    // Strip blockquote markers
+    .replace(/^>\s+/gm, '')
+    // Strip HTML entities
+    .replace(/&amp;/g, 'and')
+    .replace(/&lt;/g, '')
+    .replace(/&gt;/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    // Strip all emojis
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[★✦•→←↑↓◆◇○●|]/g, '')
-    .replace(/\s+/g, ' ')
+    // Strip special symbols
+    .replace(/[★✦•→←↑↓◆◇○●©®™⚡|]/g, '')
+    // Strip asterisks, hashes, underscores leftover
+    .replace(/[*#_~]/g, '')
+    // Strip backslashes
+    .replace(/\\/g, '')
+    // Collapse multiple spaces/newlines
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\n/g, ' ')
+    .replace(/\s{2,}/g, ' ')
     .trim();
 }, []);
-
 // ── PRELOAD TTS ──
 const preloadTTS = useCallback(async (text) => {
   const gender = ttsGenderRef.current;
@@ -2782,7 +2814,7 @@ setProcessingStatus('');
                     <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', gap: 12 }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
+                  <div data-msgid={msg.id} style={{ display: 'flex', gap: 12 }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <VortisAvatar size={28}/>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
@@ -2794,12 +2826,14 @@ setProcessingStatus('');
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
                           { ic: <Volume2 size={11}/>, fn: () => {
-  let ttsText = msg.text || '';
-  if (ttsText.includes('vsr-atext')) {
-    const m = ttsText.match(/<div class="vsr-atext">([\s\S]*?)<\/div>/);
-    if (m) ttsText = m[1].replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'");
+  // Get the actual rendered text from the DOM — not raw markdown
+  const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
+  if (bubble) {
+    const rawText = bubble.innerText || bubble.textContent || '';
+    speakText(rawText);
+  } else {
+    speakText(msg.text);
   }
-  speakText(ttsText);
 }, tip: 'Read aloud' },
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
