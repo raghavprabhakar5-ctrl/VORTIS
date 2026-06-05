@@ -446,7 +446,10 @@ export default async function handler(req, res) {
       try {
         const { EdgeTTS } = await import('@andresaya/edge-tts');
         const tts = new EdgeTTS();
-        await tts.synthesize(cleanText, voice, { outputFormat: 'audio-24khz-48kbitrate-mono-mp3', rate: '-15%' });
+        await tts.synthesize(cleanText, voice, { 
+  outputFormat: 'audio-24khz-48kbitrate-mono-mp3', 
+  rate: '-12%' 
+});
         const base64 = await tts.toBase64();
         if (base64 && base64.length > 100) {
           res.setHeader('Cache-Control', 'public, max-age=86400');
