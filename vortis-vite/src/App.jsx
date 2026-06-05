@@ -285,9 +285,9 @@ input,textarea,select{font-size:16px}
 .dot-typing span:nth-child(3){animation-delay:.4s}
 .cursor-blink{display:inline-block;width:2px;height:14px;background:var(--indigo);margin-left:2px;vertical-align:middle;animation:blink .8s step-end infinite}
 .disclaimer{text-align:center;font-size:11px;color:var(--text4);padding:4px 16px 8px;font-family:'JetBrains Mono',monospace;flex-shrink:0}
-.md-content h1,.md-content h2,.md-content h3,.md-content h4{color:var(--text1);font-weight:600;margin:14px 0 7px}
+.md-content h1,.md-content h2,.md-content h3,.md-content h4{color:var(--text1);font-weight:600;margin:8px 0 4px;line-height:1.3}
 .md-content h1{font-size:17px}.md-content h2{font-size:15px}.md-content h3{font-size:14px;color:var(--text2)}
-.md-content p{margin-bottom:10px;color:var(--text1)}
+.md-content p{margin-bottom:6px;color:var(--text1);line-height:1.65}
 .md-content table{width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;margin:10px 0;font-size:13px;display:block;overflow-x:auto}
 .md-content th{background:rgba(99,102,241,.12);padding:8px 12px;text-align:left;color:var(--text1);font-weight:600}
 .md-content td{padding:7px 12px;color:var(--text2);border-bottom:1px solid var(--border)}
@@ -410,7 +410,7 @@ const md = (text, dark = true) => {
   return `<h${hashes.length} style="font-size:${size};font-weight:700;color:var(--text1);margin:16px 0 8px;letter-spacing:-.02em">${content}</h${hashes.length}>`;
 });
   h = h.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
- h = h.replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--indigo);font-weight:700">$1</strong>');
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong style="color:#818cf8;font-weight:700;text-shadow:0 0 12px rgba(129,140,248,0.3)">$1</strong>');
   h = h.replace(/\*(.+?)\*/g, '<em style="color:var(--text2)">$1</em>');
   h = h.replace(/`{3}(\w*)\n?([\s\S]*?)`{3}/g, function(_, lang, code) {
     var escaped = code.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -436,7 +436,7 @@ const md = (text, dark = true) => {
   h = h.replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>');
   h = h.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
   h = h.replace(/(<\/li>)\s*\n\n\s*(<li>)/g, '$1$2');
-  h = h.replace(/\n\n/g, '<br/><br/>');
+  h = h.replace(/\n\n/g, '<br/>');
   h = h.replace(/\n/g, '<br/>');
 return h;
 };
@@ -601,7 +601,7 @@ const SelectionReply = ({ onReply }) => {
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
- React.useEffect(() => {
+  React.useEffect(() => {
     const renderKatex = () => {
       if (contentRef.current && window.renderMathInElement) {
         try {
@@ -625,8 +625,18 @@ const MsgContent = ({ text, onRetryImage }) => {
 
   if (!text) return null;
   const t = text.trim();
-  const clean = t.replace(/^GENERATE_IMAGE:.*$/gm, '').replace(/^WEB_SEARCH:.*$/gm, '').replace(/^CURRENT_TIME\s*$/gm, '').trim();
+
+  // ── Special states ──
+  const clean = t
+    .replace(/^GENERATE_IMAGE:.*$/gm, '')
+    .replace(/\[Generating image[\s\S]*?\]/gi, '')
+    .replace(/^WEB_SEARCH:.*$/gm, '')
+    .replace(/^CURRENT_TIME\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
   if (clean === '__IMG_LOADING__') return <ImageGeneratingPlaceholder />;
+
   if (clean === '__IMG_EXPIRED__') return (
     <div style={{ padding: '12px 14px', background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.18)', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
       <Sparkles size={14} color="var(--indigo)"/>
@@ -637,12 +647,150 @@ const MsgContent = ({ text, onRetryImage }) => {
       {onRetryImage && <button onClick={onRetryImage} style={{ marginLeft: 'auto', background: 'var(--indigo)', border: 'none', color: 'white', borderRadius: 7, padding: '5px 11px', cursor: 'pointer', fontSize: 12, fontFamily: 'JetBrains Mono' }}>Regen</button>}
     </div>
   );
-  if (t.startsWith('__IMG_B64__')) return <AIImageCard src={t.slice(11)} onRetry={onRetryImage}/>;
-  if (clean.startsWith('<')) return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
-  if (!clean) return null;
-  return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: md(clean) }}/>;
-};
 
+  if (t.startsWith('__IMG_B64__')) return <AIImageCard src={t.slice(11)} onRetry={onRetryImage}/>;
+
+  // ── Search results HTML — keep dangerouslySetInnerHTML ──
+  if (clean.startsWith('<') && (clean.includes('vsr-') || clean.includes('vsr-wrap'))) {
+    return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
+  }
+
+  if (!clean) return null;
+
+  // ── Proper ReactMarkdown rendering ──
+  return (
+    <div ref={contentRef} className="md-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+
+          // Headings
+          h1: ({children}) => <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text1)', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
+          h2: ({children}) => <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text1)', margin: '10px 0 4px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
+          h3: ({children}) => <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text2)', margin: '8px 0 3px', lineHeight: 1.3 }}>{children}</h3>,
+          h4: ({children}) => <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>{children}</h4>,
+
+          // Paragraph — tight spacing, no giant gaps
+          p: ({children}) => <p style={{ margin: '0 0 7px', color: 'var(--text1)', lineHeight: 1.75, fontSize: 14.5 }}>{children}</p>,
+
+          // Bold — sharp vibrant indigo
+          strong: ({children}) => (
+            <strong style={{ color: '#818cf8', fontWeight: 700, textShadow: '0 0 10px rgba(129,140,248,0.2)' }}>
+              {children}
+            </strong>
+          ),
+
+          // Italic
+          em: ({children}) => <em style={{ color: 'var(--text2)', fontStyle: 'italic' }}>{children}</em>,
+
+          // Unordered list
+          ul: ({children}) => (
+            <div style={{ margin: '6px 0 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>list</span>
+              </div>
+              <ul style={{ margin: 0, padding: '2px 16px 4px 32px', background: 'var(--bg2)', listStyle: 'disc' }}>{children}</ul>
+            </div>
+          ),
+
+          // Ordered list
+          ol: ({children}) => (
+            <div style={{ margin: '6px 0 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>steps</span>
+              </div>
+              <ol style={{ margin: 0, padding: '2px 16px 4px 32px', background: 'var(--bg2)' }}>{children}</ol>
+            </div>
+          ),
+
+          // List item
+          li: ({children}) => (
+            <li style={{ padding: '5px 0', borderBottom: '1px solid var(--border)', color: 'var(--text1)', lineHeight: 1.65, fontSize: 14 }}>
+              {children}
+            </li>
+          ),
+
+          // Blockquote
+          blockquote: ({children}) => (
+            <blockquote style={{ borderLeft: '3px solid var(--indigo)', padding: '8px 13px', margin: '8px 0', background: 'rgba(99,102,241,.05)', borderRadius: '0 9px 9px 0', color: 'var(--text2)' }}>
+              {children}
+            </blockquote>
+          ),
+
+          // Inline and block code
+          code: ({node, inline, className, children, ...props}) => {
+            const match = /language-(\w+)/.exec(className || '');
+            const lang = match ? match[1] : '';
+            const codeText = String(children).replace(/\n$/, '');
+
+            if (inline) {
+              return (
+                <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
+                  {children}
+                </code>
+              );
+            }
+
+            return (
+              <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
+                  <button
+                    onClick={(e) => {
+                      navigator.clipboard.writeText(codeText).then(() => {
+                        e.target.textContent = 'Copied!';
+                        e.target.style.color = '#10b981';
+                        setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
+                      });
+                    }}
+                    style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                  <code>{codeText}</code>
+                </pre>
+              </div>
+            );
+          },
+
+          // Table
+          table: ({children}) => (
+            <div style={{ overflowX: 'auto', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table>
+            </div>
+          ),
+          thead: ({children}) => <thead>{children}</thead>,
+          tbody: ({children}) => <tbody>{children}</tbody>,
+          tr: ({children}) => <tr>{children}</tr>,
+          th: ({children}) => (
+            <th style={{ background: 'rgba(99,102,241,.12)', padding: '8px 12px', textAlign: 'left', color: 'var(--text1)', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
+              {children}
+            </th>
+          ),
+          td: ({children}) => (
+            <td style={{ padding: '7px 12px', color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
+              {children}
+            </td>
+          ),
+
+          // Link
+          a: ({href, children}) => (
+            <a href={href} target="_blank" rel="noopener" style={{ color: 'var(--indigo)', textUnderlineOffset: 2 }}>
+              {children}
+            </a>
+          ),
+
+          // Horizontal rule
+          hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '10px 0' }}/>,
+        }}
+      >
+        {clean}
+      </ReactMarkdown>
+    </div>
+  );
+};
 const getGreeting = (name) => {
   const h = new Date().getHours();
   const t = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
