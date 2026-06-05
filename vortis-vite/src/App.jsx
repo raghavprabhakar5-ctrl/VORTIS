@@ -1556,27 +1556,26 @@ const detectLangVoice = (text, gender = 'male') => {
     if (hinglishCount >= 2) return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
     if (hinglishCount >= 1 && words.length <= 12) return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
 
-    // 3. ── ENGLISH LOCK — prevents tinyld from randomly picking en-IN, en-GB, en-AU ──
-    // tinyld often misidentifies plain English as regional variants.
-    // If text is mostly Latin script with no Hinglish words, treat as en-US.
-    const nonLatinRatio = (text.match(/[^\u0000-\u007F]/g) || []).length / text.length;
-    if (nonLatinRatio < 0.15) {
-      // Text is mostly ASCII/Latin — force consistent en-US or en-IN based on user preference
-      // We use en-IN for Indian users (detectable by Hinglish proximity) else en-US
-      const detected = detect(text) || 'en';
-      // Only allow non-English if tinyld is very confident (non-English Latin languages)
-      const allowedNonEnglish = ['fr','de','es','pt','it','nl','pl','tr','sv','no','da','fi','cs','sk','ro','hu','el','bg','hr','uk','ca','vi','id','ms','af'];
-      if (allowedNonEnglish.includes(detected)) {
-        return VOICE_MAP[detected]?.[gender === 'female' ? 1 : 0] || fallback;
-      }
-      // For anything detected as en, en-IN, en-GB, en-AU — use single consistent voice
-      return VOICE_MAP['en'][gender === 'female' ? 1 : 0]; // always en-US-GuyNeural / en-US-AriaNeural
-    }
+   // 3. Detect language with tinyld
+const detected = detect(text) || 'en';
 
-    // 4. For non-Latin heavy text — use tinyld
-    const detected = detect(text) || 'en';
-    const voices = VOICE_MAP[detected];
-    return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
+// 4. Latin-script languages (French, Spanish, German etc) — trust tinyld fully
+const latinNonEnglish = ['fr','de','es','pt','it','nl','pl','tr','sv','no','da','fi','cs','sk','ro','hu','el','bg','hr','uk','ca','af','ms','id','vi','fil'];
+if (latinNonEnglish.includes(detected)) {
+  return VOICE_MAP[detected]?.[gender === 'female' ? 1 : 0] || fallback;
+}
+
+// 5. For non-Latin script languages — tinyld already handled above via detectByScript
+// For anything that looks like English (en, en-IN, en-GB etc) — use consistent en-US
+const nonLatinRatio = (text.match(/[^\u0000-\u007F]/g) || []).length / text.length;
+if (nonLatinRatio < 0.15) {
+  // Mostly ASCII — English, use en-US voice always
+  return VOICE_MAP['en'][gender === 'female' ? 1 : 0];
+}
+
+// 6. Non-Latin heavy text not caught by script detection — try tinyld
+const voices = VOICE_MAP[detected];
+return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
 
   } catch(_) {
     return fallback;
@@ -2053,8 +2052,9 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
   .replace(/^GENERATE_IMAGE:.*$/gim, '')
   .replace(/^GENERATE_IMAGE\s*$/gim, '')
   .replace(/^IMAGE_GENERATION\s*$/gim, '')
-  .replace(/\[Generating image.*?\]/gi, '')
-  .replace(/\[Image generating.*?\]/gi, '')
+  .replace(/\[Generating image[\s\S]*?\]/gi, '')
+  .replace(/\[Image generating[\s\S]*?\]/gi, '')
+  .replace(/\[Generating:[\s\S]*?\]/gi, '')
 
   // Search commands
   .replace(/^WEB_SEARCH:.*$/gim, '')
@@ -2674,7 +2674,15 @@ setProcessingStatus('');
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
-                          { ic: <Volume2 size={11}/>, fn: () => speakText(msg.text), tip: 'Read aloud' },
+                          { ic: <Volume2 size={11}/>, fn: () => {
+  let textToSpeak = msg.text || '';
+  // If this is a search result (contains vsr-atext), extract just the summary
+  if (textToSpeak.includes('vsr-atext')) {
+    const match = textToSpeak.match(/<div class="vsr-atext">([\s\S]*?)<\/div>/);
+    if (match) textToSpeak = match[1].replace(/<[^>]*>/g, '');
+  }
+  speakText(textToSpeak);
+}, tip: 'Read aloud' },
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
                         ].map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>)}
