@@ -426,7 +426,7 @@ export default async function handler(req, res) {
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
     if (action === 'tts') {
-      const text  = sanitizeString(body.text  || '', 500);
+      const text  = sanitizeString(body.text  || '', 1000);
       const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
       if (!text) return res.status(400).json({ error: 'Missing text' });
 
@@ -439,7 +439,7 @@ export default async function handler(req, res) {
         .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 400);
+        .slice(0, 900)
 
       if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
 

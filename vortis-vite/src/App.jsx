@@ -7,7 +7,6 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { detect } from 'tinyld';
 import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
@@ -1425,162 +1424,153 @@ const saveChat = useCallback(async (msgsToSave) => {
  // ── TTS REFS ──
 const ttsCache = useRef(new Map());
 const ttsPending = useRef(new Map());
-const currentAudiosRef = useRef([]);   
-const isSpeakingRef = useRef(false);   
-const authHeaderCache = useRef(null);  
-const authHeaderExpiry = useRef(0);    
+const currentAudiosRef = useRef([]);
+const isSpeakingRef = useRef(false);
+const authHeaderCache = useRef(null);
+const authHeaderExpiry = useRef(0);
 const ttsGenderRef = useRef(ttsGender);
 useEffect(() => { ttsGenderRef.current = ttsGender; }, [ttsGender]);
 
-// ── DETECT LANGUAGE BY SCRIPT (Unicode ranges) ──
-const detectByScript = (text) => {
-  if (/[\u0900-\u097F]/.test(text)) return 'hi';  // Devanagari → Hindi
-  if (/[\u0600-\u06FF]/.test(text)) return 'ur';  // Arabic script → Urdu
-  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';  // Chinese
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(text)) return 'ja'; // Japanese
-  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko';  // Korean
-  if (/[\u0400-\u04FF]/.test(text)) return 'ru';  // Cyrillic → Russian
-  if (/[\u0B80-\u0BFF]/.test(text)) return 'ta';  // Tamil
-  if (/[\u0C00-\u0C7F]/.test(text)) return 'te';  // Telugu
-  if (/[\u0D00-\u0D7F]/.test(text)) return 'ml';  // Malayalam
-  if (/[\u0C80-\u0CFF]/.test(text)) return 'kn';  // Kannada
-  if (/[\u0A80-\u0AFF]/.test(text)) return 'gu';  // Gujarati
-  if (/[\u0A00-\u0A7F]/.test(text)) return 'pa';  // Punjabi/Gurmukhi
-  if (/[\u0980-\u09FF]/.test(text)) return 'bn';  // Bengali
-  if (/[\u0E00-\u0E7F]/.test(text)) return 'th';  // Thai
-  if (/[\u0600-\u06FF]/.test(text)) return 'ar';  // Arabic
-  return 'en'; // default
-};
-
-// ── DETECT LANGUAGE VOICE ──
+// ── LANGUAGE DETECTION — pure dictionary, no library needed ──
 const detectLangVoice = (text, gender = 'male') => {
   const VOICE_MAP = {
-    // ── Indian Languages ──
-    'hi': ['hi-IN-MadhurNeural', 'hi-IN-SwaraNeural'],
-    'ta': ['ta-IN-ValluvarNeural', 'ta-IN-PallaviNeural'],
-    'te': ['te-IN-MohanNeural', 'te-IN-ShrutiNeural'],
-    'ml': ['ml-IN-MidhunNeural', 'ml-IN-SobhanaNeural'],
-    'kn': ['kn-IN-GaganNeural', 'kn-IN-SapnaNeural'],
-    'gu': ['gu-IN-NiranjanNeural', 'gu-IN-DhwaniNeural'],
-    'pa': ['pa-IN-OjasNeural', 'pa-IN-OjasNeural'],
-    'bn': ['bn-BD-PradeepNeural', 'bn-BD-NabanitaNeural'],
-    'ur': ['ur-PK-AsadNeural', 'ur-PK-UzmaNeural'],
-    'mr': ['mr-IN-ManoharNeural', 'mr-IN-AarohiNeural'],
-
-    // ── European Languages ──
-    'en': ['en-US-GuyNeural', 'en-US-AriaNeural'],
-    'fr': ['fr-FR-HenriNeural', 'fr-FR-DeniseNeural'],
-    'de': ['de-DE-ConradNeural', 'de-DE-KatjaNeural'],
-    'es': ['es-ES-AlvaroNeural', 'es-ES-ElviraNeural'],
-    'pt': ['pt-BR-AntonioNeural', 'pt-BR-FranciscaNeural'],
-    'it': ['it-IT-DiegoNeural', 'it-IT-ElsaNeural'],
-    'nl': ['nl-NL-MaartenNeural', 'nl-NL-ColetteNeural'],
-    'pl': ['pl-PL-MarekNeural', 'pl-PL-ZofiaNeural'],
-    'ru': ['ru-RU-DmitryNeural', 'ru-RU-SvetlanaNeural'],
-    'tr': ['tr-TR-AhmetNeural', 'tr-TR-EmelNeural'],
-    'sv': ['sv-SE-MattiasNeural', 'sv-SE-SofieNeural'],
-    'no': ['nb-NO-FinnNeural', 'nb-NO-PernilleNeural'],
-    'da': ['da-DK-JeppeNeural', 'da-DK-ChristelNeural'],
-    'fi': ['fi-FI-HarriNeural', 'fi-FI-NooraNeural'],
-    'cs': ['cs-CZ-AntoninNeural', 'cs-CZ-VlastaNeural'],
-    'sk': ['sk-SK-LukasNeural', 'sk-SK-ViktoriaNeural'],
-    'ro': ['ro-RO-EmilNeural', 'ro-RO-AlinaNeural'],
-    'hu': ['hu-HU-TamasNeural', 'hu-HU-NoemiNeural'],
-    'el': ['el-GR-NestorasNeural', 'el-GR-AthinaNeural'],
-    'bg': ['bg-BG-BorislavNeural', 'bg-BG-KalinaNeural'],
-    'hr': ['hr-HR-SreckoNeural', 'hr-HR-GabrijelaNeural'],
-    'uk': ['uk-UA-OstapNeural', 'uk-UA-PolinaNeural'],
-    'ca': ['ca-ES-EnricNeural', 'ca-ES-JoanaNeural'],
-
-    // ── East Asian ──
-    'zh': ['zh-CN-YunxiNeural', 'zh-CN-XiaoxiaoNeural'],
-    'ja': ['ja-JP-KeitaNeural', 'ja-JP-NanamiNeural'],
-    'ko': ['ko-KR-InJoonNeural', 'ko-KR-SunHiNeural'],
-    'zh-TW': ['zh-TW-YunJheNeural', 'zh-TW-HsiaoChenNeural'],
-
-    // ── Southeast Asian ──
-    'vi': ['vi-VN-NamMinhNeural', 'vi-VN-HoaiMyNeural'],
-    'id': ['id-ID-ArdiNeural', 'id-ID-GadisNeural'],
-    'ms': ['ms-MY-OsmanNeural', 'ms-MY-YasminNeural'],
-    'th': ['th-TH-NiwatNeural', 'th-TH-PremwadeeNeural'],
-    'fil': ['fil-PH-AngeloNeural', 'fil-PH-BlessicaNeural'],
-
-    // ── Middle Eastern ──
-    'ar': ['ar-SA-HamedNeural', 'ar-SA-ZariyahNeural'],
-    'he': ['he-IL-AvriNeural', 'he-IL-HilaNeural'],
-    'fa': ['fa-IR-FaridNeural', 'fa-IR-DilaraNeural'],
-
-    // ── African ──
-    'sw': ['sw-KE-RafikiNeural', 'sw-KE-ZuriNeural'],
-    'af': ['af-ZA-WillemNeural', 'af-ZA-AdriNeural'],
-    'am': ['am-ET-AmehaNeural', 'am-ET-MekdesNeural'],
-    'zu': ['zu-ZA-ThandoNeural', 'zu-ZA-UThandoNeural'],
-
-    // ── Central/South Asian ──
-    'az': ['az-AZ-BabekNeural', 'az-AZ-BanuNeural'],
-    'kk': ['kk-KZ-DauletNeural', 'kk-KZ-AigulNeural'],
-    'uz': ['uz-UZ-SardorNeural', 'uz-UZ-MadinaNeural'],
-
-    // ── Americas ──
-    'es-MX': ['es-MX-JorgeNeural', 'es-MX-DaliaNeural'],
-    'es-US': ['es-US-AlonsoNeural', 'es-US-PalomaNeural'],
-    'fr-CA': ['fr-CA-JeanNeural', 'fr-CA-SylvieNeural'],
-    'en-GB': ['en-GB-RyanNeural', 'en-GB-SoniaNeural'],
-    'en-AU': ['en-AU-WilliamNeural', 'en-AU-NatashaNeural'],
-    'en-IN': ['en-IN-PrabhatNeural', 'en-IN-NeerjaNeural'],
+    'hi':  ['hi-IN-MadhurNeural',   'hi-IN-SwaraNeural'],
+    'ta':  ['ta-IN-ValluvarNeural', 'ta-IN-PallaviNeural'],
+    'te':  ['te-IN-MohanNeural',    'te-IN-ShrutiNeural'],
+    'ml':  ['ml-IN-MidhunNeural',   'ml-IN-SobhanaNeural'],
+    'kn':  ['kn-IN-GaganNeural',    'kn-IN-SapnaNeural'],
+    'gu':  ['gu-IN-NiranjanNeural', 'gu-IN-DhwaniNeural'],
+    'pa':  ['pa-IN-OjasNeural',     'pa-IN-OjasNeural'],
+    'bn':  ['bn-BD-PradeepNeural',  'bn-BD-NabanitaNeural'],
+    'ur':  ['ur-PK-AsadNeural',     'ur-PK-UzmaNeural'],
+    'mr':  ['mr-IN-ManoharNeural',  'mr-IN-AarohiNeural'],
+    'en':  ['en-US-GuyNeural',      'en-US-AriaNeural'],
+    'fr':  ['fr-FR-HenriNeural',    'fr-FR-DeniseNeural'],
+    'de':  ['de-DE-ConradNeural',   'de-DE-KatjaNeural'],
+    'es':  ['es-ES-AlvaroNeural',   'es-ES-ElviraNeural'],
+    'pt':  ['pt-BR-AntonioNeural',  'pt-BR-FranciscaNeural'],
+    'it':  ['it-IT-DiegoNeural',    'it-IT-ElsaNeural'],
+    'nl':  ['nl-NL-MaartenNeural',  'nl-NL-ColetteNeural'],
+    'pl':  ['pl-PL-MarekNeural',    'pl-PL-ZofiaNeural'],
+    'ru':  ['ru-RU-DmitryNeural',   'ru-RU-SvetlanaNeural'],
+    'tr':  ['tr-TR-AhmetNeural',    'tr-TR-EmelNeural'],
+    'sv':  ['sv-SE-MattiasNeural',  'sv-SE-SofieNeural'],
+    'no':  ['nb-NO-FinnNeural',     'nb-NO-PernilleNeural'],
+    'da':  ['da-DK-JeppeNeural',    'da-DK-ChristelNeural'],
+    'fi':  ['fi-FI-HarriNeural',    'fi-FI-NooraNeural'],
+    'cs':  ['cs-CZ-AntoninNeural',  'cs-CZ-VlastaNeural'],
+    'ro':  ['ro-RO-EmilNeural',     'ro-RO-AlinaNeural'],
+    'hu':  ['hu-HU-TamasNeural',    'hu-HU-NoemiNeural'],
+    'el':  ['el-GR-NestorasNeural', 'el-GR-AthinaNeural'],
+    'uk':  ['uk-UA-OstapNeural',    'uk-UA-PolinaNeural'],
+    'zh':  ['zh-CN-YunxiNeural',    'zh-CN-XiaoxiaoNeural'],
+    'ja':  ['ja-JP-KeitaNeural',    'ja-JP-NanamiNeural'],
+    'ko':  ['ko-KR-InJoonNeural',   'ko-KR-SunHiNeural'],
+    'vi':  ['vi-VN-NamMinhNeural',  'vi-VN-HoaiMyNeural'],
+    'id':  ['id-ID-ArdiNeural',     'id-ID-GadisNeural'],
+    'ms':  ['ms-MY-OsmanNeural',    'ms-MY-YasminNeural'],
+    'th':  ['th-TH-NiwatNeural',    'th-TH-PremwadeeNeural'],
+    'ar':  ['ar-SA-HamedNeural',    'ar-SA-ZariyahNeural'],
+    'he':  ['he-IL-AvriNeural',     'he-IL-HilaNeural'],
+    'fa':  ['fa-IR-FaridNeural',    'fa-IR-DilaraNeural'],
+    'sw':  ['sw-KE-RafikiNeural',   'sw-KE-ZuriNeural'],
+    'af':  ['af-ZA-WillemNeural',   'af-ZA-AdriNeural'],
   };
 
-  const fallback = VOICE_MAP['en'][gender === 'female' ? 1 : 0];
+  const g = gender === 'female' ? 1 : 0;
+  const fallback = VOICE_MAP['en'][g];
 
   try {
-    // 1. Devanagari script → always Hindi
-    if (/[\u0900-\u097F]/.test(text)) {
-      return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    const t = text || '';
+
+    // ── LAYER 1: Unicode script detection (100% accurate) ──
+    if (/[\u0900-\u097F]/.test(t)) return VOICE_MAP['hi'][g];  // Devanagari
+    if (/[\u0980-\u09FF]/.test(t)) return VOICE_MAP['bn'][g];  // Bengali
+    if (/[\u0A00-\u0A7F]/.test(t)) return VOICE_MAP['pa'][g];  // Gurmukhi
+    if (/[\u0A80-\u0AFF]/.test(t)) return VOICE_MAP['gu'][g];  // Gujarati
+    if (/[\u0B80-\u0BFF]/.test(t)) return VOICE_MAP['ta'][g];  // Tamil
+    if (/[\u0C00-\u0C7F]/.test(t)) return VOICE_MAP['te'][g];  // Telugu
+    if (/[\u0C80-\u0CFF]/.test(t)) return VOICE_MAP['kn'][g];  // Kannada
+    if (/[\u0D00-\u0D7F]/.test(t)) return VOICE_MAP['ml'][g];  // Malayalam
+    if (/[\u0600-\u06FF]/.test(t)) return VOICE_MAP['ar'][g];  // Arabic/Urdu
+    if (/[\u0590-\u05FF]/.test(t)) return VOICE_MAP['he'][g];  // Hebrew
+    if (/[\u0400-\u04FF]/.test(t)) return VOICE_MAP['ru'][g];  // Cyrillic
+    if (/[\u0E00-\u0E7F]/.test(t)) return VOICE_MAP['th'][g];  // Thai
+    if (/[\u4E00-\u9FFF]/.test(t)) return VOICE_MAP['zh'][g];  // Chinese
+    if (/[\u3040-\u30FF]/.test(t)) return VOICE_MAP['ja'][g];  // Japanese
+    if (/[\uAC00-\uD7AF]/.test(t)) return VOICE_MAP['ko'][g];  // Korean
+    if (/[\u0600-\u06FF]/.test(t)) return VOICE_MAP['fa'][g];  // Persian
+
+    // ── LAYER 2: Latin script — word dictionary per language ──
+    // Uses most frequent unique words that don't appear in other languages
+    const LANG_WORDS = {
+      fr: ['le','la','les','des','un','une','est','que','qui','pas','plus','dans','sur','avec','pour','vous','nous','ils','elle','mais','par','au','du','en','je','tu','ne','se','ce','son','sa','ses','leur','leurs','ont','été','avoir','faire','bien','aussi','comme','tout','quand','même','très','autre','encore','toujours','jamais','ici','oui','non','merci','bonjour','bonsoir','monsieur','madame','comment','pourquoi','parce','donc','alors','voilà','peut','doit'],
+      de: ['ich','du','er','sie','es','wir','ihr','die','der','das','ein','eine','und','ist','nicht','den','dem','von','mit','auf','bei','nach','vor','über','unter','auch','aber','oder','wenn','dann','so','wie','was','wer','wo','schon','noch','nur','ja','nein','danke','bitte','hallo','guten','morgen','abend','haben','sein','werden','kann','will','muss','sehr','mehr','hier','dort','jetzt','immer','alle','als'],
+      es: ['el','la','los','las','un','una','que','es','en','de','se','no','su','por','con','para','una','este','pero','como','más','ya','hay','fue','ser','estar','tener','hacer','puede','todo','cuando','bien','también','muy','así','donde','aquí','si','años','tras','cada','bajo','según','nada','tanto','entre','hasta','sobre','mismo','solo','gracias','hola','buenos','días','cómo','estás'],
+      pt: ['que','não','uma','para','com','por','mas','como','mais','seu','sua','está','são','foi','ser','ter','tem','isso','esse','esta','este','ela','nos','dos','das','também','muito','quando','sobre','entre','até','depois','antes','ainda','sempre','já','bem','aqui','onde','todos','agora','então','isso','porque','obrigado','olá','bom','dia','boa','tarde','noite','tudo','bom'],
+      it: ['il','la','le','gli','un','una','che','è','non','per','con','del','della','dei','delle','questo','questa','ma','come','più','già','anche','così','quando','dove','qui','bene','molto','tutti','tutti','grazie','ciao','buongiorno','buonasera','come','stai','sono','essere','avere','fare','dire','andare','vedere','sapere','volere','potere','dovere','quello','quella','loro','noi','voi'],
+      nl: ['de','het','een','van','en','in','is','dat','op','zijn','met','niet','ook','hij','ze','voor','aan','er','maar','om','te','dit','die','was','worden','bij','heeft','naar','zoals','wel','als','kan','moet','door','nog','dan','zo','al','meer','over','uit','worden','wat','wie','waar','hoe','dank','hallo','goedemorgen','goedemiddag','goedenavond'],
+      pl: ['że','jest','się','nie','to','jak','na','do','go','ale','już','czy','ten','być','mam','jego','jej','ich','nas','was','też','tak','nie','po','ze','co','kto','gdzie','kiedy','dlaczego','dobrze','dziękuję','cześć','dzień','dobry','wieczór','można','trzeba','będzie','była','byli','były','może','chcę','lubię','wiem','rozumiem'],
+      tr: ['bir','bu','ve','de','da','için','ile','olan','değil','gibi','çok','daha','nasıl','neden','nerede','ne','kim','evet','hayır','teşekkür','merhaba','günaydın','iyi','akşamlar','tamam','bilmiyorum','anlıyorum','istiyorum','gidiyorum','geliyor','var','yok','ben','sen','biz','siz','onlar','benim','senin','bizim','sizin','onların'],
+      sv: ['och','det','att','en','av','på','är','som','för','den','med','inte','men','har','om','ett','sig','var','kan','till','från','han','hon','vi','de','du','jag','hur','vad','när','var','ja','nej','tack','hej','god','morgon','kväll','bra','mycket','också','sedan','alltid','aldrig','här','där','nu','sedan'],
+      ru: ['и','в','не','на','я','что','тот','быть','с','он','как','это','по','но','они','к','из','у','так','же','от','за','то','чтобы','кто','где','когда','почему','да','нет','спасибо','привет','доброе','утро','добрый','вечер','можно','нельзя','хочу','знаю','понимаю','буду','была','были'],
+      id: ['yang','dan','di','ini','itu','dengan','untuk','dari','pada','adalah','tidak','ada','ke','atau','juga','saya','kamu','dia','kami','mereka','bisa','akan','sudah','belum','ya','tidak','terima','kasih','halo','selamat','pagi','siang','malam','baik','bagaimana','kenapa','dimana','kapan'],
+      ms: ['yang','dan','di','ini','itu','dengan','untuk','dari','pada','adalah','tidak','ada','ke','atau','juga','saya','awak','dia','kami','mereka','boleh','akan','sudah','belum','ya','tidak','terima','kasih','helo','selamat','pagi','tengah','malam','baik','bagaimana','kenapa','dimana','bila'],
+      vi: ['và','của','là','có','trong','không','được','cho','này','các','một','những','với','từ','đã','sẽ','vì','nhưng','khi','nếu','cũng','đây','đó','ai','gì','đâu','bao','giờ','vâng','không','cảm','ơn','xin','chào','buổi','sáng','tối','tốt','thế','nào','tại','sao'],
+    };
+
+    const lower = t.toLowerCase();
+    const wordTokens = lower.match(/\b[a-záàâäãåéèêëíìîïóòôöõúùûüýÿñçœæ]+\b/g) || [];
+    if (wordTokens.length === 0) return fallback;
+
+    // ── LAYER 2a: Hinglish check — STRICT, no common English words ──
+    // Only words that are EXCLUSIVELY Hindi/Urdu romanization
+    const hinglishOnly = new Set([
+      'yaar','kya','hain','mera','tera','apna','karta','karti',
+      'nahi','nhi','hoga','hogi','bhai','dost','acha','accha',
+      'theek','bohot','bahut','kyun','kyu','kahan','kaisa','kaisi',
+      'wala','wali','matlab','samajh','suno','bolo','dekho','dekh',
+      'raha','rahi','uska','uski','unka','humara','tumhara',
+      'phir','sirf','lekin','woh','yeh','iska','iski','hum',
+      'tum','mujhe','tumhe','usse','unhe','hua','hui','bhot',
+      'chal','kaun','kitna','kitni','kyunki','isliye','zaroor',
+      'bilkul','shukriya','namaste','acha','ji','accha',
+    ]);
+    const hinglishCount = wordTokens.filter(w => hinglishOnly.has(w)).length;
+    // Need 3+ matches OR 2+ in very short text to avoid false positives
+    if (hinglishCount >= 3) return VOICE_MAP['hi'][g];
+    if (hinglishCount >= 2 && wordTokens.length <= 6) return VOICE_MAP['hi'][g];
+
+    // ── LAYER 2b: Score each Latin language by word matches ──
+    const wordSet = new Set(wordTokens);
+    let bestLang = null;
+    let bestScore = 0;
+
+    for (const [lang, dict] of Object.entries(LANG_WORDS)) {
+      // Count how many dictionary words appear in the text
+      const matches = dict.filter(w => wordSet.has(w)).length;
+      // Score = matches / total words (ratio) to normalize for text length
+      const score = matches / Math.max(wordTokens.length, 1);
+      if (score > bestScore && matches >= 2) {
+        bestScore = score;
+        bestLang = lang;
+      }
     }
 
-    // 2. Hinglish detection
-    const hinglishWords = [
-      'yaar','kya','hai','hain','mera','tera','apna','karo','karta','karti',
-      'nahi','nhi','hoga','hogi','bhai','dost','acha','accha','thik','theek',
-      'bohot','bahut','kyun','kyu','kab','kahan','kaisa','kaisi','wala','wali',
-      'matlab','samajh','suno','bolo','bol','dekho','dekh','lag','raha','rahi',
-      'tha','thi','the','mere','tere','uska','uski','unka','humara','tumhara',
-      'phir','fir','toh','tho','sirf','bas','lekin','par','aur','ya','bhi',
-      'abhi','kuch','sab','woh','wo','ye','yeh','iska','iski','hum','tum',
-      'main','mai','mujhe','tumhe','usse','unhe','pata','chal','hua','hui',
-      'kr','ho','jao','aa','lo','le','de','kar','ab','na','hi','bhot',
-    ];
-    const lower = text.toLowerCase();
-    const words = lower.split(/\s+/);
-    const hinglishCount = words.filter(w => hinglishWords.includes(w)).length;
-    if (hinglishCount >= 2) return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
-    if (hinglishCount >= 1 && words.length <= 12) return VOICE_MAP['hi'][gender === 'female' ? 1 : 0];
+    // Only trust if we have enough signal — at least 2 word matches
+    // and score above threshold to avoid random single-word matches
+    if (bestLang && bestScore >= 0.1) {
+      return VOICE_MAP[bestLang]?.[g] || fallback;
+    }
 
-   // 3. Detect language with tinyld
-const detected = detect(text) || 'en';
-
-// 4. Latin-script languages (French, Spanish, German etc) — trust tinyld fully
-const latinNonEnglish = ['fr','de','es','pt','it','nl','pl','tr','sv','no','da','fi','cs','sk','ro','hu','el','bg','hr','uk','ca','af','ms','id','vi','fil'];
-if (latinNonEnglish.includes(detected)) {
-  return VOICE_MAP[detected]?.[gender === 'female' ? 1 : 0] || fallback;
-}
-
-// 5. For non-Latin script languages — tinyld already handled above via detectByScript
-// For anything that looks like English (en, en-IN, en-GB etc) — use consistent en-US
-const nonLatinRatio = (text.match(/[^\u0000-\u007F]/g) || []).length / text.length;
-if (nonLatinRatio < 0.15) {
-  // Mostly ASCII — English, use en-US voice always
-  return VOICE_MAP['en'][gender === 'female' ? 1 : 0];
-}
-
-// 6. Non-Latin heavy text not caught by script detection — try tinyld
-const voices = VOICE_MAP[detected];
-return voices ? voices[gender === 'female' ? 1 : 0] : fallback;
+    // ── LAYER 3: Default to English — clean en-US, no Indian accent ──
+    return VOICE_MAP['en'][g];
 
   } catch(_) {
     return fallback;
   }
 };
+
 // ── CLEAN TEXT FOR TTS ──
 const cleanForTTS = useCallback((t) => {
   if (!t) return '';
@@ -1591,14 +1581,15 @@ const cleanForTTS = useCallback((t) => {
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/\*(.+?)\*/g, '$1')
     .replace(/#{1,6}\s/g, '')
+    .replace(/\[.*?\]\(.*?\)/g, '')
+    .replace(/https?:\/\/\S+/g, '')
     .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
     .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
     .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
     .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[★✦•→←↑↓◆◇○●]/g, '')
-    .replace(/\[.*?\]\(.*?\)/g, '')
+    .replace(/[★✦•→←↑↓◆◇○●|]/g, '')
     .replace(/\s+/g, ' ')
-    .trim()
+    .trim();
 }, []);
 
 // ── PRELOAD TTS ──
@@ -1609,10 +1600,8 @@ const preloadTTS = useCallback(async (text) => {
   const cacheKey = `${gender}_${clean}`;
   if (ttsCache.current.has(cacheKey)) return;
   if (ttsPending.current.has(cacheKey)) return;
-
   try {
-    const voice = detectLangVoice(clean, gender); // sync, no await
-
+    const voice = detectLangVoice(clean, gender);
     const promise = fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
@@ -1632,13 +1621,11 @@ const preloadTTS = useCallback(async (text) => {
       ttsPending.current.delete(cacheKey);
       throw e;
     });
-
     ttsPending.current.set(cacheKey, promise);
   } catch(_) {}
 }, [cleanForTTS]);
 
-// ── SPEAK TEXT ──
-// ── CACHED AUTH — only refetches every 50 mins ──
+// ── CACHED AUTH ──
 const getCachedAuthHeader = useCallback(async () => {
   const now = Date.now();
   if (authHeaderCache.current && now < authHeaderExpiry.current) {
@@ -1646,30 +1633,19 @@ const getCachedAuthHeader = useCallback(async () => {
   }
   const headers = await getAuthHeader();
   authHeaderCache.current = headers;
-  authHeaderExpiry.current = now + 50 * 60 * 1000; // 50 min
+  authHeaderExpiry.current = now + 50 * 60 * 1000;
   return headers;
 }, []);
 
 const stopSpeaking = useCallback(() => {
-  // Kill all playing audio immediately
-  currentAudiosRef.current.forEach(a => {
-    a.pause();
-    a.src = '';
-  });
+  currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
   currentAudiosRef.current = [];
   isSpeakingRef.current = false;
 }, []);
 
 const speakText = useCallback(async (t) => {
-  // ── Hard guard: if already fetching/playing, kill everything and return ──
-  if (isSpeakingRef.current) {
-    stopSpeaking();
-    return;
-  }
-
-  // ── Set flag IMMEDIATELY before any await ──
+  if (isSpeakingRef.current) { stopSpeaking(); return; }
   isSpeakingRef.current = true;
-
   try {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
@@ -1678,7 +1654,6 @@ const speakText = useCallback(async (t) => {
     const voice = detectLangVoice(clean, gender);
     const cacheKey = `${gender}_${clean}`;
 
-    // ── Check cache first — if preload already ran, play instantly ──
     const cached = ttsCache.current.get(cacheKey);
     if (cached) {
       const audio = new Audio(cached);
@@ -1691,11 +1666,10 @@ const speakText = useCallback(async (t) => {
       return;
     }
 
-    // ── If a preload fetch is in flight, await it ──
     const pending = ttsPending.current.get(cacheKey);
     if (pending) {
       const src = await pending;
-      if (!isSpeakingRef.current) return; // cancelled while waiting
+      if (!isSpeakingRef.current) return;
       if (src) {
         const audio = new Audio(src);
         currentAudiosRef.current = [audio];
@@ -1708,16 +1682,15 @@ const speakText = useCallback(async (t) => {
       return;
     }
 
-    // ── No cache, no pending — fetch now ──
     const MAX = 800;
     const headers = await getCachedAuthHeader();
     if (!isSpeakingRef.current) return;
 
-    const fetchChunk = (text) =>
+    const fetchChunk = (chunkText) =>
       fetch(API, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ action: 'tts', text, voice })
+        body: JSON.stringify({ action: 'tts', text: chunkText, voice })
       })
         .then(r => r.ok ? r.json() : null)
         .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
@@ -1726,7 +1699,7 @@ const speakText = useCallback(async (t) => {
     if (clean.length <= MAX) {
       const src = await fetchChunk(clean);
       if (!isSpeakingRef.current || !src) return;
-      if (src) ttsCache.current.set(cacheKey, src);
+      ttsCache.current.set(cacheKey, src);
       const audio = new Audio(src);
       currentAudiosRef.current = [audio];
       await new Promise((resolve) => {
@@ -1737,7 +1710,7 @@ const speakText = useCallback(async (t) => {
       return;
     }
 
-    // ── Long text: pipeline chunks ──
+    // ── Long text: chunk by sentences and pipeline ──
     const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
     let cur = '';
@@ -1748,7 +1721,6 @@ const speakText = useCallback(async (t) => {
     if (cur.trim()) chunks.push(cur.trim());
 
     let nextFetch = fetchChunk(chunks[0]);
-
     for (let i = 0; i < chunks.length; i++) {
       if (!isSpeakingRef.current) return;
       const srcPromise = nextFetch;
@@ -1763,7 +1735,7 @@ const speakText = useCallback(async (t) => {
         audio.play().catch(resolve);
       });
     }
-  } catch (_) {}
+  } catch(_) {}
   finally {
     isSpeakingRef.current = false;
     currentAudiosRef.current = [];
@@ -1780,7 +1752,6 @@ const addMsg = (type, text, speak = false) => {
     !text.includes('__IMG_LOADING__') &&
     !text.startsWith('<style>')
   ) {
-    // Pre-warm immediately — fires the fetch in background
     preloadTTS(text);
   }
   if (speak && autoSpeak && type === 'vortis') speakText(text);
@@ -2675,13 +2646,12 @@ setProcessingStatus('');
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
                           { ic: <Volume2 size={11}/>, fn: () => {
-  let textToSpeak = msg.text || '';
-  // If this is a search result (contains vsr-atext), extract just the summary
-  if (textToSpeak.includes('vsr-atext')) {
-    const match = textToSpeak.match(/<div class="vsr-atext">([\s\S]*?)<\/div>/);
-    if (match) textToSpeak = match[1].replace(/<[^>]*>/g, '');
+  let ttsText = msg.text || '';
+  if (ttsText.includes('vsr-atext')) {
+    const m = ttsText.match(/<div class="vsr-atext">([\s\S]*?)<\/div>/);
+    if (m) ttsText = m[1].replace(/<[^>]*>/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&#39;/g,"'");
   }
-  speakText(textToSpeak);
+  speakText(ttsText);
 }, tip: 'Read aloud' },
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
