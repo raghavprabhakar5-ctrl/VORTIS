@@ -2623,16 +2623,6 @@ setProcessingStatus('');
         </div>
       )}
 
-      <Hero
-  trustBadge={{ text: "New feature release!", icons: ["🎉"] }}
-  headline={{ line1: "Transform Your", line2: "Business with AI" }}
-  subtitle="Revolutionize your workflow with our cutting-edge AI platform."
-  buttons={{
-    primary: { text: "Start Free Trial" },
-    secondary: { text: "Watch Demo →" }
-  }}
-/>
-
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
 
       {showStarredPanel && (
