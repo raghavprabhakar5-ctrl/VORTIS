@@ -2555,64 +2555,23 @@ setProcessingStatus('');
      {showLogin && (
   <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
     <HeroLanding
-      logo={{
-        src: "https://tailwindcss.com/plus-assets/img/logos/mark.svg?color=violet&shade=500",
-        alt: "Vortis AI",
-        companyName: "Vortis AI"
-      }}
+      title="Your intelligent AI companion for every task"
+      description="Search the web, generate images, analyze documents, and hold natural conversations — all in one place."
       navigation={[
         { name: 'Pricing', href: '#' },
         { name: 'About', href: '#' },
         { name: 'Contact', href: '#' },
       ]}
-      loginText={null}
-      loginHref={null}
-      title="Your intelligent AI companion for every task"
-      description="Search the web, generate images, analyze documents, and hold natural conversations — all in one place."
       announcementBanner={{
         text: "🎉 Now with Image AI & Voice Mode!",
         linkText: "See what's new",
         linkHref: "#"
       }}
-      titleSize="large"
-      gradientColors={{
-        from: "oklch(0.7 0.15 280)",
-        to: "oklch(0.6 0.2 320)"
-      }}
-      className="min-h-screen"
+      gradientColors={{ from: "oklch(0.7 0.15 280)", to: "oklch(0.6 0.2 320)" }}
+      onLogin={handleLogin}
+      authLoading={authLoading}
+      authError={authError}
     />
-    {/* Auth buttons centered over hero */}
-    <div style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0,
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      padding: '32px 24px 48px',
-      background: 'linear-gradient(to top, rgba(8,8,16,0.95) 60%, transparent)',
-      gap: 12, zIndex: 201
-    }}>
-      <p style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', fontFamily: 'JetBrains Mono', marginBottom: 4 }}>Sign in to get started</p>
-      {AUTH_BUTTONS.map(b => (
-        <button key={b.provider} onClick={() => handleLogin(b.provider)} disabled={authLoading}
-          style={{
-            width: '100%', maxWidth: 360, padding: '0 18px', height: 52,
-            background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)',
-            borderRadius: 13, display: 'flex', alignItems: 'center', gap: 14,
-            cursor: authLoading ? 'not-allowed' : 'pointer',
-            color: 'rgba(255,255,255,.85)', fontSize: 14,
-            fontFamily: 'Geist,sans-serif', fontWeight: 500,
-            transition: 'all .18s', opacity: authLoading ? 0.5 : 1
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,.12)'; e.currentTarget.style.transform='translateY(-1px)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,.06)'; e.currentTarget.style.transform='none'; }}
-        >
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {b.icon}
-          </div>
-          <span style={{ flex: 1, textAlign: 'left' }}>{authLoading ? 'Opening…' : b.label}</span>
-          <svg width="13" height="13" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      ))}
-      {authError && <p style={{ fontSize: 12, color: '#f87171', fontFamily: 'JetBrains Mono' }}>{authError}</p>}
-    </div>
   </div>
 )}
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
