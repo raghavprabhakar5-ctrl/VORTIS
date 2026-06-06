@@ -1,6 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { X } from 'lucide-react'
 
+const VortisLogo = ({ size = 36, color = "#8b5cf6" }) => (
+  <svg width={size} height={size} viewBox="0 0 1254 1254" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M0 0 C2.97551795 1.77603298 5.42755188 3.85510377 7 7 C7.11791887 8.38616367 7.17694276 9.77757631 7.20532227 11.16845703 C7.22524231 12.04519577 7.24516235 12.92193451 7.26568604 13.82524109 C7.29079254 15.27686394 7.29079254 15.27686394 7.31640625 16.7578125 C7.34791779 18.29215691 7.34791779 18.29215691 7.38006592 19.85749817 C7.44748254 23.27991239 7.50609512 26.70238724 7.5625 30.125 C7.58234955 31.29773468 7.6021991 32.47046936 7.62265015 33.67874146 C7.7612943 42.0831845 7.87456786 50.48784107 7.97470093 58.89281464 C8.00042824 61.03566883 8.02715217 63.17850912 8.05395508 65.3213501 C8.16186031 74.10092842 8.24010655 82.88021788 8.28610229 91.66033936 C8.30164142 94.50574734 8.32645681 97.35084467 8.35916138 100.19610596 C8.40446898 104.20245243 8.41666453 108.20825079 8.42578125 112.21484375 C8.44324402 113.40737259 8.46070679 114.59990143 8.47869873 115.8285675 C8.45890861 123.44413203 7.57415269 127.92564782 2.46484375 133.75 C-1.84867608 137.28024641 -6.42325204 140.20200539 -11.15625 143.140625 C-15.698455 146.11052827 -19.82950596 149.53686891 -24 153 C-24.84691406 153.66128906 -24.84691406 153.66128906 -25.7109375 154.3359375 C-29.24570442 157.1226056 -32.14616039 160.25335105 -35.03515625 163.6796875 C-36.40505539 165.29742128 -37.81209097 166.88411991 -39.24609375 168.4453125 C-53.53623377 184.49599777 -66.44022935 207.44301314 -68.55078125 229.13671875 C-68.96151304 231.75468746 -69.6443793 233.8317611 -70.5234375 236.31640625 C-72.53295931 242.83509895 -72.41478281 249.33698163 -72.33618164 256.08447266 C-72.31269155 258.23248387 -72.31562808 260.37923714 -72.32226562 262.52734375 C-72.29857945 274.83549281 -70.93486474 286.73811139 -67.625 298.625 C-67.28867554 299.846427 -67.28867554 299.846427 -66.94555664 301.0925293 C-66.50039466 302.69279205 -66.05052065 304.29175392 -65.59521484 305.88916016 C-65.10689406 307.62091631 -64.65218871 309.36211813 -64.20703125 311.10546875 C-58.52154173 331.10569329 -45.05403631 349.1091209 -31 364 C-30.31550781 364.74894531 -29.63101563 365.49789063 -28.92578125 366.26953125 C-16.1208883 379.7844922 1.32613078 390.31286386 19 396 C20.29398149 396.51505538 21.58580151 397.03558692 22.875 397.5625 C36.37825416 402.4427861 49.1200395 402.36489181 63.3125 402.1875 C65.42121438 402.1724227 67.52993921 402.1587397 69.63867188 402.14648438 C74.75937674 402.11372769 79.87957055 402.06211407 85 402 C85 401.34 85 400.68 85 400 C85.75023437 399.90203125 86.50046875 399.8040625 87.2734375 399.703125 C93.23396028 398.83231815 98.53743807 397.66268785 104.0546875 395.25 C106.40240102 394.25362291 108.7341566 393.35889793 111.1328125 392.5 C119.04855306 389.63347146 126.19399761 386.61072835 133.18530273 381.82714844 C139.02122763 377.86597237 145.144296 374.47655901 151.3125 371.0625 C158.50387227 367.07354814 165.67886377 363.07405077 172.75 358.875 C181.55156628 353.65184559 190.4388825 348.58345286 199.33251953 343.51904297 C203.61910073 341.07797504 207.90373112 338.63349933 212.1875 336.1875 C213.0434375 335.69894531 213.899375 335.21039062 214.78125 334.70703125 C220.68575329 331.33302937 226.57564039 327.93436454 232.46142578 324.52783203 C243.24556047 318.28792515 254.07096056 312.13121694 264.95166016 306.0612793 C271.53049669 302.38945511 278.08806884 298.68340275 284.625 294.9375 C298.63656393 286.90967919 312.67497255 278.92921388 326.8125 271.125 C334.0750988 267.11341231 341.25952897 262.97331884 348.4375 258.8125 C360.74327062 251.68469519 373.15262653 244.75604465 385.60009766 237.87939453 C391.27943892 234.73997409 396.95230377 231.58890727 402.625 228.4375 C404.30106323 227.50659546 404.30106323 227.50659546 406.01098633 226.55688477 C417.69015668 220.06676158 429.34615404 213.5354532 441 207 C454.98558369 199.15691301 468.98076126 191.33227435 483.00805664 183.56396484 C488.55886907 180.48543087 494.09519678 177.38497915 499.60546875 174.234375 C500.65202637 173.6369751 501.69858398 173.0395752 502.77685547 172.42407227 C504.74343044 171.29907244 506.70747218 170.169628 508.66845703 169.03491211 C518.40447532 163.46726609 527.51145014 160.90170678 538.78125 163.6875 C542.97068668 165.27842532 546.77364224 167.41055268 550.59375 169.73828125 C555.13598457 172.48572206 559.70783082 175.17656443 564.296875 177.8449707 C566.32456519 179.02426968 568.35051734 180.20656058 570.375 181.39135742 C575.62003131 184.46042033 580.87665558 187.50263389 586.171875 190.484375 C587.1525293 191.04439209 588.13318359 191.60440918 589.14355469 192.18139648 C590.98563299 193.23327043 592.83482261 194.27283336 594.69238281 195.29711914 C601.95095764 199.47585767 608.69172282 205.08121938 612 213 C612.86274466 220.37419645 613.06568357 227.09066353 608.58203125 233.25390625 C608.05996094 233.83011719 607.53789063 234.40632812 607 235 C606.35289062 235.76570312 605.70578125 236.53140625 605.0390625 237.3203125 C600.9485655 241.34849838 595.60068824 243.68340854 590.5625 246.3125 C588.38609441 247.46887779 586.21030914 248.62642384 584.03515625 249.78515625 C582.9898877 250.33961426 581.94461914 250.89407227 580.86767578 251.46533203 C576.27354681 253.92393025 571.7658349 256.51883183 567.25390625 259.125 C563.66336969 261.19397665 560.05252168 263.22424896 556.4375 265.25 C547.60923467 270.20492281 538.82329214 275.23315478 530.03710938 280.26220703 C524.96225454 283.16597043 519.8853231 286.06609897 514.80859375 288.96658325 C512.99729181 290.00154744 511.1861253 291.03674822 509.375 292.07202148 C504.04876543 295.1164434 498.72185142 298.15963585 493.390625 301.1953125 C483.32057986 306.93222675 473.28947158 312.73176785 463.28540039 318.58300781 C455.93731381 322.87843331 448.56622978 327.1324803 441.1875 331.375 C431.19299968 337.12717136 421.25562152 342.97018774 411.34350586 348.86303711 C402.8319488 353.92175211 394.29617101 358.93755761 385.75 363.9375 C377.25550948 368.90813128 368.77816812 373.90326062 360.3515625 378.98828125 C356.62386672 381.22576765 352.87625365 383.42734492 349.125 385.625 C340.78818198 390.51152903 332.50693266 395.48919536 324.22558594 400.46899414 C318.29404654 404.03286823 312.34946005 407.57112236 306.375 411.0625 C296.90475702 416.60513036 287.55153694 422.3386792 278.18652344 428.05664062 C272.56703166 431.48379007 266.93949886 434.89769729 261.3125 438.3125 C260.12718773 439.03196671 258.94188504 439.7514492 257.7565918 440.47094727 C255.36461929 441.92291081 252.97260766 443.37480988 250.58056641 444.82666016 C248.21297417 446.26370419 245.84545686 447.70087152 243.47802734 449.13818359 C242.90031082 449.48892441 242.3225943 449.83966522 241.72737122 450.20103455 C240.56284071 450.90811416 239.39836112 451.61527764 238.2339325 452.32252502 C235.32567675 454.08880471 232.41656423 455.8536405 229.50561523 457.61547852 C224.22121781 460.81575833 218.94452611 464.02629031 213.69897461 467.28996277 C198.68420609 476.63055454 183.57138401 485.11504727 167.59521484 492.74267578 C165.39628266 493.80800981 163.24339299 494.92872201 161.0859375 496.07421875 C155.59013165 498.83271226 149.70856794 500.60007095 143.875 502.5 C142.66158936 502.89727295 141.44817871 503.2945459 140.19799805 503.70385742 C136.80110051 504.81027548 133.4007831 505.90560049 130 507 C128.89567627 507.36472412 128.89567627 507.36472412 127.76904297 507.73681641 C120.06454367 510.27857138 112.22751727 511.79600724 104.25 513.1875 C103.31003174 513.35483643 102.37006348 513.52217285 101.40161133 513.69458008 C58.0633922 520.80335318 11.20464191 516.99238877 -29 499 C-30.18980469 498.47921875 -31.37960937 497.9584375 -32.60546875 497.421875 C-59.15230804 485.57644135 -83.06880952 469.12871672 -104 449 C-104.54043945 448.48147461 -105.08087891 447.96294922 -105.63769531 447.42871094 C-112.97279926 440.34903719 -119.73464337 433.06029664 -126 425 C-126.78761719 424.01773437 -127.57523438 423.03546875 -128.38671875 422.0234375 C-149.07179934 396.0168839 -164.44996258 365.78322255 -174 334 C-174.56460938 332.19208984 -174.56460938 332.19208984 -175.140625 330.34765625 C-185.18004039 297.04526714 -187.93543844 257.41757591 -182 223 C-181.86577637 222.195625 -181.73155273 221.39125 -181.59326172 220.5625 C-178.1746366 200.45204967 -173.17761968 181.09440423 -166 162 C-165.53787109 160.75452393 -165.53787109 160.75452393 -165.06640625 159.48388672 C-153.60931815 128.82666809 -136.29368097 100.96460775 -114 77 C-112.80778787 75.6290837 -111.62008001 74.25423376 -110.4375 72.875 C-104.46133692 66.03132938 -97.93900785 59.85270949 -91 54 C-90.00742188 53.13375 -89.01484375 52.2675 -87.9921875 51.375 C-69.83101453 35.8451406 -49.00928789 22.7179326 -28.12597656 11.17919922 C-25.87330298 9.92972593 -23.6350436 8.65689938 -21.3984375 7.37890625 C-19.93250528 6.5438957 -18.46636842 5.70924429 -17 4.875 C-16.33436035 4.49577393 -15.6687207 4.11654785 -14.98291016 3.72583008 C-9.76986213 0.79049358 -6.04710732 -0.61496007 0 0 Z" fill={color} transform="translate(320,528)"/>
+    <path d="M0 0 C1.30941799 0.40259911 2.6193101 0.80365963 3.9296875 1.203125 C6.95575811 2.12721538 9.97898555 3.05954507 13 4 C13 4.66 13 5.32 13 6 C13.54744873 6.17160645 14.09489746 6.34321289 14.65893555 6.52001953 C36.18525958 13.45452025 55.42480185 25.96477084 73 40 C73.96035156 40.75667969 74.92070313 41.51335937 75.91015625 42.29296875 C91.14585658 54.71651706 105.68806372 68.86953961 117 85 C117.4837207 85.68771484 117.96744141 86.37542969 118.46582031 87.08398438 C131.88933834 106.34788041 143.97587476 127.06996449 150.9296875 149.60546875 C151.68302434 151.99470127 152.53112086 154.35507593 153.4453125 156.6875 C155.43968342 161.938924 156.70617262 167.35381255 158 172.8125 C158.39191528 174.45714233 158.39191528 174.45714233 158.79174805 176.13500977 C161.01889871 185.69056319 162.76773784 195.2674323 164 205 C165.33645413 215.8994523 165.18393867 224.91069391 165.203125 233.921875 C165.24023438 250.88623047 165.29820633 265.55976486 165.32357025 276.8890152 C165.36484522 284.81968807 165.35644531 289.85839844 165.3843689 292.09727478 C165.33982443 297.6335565 163.93445293 301.48095965 160.578125 305.8515625 C158.52930641 307.34253445 157.26938061 307.40142707 154.75 307.375 C144.39403476 306.12299317 137.08167471 300.74266427 130.0625 296.6875 C117.50654454 289.46994131 108.72929131 284.378063 99.98120117 279.23681641 C83.35889729 269.71558572 73.55029297 264.23608398 65.3331585 259.59265086 C56 246 55.1680247 242.50132492 54.71875 235.578125 C54.04551962 215.58192353 52.5990774 202.9242417 48.625 189.8125 C46.56148347 183.10520159 44.49900109 179.22947028 42 175 C32.06899977 147.16478584 7.304472 126.2112154 -15 115 C-26.59321395 109.58935254 -38.46182167 105.51292604 -51 103 C-84.3442227 97.12795437 -113.50413681 103.7746467 -140 118 C-151.37138615 124.15681648 -158.13477652 129.7968126 -165 136 C-191.16877943 160.3749499 -204.07792078 193.95127274 -205.32041707 226.35818649 C-205.88846401 336.18833088 -206.10131836 397.78491211 -206.28979492 457.17358398 C-206.45055866 500.85680294 -206.66535574 563.03733081 -206.98529428 636.55840379 C-207.23469031 667.88220012 -207.37494373 687.69657536 -216.19628906 710.24951172 C-218.16761548 712.1626696 -220.10939417 713.4424722 -222.484375 714.8203125 C-239.625 724.5625 -268.5637207 740.42895508 -288.26977539 751.37426758 C-296.76921335 755.24425436 -302.3125 755.5 C-309.85334094 754.81549385 -313.73115675 750.09828882 C-315.94299282 746.44057074 -315.74946022 738.79073524 C-315.6055047 313.46462891 -315.60206966 286.52517692 -315.57108469 273.05542459 C-315.63001513 202.21749298 -311.5688804 172.35667567 -301.125 147.125 C-289.07485482 117.06970645 -277.10166652 94.98073424 -261 77 C-192.8930966 -1.14877909 -95.91099103 -27.66080594 0 0 Z" fill={color} transform="translate(701,106)"/>
+    <path d="M0 0 C0.91394531 0.61230469 1.82789063 1.22460938 2.76953125 1.85546875 C48.625 29.25 95.09496436 57.0626947 145.82397461 86.61987305 C185.99103737 110.09007588 234.9375 138.9375 276.92871094 163.65771484 C325.12763884 192.15838606 365.9375 215.9375 400.5546875 236.19140625 C431.45268812 256.12576823 457.8147078 280.12667225 472.9375 297.9375 C502.10135822 335.75667549 525.29076688 383.25041717 526.76171875 429.16796875 C528.1875 455.75 528.18954468 458.03463745 528.14936701 486.46728486 C523.9037116 514.90863699 514.9375 541.9375 505.328125 566.25 C493.19095427 592.77849538 481.02832229 611.02851326 466.9375 627.9375 C456.40817896 640.55617868 435.59521484 659.63916016 401.9375 682.9375 C381.34874056 694.43009333 342.125 707.875 288.44677734 714.32861328 C246.0844952 712.29860495 194.9375 696.9375 135.9375 664.9375 C113.35253906 644.75219727 116.1953125 634.63671875 C120.75889532 629.60192575 157.6875 608.5 186.7109375 590.71484375 C215.375 581.203125 247.5234375 595.04296875 C267.37641725 602.39949361 310.9375 599.9375 C337.86656461 591.49492449 375.54150391 564.31445312 C410.52116039 518.92526659 420.12280273 458.72802734 C416.99508377 418.7352703 409.9375 402.9375 C393.83049784 366.38307152 337.41015625 327.01171875 C283.77223545 295.54906491 226.55444336 262.02880859 C185.40610734 237.89436602 121.25 199.625 C73.8203125 171.2734375 6.21069336 130.62011719 C-4.60843454 124.21350857 -23.73803711 112.7980957 C-40.34394665 102.00825939 -45.0625 92.9375 C-48.22363281 80.31396484 C-48.51191211 18.13832571 -47.57700252 9.45700747 -38.58203125 0.11328125 C-27.3136669 -9.61769385 -11.83914377 -7.57133779 0 0 Z" fill={color} transform="translate(587.0625,330.0625)"/>
+  </svg>
+)
+
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
 )
@@ -20,60 +28,38 @@ uniform float time;
 #define T time
 #define R resolution
 #define MN min(R.x,R.y)
-
-float rnd(vec2 p) {
-  p=fract(p*vec2(12.9898,78.233));
-  p+=dot(p,p+34.56);
-  return fract(p.x*p.y);
-}
-float noise(in vec2 p) {
-  vec2 i=floor(p), f=fract(p), u=f*f*(3.-2.*f);
-  float a=rnd(i), b=rnd(i+vec2(1,0)), c=rnd(i+vec2(0,1)), d=rnd(i+1.);
-  return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
-}
-float fbm(vec2 p) {
-  float t=.0, a=1.; mat2 m=mat2(1.,-.5,.2,1.2);
-  for (int i=0; i<5; i++) { t+=a*noise(p); p*=2.*m; a*=.5; }
-  return t;
-}
-float clouds(vec2 p) {
-  float d=1., t=.0;
-  for (float i=.0; i<3.; i++) {
-    float a=d*fbm(i*10.+p.x*.2+.2*(1.+i)*p.y+d+i*i+p);
-    t=mix(t,d,a); d=a; p*=2./(i+1.);
-  }
-  return t;
-}
-void main(void) {
-  vec2 uv=(FC-.5*R)/MN, st=uv*vec2(2,1);
+float rnd(vec2 p){p=fract(p*vec2(12.9898,78.233));p+=dot(p,p+34.56);return fract(p.x*p.y);}
+float noise(in vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);float a=rnd(i),b=rnd(i+vec2(1,0)),c=rnd(i+vec2(0,1)),d=rnd(i+1.);return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}
+float fbm(vec2 p){float t=.0,a=1.;mat2 m=mat2(1.,-.5,.2,1.2);for(int i=0;i<5;i++){t+=a*noise(p);p*=2.*m;a*=.5;}return t;}
+float clouds(vec2 p){float d=1.,t=.0;for(float i=.0;i<3.;i++){float a=d*fbm(i*10.+p.x*.2+.2*(1.+i)*p.y+d+i*i+p);t=mix(t,d,a);d=a;p*=2./(i+1.);}return t;}
+void main(void){
+  vec2 uv=(FC-.5*R)/MN,st=uv*vec2(2,1);
   vec3 col=vec3(0);
   float bg=clouds(vec2(st.x+T*.5,-st.y));
   uv*=1.-.3*(sin(T*.2)*.5+.5);
-  for (float i=1.; i<12.; i++) {
+  for(float i=1.;i<12.;i++){
     uv+=.1*cos(i*vec2(.1+.01*i,.8)+i*i+T*.5+.1*uv.x);
     vec2 p=uv;
     float d=length(p);
-    // Purple/violet/indigo palette instead of orange
-    col+=.00125/d*(cos(sin(i)*vec3(2.5,1.5,4.0))+1.);
+    // Purple/violet palette: vec3(2.8, 1.2, 4.5) gives blue-purple-violet
+    col+=.00125/d*(cos(sin(i)*vec3(2.8,1.2,4.5))+1.);
     float b=noise(i+p+bg*1.731);
     col+=.002*b/length(max(p,vec2(b*p.x*.02,p.y)));
-    col=mix(col,vec3(bg*.05,bg*.03,bg*.25),d);
+    // Dark purple background blend
+    col=mix(col,vec3(bg*.04,bg*.02,bg*.22),d);
   }
   O=vec4(col,1);
-}`;
+}`
 
 function useShaderBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
- const rafRef = useRef<number | undefined>(undefined)
-  const glRef = useRef<WebGL2RenderingContext | null>(null)
-  const programRef = useRef<WebGLProgram | null>(null)
+  const rafRef = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const gl = canvas.getContext('webgl2')
     if (!gl) return
-    glRef.current = gl
 
     const resize = () => {
       const dpr = Math.max(1, 0.5 * window.devicePixelRatio)
@@ -89,17 +75,12 @@ function useShaderBackground() {
       return s
     }
 
-    const vs = compile(gl.VERTEX_SHADER, `#version 300 es
-precision highp float;
-in vec4 position;
-void main(){gl_Position=position;}`)
-
+    const vs = compile(gl.VERTEX_SHADER, `#version 300 es\nprecision highp float;\nin vec4 position;\nvoid main(){gl_Position=position;}`)
     const fs = compile(gl.FRAGMENT_SHADER, shaderSource)
     const prog = gl.createProgram()!
     gl.attachShader(prog, vs)
     gl.attachShader(prog, fs)
     gl.linkProgram(prog)
-    programRef.current = prog
 
     const buf = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
@@ -130,7 +111,7 @@ void main(){gl_Position=position;}`)
   return canvasRef
 }
 
-export function HeroLanding({ logo, navigation, title, description, announcementBanner, onLogin, authLoading, authError }: any) {
+export function HeroLanding({ navigation, title, description, announcementBanner, onLogin, authLoading, authError }: any) {
   const canvasRef = useShaderBackground()
   const [showAuthModal, setShowAuthModal] = useState(false)
 
@@ -148,43 +129,43 @@ export function HeroLanding({ logo, navigation, title, description, announcement
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#080810' }}>
-      {/* Animated shader background */}
-      <canvas
-        ref={canvasRef}
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
-      />
+      {/* Animated WebGL background */}
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
       {/* Nav */}
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
         <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 40px' }}>
+          {/* Vortis Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {logo?.src && <img alt={logo?.alt || 'Logo'} src={logo.src} style={{ height: 30, width: 'auto' }} />}
-            {logo?.companyName && <span style={{ fontSize: 16, fontWeight: 700, color: 'white', letterSpacing: '.06em' }}>{logo.companyName}</span>}
+            <VortisLogo size={32} color="#8b5cf6" />
+            <span style={{ fontSize: 16, fontWeight: 700, color: 'white', letterSpacing: '.08em' }}>VORTIS</span>
           </div>
 
+          {/* Nav links */}
           <div style={{ display: 'flex', gap: 36 }}>
             {nav.map((item: any) => (
-              <a key={item.name} href={item.href} style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.65)', textDecoration: 'none' }}>
-                {item.name}
-              </a>
+              <a key={item.name} href={item.href} style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', transition: 'color .15s' }}
+                onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.6)'}
+              >{item.name}</a>
             ))}
           </div>
 
-          <button
-            onClick={() => setShowAuthModal(true)}
-            style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.65)', background: 'none', border: 'none', cursor: 'pointer' }}
-          >
-            Sign In →
-          </button>
+          {/* Sign In */}
+          <button onClick={() => setShowAuthModal(true)}
+            style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.6)', background: 'none', border: 'none', cursor: 'pointer', transition: 'color .15s' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'white'}
+            onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.6)'}
+          >Sign In →</button>
         </nav>
       </div>
 
       {/* Hero content */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
         {announcementBanner && (
-          <div style={{ marginBottom: 24, padding: '6px 18px', borderRadius: 999, border: '1px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.55)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(255,255,255,0.05)' }}>
+          <div style={{ marginBottom: 28, padding: '6px 18px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.3)', color: 'rgba(255,255,255,0.5)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.08)' }}>
             {announcementBanner.text}{' '}
-            <a href={announcementBanner.linkHref} style={{ color: 'rgba(200,180,255,0.9)', fontWeight: 600, textDecoration: 'none' }}>{announcementBanner.linkText} →</a>
+            <a href={announcementBanner.linkHref} style={{ color: '#a78bfa', fontWeight: 600, textDecoration: 'none' }}>{announcementBanner.linkText} →</a>
           </div>
         )}
 
@@ -192,47 +173,46 @@ export function HeroLanding({ logo, navigation, title, description, announcement
           {title || 'Your intelligent AI companion for every task'}
         </h1>
 
-        <p style={{ fontSize: 'clamp(15px, 2vw, 20px)', color: 'rgba(255,255,255,0.45)', maxWidth: 580, margin: 0, lineHeight: 1.65 }}>
+        <p style={{ fontSize: 'clamp(15px, 2vw, 20px)', color: 'rgba(255,255,255,0.4)', maxWidth: 580, margin: 0, lineHeight: 1.65 }}>
           {description || 'Search the web, generate images, analyze documents, and hold natural conversations — all in one place.'}
         </p>
       </div>
 
       {/* Auth Modal */}
       {showAuthModal && (
-        <div
-          onClick={e => { if (e.target === e.currentTarget) setShowAuthModal(false) }}
+        <div onClick={e => { if (e.target === e.currentTarget) setShowAuthModal(false) }}
           style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(16px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
         >
-          <div style={{ background: '#0d0d18', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
+          <div style={{ background: '#0d0d18', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div>
-                <h2 style={{ fontSize: 20, fontWeight: 700, color: 'white', margin: '0 0 4px' }}>Welcome to Vortis</h2>
-                <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', margin: 0 }}>Sign in to continue</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <VortisLogo size={28} color="#8b5cf6" />
+                <div>
+                  <h2 style={{ fontSize: 18, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', margin: 0 }}>Sign in to continue</p>
+                </div>
               </div>
-              <button onClick={() => setShowAuthModal(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}>
-                <X size={14} />
+              <button onClick={() => setShowAuthModal(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                <X size={13} />
               </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {AUTH_BUTTONS.map(b => (
-                <button
-                  key={b.provider}
-                  onClick={() => onLogin?.(b.provider)}
-                  disabled={authLoading}
-                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: authLoading ? 'not-allowed' : 'pointer', color: 'rgba(255,255,255,0.85)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s', opacity: authLoading ? 0.5 : 1 }}
-                  onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'; }}}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
+                <button key={b.provider} onClick={() => onLogin?.(b.provider)} disabled={authLoading}
+                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: authLoading ? 'not-allowed' : 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s', opacity: authLoading ? 0.5 : 1 }}
+                  onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.35)'; }}}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
                 >
                   <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{b.icon}</div>
                   <span style={{ flex: 1, textAlign: 'left' }}>{authLoading ? 'Opening…' : b.label}</span>
-                  <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                  <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
                 </button>
               ))}
             </div>
 
             {authError && <p style={{ fontSize: 12, color: '#f87171', marginTop: 12, textAlign: 'center' }}>{authError}</p>}
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
               By continuing you agree to our Terms of Service and Privacy Policy
             </p>
           </div>
