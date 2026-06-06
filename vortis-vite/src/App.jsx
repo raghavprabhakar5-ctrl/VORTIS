@@ -2552,77 +2552,69 @@ setProcessingStatus('');
       }, 50);
     }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
-      {showLogin && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', fontFamily: "'Geist',sans-serif", background: '#080810', overflow: 'hidden' }}>
-          <div className="login-left" style={{ flex: 1, padding: 'clamp(32px,4vw,56px)', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-start', background: '#0a0a12', borderRight: '1px solid rgba(255,255,255,.07)', position: 'relative', overflow: 'hidden', minHeight: 0, height: '100%' }}>
-            <div style={{ position:'absolute', inset:0, pointerEvents:'none', backgroundImage:'linear-gradient(rgba(99,102,241,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,.04) 1px,transparent 1px)', backgroundSize:'48px 48px' }}/>
-            <div style={{ position:'absolute', width:400, height:400, borderRadius:'50%', background:'rgba(99,102,241,.18)', filter:'blur(80px)', top:-120, left:-120, pointerEvents:'none' }}/>
-            <div style={{ position:'absolute', width:280, height:280, borderRadius:'50%', background:'rgba(139,92,246,.12)', filter:'blur(70px)', bottom:-60, right:-40, pointerEvents:'none' }}/>
-            <div style={{ position:'relative', zIndex:1 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:40 }}>
-                <VortisLogo size={36} color="#8b5cf6" />
-                <span style={{ fontSize:21, fontWeight:700, color:'#fff', letterSpacing:'.08em' }}>VORTIS</span>
-              </div>
-              <h1 style={{ fontSize:'clamp(26px,2.8vw,40px)', fontWeight:800, color:'#fff', lineHeight:1.13, letterSpacing:'-.03em', marginBottom:14 }}>Your intelligent<br/><span style={{ color:'#6366f1' }}>AI companion</span><br/>for every task</h1>
-              <p style={{ fontSize:14.5, color:'rgba(255,255,255,.35)', lineHeight:1.7, marginBottom:40, maxWidth:360 }}>Search the web, generate images, analyze documents, and hold natural conversations — all in one place.</p>
-              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                {[
-                  { icon:<Search size={16}/>, color:'#6366f1', bg:'rgba(99,102,241,.15)', label:'Web Search', desc:'real-time answers from the web' },
-                  { icon:<ImageIcon size={16}/>, color:'#8b5cf6', bg:'rgba(139,92,246,.15)', label:'Image AI', desc:'generate stunning visuals' },
-                  { icon:<Brain size={16}/>, color:'#06b6d4', bg:'rgba(6,182,212,.12)', label:'Memories', desc:'remembers your skills and preferences' },
-                  { icon:<Mic size={16}/>, color:'#10b981', bg:'rgba(16,185,129,.12)', label:'Voice Mode', desc:'talk naturally, hands-free' },
-                ].map(f => (
-                  <div key={f.label} style={{ display:'flex', alignItems:'center', gap:14 }}>
-                    <div style={{ width:36, height:36, minWidth:36, borderRadius:9, background:f.bg, display:'flex', alignItems:'center', justifyContent:'center', color:f.color, flexShrink:0 }}>{f.icon}</div>
-                    <span style={{ fontSize:13.5, color:'rgba(255,255,255,.65)' }}><strong style={{ color:'#fff', fontWeight:600 }}>{f.label}</strong>{' — '}{f.desc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+     {showLogin && (
+  <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+    <HeroLanding
+      logo={{
+        src: "https://tailwindcss.com/plus-assets/img/logos/mark.svg?color=violet&shade=500",
+        alt: "Vortis AI",
+        companyName: "Vortis AI"
+      }}
+      navigation={[
+        { name: 'Pricing', href: '#' },
+        { name: 'About', href: '#' },
+        { name: 'Contact', href: '#' },
+      ]}
+      loginText={null}
+      loginHref={null}
+      title="Your intelligent AI companion for every task"
+      description="Search the web, generate images, analyze documents, and hold natural conversations — all in one place."
+      announcementBanner={{
+        text: "🎉 Now with Image AI & Voice Mode!",
+        linkText: "See what's new",
+        linkHref: "#"
+      }}
+      titleSize="large"
+      gradientColors={{
+        from: "oklch(0.7 0.15 280)",
+        to: "oklch(0.6 0.2 320)"
+      }}
+      className="min-h-screen"
+    />
+    {/* Auth buttons centered over hero */}
+    <div style={{
+      position: 'fixed', bottom: 0, left: 0, right: 0,
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      padding: '32px 24px 48px',
+      background: 'linear-gradient(to top, rgba(8,8,16,0.95) 60%, transparent)',
+      gap: 12, zIndex: 201
+    }}>
+      <p style={{ fontSize: 13, color: 'rgba(255,255,255,.5)', fontFamily: 'JetBrains Mono', marginBottom: 4 }}>Sign in to get started</p>
+      {AUTH_BUTTONS.map(b => (
+        <button key={b.provider} onClick={() => handleLogin(b.provider)} disabled={authLoading}
+          style={{
+            width: '100%', maxWidth: 360, padding: '0 18px', height: 52,
+            background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.12)',
+            borderRadius: 13, display: 'flex', alignItems: 'center', gap: 14,
+            cursor: authLoading ? 'not-allowed' : 'pointer',
+            color: 'rgba(255,255,255,.85)', fontSize: 14,
+            fontFamily: 'Geist,sans-serif', fontWeight: 500,
+            transition: 'all .18s', opacity: authLoading ? 0.5 : 1
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,.12)'; e.currentTarget.style.transform='translateY(-1px)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,.06)'; e.currentTarget.style.transform='none'; }}
+        >
+          <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {b.icon}
           </div>
-
-          <div style={{ width:'min(460px,100%)', display:'grid', placeItems:'center', padding:'0 clamp(24px,5vw,52px)', background:'#0d0d18', flexShrink:0, height:'100%', overflowY:'auto', boxSizing:'border-box' }}>
-            <div style={{ width:'100%', maxWidth:360 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:30 }}>
-                <VortisLogo size={32} color="#8b5cf6" />
-                <span style={{ fontSize:17, fontWeight:700, letterSpacing:'.06em', color:'#fff' }}>VORTIS</span>
-              </div>
-              <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'5px 13px', borderRadius:24, border:'1px solid rgba(255,255,255,.08)', background:'rgba(255,255,255,.03)', marginBottom:22 }}>
-                <span style={{ width:7, height:7, minWidth:7, borderRadius:'50%', background:'#22c55e', display:'inline-block', boxShadow:'0 0 6px rgba(34,197,94,.5)', flexShrink:0 }}/>
-                <span style={{ fontSize:10.5, color:'rgba(255,255,255,.35)', fontFamily:"'JetBrains Mono',monospace", letterSpacing:'.1em' }}>SECURE LOGIN</span>
-              </div>
-              <h2 style={{ fontSize:28, fontWeight:700, letterSpacing:'-.03em', marginBottom:6, color:'#fff' }}>Welcome back</h2>
-              <p style={{ fontSize:13.5, color:'rgba(255,255,255,.35)', marginBottom:28, lineHeight:1.6 }}>Sign in to your account to continue</p>
-
-              {AUTH_BUTTONS.map(b => (
-                <button key={b.provider} onClick={() => handleLogin(b.provider)} disabled={authLoading}
-                  style={{ width:'100%', padding:'0 18px', height:52, background:'rgba(255,255,255,.04)', border:'1px solid rgba(255,255,255,.09)', borderRadius:13, display:'flex', alignItems:'center', gap:14, cursor:authLoading?'not-allowed':'pointer', color:'rgba(255,255,255,.78)', fontSize:14, fontFamily:"'Geist',sans-serif", fontWeight:500, marginBottom:9, transition:'all .18s', opacity:authLoading?0.5:1, WebkitTapHighlightColor:'transparent', outline:'none', boxSizing:'border-box' }}
-                  onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.background='rgba(255,255,255,.08)'; e.currentTarget.style.borderColor='rgba(255,255,255,.2)'; e.currentTarget.style.transform='translateY(-1px)'; e.currentTarget.style.color='#fff'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,.04)'; e.currentTarget.style.borderColor='rgba(255,255,255,.09)'; e.currentTarget.style.transform='none'; e.currentTarget.style.color='rgba(255,255,255,.78)'; }}
-                >
-                  <div style={{ width:36, height:36, minWidth:36, borderRadius:8, background:'rgba(255,255,255,.06)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                    <div style={{ width:18, height:18, display:'flex', alignItems:'center', justifyContent:'center' }}>{b.icon}</div>
-                  </div>
-                  <span style={{ flex:1, textAlign:'left', lineHeight:1 }}>{authLoading ? 'Opening…' : b.label}</span>
-                  <svg width="13" height="13" fill="none" stroke="rgba(255,255,255,.28)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-                </button>
-              ))}
-
-              {authError && <p style={{ fontSize:12, color:'#f87171', marginTop:4, marginBottom:8, fontFamily:"'JetBrains Mono',monospace" }}>{authError}</p>}
-
-              <div style={{ display:'flex', gap:18, marginTop:22, marginBottom:18, flexWrap:'wrap' }}>
-                {[[<Shield size={11}/>, 'Encrypted'], [<Lock size={11}/>, 'Private'], [<Cpu size={11}/>, 'No ads ever']].map(([icon, label]) => (
-                  <div key={label} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'rgba(255,255,255,.28)', fontFamily:"'JetBrains Mono',monospace" }}>{icon}{label}</div>
-                ))}
-              </div>
-              <p style={{ fontSize:11, color:'rgba(255,255,255,.18)', fontFamily:"'JetBrains Mono',monospace", lineHeight:2 }}>
-                By continuing you agree to our{' '}<a href="#" style={{ color:'#6366f1', textDecoration:'none' }}>Terms of Service</a>{' '}and{' '}<a href="#" style={{ color:'#6366f1', textDecoration:'none' }}>Privacy Policy</a><br/>Vortis AI © 2026
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
+          <span style={{ flex: 1, textAlign: 'left' }}>{authLoading ? 'Opening…' : b.label}</span>
+          <svg width="13" height="13" fill="none" stroke="rgba(255,255,255,.3)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      ))}
+      {authError && <p style={{ fontSize: 12, color: '#f87171', fontFamily: 'JetBrains Mono' }}>{authError}</p>}
+    </div>
+  </div>
+)}
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
 
       {showStarredPanel && (
