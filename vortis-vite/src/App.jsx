@@ -6,6 +6,7 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
+import Hero from "./animated-shader-hero-purple";
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
@@ -2621,6 +2622,16 @@ setProcessingStatus('');
           </div>
         </div>
       )}
+
+      <Hero
+  trustBadge={{ text: "New feature release!", icons: ["🎉"] }}
+  headline={{ line1: "Transform Your", line2: "Business with AI" }}
+  subtitle="Revolutionize your workflow with our cutting-edge AI platform."
+  buttons={{
+    primary: { text: "Start Free Trial" },
+    secondary: { text: "Watch Demo →" }
+  }}
+/>
 
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
 
