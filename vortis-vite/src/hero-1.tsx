@@ -28,55 +28,25 @@ uniform float time;
 #define T time
 #define R resolution
 #define MN min(R.x,R.y)
-
-float rnd(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+74.3);return fract(p.x*p.y);}
-float noise(vec2 p){
-  vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);
-  float a=rnd(i),b=rnd(i+vec2(1,0)),c=rnd(i+vec2(0,1)),d=rnd(i+1.);
-  return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
-}
-float fbm(vec2 p){
-  float v=0.,a=.5;
-  mat2 m=mat2(.8,.6,-.6,.8);
-  for(int i=0;i<6;i++){v+=a*noise(p);p=m*p*2.1+.4;a*=.5;}
-  return v;
-}
-
+float rnd(vec2 p){p=fract(p*vec2(12.9898,78.233));p+=dot(p,p+34.56);return fract(p.x*p.y);}
+float noise(in vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);float a=rnd(i),b=rnd(i+vec2(1,0)),c=rnd(i+vec2(0,1)),d=rnd(i+1.);return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}
+float fbm(vec2 p){float t=.0,a=1.;mat2 m=mat2(1.,-.5,.2,1.2);for(int i=0;i<5;i++){t+=a*noise(p);p*=2.*m;a*=.5;}return t;}
+float clouds(vec2 p){float d=1.,t=.0;for(float i=.0;i<3.;i++){float a=d*fbm(i*10.+p.x*.2+.2*(1.+i)*p.y+d+i*i+p);t=mix(t,d,a);d=a;p*=2./(i+1.);}return t;}
 void main(void){
-  vec2 uv=(FC-.5*R)/MN;
-  vec2 q=uv*1.4;
-  
-  /* layered fbm cloud base */
-  float t=T*.18;
-  vec2 p=q+vec2(t*.3,t*.12);
-  float f=fbm(p+fbm(p+fbm(p)));
-  
-  /* fire colour ramp: deep brown -> orange -> bright amber -> pale yellow */
-  vec3 dark   = vec3(0.10, 0.04, 0.01);
-  vec3 mid    = vec3(0.55, 0.22, 0.03);
-  vec3 orange = vec3(0.90, 0.42, 0.05);
-  vec3 amber  = vec3(1.00, 0.70, 0.15);
-  vec3 bright = vec3(1.00, 0.92, 0.60);
-
-  float f2=clamp(f*1.6-.1,0.,1.);
-  vec3 col=dark;
-  col=mix(col, mid,    smoothstep(0.0, 0.35, f2));
-  col=mix(col, orange, smoothstep(0.3, 0.58, f2));
-  col=mix(col, amber,  smoothstep(0.55,0.78, f2));
-  col=mix(col, bright, smoothstep(0.75,1.0,  f2));
-
-  /* extra brightness boost in cloud peaks */
-  col += bright * pow(max(f2-.55,0.),2.) * 1.4;
-
-  /* subtle radial vignette so edges stay dark */
-  float vig=1.-smoothstep(.4,1.4,length(uv*.9));
-  col*=vig;
-
-  /* slight animated shimmer streaks */
-  float streak=noise(vec2(uv.x*18.+T*.6, uv.y*3.));
-  col+=vec3(1.,.8,.3)*pow(streak,9.)*0.35;
-
-  O=vec4(col,1.);
+  vec2 uv=(FC-.5*R)/MN,st=uv*vec2(2,1);
+  vec3 col=vec3(0);
+  float bg=clouds(vec2(st.x+T*.5,-st.y));
+  uv*=1.-.3*(sin(T*.2)*.5+.5);
+  for(float i=1.;i<12.;i++){
+    uv+=.1*cos(i*vec2(.1+.01*i,.8)+i*i+T*.5+.1*uv.x);
+    vec2 p=uv;
+    float d=length(p);
+    col+=.00125/d*(cos(sin(i)*vec3(1.0,0.5,3.5))+1.);
+    float b=noise(i+p+bg*1.731);
+    col+=.002*b/length(max(p,vec2(b*p.x*.02,p.y)));
+    col=mix(col,vec3(bg*.03,bg*.01,bg*.20),d);
+  }
+  O=vec4(col,1);
 }`
 
 function useShader() {
@@ -175,18 +145,18 @@ export default function VortisLanding() {
   ]
 
   return (
-    <div style={{ background: '#0e0703', overflowY: 'auto', overflowX: 'hidden', minHeight: '100vh', width: '100vw', fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{ background: '#07070f', overflowY: 'auto', overflowX: 'hidden', minHeight: '100vh', width: '100vw', fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
 
       {/* HERO */}
       <div style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
         <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
         {/* dark vignette overlay to deepen bg like screenshot */}
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(14,7,3,0.05) 0%, rgba(14,7,3,0.45) 65%, rgba(14,7,3,0.82) 100%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(7,7,15,0.1) 0%, rgba(7,7,15,0.55) 70%, rgba(7,7,15,0.85) 100%)', pointerEvents: 'none' }} />
 
         {/* NAV */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }}>
-          <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,200,100,0.08)', backdropFilter: 'blur(12px)', background: 'rgba(14,7,3,0.35)' }}>
+          <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', background: 'rgba(7,7,15,0.3)' }}>
             {/* Logo */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
               <VortisLogo size={28} color="#8b5cf6" />
@@ -254,7 +224,7 @@ export default function VortisLanding() {
       </div>
 
       {/* FEATURES */}
-      <div id="features" style={{ background: '#120804', padding: '90px 48px', borderTop: '1px solid rgba(255,150,50,0.08)' }}>
+      <div id="features" style={{ background: '#09091a', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
             <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>
@@ -280,7 +250,7 @@ export default function VortisLanding() {
       </div>
 
       {/* PRICING */}
-      <div id="pricing" style={{ background: '#0e0703', padding: '90px 48px', borderTop: '1px solid rgba(255,150,50,0.08)' }}>
+      <div id="pricing" style={{ background: '#07070f', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ maxWidth: 920, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>Simple, transparent pricing</h2>
@@ -317,7 +287,7 @@ export default function VortisLanding() {
       </div>
 
       {/* FOOTER */}
-      <div style={{ background: '#0e0703', borderTop: '1px solid rgba(255,150,50,0.08)', padding: '22px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ background: '#07070f', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '22px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <VortisLogo size={18} color="#8b5cf6" />
           <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '.08em' }}>VORTIS AI</span>
@@ -334,112 +304,36 @@ export default function VortisLanding() {
 
       {/* AUTH MODAL */}
       {showAuth && (
-        <div
-          onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 999,
-            background: 'rgba(0,0,0,0.75)',
-            backdropFilter: 'blur(24px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
-          }}>
-
-          {/* Glowing orb behind modal */}
-          <div style={{
-            position: 'absolute', width: 480, height: 480, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 70%)',
-            pointerEvents: 'none'
-          }} />
-
-          <div style={{
-            position: 'relative',
-            background: 'linear-gradient(145deg, rgba(30,20,50,0.98), rgba(18,12,30,0.98))',
-            border: '1px solid rgba(139,92,246,0.35)',
-            borderRadius: 24, padding: '36px 32px',
-            width: '100%', maxWidth: 400,
-            boxShadow: '0 0 60px rgba(139,92,246,0.15), 0 24px 80px rgba(0,0,0,0.6)'
-          }}>
-
-            {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <VortisLogo size={26} color="#a78bfa" />
-                </div>
+        <div onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
+          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#0d0d1e', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <VortisLogo size={26} color="#8b5cf6" />
                 <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 800, color: '#ffffff', margin: '0 0 4px', letterSpacing: '-.01em' }}>Welcome to Vortis</h2>
-                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Sign in to continue</p>
+                  <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>Sign in to continue</p>
                 </div>
               </div>
-              <button
-                onClick={() => setShowAuth(false)}
-                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', flexShrink: 0, transition: 'all .15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.color = 'white' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}>
-                <X size={14} />
+              <button onClick={() => setShowAuth(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                <X size={13} />
               </button>
             </div>
-
-            {/* Divider with text */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: '.08em', fontWeight: 600 }}>CHOOSE A PROVIDER</span>
-              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-            </div>
-
-            {/* Auth buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {AUTH.map(b => (
-                <button
-                  key={b.provider}
-                  onClick={() => {
-                    const urls: Record<string, string> = {
-                      google:   'https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_GOOGLE_CLIENT_ID&redirect_uri=' + encodeURIComponent(window.location.origin) + '&response_type=token&scope=email%20profile',
-                      github:   'https://github.com/login/oauth/authorize?client_id=YOUR_GITHUB_CLIENT_ID&scope=user:email&redirect_uri=' + encodeURIComponent(window.location.origin),
-                      facebook: 'https://www.facebook.com/v18.0/dialog/oauth?client_id=YOUR_FACEBOOK_APP_ID&redirect_uri=' + encodeURIComponent(window.location.origin) + '&scope=email',
-                    }
-                    window.location.href = urls[b.provider]
-                  }}
-                  style={{
-                    width: '100%', padding: '0 18px', height: 54,
-                    background: 'rgba(255,255,255,0.04)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 14, display: 'flex', alignItems: 'center', gap: 14,
-                    cursor: 'pointer', color: '#ffffff', fontSize: 14.5,
-                    fontFamily: 'inherit', fontWeight: 600, transition: 'all .18s',
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'rgba(139,92,246,0.14)'
-                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)'
-                    e.currentTarget.style.transform = 'translateY(-1px)'
-                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(139,92,246,0.2)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
-                    e.currentTarget.style.transform = 'none'
-                    e.currentTarget.style.boxShadow = 'none'
-                  }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    {b.icon}
-                  </div>
-                  <span style={{ flex: 1, color: '#ffffff' }}>{b.label}</span>
-                  <svg width="14" height="14" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-                    <polyline points="9 18 15 12 9 6" />
-                  </svg>
+                <button key={b.provider}
+                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{b.icon}</div>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{b.label}</span>
+                  <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
                 </button>
               ))}
             </div>
-
-            {/* Footer note */}
-            <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-              <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.38)', textAlign: 'center', lineHeight: 1.7, margin: 0 }}>
-                By continuing you agree to our{' '}
-                <a href="#" style={{ color: '#a78bfa', textDecoration: 'none' }}>Terms of Service</a>
-                {' '}and{' '}
-                <a href="#" style={{ color: '#a78bfa', textDecoration: 'none' }}>Privacy Policy</a>
-              </p>
-            </div>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+              By continuing you agree to our Terms of Service and Privacy Policy
+            </p>
           </div>
         </div>
       )}
