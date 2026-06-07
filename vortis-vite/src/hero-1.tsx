@@ -28,25 +28,55 @@ uniform float time;
 #define T time
 #define R resolution
 #define MN min(R.x,R.y)
-float rnd(vec2 p){p=fract(p*vec2(12.9898,78.233));p+=dot(p,p+34.56);return fract(p.x*p.y);}
-float noise(in vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);float a=rnd(i),b=rnd(i+vec2(1,0)),c=rnd(i+vec2(0,1)),d=rnd(i+1.);return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);}
-float fbm(vec2 p){float t=.0,a=1.;mat2 m=mat2(1.,-.5,.2,1.2);for(int i=0;i<5;i++){t+=a*noise(p);p*=2.*m;a*=.5;}return t;}
-float clouds(vec2 p){float d=1.,t=.0;for(float i=.0;i<3.;i++){float a=d*fbm(i*10.+p.x*.2+.2*(1.+i)*p.y+d+i*i+p);t=mix(t,d,a);d=a;p*=2./(i+1.);}return t;}
+
+float rnd(vec2 p){p=fract(p*vec2(127.1,311.7));p+=dot(p,p+74.3);return fract(p.x*p.y);}
+float noise(vec2 p){
+  vec2 i=floor(p),f=fract(p),u=f*f*(3.-2.*f);
+  float a=rnd(i),b=rnd(i+vec2(1,0)),c=rnd(i+vec2(0,1)),d=rnd(i+1.);
+  return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
+}
+float fbm(vec2 p){
+  float v=0.,a=.5;
+  mat2 m=mat2(.8,.6,-.6,.8);
+  for(int i=0;i<6;i++){v+=a*noise(p);p=m*p*2.1+.4;a*=.5;}
+  return v;
+}
+
 void main(void){
-  vec2 uv=(FC-.5*R)/MN,st=uv*vec2(2,1);
-  vec3 col=vec3(0);
-  float bg=clouds(vec2(st.x+T*.5,-st.y));
-  uv*=1.-.3*(sin(T*.2)*.5+.5);
-  for(float i=1.;i<12.;i++){
-    uv+=.1*cos(i*vec2(.1+.01*i,.8)+i*i+T*.5+.1*uv.x);
-    vec2 p=uv;
-    float d=length(p);
-    col+=.00125/d*(cos(sin(i)*vec3(1.0,0.5,3.5))+1.);
-    float b=noise(i+p+bg*1.731);
-    col+=.002*b/length(max(p,vec2(b*p.x*.02,p.y)));
-    col=mix(col,vec3(bg*.03,bg*.01,bg*.20),d);
-  }
-  O=vec4(col,1);
+  vec2 uv=(FC-.5*R)/MN;
+  vec2 q=uv*1.4;
+  
+  /* layered fbm cloud base */
+  float t=T*.18;
+  vec2 p=q+vec2(t*.3,t*.12);
+  float f=fbm(p+fbm(p+fbm(p)));
+  
+  /* fire colour ramp: deep brown -> orange -> bright amber -> pale yellow */
+  vec3 dark   = vec3(0.10, 0.04, 0.01);
+  vec3 mid    = vec3(0.55, 0.22, 0.03);
+  vec3 orange = vec3(0.90, 0.42, 0.05);
+  vec3 amber  = vec3(1.00, 0.70, 0.15);
+  vec3 bright = vec3(1.00, 0.92, 0.60);
+
+  float f2=clamp(f*1.6-.1,0.,1.);
+  vec3 col=dark;
+  col=mix(col, mid,    smoothstep(0.0, 0.35, f2));
+  col=mix(col, orange, smoothstep(0.3, 0.58, f2));
+  col=mix(col, amber,  smoothstep(0.55,0.78, f2));
+  col=mix(col, bright, smoothstep(0.75,1.0,  f2));
+
+  /* extra brightness boost in cloud peaks */
+  col += bright * pow(max(f2-.55,0.),2.) * 1.4;
+
+  /* subtle radial vignette so edges stay dark */
+  float vig=1.-smoothstep(.4,1.4,length(uv*.9));
+  col*=vig;
+
+  /* slight animated shimmer streaks */
+  float streak=noise(vec2(uv.x*18.+T*.6, uv.y*3.));
+  col+=vec3(1.,.8,.3)*pow(streak,9.)*0.35;
+
+  O=vec4(col,1.);
 }`
 
 function useShader() {
@@ -145,18 +175,18 @@ export default function VortisLanding() {
   ]
 
   return (
-    <div style={{ background: '#07070f', overflowY: 'auto', overflowX: 'hidden', minHeight: '100vh', width: '100vw', fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
+    <div style={{ background: '#0e0703', overflowY: 'auto', overflowX: 'hidden', minHeight: '100vh', width: '100vw', fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
 
       {/* HERO */}
       <div style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
         <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
         {/* dark vignette overlay to deepen bg like screenshot */}
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(7,7,15,0.1) 0%, rgba(7,7,15,0.55) 70%, rgba(7,7,15,0.85) 100%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(14,7,3,0.05) 0%, rgba(14,7,3,0.45) 65%, rgba(14,7,3,0.82) 100%)', pointerEvents: 'none' }} />
 
         {/* NAV */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }}>
-          <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', background: 'rgba(7,7,15,0.3)' }}>
+          <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,200,100,0.08)', backdropFilter: 'blur(12px)', background: 'rgba(14,7,3,0.35)' }}>
             {/* Logo */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
               <VortisLogo size={28} color="#8b5cf6" />
@@ -224,7 +254,7 @@ export default function VortisLanding() {
       </div>
 
       {/* FEATURES */}
-      <div id="features" style={{ background: '#09091a', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <div id="features" style={{ background: '#120804', padding: '90px 48px', borderTop: '1px solid rgba(255,150,50,0.08)' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
             <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>
@@ -250,7 +280,7 @@ export default function VortisLanding() {
       </div>
 
       {/* PRICING */}
-      <div id="pricing" style={{ background: '#07070f', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <div id="pricing" style={{ background: '#0e0703', padding: '90px 48px', borderTop: '1px solid rgba(255,150,50,0.08)' }}>
         <div style={{ maxWidth: 920, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 56 }}>
             <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>Simple, transparent pricing</h2>
@@ -287,7 +317,7 @@ export default function VortisLanding() {
       </div>
 
       {/* FOOTER */}
-      <div style={{ background: '#07070f', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '22px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+      <div style={{ background: '#0e0703', borderTop: '1px solid rgba(255,150,50,0.08)', padding: '22px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <VortisLogo size={18} color="#8b5cf6" />
           <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '.08em' }}>VORTIS AI</span>
@@ -306,7 +336,7 @@ export default function VortisLanding() {
       {showAuth && (
         <div onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
           style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: '#0d0d1e', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
+          <div style={{ background: '#180c04', border: '1px solid rgba(255,150,50,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <VortisLogo size={26} color="#8b5cf6" />
