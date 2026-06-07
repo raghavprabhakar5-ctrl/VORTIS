@@ -128,9 +128,9 @@ export default function VortisLanding() {
   ]
 
   const AUTH = [
-    { provider: 'google', label: 'Continue with Google', icon: <GoogleIcon /> },
-    { provider: 'github', label: 'Continue with GitHub', icon: <GithubIcon /> },
-    { provider: 'facebook', label: 'Continue with Facebook', icon: <FacebookIcon /> },
+    { provider: 'google', label: 'Continue with Google',  color: 'white', icon: <GoogleIcon /> },
+    { provider: 'github', label: 'Continue with GitHub',  color: 'white', icon: <GithubIcon /> },
+    { provider: 'facebook', label: 'Continue with Facebook', color: 'white', icon: <FacebookIcon /> },
   ]
 
   const FEATURES = [
