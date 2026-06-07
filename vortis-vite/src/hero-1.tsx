@@ -334,36 +334,112 @@ export default function VortisLanding() {
 
       {/* AUTH MODAL */}
       {showAuth && (
-        <div onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
-          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div style={{ background: '#180c04', border: '1px solid rgba(255,150,50,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <VortisLogo size={26} color="#8b5cf6" />
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 999,
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(24px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
+          }}>
+
+          {/* Glowing orb behind modal */}
+          <div style={{
+            position: 'absolute', width: 480, height: 480, borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 70%)',
+            pointerEvents: 'none'
+          }} />
+
+          <div style={{
+            position: 'relative',
+            background: 'linear-gradient(145deg, rgba(30,20,50,0.98), rgba(18,12,30,0.98))',
+            border: '1px solid rgba(139,92,246,0.35)',
+            borderRadius: 24, padding: '36px 32px',
+            width: '100%', maxWidth: 400,
+            boxShadow: '0 0 60px rgba(139,92,246,0.15), 0 24px 80px rgba(0,0,0,0.6)'
+          }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 28 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,0.15)', border: '1px solid rgba(139,92,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <VortisLogo size={26} color="#a78bfa" />
+                </div>
                 <div>
-                  <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
-                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>Sign in to continue</p>
+                  <h2 style={{ fontSize: 18, fontWeight: 800, color: '#ffffff', margin: '0 0 4px', letterSpacing: '-.01em' }}>Welcome to Vortis</h2>
+                  <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Sign in to continue</p>
                 </div>
               </div>
-              <button onClick={() => setShowAuth(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
-                <X size={13} />
+              <button
+                onClick={() => setShowAuth(false)}
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', flexShrink: 0, transition: 'all .15s' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.color = 'white' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}>
+                <X size={14} />
               </button>
             </div>
+
+            {/* Divider with text */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+              <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', letterSpacing: '.08em', fontWeight: 600 }}>CHOOSE A PROVIDER</span>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+            </div>
+
+            {/* Auth buttons */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {AUTH.map(b => (
-                <button key={b.provider}
-                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{b.icon}</div>
-                  <span style={{ flex: 1, textAlign: 'left' }}>{b.label}</span>
-                  <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+                <button
+                  key={b.provider}
+                  onClick={() => {
+                    const urls: Record<string, string> = {
+                      google:   'https://accounts.google.com/o/oauth2/v2/auth?client_id=YOUR_GOOGLE_CLIENT_ID&redirect_uri=' + encodeURIComponent(window.location.origin) + '&response_type=token&scope=email%20profile',
+                      github:   'https://github.com/login/oauth/authorize?client_id=YOUR_GITHUB_CLIENT_ID&scope=user:email&redirect_uri=' + encodeURIComponent(window.location.origin),
+                      facebook: 'https://www.facebook.com/v18.0/dialog/oauth?client_id=YOUR_FACEBOOK_APP_ID&redirect_uri=' + encodeURIComponent(window.location.origin) + '&scope=email',
+                    }
+                    window.location.href = urls[b.provider]
+                  }}
+                  style={{
+                    width: '100%', padding: '0 18px', height: 54,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 14, display: 'flex', alignItems: 'center', gap: 14,
+                    cursor: 'pointer', color: '#ffffff', fontSize: 14.5,
+                    fontFamily: 'inherit', fontWeight: 600, transition: 'all .18s',
+                    textAlign: 'left'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(139,92,246,0.14)'
+                    e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)'
+                    e.currentTarget.style.transform = 'translateY(-1px)'
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(139,92,246,0.2)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+                    e.currentTarget.style.transform = 'none'
+                    e.currentTarget.style.boxShadow = 'none'
+                  }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {b.icon}
+                  </div>
+                  <span style={{ flex: 1, color: '#ffffff' }}>{b.label}</span>
+                  <svg width="14" height="14" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
-              By continuing you agree to our Terms of Service and Privacy Policy
-            </p>
+
+            {/* Footer note */}
+            <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+              <p style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.38)', textAlign: 'center', lineHeight: 1.7, margin: 0 }}>
+                By continuing you agree to our{' '}
+                <a href="#" style={{ color: '#a78bfa', textDecoration: 'none' }}>Terms of Service</a>
+                {' '}and{' '}
+                <a href="#" style={{ color: '#a78bfa', textDecoration: 'none' }}>Privacy Policy</a>
+              </p>
+            </div>
           </div>
         </div>
       )}
