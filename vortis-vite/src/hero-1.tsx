@@ -312,7 +312,7 @@ export default function VortisLanding() {
                 <VortisLogo size={26} color="#8b5cf6" />
                 <div>
                   <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
-                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>Sign in to continue</p>
+                  <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.77)', margin: 0 }}>Sign in to continue</p>
                 </div>
               </div>
               <button onClick={() => setShowAuth(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
