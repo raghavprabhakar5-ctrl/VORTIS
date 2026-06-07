@@ -56,6 +56,7 @@ function useShader() {
   useEffect(() => {
     const canvas = ref.current
     if (!canvas) return
+
     const gl = canvas.getContext('webgl2')
     if (!gl) return
 
@@ -68,7 +69,7 @@ function useShader() {
 
     const mk = (t: number, s: string): WebGLShader => {
       const x = gl.createShader(t)
-      if (!x) throw new Error('Failed to create shader')
+      if (!x) throw new Error('createShader failed')
       gl.shaderSource(x, s)
       gl.compileShader(x)
       return x
@@ -106,13 +107,14 @@ function useShader() {
 
     return () => {
       window.removeEventListener('resize', resize)
-      if (raf.current) cancelAnimationFrame(raf.current)
+      if (raf.current !== undefined) cancelAnimationFrame(raf.current)
       gl.deleteProgram(p)
     }
   }, [])
 
   return ref
 }
+
 export default function VortisLanding() {
   const canvasRef = useShader()
   const [showAuth, setShowAuth] = useState(false)
@@ -153,7 +155,7 @@ export default function VortisLanding() {
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(7,7,15,0.1) 0%, rgba(7,7,15,0.55) 70%, rgba(7,7,15,0.85) 100%)', pointerEvents: 'none' }} />
 
         {/* NAV */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }}>
           <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', background: 'rgba(7,7,15,0.3)' }}>
             {/* Logo */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -184,11 +186,17 @@ export default function VortisLanding() {
         </div>
 
         {/* HERO TEXT — matching screenshot layout */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '80px 24px 0' }}>
 
-          {/* Badge */}
-          <div style={{ marginBottom: 32, padding: '5px 16px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.3)', color: 'rgba(255,255,255,0.5)', fontSize: 12.5, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.08)', display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '.02em' }}>
-            <span style={{ color: '#a78bfa' }}>✦</span> Trusted by forward-thinking teams.
+          {/* Badge / Announcement banner */}
+          <div style={{ marginBottom: 36, padding: '7px 18px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.35)', color: 'rgba(255,255,255,0.6)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.1)', display: 'inline-flex', alignItems: 'center', gap: 8, letterSpacing: '.01em' }}>
+            <span>🎉</span>
+            <span>Now with Image AI &amp; Voice Mode!</span>
+            <a href="#features" style={{ color: '#a78bfa', fontWeight: 700, textDecoration: 'none', transition: 'color .15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#c4b5fd'}
+              onMouseLeave={e => e.currentTarget.style.color = '#a78bfa'}>
+              See what's new →
+            </a>
           </div>
 
           {/* Main headline — two-tone like screenshot */}
@@ -210,21 +218,8 @@ export default function VortisLanding() {
             Supercharge productivity with AI-powered automation and integrations built for the next generation of teams — fast, seamless, and limitless.
           </p>
 
-          {/* CTA row — "Explore Features" only, no Get Started */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button
-              style={{ padding: '13px 32px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, color: 'rgba(255,255,255,0.75)', fontSize: 14.5, fontWeight: 600, cursor: 'pointer', transition: 'all .2s', backdropFilter: 'blur(8px)' }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)'; e.currentTarget.style.color = 'white'; e.currentTarget.style.background = 'rgba(139,92,246,0.12)' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.75)'; e.currentTarget.style.background = 'transparent' }}>
-              Explore Features
-            </button>
-          </div>
+          {/* No CTA buttons in hero */}
 
-          {/* Scroll indicator */}
-          <div style={{ position: 'absolute', bottom: 32, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.2)', fontSize: 10, letterSpacing: '.12em' }}>
-            <span>SCROLL</span>
-            <div style={{ width: 1, height: 36, background: 'linear-gradient(to bottom, rgba(255,255,255,0.25), transparent)' }} />
-          </div>
         </div>
       </div>
 
