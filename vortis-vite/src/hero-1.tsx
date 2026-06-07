@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Search, Image, Brain, Mic, Shield, Lock, Cpu } from 'lucide-react'
+import { X, Search, Image, Brain, Mic, Shield, Lock, Cpu, Zap, Globe, BarChart3, Users } from 'lucide-react'
 
-// ── EXACT VORTIS LOGO FROM APP.JSX ──
 const VortisLogo = ({ size = 36, color = "#8b5cf6" }) => (
   <svg width={size} height={size} viewBox="0 0 1254 1254" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M0 0 C2.97551795 1.77603298 5.42755188 3.85510377 7 7 C7.11791887 8.38616367 7.17694276 9.77757631 7.20532227 11.16845703 C7.22524231 12.04519577 7.24516235 12.92193451 7.26568604 13.82524109 C7.29079254 15.27686394 7.29079254 15.27686394 7.31640625 16.7578125 C7.34791779 18.29215691 7.34791779 18.29215691 7.38006592 19.85749817 C7.44748254 23.27991239 7.50609512 26.70238724 7.5625 30.125 C7.58234955 31.29773468 7.6021991 32.47046936 7.62265015 33.67874146 C7.7612943 42.0831845 7.87456786 50.48784107 7.97470093 58.89281464 C8.00042824 61.03566883 8.02715217 63.17850912 8.05395508 65.3213501 C8.16186031 74.10092842 8.24010655 82.88021788 8.28610229 91.66033936 C8.30164142 94.50574734 8.32645681 97.35084467 8.35916138 100.19610596 C8.40446898 104.20245243 8.41666453 108.20825079 8.42578125 112.21484375 C8.44324402 113.40737259 8.46070679 114.59990143 8.47869873 115.8285675 C8.45890861 123.44413203 7.57415269 127.92564782 2.46484375 133.75 C-1.84867608 137.28024641 -6.42325204 140.20200539 -11.15625 143.140625 C-15.698455 146.11052827 -19.82950596 149.53686891 -24 153 C-24.84691406 153.66128906 -24.84691406 153.66128906 -25.7109375 154.3359375 C-29.24570442 157.1226056 -32.14616039 160.25335105 -35.03515625 163.6796875 C-36.40505539 165.29742128 -37.81209097 166.88411991 -39.24609375 168.4453125 C-53.53623377 184.49599777 -66.44022935 207.44301314 -68.55078125 229.13671875 C-68.96151304 231.75468746 -69.6443793 233.8317611 -70.5234375 236.31640625 C-72.53295931 242.83509895 -72.41478281 249.33698163 -72.33618164 256.08447266 C-72.31269155 258.23248387 -72.31562808 260.37923714 -72.32226562 262.52734375 C-72.29857945 274.83549281 -70.93486474 286.73811139 -67.625 298.625 C-67.28867554 299.846427 -67.28867554 299.846427 -66.94555664 301.0925293 C-66.50039466 302.69279205 -66.05052065 304.29175392 -65.59521484 305.88916016 C-65.10689406 307.62091631 -64.65218871 309.36211813 -64.20703125 311.10546875 C-58.52154173 331.10569329 -45.05403631 349.1091209 -31 364 C-30.31550781 364.74894531 -29.63101563 365.49789063 -28.92578125 366.26953125 C-16.1208883 379.7844922 1.32613078 390.31286386 19 396 C20.29398149 396.51505538 21.58580151 397.03558692 22.875 397.5625 C36.37825416 402.4427861 49.1200395 402.36489181 63.3125 402.1875 C65.42121438 402.1724227 67.52993921 402.1587397 69.63867188 402.14648438 C74.75937674 402.11372769 79.87957055 402.06211407 85 402 C85 401.34 85 400.68 85 400 C85.75023437 399.90203125 86.50046875 399.8040625 87.2734375 399.703125 C93.23396028 398.83231815 98.53743807 397.66268785 104.0546875 395.25 C106.40240102 394.25362291 108.7341566 393.35889793 111.1328125 392.5 C119.04855306 389.63347146 126.19399761 386.61072835 133.18530273 381.82714844 C139.02122763 377.86597237 145.144296 374.47655901 151.3125 371.0625 C158.50387227 367.07354814 165.67886377 363.07405077 172.75 358.875 C181.55156628 353.65184559 190.4388825 348.58345286 199.33251953 343.51904297 C203.61910073 341.07797504 207.90373112 338.63349933 212.1875 336.1875 C213.0434375 335.69894531 213.899375 335.21039062 214.78125 334.70703125 C220.68575329 331.33302937 226.57564039 327.93436454 232.46142578 324.52783203 C243.24556047 318.28792515 254.07096056 312.13121694 264.95166016 306.0612793 C271.53049669 302.38945511 278.08806884 298.68340275 284.625 294.9375 C298.63656393 286.90967919 312.67497255 278.92921388 326.8125 271.125 C334.0750988 267.11341231 341.25952897 262.97331884 348.4375 258.8125 C360.74327062 251.68469519 373.15262653 244.75604465 385.60009766 237.87939453 C391.27943892 234.73997409 396.95230377 231.58890727 402.625 228.4375 C404.30106323 227.50659546 404.30106323 227.50659546 406.01098633 226.55688477 C417.69015668 220.06676158 429.34615404 213.5354532 441 207 C454.98558369 199.15691301 468.98076126 191.33227435 483.00805664 183.56396484 C488.55886907 180.48543087 494.09519678 177.38497915 499.60546875 174.234375 C500.65202637 173.6369751 501.69858398 173.0395752 502.77685547 172.42407227 C504.74343044 171.29907244 506.70747218 170.169628 508.66845703 169.03491211 C518.40447532 163.46726609 527.51145014 160.90170678 538.78125 163.6875 C542.97068668 165.27842532 546.77364224 167.41055268 550.59375 169.73828125 C555.13598457 172.48572206 559.70783082 175.17656443 564.296875 177.8449707 C566.32456519 179.02426968 568.35051734 180.20656058 570.375 181.39135742 C575.62003131 184.46042033 580.87665558 187.50263389 586.171875 190.484375 C587.1525293 191.04439209 588.13318359 191.60440918 589.14355469 192.18139648 C590.98563299 193.23327043 592.83482261 194.27283336 594.69238281 195.29711914 C601.95095764 199.47585767 608.69172282 205.08121938 612 213 C612.86274466 220.37419645 613.06568357 227.09066353 608.58203125 233.25390625 C608.05996094 233.83011719 607.53789063 234.40632812 607 235 C606.35289062 235.76570312 605.70578125 236.53140625 605.0390625 237.3203125 C600.9485655 241.34849838 595.60068824 243.68340854 590.5625 246.3125 C588.38609441 247.46887779 586.21030914 248.62642384 584.03515625 249.78515625 C582.9898877 250.33961426 581.94461914 250.89407227 580.86767578 251.46533203 C576.27354681 253.92393025 571.7658349 256.51883183 567.25390625 259.125 C563.66336969 261.19397665 560.05252168 263.22424896 556.4375 265.25 C547.60923467 270.20492281 538.82329214 275.23315478 530.03710938 280.26220703 C524.96225454 283.16597043 519.8853231 286.06609897 514.80859375 288.96658325 C512.99729181 290.00154744 511.1861253 291.03674822 509.375 292.07202148 C504.04876543 295.1164434 498.72185142 298.15963585 493.390625 301.1953125 C483.32057986 306.93222675 473.28947158 312.73176785 463.28540039 318.58300781 C455.93731381 322.87843331 448.56622978 327.1324803 441.1875 331.375 C431.19299968 337.12717136 421.25562152 342.97018774 411.34350586 348.86303711 C402.8319488 353.92175211 394.29617101 358.93755761 385.75 363.9375 C377.25550948 368.90813128 368.77816812 373.90326062 360.3515625 378.98828125 C356.62386672 381.22576765 352.87625365 383.42734492 349.125 385.625 C340.78818198 390.51152903 332.50693266 395.48919536 324.22558594 400.46899414 C318.29404654 404.03286823 312.34946005 407.57112236 306.375 411.0625 C296.90475702 416.60513036 287.55153694 422.3386792 278.18652344 428.05664062 C272.56703166 431.48379007 266.93949886 434.89769729 261.3125 438.3125 C260.12718773 439.03196671 258.94188504 439.7514492 257.7565918 440.47094727 C255.36461929 441.92291081 252.97260766 443.37480988 250.58056641 444.82666016 C248.21297417 446.26370419 245.84545686 447.70087152 243.47802734 449.13818359 C242.90031082 449.48892441 242.3225943 449.83966522 241.72737122 450.20103455 C240.56284071 450.90811416 239.39836112 451.61527764 238.2339325 452.32252502 C235.32567675 454.08880471 232.41656423 455.8536405 229.50561523 457.61547852 C224.22121781 460.81575833 218.94452611 464.02629031 213.69897461 467.28996277 C198.68420609 476.63055454 183.57138401 485.11504727 167.59521484 492.74267578 C165.39628266 493.80800981 163.24339299 494.92872201 161.0859375 496.07421875 C155.59013165 498.83271226 149.70856794 500.60007095 143.875 502.5 C142.66158936 502.89727295 141.44817871 503.2945459 140.19799805 503.70385742 C136.80110051 504.81027548 133.4007831 505.90560049 130 507 C128.89567627 507.36472412 128.89567627 507.36472412 127.76904297 507.73681641 C120.06454367 510.27857138 112.22751727 511.79600724 104.25 513.1875 C103.31003174 513.35483643 102.37006348 513.52217285 101.40161133 513.69458008 C58.0633922 520.80335318 11.20464191 516.99238877 -29 499 C-30.18980469 498.47921875 -31.37960937 497.9584375 -32.60546875 497.421875 C-59.15230804 485.57644135 -83.06880952 469.12871672 -104 449 C-104.54043945 448.48147461 -105.08087891 447.96294922 -105.63769531 447.42871094 C-112.97279926 440.34903719 -119.73464337 433.06029664 -126 425 C-126.78761719 424.01773437 -127.57523438 423.03546875 -128.38671875 422.0234375 C-149.07179934 396.0168839 -164.44996258 365.78322255 -174 334 C-174.56460938 332.19208984 -174.56460938 332.19208984 -175.140625 330.34765625 C-185.18004039 297.04526714 -187.93543844 257.41757591 -182 223 C-181.86577637 222.195625 -181.73155273 221.39125 -181.59326172 220.5625 C-178.1746366 200.45204967 -173.17761968 181.09440423 -166 162 C-165.53787109 160.75452393 -165.53787109 160.75452393 -165.06640625 159.48388672 C-153.60931815 128.82666809 -136.29368097 100.96460775 -114 77 C-112.80778787 75.6290837 -111.62008001 74.25423376 -110.4375 72.875 C-104.46133692 66.03132938 -97.93900785 59.85270949 -91 54 C-90.00742188 53.13375 -89.01484375 52.2675 -87.9921875 51.375 C-69.83101453 35.8451406 -49.00928789 22.7179326 -28.12597656 11.17919922 C-25.87330298 9.92972593 -23.6350436 8.65689938 -21.3984375 7.37890625 C-19.93250528 6.5438957 -18.46636842 5.70924429 -17 4.875 C-16.33436035 4.49577393 -15.6687207 4.11654785 -14.98291016 3.72583008 C-9.76986213 0.79049358 -6.04710732 -0.61496007 0 0 Z " fill={color} transform="translate(320,528)"/>
@@ -20,7 +19,6 @@ const FacebookIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
 )
 
-// ── PURPLE SHADER ──
 const shaderSrc = `#version 300 es
 precision highp float;
 out vec4 O;
@@ -54,154 +52,237 @@ void main(void){
 function useShader() {
   const ref = useRef<HTMLCanvasElement>(null)
   const raf = useRef<number | undefined>(undefined)
+
   useEffect(() => {
-    const canvas = ref.current; if (!canvas) return
-    const gl = canvas.getContext('webgl2'); if (!gl) return
-    const resize = () => { const d = Math.max(1,.5*window.devicePixelRatio); canvas.width=window.innerWidth*d; canvas.height=window.innerHeight*d; gl.viewport(0,0,canvas.width,canvas.height) }
-    const mk = (t:number,s:string) => { const x=gl.createShader(t)!; gl.shaderSource(x,s); gl.compileShader(x); return x }
-    const vs = mk(gl.VERTEX_SHADER,`#version 300 es\nin vec4 position;\nvoid main(){gl_Position=position;}`)
+    const canvas = ref.current
+    if (!canvas) return
+    const gl = canvas.getContext('webgl2')
+    if (!gl) return
+
+    const resize = () => {
+      const d = Math.max(1, 0.5 * window.devicePixelRatio)
+      canvas.width = window.innerWidth * d
+      canvas.height = window.innerHeight * d
+      gl.viewport(0, 0, canvas.width, canvas.height)
+    }
+
+    const mk = (t: number, s: string): WebGLShader => {
+      const x = gl.createShader(t)
+      if (!x) throw new Error('Failed to create shader')
+      gl.shaderSource(x, s)
+      gl.compileShader(x)
+      return x
+    }
+
+    const vs = mk(gl.VERTEX_SHADER, `#version 300 es\nin vec4 position;\nvoid main(){gl_Position=position;}`)
     const fs = mk(gl.FRAGMENT_SHADER, shaderSrc)
-    const p = gl.createProgram()!; gl.attachShader(p,vs); gl.attachShader(p,fs); gl.linkProgram(p)
-    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,b); gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,1,-1,-1,1,1,1,-1]),gl.STATIC_DRAW)
-    const pos = gl.getAttribLocation(p,'position'); gl.enableVertexAttribArray(pos); gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0)
-    resize(); window.addEventListener('resize',resize)
-    const loop = (now:number) => { gl.useProgram(p); gl.uniform2f(gl.getUniformLocation(p,'resolution'),canvas.width,canvas.height); gl.uniform1f(gl.getUniformLocation(p,'time'),now*1e-3); gl.drawArrays(gl.TRIANGLE_STRIP,0,4); raf.current=requestAnimationFrame(loop) }
+
+    const p = gl.createProgram()
+    if (!p) return
+    gl.attachShader(p, vs)
+    gl.attachShader(p, fs)
+    gl.linkProgram(p)
+
+    const b = gl.createBuffer()
+    if (!b) return
+    gl.bindBuffer(gl.ARRAY_BUFFER, b)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, 1, -1, -1, 1, 1, 1, -1]), gl.STATIC_DRAW)
+
+    const pos = gl.getAttribLocation(p, 'position')
+    gl.enableVertexAttribArray(pos)
+    gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0)
+
+    resize()
+    window.addEventListener('resize', resize)
+
+    const loop = (now: number) => {
+      gl.useProgram(p)
+      gl.uniform2f(gl.getUniformLocation(p, 'resolution'), canvas.width, canvas.height)
+      gl.uniform1f(gl.getUniformLocation(p, 'time'), now * 1e-3)
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+      raf.current = requestAnimationFrame(loop)
+    }
     raf.current = requestAnimationFrame(loop)
-    return () => { window.removeEventListener('resize',resize); if(raf.current) cancelAnimationFrame(raf.current); gl.deleteProgram(p) }
-  },[])
+
+    return () => {
+      window.removeEventListener('resize', resize)
+      if (raf.current) cancelAnimationFrame(raf.current)
+      gl.deleteProgram(p)
+    }
+  }, [])
+
   return ref
 }
-
-export function HeroLanding({ navigation, title, description, announcementBanner, onLogin, authLoading, authError }: any) {
+export default function VortisLanding() {
   const canvasRef = useShader()
   const [showAuth, setShowAuth] = useState(false)
 
-  const nav = navigation || [
+  const nav = [
+    { name: 'Features', href: '#features' },
     { name: 'Pricing', href: '#pricing' },
+    { name: 'Integrations', href: '#integrations' },
+    { name: 'Resources', href: '#resources' },
     { name: 'About', href: '#about' },
-    { name: 'Contact', href: '#contact' },
   ]
 
   const AUTH = [
-    { provider: 'google',   label: 'Continue with Google',   icon: <GoogleIcon /> },
-    { provider: 'github',   label: 'Continue with GitHub',   icon: <GithubIcon /> },
+    { provider: 'google', label: 'Continue with Google', icon: <GoogleIcon /> },
+    { provider: 'github', label: 'Continue with GitHub', icon: <GithubIcon /> },
     { provider: 'facebook', label: 'Continue with Facebook', icon: <FacebookIcon /> },
   ]
 
   const FEATURES = [
-    { icon: <Search size={16}/>, color:'#6366f1', bg:'rgba(99,102,241,.15)', label:'Web Search', desc:'Real-time answers from the web' },
-    { icon: <Image size={16}/>, color:'#8b5cf6', bg:'rgba(139,92,246,.15)', label:'Image AI', desc:'Generate stunning visuals instantly' },
-    { icon: <Brain size={16}/>, color:'#06b6d4', bg:'rgba(6,182,212,.12)', label:'Memories', desc:'Remembers your skills & preferences' },
-    { icon: <Mic size={16}/>, color:'#10b981', bg:'rgba(16,185,129,.12)', label:'Voice Mode', desc:'Talk naturally, hands-free' },
+    { icon: <Zap size={18} />, color: '#a78bfa', bg: 'rgba(167,139,250,.15)', label: 'AI Automation', desc: 'Automate repetitive workflows with intelligent agents that learn and adapt.' },
+    { icon: <Globe size={18} />, color: '#818cf8', bg: 'rgba(129,140,248,.15)', label: 'Integrations', desc: 'Connect 500+ tools and services seamlessly into your existing stack.' },
+    { icon: <BarChart3 size={18} />, color: '#c084fc', bg: 'rgba(192,132,252,.15)', label: 'Analytics', desc: 'Real-time insights and dashboards to track every workflow in detail.' },
+    { icon: <Users size={18} />, color: '#e879f9', bg: 'rgba(232,121,249,.15)', label: 'Team Collaboration', desc: 'Built for teams — share, iterate, and ship together faster.' },
+    { icon: <Search size={18} />, color: '#6366f1', bg: 'rgba(99,102,241,.15)', label: 'Web Search', desc: 'Real-time answers and research built directly into your workflow.' },
+    { icon: <Brain size={18} />, color: '#8b5cf6', bg: 'rgba(139,92,246,.15)', label: 'AI Memory', desc: 'Remembers context, preferences, and past work across every session.' },
+    { icon: <Image size={18} />, color: '#a855f7', bg: 'rgba(168,85,247,.15)', label: 'Image Generation', desc: 'Create stunning visuals and design assets on demand.' },
+    { icon: <Mic size={18} />, color: '#d946ef', bg: 'rgba(217,70,239,.15)', label: 'Voice Mode', desc: 'Talk naturally and control your workspace completely hands-free.' },
   ]
 
   return (
-    <div style={{ background:'#080810', overflowY:'auto', overflowX:'hidden', minHeight:'100vh', width:'100vw' }}>
+    <div style={{ background: '#07070f', overflowY: 'auto', overflowX: 'hidden', minHeight: '100vh', width: '100vw', fontFamily: "'Segoe UI', system-ui, sans-serif" }}>
 
-      {/* ── HERO SECTION ── */}
-      <div style={{ position:'relative', height:'100vh', overflow:'hidden' }}>
-        <canvas ref={canvasRef} style={{ position:'absolute', inset:0, width:'100%', height:'100%', display:'block' }}/>
+      {/* HERO */}
+      <div style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
+        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
-        {/* Nav */}
-        <div style={{ position:'absolute', top:0, left:0, right:0, zIndex:10 }}>
-          <nav style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 40px' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <VortisLogo size={32} color="#8b5cf6"/>
-              <span style={{ fontSize:16, fontWeight:700, color:'white', letterSpacing:'.08em' }}>VORTIS</span>
+        {/* dark vignette overlay to deepen bg like screenshot */}
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(7,7,15,0.1) 0%, rgba(7,7,15,0.55) 70%, rgba(7,7,15,0.85) 100%)', pointerEvents: 'none' }} />
+
+        {/* NAV */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 }}>
+          <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', background: 'rgba(7,7,15,0.3)' }}>
+            {/* Logo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+              <VortisLogo size={28} color="#8b5cf6" />
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'white', letterSpacing: '.1em' }}>VORTIS</span>
             </div>
-            <div style={{ display:'flex', gap:36 }}>
-              {nav.map((item:any) => (
-                <a key={item.name} href={item.href} style={{ fontSize:14, fontWeight:600, color:'rgba(255,255,255,0.6)', textDecoration:'none' }}
-                  onMouseEnter={e=>e.currentTarget.style.color='white'} onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,0.6)'}>
+
+            {/* Nav links — matching the screenshot layout */}
+            <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+              {nav.map(item => (
+                <a key={item.name} href={item.href}
+                  style={{ fontSize: 13.5, fontWeight: 500, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', transition: 'color .15s', letterSpacing: '.01em' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'white'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}>
                   {item.name}
                 </a>
               ))}
             </div>
-            <button onClick={()=>setShowAuth(true)}
-              style={{ fontSize:14, fontWeight:600, color:'rgba(255,255,255,0.6)', background:'none', border:'none', cursor:'pointer' }}
-              onMouseEnter={e=>e.currentTarget.style.color='white'} onMouseLeave={e=>e.currentTarget.style.color='rgba(255,255,255,0.6)'}>
-              Sign In →
+
+            {/* Sign In button — pill style like screenshot */}
+            <button onClick={() => setShowAuth(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: 'white', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 999, padding: '8px 18px', cursor: 'pointer', transition: 'all .15s', backdropFilter: 'blur(8px)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.25)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}>
+              Sign In <span style={{ opacity: 0.6 }}>→</span>
             </button>
           </nav>
         </div>
 
-        {/* Hero text */}
-        <div style={{ position:'absolute', inset:0, zIndex:10, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', textAlign:'center', padding:'0 24px' }}>
-          {announcementBanner && (
-            <div style={{ marginBottom:28, padding:'6px 18px', borderRadius:999, border:'1px solid rgba(139,92,246,0.3)', color:'rgba(255,255,255,0.5)', fontSize:13, backdropFilter:'blur(8px)', background:'rgba(139,92,246,0.08)', display:'inline-block' }}>
-              {announcementBanner.text}{' '}
-              <a href={announcementBanner.linkHref} style={{ color:'#a78bfa', fontWeight:600, textDecoration:'none' }}>{announcementBanner.linkText} →</a>
-            </div>
-          )}
-          <h1 style={{ fontSize:'clamp(36px,8vw,80px)', fontWeight:700, color:'white', lineHeight:1.1, letterSpacing:'-0.03em', maxWidth:900, margin:'0 0 24px' }}>
-            {title || 'Your intelligent AI companion for every task'}
+        {/* HERO TEXT — matching screenshot layout */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 24px' }}>
+
+          {/* Badge */}
+          <div style={{ marginBottom: 32, padding: '5px 16px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.3)', color: 'rgba(255,255,255,0.5)', fontSize: 12.5, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.08)', display: 'inline-flex', alignItems: 'center', gap: 6, letterSpacing: '.02em' }}>
+            <span style={{ color: '#a78bfa' }}>✦</span> Trusted by forward-thinking teams.
+          </div>
+
+          {/* Main headline — two-tone like screenshot */}
+          <h1 style={{ fontSize: 'clamp(40px,7.5vw,84px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 28px' }}>
+            <span style={{ color: 'white', display: 'block' }}>Launch Your</span>
+            <span style={{
+              display: 'block',
+              background: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #6366f1 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>
+              Workflow Into Orbit
+            </span>
           </h1>
-          <p style={{ fontSize:'clamp(15px,2vw,20px)', color:'rgba(255,255,255,0.4)', maxWidth:580, margin:'0 0 40px', lineHeight:1.65 }}>
-            {description || 'Search the web, generate images, analyze documents, and hold natural conversations — all in one place.'}
+
+          {/* Subheading */}
+          <p style={{ fontSize: 'clamp(15px,1.8vw,18px)', color: 'rgba(255,255,255,0.42)', maxWidth: 560, margin: '0 0 44px', lineHeight: 1.7, fontWeight: 400 }}>
+            Supercharge productivity with AI-powered automation and integrations built for the next generation of teams — fast, seamless, and limitless.
           </p>
-          <button onClick={()=>setShowAuth(true)}
-            style={{ padding:'13px 36px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', borderRadius:12, color:'white', fontSize:15, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 24px rgba(99,102,241,0.4)', transition:'all .2s' }}
-            onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 8px 32px rgba(99,102,241,0.5)'}}
-            onMouseLeave={e=>{e.currentTarget.style.transform='none';e.currentTarget.style.boxShadow='0 4px 24px rgba(99,102,241,0.4)'}}>
-            Get Started Free →
-          </button>
+
+          {/* CTA row — "Explore Features" only, no Get Started */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <button
+              style={{ padding: '13px 32px', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 10, color: 'rgba(255,255,255,0.75)', fontSize: 14.5, fontWeight: 600, cursor: 'pointer', transition: 'all .2s', backdropFilter: 'blur(8px)' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)'; e.currentTarget.style.color = 'white'; e.currentTarget.style.background = 'rgba(139,92,246,0.12)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.color = 'rgba(255,255,255,0.75)'; e.currentTarget.style.background = 'transparent' }}>
+              Explore Features
+            </button>
+          </div>
+
           {/* Scroll indicator */}
-          <div style={{ position:'absolute', bottom:32, left:'50%', transform:'translateX(-50%)', display:'flex', flexDirection:'column', alignItems:'center', gap:6, color:'rgba(255,255,255,0.3)', fontSize:11, letterSpacing:'.1em' }}>
+          <div style={{ position: 'absolute', bottom: 32, left: '50%', transform: 'translateX(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.2)', fontSize: 10, letterSpacing: '.12em' }}>
             <span>SCROLL</span>
-            <div style={{ width:1, height:40, background:'linear-gradient(to bottom, rgba(255,255,255,0.3), transparent)' }}/>
+            <div style={{ width: 1, height: 36, background: 'linear-gradient(to bottom, rgba(255,255,255,0.25), transparent)' }} />
           </div>
         </div>
       </div>
 
-      {/* ── FEATURES SECTION ── */}
-      <div id="about" style={{ background:'#0a0a12', padding:'80px 40px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ maxWidth:960, margin:'0 auto' }}>
-          <h2 style={{ fontSize:'clamp(24px,4vw,40px)', fontWeight:700, color:'white', textAlign:'center', marginBottom:12, letterSpacing:'-.02em' }}>
-            Everything you need, in one place
-          </h2>
-          <p style={{ fontSize:16, color:'rgba(255,255,255,0.4)', textAlign:'center', marginBottom:56 }}>
-            Vortis combines the best AI capabilities into a single, seamless experience.
-          </p>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:20 }}>
+      {/* FEATURES */}
+      <div id="features" style={{ background: '#09091a', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>
+              Everything you need, in one place
+            </h2>
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)', maxWidth: 480, margin: '0 auto' }}>
+              Vortis combines the best AI capabilities into a single, seamless experience.
+            </p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16 }}>
             {FEATURES.map(f => (
-              <div key={f.label} style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:16, padding:'24px 20px', transition:'all .2s' }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.borderColor='rgba(139,92,246,0.3)';(e.currentTarget as HTMLDivElement).style.background='rgba(139,92,246,0.06)'}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.borderColor='rgba(255,255,255,0.07)';(e.currentTarget as HTMLDivElement).style.background='rgba(255,255,255,0.03)'}}>
-                <div style={{ width:40, height:40, borderRadius:10, background:f.bg, display:'flex', alignItems:'center', justifyContent:'center', color:f.color, marginBottom:14 }}>{f.icon}</div>
-                <div style={{ fontSize:15, fontWeight:700, color:'white', marginBottom:6 }}>{f.label}</div>
-                <div style={{ fontSize:13, color:'rgba(255,255,255,0.4)', lineHeight:1.6 }}>{f.desc}</div>
+              <div key={f.label}
+                style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 14, padding: '22px 18px', transition: 'all .2s', cursor: 'default' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(139,92,246,0.3)'; e.currentTarget.style.background = 'rgba(139,92,246,0.07)'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; e.currentTarget.style.transform = 'none' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 9, background: f.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: f.color, marginBottom: 12 }}>{f.icon}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'white', marginBottom: 6 }}>{f.label}</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.38)', lineHeight: 1.65 }}>{f.desc}</div>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* ── PRICING SECTION ── */}
-      <div id="pricing" style={{ background:'#080810', padding:'80px 40px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ maxWidth:860, margin:'0 auto' }}>
-          <h2 style={{ fontSize:'clamp(24px,4vw,40px)', fontWeight:700, color:'white', textAlign:'center', marginBottom:12, letterSpacing:'-.02em' }}>Simple, transparent pricing</h2>
-          <p style={{ fontSize:16, color:'rgba(255,255,255,0.4)', textAlign:'center', marginBottom:56 }}>Start free, upgrade when you're ready.</p>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:20 }}>
+      {/* PRICING */}
+      <div id="pricing" style={{ background: '#07070f', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+        <div style={{ maxWidth: 920, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 56 }}>
+            <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>Simple, transparent pricing</h2>
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)' }}>Start free, upgrade when you're ready.</p>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 18 }}>
             {[
-              { name:'Free', price:'$0', period:'forever', features:['10 messages/day','2 image generations','Basic web search','1 document upload'], cta:'Start Free', highlight:false },
-              { name:'Gold', price:'$19', period:'/month', features:['500 messages/day','40 image generations','Deep web research','50 document uploads','Voice mode','Priority support'], cta:'Upgrade to Gold', highlight:true },
-              { name:'Platinum', price:'$29', period:'/month', features:['Unlimited messages','Unlimited images','Unlimited documents','Unlimited vision','VIP support','Early features'], cta:'Go Platinum', highlight:false },
+              { name: 'Free', price: '$0', period: 'forever', features: ['10 messages/day', '2 image generations', 'Basic web search', '1 document upload'], cta: 'Start Free', highlight: false },
+              { name: 'Gold', price: '$19', period: '/month', features: ['500 messages/day', '40 image generations', 'Deep web research', '50 document uploads', 'Voice mode', 'Priority support'], cta: 'Upgrade to Gold', highlight: true },
+              { name: 'Platinum', price: '$29', period: '/month', features: ['Unlimited messages', 'Unlimited images', 'Unlimited documents', 'Unlimited vision', 'VIP support', 'Early features'], cta: 'Go Platinum', highlight: false },
             ].map(plan => (
-              <div key={plan.name} style={{ background: plan.highlight ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.03)', border:`1px solid ${plan.highlight?'rgba(99,102,241,0.5)':'rgba(255,255,255,0.07)'}`, borderRadius:16, padding:'28px 24px', position:'relative' }}>
-                {plan.highlight && <div style={{ position:'absolute', top:-12, left:'50%', transform:'translateX(-50%)', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', padding:'3px 14px', borderRadius:20, fontSize:11, color:'white', fontWeight:700, whiteSpace:'nowrap' }}>Most Popular</div>}
-                <div style={{ fontSize:18, fontWeight:700, color:'white', marginBottom:8 }}>{plan.name}</div>
-                <div style={{ fontSize:32, fontWeight:800, color: plan.highlight?'#a78bfa':'white', marginBottom:4, fontFamily:'monospace' }}>{plan.price}</div>
-                <div style={{ fontSize:13, color:'rgba(255,255,255,0.4)', marginBottom:20 }}>{plan.period}</div>
-                <ul style={{ listStyle:'none', padding:0, margin:'0 0 24px' }}>
+              <div key={plan.name} style={{ background: plan.highlight ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.025)', border: `1px solid ${plan.highlight ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.06)'}`, borderRadius: 16, padding: '28px 22px', position: 'relative' }}>
+                {plan.highlight && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '3px 14px', borderRadius: 20, fontSize: 10.5, color: 'white', fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '.04em' }}>MOST POPULAR</div>}
+                <div style={{ fontSize: 16, fontWeight: 700, color: 'white', marginBottom: 8 }}>{plan.name}</div>
+                <div style={{ fontSize: 34, fontWeight: 800, color: plan.highlight ? '#a78bfa' : 'white', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>{plan.price}</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.35)', marginBottom: 22 }}>{plan.period}</div>
+                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 22px' }}>
                   {plan.features.map(f => (
-                    <li key={f} style={{ fontSize:13, color:'rgba(255,255,255,0.65)', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.05)', display:'flex', alignItems:'center', gap:8 }}>
-                      <span style={{ color:'#10b981', fontSize:11 }}>✓</span>{f}
+                    <li key={f} style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ color: '#10b981', fontSize: 10, flexShrink: 0 }}>✓</span>{f}
                     </li>
                   ))}
                 </ul>
-                <button onClick={()=>setShowAuth(true)}
-                  style={{ width:'100%', padding:'11px', background: plan.highlight?'linear-gradient(135deg,#6366f1,#8b5cf6)':'rgba(255,255,255,0.08)', border:`1px solid ${plan.highlight?'transparent':'rgba(255,255,255,0.12)'}`, borderRadius:10, color:'white', fontSize:13, fontWeight:700, cursor:'pointer', transition:'all .15s' }}
-                  onMouseEnter={e=>{e.currentTarget.style.opacity='.85'}} onMouseLeave={e=>{e.currentTarget.style.opacity='1'}}>
+                <button onClick={() => setShowAuth(true)}
+                  style={{ width: '100%', padding: '11px', background: plan.highlight ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.07)', border: `1px solid ${plan.highlight ? 'transparent' : 'rgba(255,255,255,0.1)'}`, borderRadius: 9, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'opacity .15s' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '.8'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
                   {plan.cta}
                 </button>
               </div>
@@ -210,75 +291,52 @@ export function HeroLanding({ navigation, title, description, announcementBanner
         </div>
       </div>
 
-      {/* ── CONTACT SECTION ── */}
-      <div id="contact" style={{ background:'#0a0a12', padding:'80px 40px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
-        <div style={{ maxWidth:560, margin:'0 auto', textAlign:'center' }}>
-          <h2 style={{ fontSize:'clamp(24px,4vw,36px)', fontWeight:700, color:'white', marginBottom:12 }}>Get in touch</h2>
-          <p style={{ fontSize:15, color:'rgba(255,255,255,0.4)', marginBottom:36, lineHeight:1.7 }}>Have questions or feedback? We'd love to hear from you.</p>
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            {[
-              { label:'Email us', value:'hello@vortis.ai', href:'mailto:hello@vortis.ai' },
-              { label:'Twitter', value:'@vortisai', href:'#' },
-              { label:'Discord', value:'Join our community', href:'#' },
-            ].map(c => (
-              <a key={c.label} href={c.href} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 20px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.07)', borderRadius:12, textDecoration:'none', transition:'all .15s' }}
-                onMouseEnter={e=>{(e.currentTarget as HTMLAnchorElement).style.borderColor='rgba(139,92,246,0.3)';(e.currentTarget as HTMLAnchorElement).style.background='rgba(139,92,246,0.06)'}}
-                onMouseLeave={e=>{(e.currentTarget as HTMLAnchorElement).style.borderColor='rgba(255,255,255,0.07)';(e.currentTarget as HTMLAnchorElement).style.background='rgba(255,255,255,0.03)'}}>
-                <span style={{ fontSize:13, color:'rgba(255,255,255,0.4)' }}>{c.label}</span>
-                <span style={{ fontSize:14, fontWeight:600, color:'white' }}>{c.value}</span>
-              </a>
-            ))}
-          </div>
+      {/* FOOTER */}
+      <div style={{ background: '#07070f', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '22px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <VortisLogo size={18} color="#8b5cf6" />
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '.08em' }}>VORTIS AI</span>
         </div>
-      </div>
-
-      {/* ── FOOTER ── */}
-      <div style={{ background:'#080810', borderTop:'1px solid rgba(255,255,255,0.06)', padding:'24px 40px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <VortisLogo size={20} color="#8b5cf6"/>
-          <span style={{ fontSize:13, fontWeight:700, color:'rgba(255,255,255,0.5)', letterSpacing:'.06em' }}>VORTIS AI</span>
-        </div>
-        <div style={{ display:'flex', gap:16 }}>
-          {[<Shield size={12}/>, <Lock size={12}/>, <Cpu size={12}/>].map((icon,i) => (
-            <div key={i} style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, color:'rgba(255,255,255,0.25)', fontFamily:'monospace' }}>
-              {icon}{['Encrypted','Private','No ads'][i]}
+        <div style={{ display: 'flex', gap: 18 }}>
+          {[<Shield size={11} />, <Lock size={11} />, <Cpu size={11} />].map((icon, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'rgba(255,255,255,0.2)' }}>
+              {icon}{['Encrypted', 'Private', 'No ads'][i]}
             </div>
           ))}
         </div>
-        <span style={{ fontSize:12, color:'rgba(255,255,255,0.2)' }}>Vortis AI © 2026</span>
+        <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.18)' }}>Vortis AI © 2026</span>
       </div>
 
-      {/* ── AUTH MODAL ── */}
+      {/* AUTH MODAL */}
       {showAuth && (
-        <div onClick={e=>{if(e.target===e.currentTarget)setShowAuth(false)}}
-          style={{ position:'fixed', inset:0, zIndex:999, background:'rgba(0,0,0,0.88)', backdropFilter:'blur(16px)', display:'flex', alignItems:'center', justifyContent:'center', padding:24 }}>
-          <div style={{ background:'#0d0d18', border:'1px solid rgba(139,92,246,0.2)', borderRadius:20, padding:'32px 28px', width:'100%', maxWidth:380 }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:24 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <VortisLogo size={28} color="#8b5cf6"/>
+        <div onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
+          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#0d0d1e', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <VortisLogo size={26} color="#8b5cf6" />
                 <div>
-                  <h2 style={{ fontSize:18, fontWeight:700, color:'white', margin:'0 0 2px' }}>Welcome to Vortis</h2>
-                  <p style={{ fontSize:12, color:'rgba(255,255,255,0.35)', margin:0 }}>Sign in to continue</p>
+                  <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', margin: 0 }}>Sign in to continue</p>
                 </div>
               </div>
-              <button onClick={()=>setShowAuth(false)} style={{ background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, width:30, height:30, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', color:'rgba(255,255,255,0.4)', flexShrink:0 }}>
-                <X size={13}/>
+              <button onClick={() => setShowAuth(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+                <X size={13} />
               </button>
             </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {AUTH.map(b => (
-                <button key={b.provider} onClick={()=>onLogin?.(b.provider)} disabled={authLoading}
-                  style={{ width:'100%', padding:'0 16px', height:50, background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, display:'flex', alignItems:'center', gap:12, cursor:authLoading?'not-allowed':'pointer', color:'rgba(255,255,255,0.8)', fontSize:14, fontFamily:'inherit', fontWeight:500, transition:'all .15s', opacity:authLoading?0.5:1 }}
-                  onMouseEnter={e=>{if(!authLoading){e.currentTarget.style.background='rgba(139,92,246,0.12)';e.currentTarget.style.borderColor='rgba(139,92,246,0.4)'}}}
-                  onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,0.04)';e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'}}>
-                  <div style={{ width:34, height:34, borderRadius:8, background:'rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{b.icon}</div>
-                  <span style={{ flex:1, textAlign:'left' }}>{authLoading?'Opening…':b.label}</span>
-                  <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+                <button key={b.provider}
+                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{b.icon}</div>
+                  <span style={{ flex: 1, textAlign: 'left' }}>{b.label}</span>
+                  <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
                 </button>
               ))}
             </div>
-            {authError && <p style={{ fontSize:12, color:'#f87171', marginTop:12, textAlign:'center' }}>{authError}</p>}
-            <p style={{ fontSize:11, color:'rgba(255,255,255,0.18)', textAlign:'center', marginTop:20, lineHeight:1.8, margin:'20px 0 0' }}>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
               By continuing you agree to our Terms of Service and Privacy Policy
             </p>
           </div>
