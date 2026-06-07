@@ -136,29 +136,26 @@ const handleAuth = async (provider: string) => {
 
     if (provider === "google") {
       authProvider = new GoogleAuthProvider();
-    }
-
-    if (provider === "github") {
+    } else if (provider === "github") {
       authProvider = new GithubAuthProvider();
-    }
-
-    if (provider === "facebook") {
+    } else if (provider === "facebook") {
       authProvider = new FacebookAuthProvider();
     }
 
     if (!authProvider) return;
 
-    const result = await signInWithPopup(
-      auth,
-      authProvider
-    );
+    const result = await signInWithPopup(auth, authProvider);
 
     console.log("Logged in:", result.user);
 
     setShowAuth(false);
 
+    // Redirect after successful login
+    window.location.href = "/";
+
   } catch (error) {
-    console.error(error);
+    console.error("Auth Error:", error);
+    alert("Sign in failed. Check console for details.");
   }
 };
 
