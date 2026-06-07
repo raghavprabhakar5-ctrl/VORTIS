@@ -148,16 +148,15 @@ const handleAuth = async (provider: string) => {
 
     console.log("Logged in:", result.user);
 
-    setShowAuth(false);
-
-    // Redirect after successful login
-    window.location.href = "/";
+   setShowAuth(false);
 
   } catch (error) {
     console.error("Auth Error:", error);
     alert("Sign in failed. Check console for details.");
   }
 };
+
+
 
   const nav = [
     { name: 'Features', href: '#features' },
