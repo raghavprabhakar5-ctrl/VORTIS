@@ -331,7 +331,7 @@ export default function VortisLanding() {
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.18)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+            <p style={{ fontSize: 11, color: 'hsla(0, 0%, 100%, 0.97)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
               By continuing you agree to our Terms of Service and Privacy Policy
             </p>
           </div>
