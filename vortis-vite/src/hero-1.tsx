@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-// ── VORTEX SHADER (exact same as original) ──────────────────────────────────
+// ─── WebGL Vortex Shader ────────────────────────────────────────────────────
 const SHADER = `#version 300 es
 precision highp float;
 out vec4 O;
@@ -34,60 +34,36 @@ void main(void){
 function useVortexShader() {
   const ref = useRef<HTMLCanvasElement>(null)
   const raf = useRef<number | undefined>(undefined)
-
   useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
-    const gl = canvas.getContext('webgl2')
-    if (!gl) return
-
+    const canvas = ref.current; if (!canvas) return
+    const gl = canvas.getContext('webgl2'); if (!gl) return
     const resize = () => {
-      const dpr = Math.max(1, window.devicePixelRatio * 0.6)
-      canvas.width = window.innerWidth * dpr
-      canvas.height = window.innerHeight * dpr
+      const d = Math.max(1, window.devicePixelRatio * 0.55)
+      canvas.width = window.innerWidth * d
+      canvas.height = window.innerHeight * d
       gl.viewport(0, 0, canvas.width, canvas.height)
     }
-
-    const mkShader = (type: number, src: string) => {
-      const s = gl.createShader(type)!
-      gl.shaderSource(s, src)
-      gl.compileShader(s)
-      return s
-    }
-
-    const vs = mkShader(gl.VERTEX_SHADER, `#version 300 es\nin vec4 position;\nvoid main(){gl_Position=position;}`)
-    const fs = mkShader(gl.FRAGMENT_SHADER, SHADER)
-    const prog = gl.createProgram()!
-    gl.attachShader(prog, vs)
-    gl.attachShader(prog, fs)
-    gl.linkProgram(prog)
-
-    const buf = gl.createBuffer()!
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+    const mk = (t: number, s: string) => { const x = gl.createShader(t)!; gl.shaderSource(x,s); gl.compileShader(x); return x }
+    const vs = mk(gl.VERTEX_SHADER, `#version 300 es\nin vec4 position;\nvoid main(){gl_Position=position;}`)
+    const fs = mk(gl.FRAGMENT_SHADER, SHADER)
+    const p = gl.createProgram()!
+    gl.attachShader(p,vs); gl.attachShader(p,fs); gl.linkProgram(p)
+    const b = gl.createBuffer()!
+    gl.bindBuffer(gl.ARRAY_BUFFER,b)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,1,-1,-1,1,1,1,-1]), gl.STATIC_DRAW)
-    const pos = gl.getAttribLocation(prog, 'position')
-    gl.enableVertexAttribArray(pos)
-    gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0)
-
-    resize()
-    window.addEventListener('resize', resize)
-
+    const pos = gl.getAttribLocation(p,'position')
+    gl.enableVertexAttribArray(pos); gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0)
+    resize(); window.addEventListener('resize',resize)
     const loop = (now: number) => {
-      gl.useProgram(prog)
-      gl.uniform2f(gl.getUniformLocation(prog, 'resolution'), canvas.width, canvas.height)
-      gl.uniform1f(gl.getUniformLocation(prog, 'time'), now * 1e-3)
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+      gl.useProgram(p)
+      gl.uniform2f(gl.getUniformLocation(p,'resolution'), canvas.width, canvas.height)
+      gl.uniform1f(gl.getUniformLocation(p,'time'), now*1e-3)
+      gl.drawArrays(gl.TRIANGLE_STRIP,0,4)
       raf.current = requestAnimationFrame(loop)
     }
     raf.current = requestAnimationFrame(loop)
-
-    return () => {
-      window.removeEventListener('resize', resize)
-      if (raf.current !== undefined) cancelAnimationFrame(raf.current)
-      gl.deleteProgram(prog)
-    }
-  }, [])
-
+    return () => { window.removeEventListener('resize',resize); if(raf.current !== undefined) cancelAnimationFrame(raf.current); gl.deleteProgram(p) }
+  },[])
   return ref
 }
 
@@ -100,9 +76,9 @@ const VortisLogo = ({ size = 36, color = '#8b5cf6' }: { size?: number; color?: s
   </svg>
 )
 
-// ── PROVIDER ICONS ──────────────────────────────────────────────────────────
+// ─── Auth Provider Icons ──────────────────────────────────────────────────────
 const GoogleIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" style={{ display: 'block', flexShrink: 0 }}>
+  <svg width="18" height="18" viewBox="0 0 24 24" style={{display:'block',flexShrink:0}}>
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
     <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
     <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
@@ -110,17 +86,30 @@ const GoogleIcon = () => (
   </svg>
 )
 const GithubIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="white" style={{ display: 'block', flexShrink: 0 }}>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="white" style={{display:'block',flexShrink:0}}>
     <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
   </svg>
 )
 const FacebookIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2" style={{ display: 'block', flexShrink: 0 }}>
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2" style={{display:'block',flexShrink:0}}>
     <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
   </svg>
 )
 
-// ── TYPES ────────────────────────────────────────────────────────────────────
+// ─── Intersection Observer hook for scroll animations ──────────────────────
+function useInView(threshold = 0.15) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [inView, setInView] = useState(false)
+  useEffect(() => {
+    const el = ref.current; if (!el) return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setInView(true); obs.disconnect() } }, { threshold })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [threshold])
+  return { ref, inView }
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface HeroLandingProps {
   title?: string
   description?: string
@@ -132,289 +121,462 @@ interface HeroLandingProps {
   authError: string
 }
 
-// ── CSS INJECTION ─────────────────────────────────────────────────────────
-const HERO_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap');
+// ─── Global styles ────────────────────────────────────────────────────────────
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap');
 
-.vhl-root *{box-sizing:border-box;margin:0;padding:0}
-.vhl-root{
-  position:relative;
-  width:100vw;
-  height:100vh;
-  overflow:hidden;
+.vl *{box-sizing:border-box;margin:0;padding:0;}
+.vl{
   font-family:'DM Sans',sans-serif;
-  background:#07070f;
-  color:white;
+  background:#06060e;
+  color:#e2e2f0;
+  overflow-x:hidden;
+  scroll-behavior:smooth;
 }
-
-/* ── canvas bg ── */
-.vhl-canvas{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  display:block;
-}
-.vhl-vignette{
-  position:absolute;inset:0;
-  background:radial-gradient(ellipse at center,
-    rgba(7,7,15,.05) 0%,
-    rgba(7,7,15,.45) 55%,
-    rgba(7,7,15,.82) 100%);
-  pointer-events:none;
-}
-/* subtle scanline texture */
-.vhl-grain{
-  position:absolute;inset:0;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
-  background-repeat:repeat;
-  opacity:.35;
-  pointer-events:none;
-  mix-blend-mode:overlay;
-}
+/* ── scrollbar ── */
+.vl ::-webkit-scrollbar{width:4px}
+.vl ::-webkit-scrollbar-track{background:transparent}
+.vl ::-webkit-scrollbar-thumb{background:rgba(139,92,246,.35);border-radius:4px}
 
 /* ── nav ── */
-.vhl-nav{
-  position:absolute;top:0;left:0;right:0;z-index:20;
+.vl-nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
   display:flex;align-items:center;justify-content:space-between;
-  padding:20px 48px;
+  padding:0 48px;height:64px;
   border-bottom:1px solid rgba(255,255,255,.055);
-  backdrop-filter:blur(14px);
-  background:rgba(7,7,15,.28);
-  animation:vhl-slideDown .7s cubic-bezier(.22,1,.36,1) both;
+  backdrop-filter:blur(18px);
+  background:rgba(6,6,14,.55);
+  transition:background .3s;
 }
-@keyframes vhl-slideDown{
-  from{opacity:0;transform:translateY(-20px)}
-  to{opacity:1;transform:translateY(0)}
+.vl-nav-logo{display:flex;align-items:center;gap:9px;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;letter-spacing:.1em;color:#fff;flex-shrink:0;text-decoration:none;}
+.vl-nav-links{display:flex;gap:30px;}
+.vl-nav-link{font-size:13px;color:rgba(255,255,255,.45);text-decoration:none;transition:color .15s;letter-spacing:.01em;}
+.vl-nav-link:hover{color:#fff;}
+.vl-nav-cta{
+  display:flex;align-items:center;gap:6px;
+  padding:9px 20px;border-radius:999px;
+  background:rgba(139,92,246,.15);
+  border:1px solid rgba(139,92,246,.35);
+  color:#c4b5fd;font-size:13px;font-weight:600;
+  cursor:pointer;transition:all .2s;
+  font-family:'DM Sans',sans-serif;
+  white-space:nowrap;
 }
-.vhl-logo{
-  display:flex;align-items:center;gap:10px;
+.vl-nav-cta:hover{background:rgba(139,92,246,.28);border-color:rgba(139,92,246,.6);color:#fff;transform:translateY(-1px);}
+
+/* ── hero ── */
+.vl-hero{
+  position:relative;
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;
+  padding:100px 24px 60px;
+  overflow:hidden;
+}
+.vl-hero-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.vl-hero-vignette{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse 80% 70% at 50% 50%,rgba(6,6,14,0) 0%,rgba(6,6,14,.5) 60%,rgba(6,6,14,.92) 100%);
+  pointer-events:none;
+}
+.vl-hero-bottom-fade{
+  position:absolute;bottom:0;left:0;right:0;height:220px;
+  background:linear-gradient(to bottom,transparent,#06060e);
+  pointer-events:none;
+}
+.vl-hero-content{position:relative;z-index:2;max-width:900px;}
+
+/* badge */
+.vl-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:6px 16px;border-radius:999px;
+  border:1px solid rgba(139,92,246,.3);
+  background:rgba(139,92,246,.08);
+  color:rgba(255,255,255,.55);font-size:12.5px;
+  margin-bottom:32px;backdrop-filter:blur(8px);
+  animation:vl-up .7s .1s both;
+}
+.vl-badge a{color:#c4b5fd;font-weight:700;text-decoration:none;}
+.vl-badge a:hover{color:#fff;}
+
+/* headline */
+.vl-h1{
   font-family:'Syne',sans-serif;
-  font-size:15px;font-weight:800;
-  letter-spacing:.12em;color:white;
-  flex-shrink:0;
+  font-size:clamp(44px,8vw,96px);
+  font-weight:800;line-height:1.03;
+  letter-spacing:-0.045em;
+  margin-bottom:22px;
+  animation:vl-up .7s .2s both;
 }
-.vhl-nav-links{display:flex;gap:28px;align-items:center;}
-.vhl-nav-link{
-  font-size:13px;font-weight:400;
-  color:rgba(255,255,255,.5);
-  text-decoration:none;
-  letter-spacing:.02em;
-  transition:color .18s;
+.vl-h1 span:first-child{color:#fff;display:block;}
+.vl-h1 span:last-child{
+  display:block;
+  background:linear-gradient(135deg,#e879f9 0%,#a78bfa 40%,#818cf8 70%,#6366f1 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
-.vhl-nav-link:hover{color:rgba(255,255,255,.9);}
-.vhl-signin-pill{
-  display:flex;align-items:center;gap:5px;
-  font-size:13px;font-weight:600;
-  color:white;
-  background:rgba(255,255,255,.07);
-  border:1px solid rgba(255,255,255,.14);
-  border-radius:999px;
-  padding:8px 18px;
-  cursor:pointer;
-  transition:all .18s;
-  backdrop-filter:blur(8px);
+
+/* sub */
+.vl-sub{
+  font-size:clamp(15px,1.8vw,18px);
+  color:rgba(255,255,255,.38);
+  max-width:540px;margin:0 auto 44px;
+  line-height:1.75;font-weight:300;
+  animation:vl-up .7s .3s both;
+}
+
+/* cta row */
+.vl-cta-row{
+  display:flex;gap:14px;justify-content:center;flex-wrap:wrap;
+  animation:vl-up .7s .4s both;
+  margin-bottom:0;
+}
+.vl-btn-primary{
+  display:flex;align-items:center;gap:8px;
+  padding:14px 28px;border-radius:999px;
+  background:linear-gradient(135deg,#6366f1,#8b5cf6,#a855f7);
+  border:none;color:#fff;font-size:15px;font-weight:600;
+  cursor:pointer;transition:all .2s;
+  font-family:'DM Sans',sans-serif;
+  box-shadow:0 8px 32px rgba(99,102,241,.4);
+}
+.vl-btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(99,102,241,.55);}
+.vl-btn-ghost{
+  display:flex;align-items:center;gap:8px;
+  padding:14px 28px;border-radius:999px;
+  background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.12);
+  color:rgba(255,255,255,.7);font-size:15px;font-weight:500;
+  cursor:pointer;transition:all .2s;
   font-family:'DM Sans',sans-serif;
 }
-.vhl-signin-pill:hover{
-  background:rgba(139,92,246,.22);
-  border-color:rgba(139,92,246,.45);
-  transform:translateY(-1px);
+.vl-btn-ghost:hover{background:rgba(255,255,255,.1);color:#fff;border-color:rgba(255,255,255,.25);}
+
+/* orbit planet decoration */
+.vl-planet{
+  position:absolute;bottom:-120px;left:50%;transform:translateX(-50%);
+  width:min(700px,90vw);height:min(700px,90vw);
+  border-radius:50%;
+  background:radial-gradient(ellipse at 30% 30%,rgba(99,102,241,.25) 0%,rgba(139,92,246,.12) 40%,transparent 70%);
+  border:1px solid rgba(139,92,246,.15);
+  pointer-events:none;z-index:1;
+  animation:vl-up .7s .5s both;
+  box-shadow:0 0 80px rgba(99,102,241,.1),inset 0 0 80px rgba(139,92,246,.05);
+}
+.vl-planet::after{
+  content:'';position:absolute;inset:-30px;border-radius:50%;
+  border:1px solid rgba(139,92,246,.08);
 }
 
-/* ── hero content ── */
-.vhl-content{
-  position:absolute;inset:0;z-index:10;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  text-align:center;
-  padding:80px 24px 0;
+/* feature dots */
+.vl-feat-strip{
+  display:flex;flex-wrap:wrap;gap:18px;justify-content:center;
+  padding:48px 24px 0;
+  animation:vl-up .7s .6s both;
+  position:relative;z-index:2;
 }
-.vhl-badge{
-  display:inline-flex;align-items:center;gap:7px;
-  padding:7px 18px;
-  border-radius:999px;
-  border:1px solid rgba(139,92,246,.35);
-  background:rgba(139,92,246,.1);
-  color:rgba(255,255,255,.6);
-  font-size:12.5px;
-  backdrop-filter:blur(8px);
-  margin-bottom:36px;
-  animation:vhl-fadeUp .8s .2s cubic-bezier(.22,1,.36,1) both;
+.vl-feat-dot{
+  display:flex;align-items:center;gap:7px;
+  font-size:11.5px;color:rgba(255,255,255,.3);letter-spacing:.04em;
 }
-.vhl-badge-link{
-  color:#c4b5fd;font-weight:700;text-decoration:none;
-  transition:color .15s;
+.vl-feat-dot::before{content:'';width:5px;height:5px;border-radius:50%;background:rgba(139,92,246,.7);flex-shrink:0;}
+
+/* ── sections ── */
+.vl-section{padding:100px 48px;position:relative;}
+.vl-section-inner{max-width:1080px;margin:0 auto;}
+.vl-section-label{
+  font-size:10.5px;color:#7c3aed;letter-spacing:.14em;text-transform:uppercase;
+  font-family:'DM Sans',sans-serif;font-weight:600;margin-bottom:14px;
 }
-.vhl-badge-link:hover{color:white;}
-.vhl-h1{
+.vl-section-h2{
   font-family:'Syne',sans-serif;
-  font-size:clamp(38px,7.5vw,86px);
-  font-weight:800;
-  line-height:1.05;
-  letter-spacing:-0.04em;
-  max-width:860px;
-  margin-bottom:26px;
-  animation:vhl-fadeUp .8s .35s cubic-bezier(.22,1,.36,1) both;
+  font-size:clamp(30px,4.5vw,50px);font-weight:800;
+  color:#fff;letter-spacing:-0.035em;line-height:1.1;
+  margin-bottom:14px;
 }
-.vhl-h1-white{color:white;display:block;}
-.vhl-h1-grad{
-  display:block;
-  background:linear-gradient(135deg,#c084fc 0%,#a78bfa 35%,#818cf8 65%,#6366f1 100%);
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  background-clip:text;
+.vl-section-h2 em{
+  font-style:normal;
+  background:linear-gradient(135deg,#a78bfa,#6366f1);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
 }
-.vhl-sub{
-  font-size:clamp(14px,1.8vw,17.5px);
-  color:rgba(255,255,255,.4);
-  max-width:520px;
-  line-height:1.75;
-  font-weight:300;
-  margin-bottom:52px;
-  animation:vhl-fadeUp .8s .5s cubic-bezier(.22,1,.36,1) both;
-}
+.vl-section-sub{font-size:15.5px;color:rgba(255,255,255,.38);max-width:420px;line-height:1.75;font-weight:300;}
 
-/* ── auth card ── */
-.vhl-card{
-  background:rgba(10,10,20,.75);
+/* ── features grid ── */
+.vl-feat-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;
+  margin-top:56px;
+}
+.vl-feat-card{
+  background:rgba(255,255,255,.025);
+  border:1px solid rgba(255,255,255,.06);
+  border-radius:18px;padding:24px 22px;
+  transition:all .25s;position:relative;overflow:hidden;
+}
+.vl-feat-card::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%,rgba(139,92,246,.07) 0%,transparent 70%);
+  opacity:0;transition:opacity .25s;
+}
+.vl-feat-card:hover{border-color:rgba(139,92,246,.3);transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.3);}
+.vl-feat-card:hover::before{opacity:1;}
+.vl-feat-icon{
+  width:42px;height:42px;border-radius:11px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;margin-bottom:14px;
+  border:1px solid rgba(255,255,255,.07);
+}
+.vl-feat-title{font-size:14.5px;font-weight:700;color:#fff;margin-bottom:6px;}
+.vl-feat-desc{font-size:13px;color:rgba(255,255,255,.38);line-height:1.65;}
+
+/* ── dashboard mockup ── */
+.vl-split{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;margin-top:56px;}
+@media(max-width:860px){.vl-split{grid-template-columns:1fr;gap:40px;}}
+.vl-mockup{
+  background:rgba(10,10,22,.8);
   border:1px solid rgba(139,92,246,.2);
-  border-radius:22px;
-  padding:28px 28px 24px;
-  width:100%;
-  max-width:368px;
-  backdrop-filter:blur(28px);
-  box-shadow:0 32px 80px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.06);
-  animation:vhl-fadeUp .8s .65s cubic-bezier(.22,1,.36,1) both;
+  border-radius:20px;padding:24px;
+  box-shadow:0 32px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04) inset;
 }
-.vhl-card-title{
-  font-family:'Syne',sans-serif;
-  font-size:17px;font-weight:700;
-  color:white;margin-bottom:4px;
-}
-.vhl-card-sub{
-  font-size:12.5px;color:rgba(255,255,255,.4);
-  margin-bottom:20px;
-}
-.vhl-divider{
+.vl-mockup-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;}
+.vl-mockup-dot{width:10px;height:10px;border-radius:50%;}
+.vl-mockup-title{font-size:13px;color:rgba(255,255,255,.5);font-family:monospace;}
+.vl-stat-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;}
+.vl-stat{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:14px;}
+.vl-stat-num{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;color:#fff;}
+.vl-stat-lbl{font-size:11px;color:rgba(255,255,255,.35);margin-top:2px;}
+.vl-stat-up{font-size:10.5px;color:#10b981;margin-top:4px;}
+.vl-activity-list{display:flex;flex-direction:column;gap:8px;}
+.vl-activity-item{
   display:flex;align-items:center;gap:10px;
-  margin:16px 0;
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+  border-radius:10px;padding:10px 12px;
 }
-.vhl-divider-line{flex:1;height:1px;background:rgba(255,255,255,.07);}
-.vhl-divider-text{font-size:11px;color:rgba(255,255,255,.25);letter-spacing:.08em;font-family:monospace;}
-.vhl-auth-btn{
-  width:100%;
-  padding:0 16px;
-  height:50px;
+.vl-activity-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.vl-activity-name{font-size:12.5px;color:rgba(255,255,255,.7);flex:1;}
+.vl-activity-badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;}
+.active-badge{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.2);}
+.paused-badge{background:rgba(245,158,11,.12);color:#f59e0b;border:1px solid rgba(245,158,11,.2);}
+
+/* ── scale cards ── */
+.vl-scale-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:56px;}
+.vl-scale-card{
+  background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);
+  border-radius:18px;padding:28px 22px;text-align:center;transition:all .22s;
+}
+.vl-scale-card:hover{border-color:rgba(139,92,246,.3);transform:translateY(-3px);background:rgba(99,102,241,.05);}
+.vl-scale-icon{font-size:28px;margin-bottom:14px;}
+.vl-scale-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:8px;font-family:'Syne',sans-serif;}
+.vl-scale-desc{font-size:13px;color:rgba(255,255,255,.38);line-height:1.65;}
+
+/* ── testimonials ── */
+.vl-testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:56px;}
+.vl-testi-card{
+  background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);
+  border-radius:18px;padding:24px;transition:all .22s;
+}
+.vl-testi-card:hover{border-color:rgba(139,92,246,.2);transform:translateY(-2px);}
+.vl-testi-quote{font-size:14px;color:rgba(255,255,255,.65);line-height:1.75;margin-bottom:18px;font-style:italic;}
+.vl-testi-author{display:flex;align-items:center;gap:10px;}
+.vl-testi-avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgba(139,92,246,.3);}
+.vl-testi-name{font-size:13px;font-weight:600;color:#fff;}
+.vl-testi-role{font-size:11.5px;color:rgba(255,255,255,.35);}
+.vl-stars{color:#f59e0b;font-size:12px;margin-top:4px;letter-spacing:2px;}
+
+/* ── pricing ── */
+.vl-price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:56px;}
+.vl-price-card{
+  background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);
+  border-radius:20px;padding:28px 24px;position:relative;transition:all .22s;
+}
+.vl-price-card.featured{border-color:rgba(99,102,241,.5);background:rgba(99,102,241,.08);}
+.vl-price-card:hover:not(.featured){border-color:rgba(139,92,246,.25);transform:translateY(-3px);}
+.vl-price-popular{
+  position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(135deg,#6366f1,#8b5cf6);
+  padding:3px 14px;border-radius:20px;font-size:10.5px;color:#fff;font-weight:700;
+  white-space:nowrap;letter-spacing:.04em;font-family:monospace;
+}
+.vl-price-name{font-size:15px;font-weight:700;color:#fff;margin-bottom:6px;font-family:'Syne',sans-serif;}
+.vl-price-amount{font-size:38px;font-weight:800;color:#fff;font-family:'Syne',sans-serif;letter-spacing:-0.04em;}
+.vl-price-amount span{font-size:15px;color:rgba(255,255,255,.4);font-weight:400;}
+.vl-price-period{font-size:12px;color:rgba(255,255,255,.3);margin-bottom:20px;font-family:monospace;}
+.vl-price-feats{list-style:none;padding:0;margin:0 0 22px;}
+.vl-price-feats li{
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;color:rgba(255,255,255,.6);
+  padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);
+}
+.vl-price-feats li::before{content:'✓';color:#10b981;font-size:11px;flex-shrink:0;}
+.vl-price-btn{
+  width:100%;padding:11px;border-radius:10px;
+  font-size:13.5px;font-weight:700;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all .18s;
+  border:none;
+}
+.vl-price-btn.primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;box-shadow:0 4px 16px rgba(99,102,241,.35);}
+.vl-price-btn.primary:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(99,102,241,.5);}
+.vl-price-btn.secondary{background:rgba(255,255,255,.06);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.1);}
+.vl-price-btn.secondary:hover{background:rgba(255,255,255,.1);color:#fff;}
+
+/* ── CTA banner ── */
+.vl-cta-banner{
+  text-align:center;
+  background:radial-gradient(ellipse at center,rgba(99,102,241,.15) 0%,transparent 70%);
+  border-top:1px solid rgba(255,255,255,.05);
+  border-bottom:1px solid rgba(255,255,255,.05);
+  padding:100px 24px;
+}
+.vl-cta-h2{
+  font-family:'Syne',sans-serif;
+  font-size:clamp(32px,5vw,58px);font-weight:800;
+  color:#fff;letter-spacing:-0.04em;margin-bottom:14px;
+}
+.vl-cta-sub{font-size:16px;color:rgba(255,255,255,.38);margin-bottom:36px;}
+.vl-cta-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+
+/* ── footer ── */
+.vl-footer{
+  padding:60px 48px 32px;
+  border-top:1px solid rgba(255,255,255,.05);
+}
+.vl-footer-inner{max-width:1080px;margin:0 auto;}
+.vl-footer-top{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:40px;margin-bottom:48px;}
+.vl-footer-brand p{font-size:13px;color:rgba(255,255,255,.3);line-height:1.7;margin-top:10px;max-width:220px;}
+.vl-footer-col-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;font-family:monospace;}
+.vl-footer-link{display:block;font-size:13px;color:rgba(255,255,255,.32);text-decoration:none;margin-bottom:8px;transition:color .15s;}
+.vl-footer-link:hover{color:rgba(255,255,255,.8);}
+.vl-footer-bottom{
+  display:flex;align-items:center;justify-content:space-between;
+  padding-top:24px;border-top:1px solid rgba(255,255,255,.05);
+  flex-wrap:wrap;gap:12px;
+}
+.vl-footer-copy{font-size:12px;color:rgba(255,255,255,.22);}
+.vl-footer-socials{display:flex;gap:10px;}
+.vl-social-btn{
+  width:32px;height:32px;border-radius:8px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,.4);text-decoration:none;font-size:13px;
+  transition:all .15s;cursor:pointer;
+}
+.vl-social-btn:hover{background:rgba(139,92,246,.15);border-color:rgba(139,92,246,.3);color:#a78bfa;}
+
+/* ── auth modal ── */
+.vl-modal-backdrop{
+  position:fixed;inset:0;z-index:200;
+  background:rgba(0,0,0,.85);backdrop-filter:blur(20px);
+  display:flex;align-items:center;justify-content:center;padding:20px;
+  animation:vl-fade .2s both;
+}
+.vl-modal{
+  background:rgba(10,10,22,.95);
+  border:1px solid rgba(139,92,246,.22);
+  border-radius:22px;padding:32px 28px 26px;
+  width:100%;max-width:370px;
+  box-shadow:0 40px 100px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:vl-scale .25s cubic-bezier(.22,1,.36,1) both;
+  position:relative;
+}
+.vl-modal-close{
+  position:absolute;top:14px;right:14px;
+  width:28px;height:28px;border-radius:7px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.4);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;transition:all .15s;
+}
+.vl-modal-close:hover{background:rgba(239,68,68,.1);color:#f87171;border-color:rgba(239,68,68,.3);}
+.vl-modal-logo{display:flex;align-items:center;gap:9px;margin-bottom:4px;}
+.vl-modal-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#fff;margin-bottom:3px;}
+.vl-modal-sub{font-size:12.5px;color:rgba(255,255,255,.38);margin-bottom:22px;}
+.vl-modal-divider{display:flex;align-items:center;gap:10px;margin:0 0 16px;}
+.vl-modal-divider-line{flex:1;height:1px;background:rgba(255,255,255,.07);}
+.vl-modal-divider-text{font-size:10.5px;color:rgba(255,255,255,.22);letter-spacing:.1em;font-family:monospace;}
+.vl-auth-btn{
+  width:100%;padding:0 15px;height:50px;
   background:rgba(255,255,255,.04);
   border:1px solid rgba(255,255,255,.08);
   border-radius:13px;
-  display:flex;align-items:center;gap:13px;
-  cursor:pointer;
-  color:rgba(255,255,255,.82);
-  font-size:14px;
-  font-family:'DM Sans',sans-serif;
-  font-weight:500;
-  transition:all .18s;
-  margin-bottom:9px;
+  display:flex;align-items:center;gap:12px;
+  cursor:pointer;color:rgba(255,255,255,.8);
+  font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;
+  transition:all .18s;margin-bottom:9px;text-align:left;
   position:relative;
-  overflow:hidden;
-  text-align:left;
 }
-.vhl-auth-btn:last-of-type{margin-bottom:0;}
-.vhl-auth-btn:hover{
+.vl-auth-btn:last-of-type{margin-bottom:0;}
+.vl-auth-btn:hover:not(:disabled){
   background:rgba(139,92,246,.12);
-  border-color:rgba(139,92,246,.4);
-  color:white;
+  border-color:rgba(139,92,246,.4);color:#fff;
   transform:translateX(2px);
 }
-.vhl-auth-btn:active{transform:scale(.98);}
-.vhl-auth-btn:disabled{
-  opacity:.45;
-  cursor:not-allowed;
-  transform:none;
+.vl-auth-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+.vl-auth-icon{
+  width:34px;height:34px;border-radius:9px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
-.vhl-auth-btn-icon{
-  width:34px;height:34px;
-  border-radius:9px;
-  background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.08);
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
+.vl-auth-spinner{
+  width:15px;height:15px;
+  border:2px solid rgba(255,255,255,.15);
+  border-top-color:#8b5cf6;border-radius:50%;
+  animation:vl-spin .65s linear infinite;
+  margin-left:auto;flex-shrink:0;
 }
-.vhl-auth-btn-label{flex:1;}
-.vhl-auth-btn-arrow{
-  color:rgba(255,255,255,.22);
-  font-size:15px;
-  margin-left:auto;
-  flex-shrink:0;
-}
-.vhl-auth-spinner{
-  width:16px;height:16px;
-  border:2px solid rgba(255,255,255,.2);
-  border-top-color:#8b5cf6;
-  border-radius:50%;
-  animation:vhl-spin .7s linear infinite;
-  flex-shrink:0;
-  margin-left:auto;
-}
-@keyframes vhl-spin{to{transform:rotate(360deg)}}
-.vhl-error{
-  font-size:12px;
-  color:#f87171;
-  background:rgba(239,68,68,.08);
-  border:1px solid rgba(239,68,68,.2);
-  border-radius:9px;
-  padding:8px 12px;
-  margin-top:12px;
-  text-align:left;
+.vl-auth-arrow{margin-left:auto;color:rgba(255,255,255,.2);font-size:16px;flex-shrink:0;}
+.vl-auth-error{
+  font-size:12px;color:#f87171;
+  background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);
+  border-radius:9px;padding:9px 12px;margin-top:13px;
   display:flex;align-items:center;gap:7px;
 }
-.vhl-tos{
-  font-size:10.5px;color:rgba(255,255,255,.22);
-  text-align:center;margin-top:16px;line-height:1.8;
-}
+.vl-modal-tos{font-size:10.5px;color:rgba(255,255,255,.2);text-align:center;margin-top:16px;line-height:1.8;}
+.vl-modal-tos span{color:rgba(167,139,250,.6);}
 
-/* ── feature strips ── */
-.vhl-features{
-  position:absolute;bottom:28px;left:0;right:0;z-index:10;
-  display:flex;justify-content:center;gap:20px;
-  animation:vhl-fadeUp .8s .9s cubic-bezier(.22,1,.36,1) both;
-  padding:0 20px;
-  flex-wrap:wrap;
-}
-.vhl-feat{
-  display:flex;align-items:center;gap:7px;
-  font-size:11.5px;color:rgba(255,255,255,.28);
-  letter-spacing:.03em;
-  white-space:nowrap;
-}
-.vhl-feat-dot{
-  width:5px;height:5px;
-  border-radius:50%;
-  background:rgba(139,92,246,.6);
-  flex-shrink:0;
-}
+/* ── scroll animations ── */
+.vl-reveal{opacity:0;transform:translateY(28px);transition:opacity .65s ease,transform .65s ease;}
+.vl-reveal.visible{opacity:1;transform:translateY(0);}
+.vl-reveal-delay-1{transition-delay:.1s;}
+.vl-reveal-delay-2{transition-delay:.2s;}
+.vl-reveal-delay-3{transition-delay:.3s;}
+.vl-reveal-delay-4{transition-delay:.4s;}
 
-/* ── shared animation ── */
-@keyframes vhl-fadeUp{
-  from{opacity:0;transform:translateY(22px)}
-  to{opacity:1;transform:translateY(0)}
-}
+/* ── keyframes ── */
+@keyframes vl-up{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+@keyframes vl-fade{from{opacity:0}to{opacity:1}}
+@keyframes vl-scale{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
+@keyframes vl-spin{to{transform:rotate(360deg)}}
+@keyframes vl-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes vl-pulse-ring{0%{transform:scale(1);opacity:.6}100%{transform:scale(1.4);opacity:0}}
 
 /* ── mobile ── */
-@media(max-width:640px){
-  .vhl-nav{padding:16px 20px;}
-  .vhl-nav-links{display:none;}
-  .vhl-h1{font-size:clamp(32px,9vw,48px);}
-  .vhl-content{padding:70px 16px 0;}
-  .vhl-card{padding:22px 20px 20px;}
-  .vhl-features{gap:12px;bottom:16px;}
-  .vhl-feat{font-size:10.5px;}
+@media(max-width:768px){
+  .vl-nav{padding:0 20px;}
+  .vl-nav-links{display:none;}
+  .vl-section{padding:64px 20px;}
+  .vl-footer-top{grid-template-columns:1fr 1fr;gap:28px;}
+  .vl-footer{padding:48px 20px 24px;}
+  .vl-footer-bottom{flex-direction:column;align-items:flex-start;}
+}
+@media(max-width:480px){
+  .vl-footer-top{grid-template-columns:1fr;}
 }
 `
 
-// ── MAIN COMPONENT ───────────────────────────────────────────────────────────
+// ─── Scroll reveal wrapper ─────────────────────────────────────────────────
+function Reveal({ children, delay = 0, className = '' }: { children: React.ReactNode; delay?: number; className?: string }) {
+  const { ref, inView } = useInView()
+  return (
+    <div
+      ref={ref}
+      className={`vl-reveal ${inView ? 'visible' : ''} ${delay ? `vl-reveal-delay-${delay}` : ''} ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function HeroLanding({
-  title = 'Your Intelligent AI Companion',
+  title = 'Your Intelligent AI Companion for Every Task',
   description = 'Search the web, generate images, analyze documents, and hold natural conversations — all in one place.',
   navigation = [],
   announcementBanner,
@@ -423,28 +585,23 @@ export default function HeroLanding({
   authError,
 }: HeroLandingProps) {
   const canvasRef = useVortexShader()
+  const [showModal, setShowModal] = useState(false)
   const [loadingProvider, setLoadingProvider] = useState<string | null>(null)
-  const [showCard, setShowCard] = useState(false)
 
-  // inject CSS once
+  // inject CSS
   useEffect(() => {
     const el = document.createElement('style')
-    el.id = 'vhl-styles'
-    el.textContent = HERO_CSS
+    el.id = 'vl-css'
+    el.textContent = CSS
     document.head.appendChild(el)
     return () => el.remove()
   }, [])
 
-  // show card after brief mount delay for dramatic entrance
-  useEffect(() => {
-    const t = setTimeout(() => setShowCard(true), 60)
-    return () => clearTimeout(t)
-  }, [])
+  // clear spinner when auth resolves
+  useEffect(() => { if (!authLoading) setLoadingProvider(null) }, [authLoading])
 
-  // clear loading state when authLoading goes false
-  useEffect(() => {
-    if (!authLoading) setLoadingProvider(null)
-  }, [authLoading])
+  // show modal when error arrives
+  useEffect(() => { if (authError) setShowModal(true) }, [authError])
 
   const handleAuth = (provider: 'google' | 'github' | 'facebook') => {
     if (authLoading) return
@@ -452,79 +609,350 @@ export default function HeroLanding({
     onLogin(provider)
   }
 
-  const AUTH = [
-    { provider: 'google'   as const, label: 'Continue with Google',   icon: <GoogleIcon />   },
-    { provider: 'github'   as const, label: 'Continue with GitHub',   icon: <GithubIcon />   },
-    { provider: 'facebook' as const, label: 'Continue with Facebook', icon: <FacebookIcon /> },
-  ]
-
-  const FEATURES = [
-    'Web Search', 'Image Generation', 'Vision AI',
-    'Document Analysis', 'Voice Mode', 'AI Memory',
-  ]
-
-  // parse headline into two lines
+  // split title
   const words = title.split(' ')
   const mid = Math.ceil(words.length / 2)
   const line1 = words.slice(0, mid).join(' ')
   const line2 = words.slice(mid).join(' ')
 
-  return (
-    <div className="vhl-root">
-      {/* animated background */}
-      <canvas ref={canvasRef} className="vhl-canvas" />
-      <div className="vhl-vignette" />
-      <div className="vhl-grain" />
+  const navLinks = navigation.length > 0 ? navigation : [
+    { name: 'Features', href: '#features' },
+    { name: 'Pricing', href: '#pricing' },
+    { name: 'Integrations', href: '#integrations' },
+    { name: 'Resources', href: '#resources' },
+    { name: 'About', href: '#about' },
+  ]
 
-      {/* nav */}
-      <nav className="vhl-nav">
-        <div className="vhl-logo">
-          <VortisLogo size={26} color="#8b5cf6" />
-          VORTIS
+  const AUTH = [
+    { provider: 'google'   as const, label: 'Continue with Google',   icon: <GoogleIcon /> },
+    { provider: 'github'   as const, label: 'Continue with GitHub',   icon: <GithubIcon /> },
+    { provider: 'facebook' as const, label: 'Continue with Facebook', icon: <FacebookIcon /> },
+  ]
+
+  const FEATURES = [
+    { icon: '⚡', color: 'rgba(99,102,241,.15)', title: 'AI Automation', desc: 'Automate repetitive workflows with intelligent agents that learn and adapt.' },
+    { icon: '🌐', color: 'rgba(6,182,212,.12)', title: 'Web Search', desc: 'Real-time answers and research built directly into every conversation.' },
+    { icon: '🖼️', color: 'rgba(139,92,246,.15)', title: 'Image Generation', desc: 'Create stunning visuals and design assets from any text description.' },
+    { icon: '📄', color: 'rgba(16,185,129,.12)', title: 'Document Analysis', desc: 'Upload PDFs, CSVs, and docs — ask anything, get instant answers.' },
+    { icon: '🎙️', color: 'rgba(236,72,153,.12)', title: 'Voice Mode', desc: 'Speak naturally and control your workspace completely hands-free.' },
+    { icon: '🧠', color: 'rgba(245,158,11,.12)', title: 'AI Memory', desc: 'Remembers context, preferences, and past work across every session.' },
+    { icon: '👁️', color: 'rgba(6,182,212,.12)', title: 'Vision AI', desc: 'Analyze, describe, and extract text from any uploaded image.' },
+    { icon: '🔗', color: 'rgba(99,102,241,.12)', title: '500+ Integrations', desc: 'Connect your favorite tools and services seamlessly.' },
+  ]
+
+  const ACTIVITIES = [
+    { name: 'AI Research Agent', status: 'Active', color: '#10b981' },
+    { name: 'Image Batch Gen', status: 'Active', color: '#10b981' },
+    { name: 'Doc Summarizer', status: 'Paused', color: '#f59e0b' },
+    { name: 'Web Monitor', status: 'Active', color: '#10b981' },
+  ]
+
+  return (
+    <div className="vl">
+
+      {/* ── sticky nav ── */}
+      <nav className="vl-nav">
+        <a href="#" className="vl-nav-logo">
+          <VortisLogo size={24} color="#8b5cf6" /> VORTIS
+        </a>
+        <div className="vl-nav-links">
+          {navLinks.map(n => <a key={n.name} href={n.href} className="vl-nav-link">{n.name}</a>)}
         </div>
-        {navigation.length > 0 && (
-          <div className="vhl-nav-links">
-            {navigation.map(n => (
-              <a key={n.name} href={n.href} className="vhl-nav-link">{n.name}</a>
-            ))}
-          </div>
-        )}
-        <button className="vhl-signin-pill" onClick={() => setShowCard(true)}>
-          Sign In <span style={{ opacity: .55 }}>→</span>
+        <button className="vl-nav-cta" onClick={() => setShowModal(true)}>
+          Sign In →
         </button>
       </nav>
 
-      {/* main content */}
-      <div className="vhl-content">
-        {/* announcement badge */}
-        {announcementBanner && (
-          <div className="vhl-badge">
-            <span>{announcementBanner.text}</span>
-            <a href={announcementBanner.linkHref} className="vhl-badge-link">
-              {announcementBanner.linkText} →
-            </a>
+      {/* ── hero ── */}
+      <section className="vl-hero">
+        <canvas ref={canvasRef} className="vl-hero-canvas" />
+        <div className="vl-hero-vignette" />
+        <div className="vl-hero-bottom-fade" />
+
+        <div className="vl-hero-content">
+          {announcementBanner && (
+            <div className="vl-badge">
+              <span>🎉</span>
+              <span>{announcementBanner.text}</span>
+              <a href={announcementBanner.linkHref}>{announcementBanner.linkText} →</a>
+            </div>
+          )}
+
+          <h1 className="vl-h1">
+            <span>{line1}</span>
+            <span>{line2}</span>
+          </h1>
+
+          <p className="vl-sub">{description}</p>
+
+          <div className="vl-cta-row">
+            <button className="vl-btn-primary" onClick={() => setShowModal(true)}>
+              Start Free Trial →
+            </button>
+            <button className="vl-btn-ghost" onClick={() => document.getElementById('features')?.scrollIntoView({behavior:'smooth'})}>
+              View Features ↓
+            </button>
           </div>
-        )}
+        </div>
 
-        {/* headline */}
-        <h1 className="vhl-h1">
-          <span className="vhl-h1-white">{line1}</span>
-          <span className="vhl-h1-grad">{line2}</span>
-        </h1>
+        {/* planet glow */}
+        <div className="vl-planet" />
 
-        {/* subheading */}
-        <p className="vhl-sub">{description}</p>
+        {/* feature dots */}
+        <div className="vl-feat-strip">
+          {['Web Search','Image AI','Vision','Documents','Voice Mode','AI Memory','500+ Tools','Real-time'].map(f => (
+            <div key={f} className="vl-feat-dot">{f}</div>
+          ))}
+        </div>
+      </section>
 
-        {/* auth card */}
-        {showCard && (
-          <div className="vhl-card">
-            <div className="vhl-card-title">Welcome to Vortis</div>
-            <div className="vhl-card-sub">Choose a provider to get started</div>
+      {/* ── features ── */}
+      <section className="vl-section" id="features">
+        <div className="vl-section-inner">
+          <Reveal>
+            <div className="vl-section-label">AUTOMATE · RESEARCH · CREATE</div>
+            <h2 className="vl-section-h2">Everything You Need<br />To Move <em>Faster</em></h2>
+            <p className="vl-section-sub">Vortis combines the best AI capabilities into a single, seamless experience built for the next generation of teams.</p>
+          </Reveal>
 
-            <div className="vhl-divider">
-              <div className="vhl-divider-line" />
-              <span className="vhl-divider-text">SIGN IN</span>
-              <div className="vhl-divider-line" />
+          {/* dashboard mockup + copy */}
+          <div className="vl-split">
+            <Reveal>
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:13,color:'rgba(255,255,255,.35)',marginBottom:8,fontFamily:'monospace',letterSpacing:'.05em'}}>AI-POWERED WORKSPACE</div>
+                <h3 style={{fontFamily:"'Syne',sans-serif",fontSize:'clamp(22px,3vw,32px)',fontWeight:800,color:'#fff',marginBottom:12,letterSpacing:'-0.03em',lineHeight:1.15}}>
+                  Good morning, Alex 👋<br />
+                  <span style={{color:'rgba(255,255,255,.45)',fontSize:'clamp(16px,2vw,22px)',fontWeight:400}}>Here's what's happening with your workflows.</span>
+                </h3>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {[
+                  {label:'AI-Powered Automation',desc:"Let AI handle repetitive tasks and complex workflows — instantly.",icon:'⚡'},
+                  {label:'Seamless Integrations',desc:'Connect your favorite tools and unify your entire stack.',icon:'🔗'},
+                  {label:'Real-Time Insights',desc:'Track performance, measure impact, and make data-driven decisions.',icon:'📊'},
+                ].map(item => (
+                  <div key={item.label} style={{display:'flex',gap:12,padding:'14px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                    <div style={{width:38,height:38,borderRadius:10,background:'rgba(99,102,241,.12)',border:'1px solid rgba(99,102,241,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:17,flexShrink:0}}>{item.icon}</div>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:'#fff',marginBottom:3}}>{item.label}</div>
+                      <div style={{fontSize:13,color:'rgba(255,255,255,.38)',lineHeight:1.6}}>{item.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Reveal>
+
+            <Reveal delay={2}>
+              <div className="vl-mockup">
+                <div className="vl-mockup-header">
+                  <div className="vl-mockup-dot" style={{background:'#ef4444'}} />
+                  <div className="vl-mockup-dot" style={{background:'#f59e0b'}} />
+                  <div className="vl-mockup-dot" style={{background:'#10b981'}} />
+                  <span className="vl-mockup-title" style={{marginLeft:6}}>vortis-ai — dashboard</span>
+                </div>
+                <div className="vl-stat-row">
+                  {[{n:'24',l:'Workflows',u:'↑ 12%'},{n:'1,429',l:'Tasks Automated',u:'↑ 23%'},{n:'56h',l:'Time Saved',u:'↑ 18%'}].map(s => (
+                    <div key={s.l} className="vl-stat">
+                      <div className="vl-stat-num">{s.n}</div>
+                      <div className="vl-stat-lbl">{s.l}</div>
+                      <div className="vl-stat-up">{s.u}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{fontSize:11,color:'rgba(255,255,255,.3)',marginBottom:8,fontFamily:'monospace',letterSpacing:'.06em'}}>RECENT ACTIVITY</div>
+                <div className="vl-activity-list">
+                  {ACTIVITIES.map(a => (
+                    <div key={a.name} className="vl-activity-item">
+                      <div className="vl-activity-dot" style={{background:a.color}} />
+                      <span className="vl-activity-name">{a.name}</span>
+                      <span className={`vl-activity-badge ${a.status === 'Active' ? 'active-badge' : 'paused-badge'}`}>{a.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* features grid */}
+          <div className="vl-feat-grid" style={{marginTop:80}}>
+            {FEATURES.map((f, i) => (
+              <Reveal key={f.title} delay={(i % 4 + 1) as 1|2|3|4}>
+                <div className="vl-feat-card">
+                  <div className="vl-feat-icon" style={{background:f.color}}>{f.icon}</div>
+                  <div className="vl-feat-title">{f.title}</div>
+                  <div className="vl-feat-desc">{f.desc}</div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── scale section ── */}
+      <section className="vl-section" style={{background:'rgba(99,102,241,.03)',borderTop:'1px solid rgba(255,255,255,.04)',borderBottom:'1px solid rgba(255,255,255,.04)'}}>
+        <div className="vl-section-inner" style={{textAlign:'center'}}>
+          <Reveal>
+            <div className="vl-section-label" style={{textAlign:'center'}}>BUILT FOR TEAMS THAT DREAM BIG</div>
+            <h2 className="vl-section-h2" style={{textAlign:'center'}}>Designed To <em>Scale</em><br />With You</h2>
+            <p className="vl-section-sub" style={{margin:'0 auto'}}>From solo creators to enterprises, Vortis grows with your team and adapts to your needs.</p>
+          </Reveal>
+          <div className="vl-scale-grid">
+            {[
+              {icon:'🤝',title:'Collaborate Effortlessly',desc:'Work together in real-time with built-in team tools and permissions.'},
+              {icon:'🛡️',title:'Enterprise-Grade Security',desc:'Your data is protected with end-to-end encryption and top-tier compliance.'},
+              {icon:'🚀',title:'Scalable Infrastructure',desc:'Built on a robust, cloud-native platform that scales with your ambitions.'},
+            ].map((c,i) => (
+              <Reveal key={c.title} delay={(i+1) as 1|2|3}>
+                <div className="vl-scale-card">
+                  <div className="vl-scale-icon">{c.icon}</div>
+                  <div className="vl-scale-title">{c.title}</div>
+                  <div className="vl-scale-desc">{c.desc}</div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── testimonials ── */}
+      <section className="vl-section">
+        <div className="vl-section-inner" style={{textAlign:'center'}}>
+          <Reveal>
+            <div className="vl-section-label" style={{textAlign:'center'}}>TRUSTED BY INNOVATORS</div>
+            <h2 className="vl-section-h2" style={{textAlign:'center'}}>Loved By Teams<br /><em>Worldwide</em></h2>
+          </Reveal>
+          <div className="vl-testi-grid">
+            {[
+              {q:'"Vortis has completely transformed how we automate and collaborate. It\'s like having a co-pilot for our entire team."',name:'Sarah Chen',role:'Head of Ops, Nova Labs',init:'S'},
+              {q:'"The AI search and document analysis alone saved us 20+ hours per week. Genuinely can\'t imagine going back."',name:'Marcus Liu',role:'Product Lead, Drift',init:'M'},
+              {q:'"The integrations are flawless, the UI is beautiful, and the automation saves us hours every single week."',name:'James Carter',role:'CTO, Elevate',init:'J'},
+            ].map((t,i) => (
+              <Reveal key={t.name} delay={(i+1) as 1|2|3}>
+                <div className="vl-testi-card">
+                  <div className="vl-testi-quote">{t.q}</div>
+                  <div className="vl-testi-author">
+                    <div style={{width:36,height:36,borderRadius:'50%',background:'linear-gradient(135deg,#6366f1,#8b5cf6)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,color:'#fff',flexShrink:0,border:'2px solid rgba(139,92,246,.3)'}}>{t.init}</div>
+                    <div>
+                      <div className="vl-testi-name">{t.name}</div>
+                      <div className="vl-testi-role">{t.role}</div>
+                      <div className="vl-stars">★★★★★</div>
+                    </div>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── pricing ── */}
+      <section className="vl-section" id="pricing" style={{background:'rgba(99,102,241,.02)',borderTop:'1px solid rgba(255,255,255,.04)'}}>
+        <div className="vl-section-inner" style={{textAlign:'center'}}>
+          <Reveal>
+            <div className="vl-section-label" style={{textAlign:'center'}}>SIMPLE TRANSPARENT PRICING</div>
+            <h2 className="vl-section-h2" style={{textAlign:'center'}}>Start Free,<br /><em>Scale Anytime</em></h2>
+            <p className="vl-section-sub" style={{margin:'0 auto'}}>No hidden fees. Cancel anytime. Upgrade when you're ready.</p>
+          </Reveal>
+          <div className="vl-price-grid">
+            {[
+              {name:'Free',price:'$0',period:'forever',feats:['10 messages/day','2 image generations','Basic web search','1 document upload'],primary:false,popular:false},
+              {name:'Gold',price:'$19',period:'/month',feats:['500 messages/day','40 image generations','Deep web research','50 doc uploads','Voice mode','Priority support'],primary:true,popular:true},
+              {name:'Platinum',price:'$29',period:'/month',feats:['Unlimited messages','Unlimited images','Unlimited docs','Unlimited vision','VIP support','Early features'],primary:false,popular:false},
+            ].map((plan,i) => (
+              <Reveal key={plan.name} delay={(i+1) as 1|2|3}>
+                <div className={`vl-price-card ${plan.popular ? 'featured' : ''}`}>
+                  {plan.popular && <div className="vl-price-popular">MOST POPULAR</div>}
+                  <div className="vl-price-name">{plan.name}</div>
+                  <div className="vl-price-amount">{plan.price}<span>{plan.period}</span></div>
+                  <div className="vl-price-period" style={{marginTop:4}}>{plan.popular ? 'Best value for growing teams' : plan.price === '$0' ? 'Forever free, no card needed' : 'Full access, no limits'}</div>
+                  <ul className="vl-price-feats">
+                    {plan.feats.map(f => <li key={f}>{f}</li>)}
+                  </ul>
+                  <button
+                    className={`vl-price-btn ${plan.primary ? 'primary' : 'secondary'}`}
+                    onClick={() => setShowModal(true)}
+                  >
+                    {plan.price === '$0' ? 'Start Free' : `Upgrade to ${plan.name}`}
+                  </button>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CTA banner ── */}
+      <div className="vl-cta-banner">
+        <Reveal>
+          <h2 className="vl-cta-h2">Ready To Launch?</h2>
+          <p className="vl-cta-sub">Join thousands of teams already in orbit.</p>
+          <div className="vl-cta-btns">
+            <button className="vl-btn-primary" onClick={() => setShowModal(true)}>Start Free Trial →</button>
+            <button className="vl-btn-ghost" onClick={() => setShowModal(true)}>Book a Demo</button>
+          </div>
+        </Reveal>
+      </div>
+
+      {/* ── footer ── */}
+      <footer className="vl-footer">
+        <div className="vl-footer-inner">
+          <div className="vl-footer-top">
+            <div className="vl-footer-brand">
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                <VortisLogo size={22} color="#8b5cf6" />
+                <span style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:14,letterSpacing:'.1em',color:'#fff'}}>VORTIS</span>
+              </div>
+              <p>AI-powered automation and integrations that help teams move faster and achieve more.</p>
+              <div className="vl-footer-socials" style={{marginTop:14}}>
+                {['𝕏','in','⌥'].map((s,i) => <button key={i} className="vl-social-btn">{s}</button>)}
+              </div>
+            </div>
+            {[
+              {title:'Product',links:['Features','Integrations','Pricing','Changelog']},
+              {title:'Resources',links:['Docs','Blog','Guides','Help Center']},
+              {title:'Company',links:['About Us','Careers','Contact','Privacy Policy']},
+            ].map(col => (
+              <div key={col.title}>
+                <div className="vl-footer-col-title">{col.title}</div>
+                {col.links.map(l => <a key={l} href="#" className="vl-footer-link">{l}</a>)}
+              </div>
+            ))}
+          </div>
+          <div className="vl-footer-bottom">
+            <span className="vl-footer-copy">© 2026 Vortis AI. All rights reserved.</span>
+            <div style={{display:'flex',gap:16}}>
+              {[
+                {icon:'🔒',label:'Encrypted'},
+                {icon:'🔐',label:'Private'},
+                {icon:'🚫',label:'No Ads'},
+              ].map(b => (
+                <div key={b.label} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'rgba(255,255,255,.2)'}}>
+                  <span style={{fontSize:10}}>{b.icon}</span>{b.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* ── auth modal overlay ── */}
+      {showModal && (
+        <div className="vl-modal-backdrop" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
+          <div className="vl-modal">
+            <button className="vl-modal-close" onClick={() => setShowModal(false)}>✕</button>
+
+            <div className="vl-modal-logo">
+              <VortisLogo size={26} color="#8b5cf6" />
+              <div>
+                <div className="vl-modal-title">Welcome to Vortis</div>
+                <div className="vl-modal-sub">Sign in to continue</div>
+              </div>
+            </div>
+
+            <div className="vl-modal-divider">
+              <div className="vl-modal-divider-line" />
+              <span className="vl-modal-divider-text">SIGN IN WITH</span>
+              <div className="vl-modal-divider-line" />
             </div>
 
             {AUTH.map(({ provider, label, icon }) => {
@@ -532,45 +960,33 @@ export default function HeroLanding({
               return (
                 <button
                   key={provider}
-                  className="vhl-auth-btn"
+                  className="vl-auth-btn"
                   onClick={() => handleAuth(provider)}
                   disabled={authLoading}
                 >
-                  <div className="vhl-auth-btn-icon">{icon}</div>
-                  <span className="vhl-auth-btn-label">{label}</span>
+                  <div className="vl-auth-icon">{icon}</div>
+                  <span style={{flex:1}}>{label}</span>
                   {isLoading
-                    ? <div className="vhl-auth-spinner" />
-                    : <span className="vhl-auth-btn-arrow">›</span>
+                    ? <div className="vl-auth-spinner" />
+                    : <span className="vl-auth-arrow">›</span>
                   }
                 </button>
               )
             })}
 
             {authError && (
-              <div className="vhl-error">
+              <div className="vl-auth-error">
                 <span>⚠</span> {authError}
               </div>
             )}
 
-            <p className="vhl-tos">
-              By continuing you agree to our{' '}
-              <span style={{ color: 'rgba(167,139,250,.7)' }}>Terms of Service</span>
-              {' '}and{' '}
-              <span style={{ color: 'rgba(167,139,250,.7)' }}>Privacy Policy</span>
+            <p className="vl-modal-tos">
+              By continuing you agree to our <span>Terms of Service</span> and <span>Privacy Policy</span>
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* feature strip */}
-      <div className="vhl-features">
-        {FEATURES.map(f => (
-          <div key={f} className="vhl-feat">
-            <div className="vhl-feat-dot" />
-            {f}
-          </div>
-        ))}
-      </div>
     </div>
   )
 }
