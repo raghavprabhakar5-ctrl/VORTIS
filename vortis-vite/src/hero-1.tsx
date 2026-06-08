@@ -46,10 +46,10 @@ void main(void){
     uv+=.1*cos(i*vec2(.1+.01*i,.8)+i*i+T*.5+.1*uv.x);
     vec2 p=uv;
     float d=length(p);
-    col+=.0018/d*(cos(sin(i)*vec3(0.8,0.3,2.8))+1.);
+    col+=.00125/d*(cos(sin(i)*vec3(1.0,0.5,3.5))+1.);
     float b=noise(i+p+bg*1.731);
     col+=.002*b/length(max(p,vec2(b*p.x*.02,p.y)));
-    col=mix(col,vec3(bg*.08,bg*.02,bg*.45),d);
+    col=mix(col,vec3(bg*.03,bg*.01,bg*.20),d);
   }
   O=vec4(col,1);
 }`
@@ -181,26 +181,17 @@ export default function VortisLanding({
             </div>
             {/* ✅ Sign In opens the internal modal */}
             <button
-  onClick={() => setShowAuth(true)}
-  style={{ 
-    display: 'inline-flex', alignItems: 'center', gap: 10,
-    padding: '14px 32px', borderRadius: 999,
-    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
-    border: 'none', color: 'white', fontSize: 16, fontWeight: 700,
-    cursor: 'pointer', letterSpacing: '.02em',
-    boxShadow: '0 8px 32px rgba(99,102,241,0.4)',
-    transition: 'all .2s'
-  }}
-  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(99,102,241,0.6)' }}
-  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(99,102,241,0.4)' }}
->
-  Start for Free <span style={{ fontSize: 18 }}>→</span>
-</button>
+              onClick={() => setShowAuth(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: 'white', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 999, padding: '8px 18px', cursor: 'pointer', transition: 'all .15s', backdropFilter: 'blur(8px)' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.25)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}>
+              Sign In <span style={{ opacity: 0.6 }}>→</span>
+            </button>
           </nav>
         </div>
 
         {/* HERO TEXT */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',padding: '50px 24px 20px' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '80px 24px 0' }}>
           <div style={{ marginBottom: 36, padding: '7px 18px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.35)', color: 'rgba(255,255,255,0.6)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.1)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <span>🎉</span>
             <span>Now with Image AI &amp; Voice Mode!</span>
@@ -210,14 +201,14 @@ export default function VortisLanding({
               See what's new →
             </a>
           </div>
-          <h1 style={{fontSize: 'clamp(38px,6.5vw,76px)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 20px' }}>
+          <h1 style={{ fontSize: 'clamp(40px,7.5vw,84px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 28px' }}>
             <span style={{ color: 'white', display: 'block' }}>Ask Anything.</span>
-            <span style={{ display: 'block', background: 'linear-gradient(135deg, #c084fc 0%, #a78bfa 50%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+            <span style={{ display: 'block', background: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
              Do Everything.
-             </span>
+            </span>
           </h1>
-          <p style={{ fontSize: 'clamp(15px,1.8vw,18px)', color: 'rgba(255, 255, 255, 0.45)', maxWidth: 560, margin: '0 0 44px', lineHeight: 1.7, fontWeight: 400 }}>
-          One AI that searches, creates, codes, and thinks — just ask.
+          <p style={{ fontSize: 'clamp(15px,1.8vw,18px)', color: 'rgba(255,255,255,0.42)', maxWidth: 560, margin: '0 0 44px', lineHeight: 1.7, fontWeight: 400 }}>
+            One AI that searches, creates, codes, and thinks — just ask.
           </p>
         </div>
       </div>
