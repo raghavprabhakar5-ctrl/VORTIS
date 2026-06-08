@@ -46,10 +46,10 @@ void main(void){
     uv+=.1*cos(i*vec2(.1+.01*i,.8)+i*i+T*.5+.1*uv.x);
     vec2 p=uv;
     float d=length(p);
-    col+=.00125/d*(cos(sin(i)*vec3(1.0,0.5,3.5))+1.);
+    col+=.0018/d*(cos(sin(i)*vec3(0.8,0.3,2.8))+1.);
     float b=noise(i+p+bg*1.731);
     col+=.002*b/length(max(p,vec2(b*p.x*.02,p.y)));
-    col=mix(col,vec3(bg*.03,bg*.01,bg*.20),d);
+    col=mix(col,vec3(bg*.08,bg*.02,bg*.45),d);
   }
   O=vec4(col,1);
 }`
@@ -202,13 +202,13 @@ export default function VortisLanding({
             </a>
           </div>
           <h1 style={{ fontSize: 'clamp(40px,7.5vw,84px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 28px' }}>
-            <span style={{ color: 'white', display: 'block' }}>Launch Your</span>
-            <span style={{ display: 'block', background: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              Workflow Into Orbit
-            </span>
+            <span style={{ color: 'white', display: 'block' }}>Ask Anything.</span>
+            <span style={{ display: 'block', background: 'linear-gradient(135deg, #c084fc 0%, #a78bfa 50%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+             Do Everything.
+             </span>
           </h1>
-          <p style={{ fontSize: 'clamp(15px,1.8vw,18px)', color: 'rgba(255,255,255,0.42)', maxWidth: 560, margin: '0 0 44px', lineHeight: 1.7, fontWeight: 400 }}>
-            Supercharge productivity with AI-powered automation and integrations built for the next generation of teams — fast, seamless, and limitless.
+          <p style={{ fontSize: 'clamp(15px,1.8vw,18px)', color: 'rgba(255, 255, 255, 0.45)', maxWidth: 560, margin: '0 0 44px', lineHeight: 1.7, fontWeight: 400 }}>
+          One AI that searches, creates, codes, and thinks — just ask.
           </p>
         </div>
       </div>
