@@ -191,7 +191,7 @@ export default function VortisLanding({
         </div>
 
         {/* HERO TEXT */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '60px 24px 0' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center',padding: '50px 24px 20px' }}>
           <div style={{ marginBottom: 36, padding: '7px 18px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.35)', color: 'rgba(255,255,255,0.6)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.1)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <span>🎉</span>
             <span>Now with Image AI &amp; Voice Mode!</span>
@@ -201,7 +201,7 @@ export default function VortisLanding({
               See what's new →
             </a>
           </div>
-          <h1 style={{ fontSize: 'clamp(36px,6vw,72px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 28px' }}>
+          <h1 style={{fontSize: 'clamp(38px,6.5vw,76px)', fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 20px' }}>
             <span style={{ color: 'white', display: 'block' }}>Ask Anything.</span>
             <span style={{ display: 'block', background: 'linear-gradient(135deg, #c084fc 0%, #a78bfa 50%, #818cf8 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
              Do Everything.
