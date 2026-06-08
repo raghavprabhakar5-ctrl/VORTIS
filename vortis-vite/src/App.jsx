@@ -2552,26 +2552,86 @@ setProcessingStatus('');
       }, 50);
     }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
-     {showLogin && (
+    {showLogin && (
   <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-    <HeroLanding
-      title="Your intelligent AI companion for every task"
-      description="Search the web, generate images, analyze documents, and hold natural conversations — all in one place."
-      navigation={[
-        { name: 'Pricing', href: '#' },
-        { name: 'About', href: '#' },
-        { name: 'Contact', href: '#' },
-      ]}
-      announcementBanner={{
-        text: "🎉 Now with Image AI & Voice Mode!",
-        linkText: "See what's new",
-        linkHref: "#"
-      }}
-      gradientColors={{ from: "oklch(0.7 0.15 280)", to: "oklch(0.6 0.2 320)" }}
-      onLogin={handleLogin}
-      authLoading={authLoading}
-      authError={authError}
-    />
+    {/* Keep HeroLanding as visual background */}
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <HeroLanding />
+    </div>
+
+    {/* Auth modal on top */}
+    <div style={{
+      position: 'absolute', inset: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 10
+    }}>
+      <div style={{
+        background: '#0d0d1e', border: '1px solid rgba(139,92,246,0.2)',
+        borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380, margin: '0 16px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+          <VortisLogoMark size={36} color="#8b5cf6" />
+          <div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Sign in to continue</p>
+          </div>
+        </div>
+
+        {authError && (
+          <div style={{
+            marginBottom: 14, padding: '10px 14px',
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 10, fontSize: 13, color: '#ef4444'
+          }}>
+            {authError}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {AUTH_BUTTONS.map(b => (
+            <button
+              key={b.provider}
+              onClick={() => handleLogin(b.provider)}
+              disabled={authLoading}
+              style={{
+                width: '100%', padding: '0 16px', height: 50,
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 12, display: 'flex', alignItems: 'center',
+                gap: 12, cursor: authLoading ? 'not-allowed' : 'pointer',
+                color: 'rgba(255,255,255,0.8)', fontSize: 14,
+                fontFamily: 'inherit', fontWeight: 500,
+                opacity: authLoading ? 0.6 : 1, transition: 'all .15s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(139,92,246,0.12)';
+                e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+              }}
+            >
+              <div style={{
+                width: 34, height: 34, borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+              }}>
+                {authLoading ? <Loader size={16} style={{ animation: 'spin 1s linear infinite', color: '#8b5cf6' }} /> : b.icon}
+              </div>
+              <span style={{ flex: 1, textAlign: 'left' }}>{b.label}</span>
+              <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </button>
+          ))}
+        </div>
+
+        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+          By continuing you agree to our Terms of Service and Privacy Policy
+        </p>
+      </div>
+    </div>
   </div>
 )}
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
