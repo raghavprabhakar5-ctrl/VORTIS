@@ -2552,37 +2552,59 @@ setProcessingStatus('');
       }, 50);
     }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
-    {showLogin && (
+   {showLogin && (
   <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-    {/* Keep HeroLanding as visual background */}
-    <div style={{ position: 'absolute', inset: 0 }}>
+
+    {/* Background — hero canvas only, no internal modal conflicts */}
+    <div style={{ position: 'absolute', inset: 0, background: '#07070f', overflow: 'hidden' }}>
       <HeroLanding />
+      {/* Dark overlay so modal stands out */}
+      <div style={{ 
+        position: 'absolute', inset: 0, 
+        background: 'radial-gradient(ellipse at center, rgba(7,7,15,0.3) 0%, rgba(7,7,15,0.7) 100%)',
+        pointerEvents: 'none'
+      }} />
     </div>
 
-    {/* Auth modal on top */}
+    {/* Auth modal */}
     <div style={{
       position: 'absolute', inset: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', zIndex: 10
+      zIndex: 10
     }}>
       <div style={{
-        background: '#0d0d1e', border: '1px solid rgba(139,92,246,0.2)',
-        borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380, margin: '0 16px'
+        background: '#0d0d1e', 
+        border: '1px solid rgba(139,92,246,0.2)',
+        borderRadius: 20, padding: '32px 28px', 
+        width: '100%', maxWidth: 380, margin: '0 16px',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(139,92,246,0.05)',
+        backdropFilter: 'blur(20px)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-          <VortisLogoMark size={36} color="#8b5cf6" />
+          <VortisLogoMark size={36} />
           <div>
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
-            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Sign in to continue</p>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>
+              Welcome to Vortis
+            </h2>
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>
+              Sign in to continue
+            </p>
           </div>
         </div>
 
         {authError && (
           <div style={{
             marginBottom: 14, padding: '10px 14px',
-            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
-            borderRadius: 10, fontSize: 13, color: '#ef4444'
+            background: 'rgba(239,68,68,0.1)', 
+            border: '1px solid rgba(239,68,68,0.3)',
+            borderRadius: 10, fontSize: 13, color: '#ef4444',
+            display: 'flex', alignItems: 'center', gap: 8
           }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
             {authError}
           </div>
         )}
@@ -2604,6 +2626,7 @@ setProcessingStatus('');
                 opacity: authLoading ? 0.6 : 1, transition: 'all .15s'
               }}
               onMouseEnter={e => {
+                if (authLoading) return;
                 e.currentTarget.style.background = 'rgba(139,92,246,0.12)';
                 e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)';
               }}
@@ -2615,19 +2638,27 @@ setProcessingStatus('');
               <div style={{
                 width: 34, height: 34, borderRadius: 8,
                 background: 'rgba(255,255,255,0.06)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                display: 'flex', alignItems: 'center', 
+                justifyContent: 'center', flexShrink: 0
               }}>
-                {authLoading ? <Loader size={16} style={{ animation: 'spin 1s linear infinite', color: '#8b5cf6' }} /> : b.icon}
+                {authLoading 
+                  ? <Loader size={16} style={{ animation: 'spin 1s linear infinite', color: '#8b5cf6' }} /> 
+                  : b.icon
+                }
               </div>
               <span style={{ flex: 1, textAlign: 'left' }}>{b.label}</span>
-              <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
+              <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" 
+                strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24">
                 <polyline points="9 18 15 12 9 6" />
               </svg>
             </button>
           ))}
         </div>
 
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+        <p style={{ 
+          fontSize: 11, color: 'rgba(255,255,255,0.3)', 
+          textAlign: 'center', marginTop: 20, lineHeight: 1.8 
+        }}>
           By continuing you agree to our Terms of Service and Privacy Policy
         </p>
       </div>

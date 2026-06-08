@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { X, Search, Image, Brain, Mic, Shield, Lock, Cpu, Zap, Globe, BarChart3, Users } from 'lucide-react'
+import { X, Shield, Lock, Cpu, Zap, Globe, BarChart3, Users, Search, Image, Brain, Mic } from 'lucide-react'
 
 const VortisLogo = ({ size = 36, color = "#8b5cf6" }) => (
   <svg width={size} height={size} viewBox="0 0 1254 1254" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -8,6 +8,9 @@ const VortisLogo = ({ size = 36, color = "#8b5cf6" }) => (
     <path d="M0 0 C0.91394531 0.61230469 1.82789063 1.22460938 2.76953125 1.85546875 C6.50275739 4.30899468 10.32827702 6.56452637 14.1875 8.8125 C19.51834879 11.92870763 24.83641932 15.06255222 30.125 18.25 C36.27131036 21.95140593 42.44488781 25.60534592 48.625 29.25 C55.74656841 33.45061977 62.85249932 37.67549541 69.9375 41.9375 C95.09496436 57.0626947 120.4633796 71.8385265 145.82397461 86.61987305 C165.91816258 98.33548285 185.99103737 110.09007588 206.0078125 121.9375 C215.63376452 127.63419128 225.27162233 133.30876352 234.9375 138.9375 C245.39778036 145.0294366 255.82613851 151.17377639 266.24169922 157.34179688 C269.80258502 159.44956264 273.3656755 161.55358567 276.92871094 163.65771484 C283.78308792 167.70554595 290.63539175 171.75676848 297.48046875 175.8203125 C311.28901441 184.01665365 325.12763884 192.15838606 339.0078125 200.23291016 C347.98959686 205.45881169 356.96455513 210.69643858 365.9375 215.9375 C366.51493958 216.27477112 367.09237915 216.61204224 367.68731689 216.95953369 C375.08555989 221.28132417 382.4789587 225.61116748 389.86283875 229.9574585 C393.41882792 232.04939543 396.9838548 234.12493415 400.5546875 236.19140625 C416.60946345 245.55018456 431.45268812 256.12576823 444.9375 268.9375 C446.26478115 270.09033848 447.59777994 271.23664067 448.9375 272.375 C457.8147078 280.12667225 465.75963126 288.5969832 472.9375 297.9375 C473.45715332 298.6078125 473.97680664 299.278125 474.51220703 299.96875 C502.10135822 335.75667549 525.29076688 383.25041717 526.76171875 429.16796875 C526.86897809 432.86886194 526.86897809 432.86886194 527.43579102 436.22265625 C528.31057095 442.6998589 528.18225658 449.2240711 528.1875 455.75 C528.18851212 456.88089554 528.18851212 456.88089554 528.18954468 458.03463745 C528.14936701 486.46728486 523.9037116 514.90863699 514.9375 541.9375 C514.6988623 542.66437012 514.46022461 543.39124023 514.21435547 544.14013672 C511.696524 551.739559 509.10653011 559.17146891 505.328125 566.25 C504.22614212 568.37967478 503.21471532 570.50175227 502.234375 572.6875 C493.19095427 592.77849538 481.02832229 611.02851326 466.9375 627.9375 C466.49148438 628.47375 466.04546875 629.01 465.5859375 629.5625 C456.40817896 640.55617868 446.91051639 650.78227524 435.59521484 659.63916016 C434.40445549 660.57177551 433.21774787 661.5095728 432.03369141 662.45068359 C422.40799628 670.09103602 412.69556467 676.99358101 401.9375 682.9375 C400.80199707 683.57486084 400.80199707 683.57486084 399.64355469 684.22509766 C381.34874056 694.43009333 362.4058611 702.53046473 342.125 707.875 C341.10196777 708.14538086 340.07893555 708.41576172 339.02490234 708.69433594 C322.23558396 712.85802357 305.71425621 714.43813217 288.44677734 714.32861328 C285.43931765 714.31250973 282.43320112 714.32858171 279.42578125 714.34765625 C262.42118835 714.36701497 246.0844952 712.29860495 229.5625 708.25 C228.00849487 707.87307007 228.00849487 707.87307007 226.4230957 707.48852539 C215.63860153 704.76962811 205.25404578 701.06934237 194.9375 696.9375 C193.98552734 696.55795166 193.03355469 696.17840332 192.05273438 695.78735352 C172.16053249 687.69202768 153.77833323 676.80454295 135.9375 664.9375 C134.36592705 663.91009256 132.79431421 662.88274614 131.22265625 661.85546875 C129.79301283 660.90553641 128.36454938 659.95382485 126.9375 659 C126.30900146 658.5879834 125.68050293 658.1759668 125.03295898 657.75146484 C120.31828893 654.53518575 114.88492372 650.47689471 113.35253906 644.75219727 C113.03955544 640.36255563 113.67279078 638.32448839 116.1953125 634.63671875 C120.75889532 629.60192575 126.71465936 626.56611432 132.5625 623.25 C133.77588029 622.54885351 134.98843733 621.84628051 136.20019531 621.14233398 C138.63152535 619.73103843 141.0659588 618.32535857 143.50292969 616.92382812 C148.26423429 614.17020471 152.97883701 611.34239627 157.6875 608.5 C159.29676069 607.53236195 160.90613189 606.56490766 162.515625 605.59765625 C163.26521484 605.14664551 164.01480469 604.69563477 164.78710938 604.23095703 C166.78963155 603.02644267 168.79298186 601.82332559 170.796875 600.62109375 C171.40289551 600.25677246 172.00891602 599.89245117 172.63330078 599.51708984 C173.82672627 598.80297245 175.02298987 598.09357476 176.22216797 597.38916016 C179.80257248 595.27517232 183.27039925 593.05061575 186.7109375 590.71484375 C196.12598924 584.46388167 203.80868479 579.96635286 215.375 581.203125 C219.30976871 582.0142396 221.81205063 583.03327561 224.9296875 585.5078125 C229.35140859 588.65635319 234.8760072 590.07594135 239.9375 591.9375 C242.47230498 592.95846312 244.99965746 593.99510955 247.5234375 595.04296875 C267.37641725 602.39949361 290.11462775 600.15640453 310.9375 599.9375 C310.9375 599.2775 310.9375 598.6175 310.9375 597.9375 C312.10023438 597.669375 313.26296875 597.40125 314.4609375 597.125 C337.86656461 591.49492449 358.39202819 581.36843553 375.54150391 564.31445312 C376.787986 563.08497446 378.0696049 561.8913546 379.35546875 560.703125 C397.17243769 543.92679318 410.52116039 518.92526659 415.49951172 495.02197266 C416.27035316 491.35338614 417.28356059 487.74494235 418.25390625 484.125 C420.06126274 475.69755487 420.1238338 467.31681907 420.12280273 458.72802734 C420.12498095 456.7051867 420.14317535 454.68290041 420.16210938 452.66015625 C420.18745514 435.40813771 416.99508377 418.7352703 409.9375 402.9375 C409.19886719 401.22820312 409.19886719 401.22820312 408.4453125 399.484375 C393.83049784 366.38307152 368.43668862 344.33423141 337.41015625 327.01171875 C331.78188176 323.86849881 326.23030354 320.60356973 320.6875 317.3125 C319.75856934 316.76182861 318.82963867 316.21115723 317.87255859 315.64379883 C316.06016217 314.5692219 314.24798087 313.49428205 312.43603516 312.41894531 C308.9201102 310.3342636 305.3986024 308.25917236 301.875 306.1875 C301.21862549 305.80158691 300.56225098 305.41567383 299.88598633 305.01806641 C283.77223545 295.54906491 267.6496843 286.09509597 251.5 276.6875 C243.16640364 271.83206555 234.85344212 266.94311471 226.55444336 262.02880859 C219.67676573 257.95850764 212.7833057 253.91555531 205.88555908 249.87939453 C185.40610734 237.89436602 164.99088792 225.79970554 144.65869141 213.56640625 C136.87444658 208.88782608 129.06151247 204.25783873 121.25 199.625 C108.45499046 192.03577479 95.68565715 184.40537639 82.93652344 176.73925781 C79.89940076 174.91461068 76.86018701 173.09349591 73.8203125 171.2734375 C63.56347829 165.13068841 53.32310964 158.96258211 43.11157227 152.74481201 C30.86067189 145.2858514 18.55350318 137.92597224 6.21069336 130.62011719 C4.94644553 129.87175542 3.68220392 129.12338316 2.41796875 128.375 C1.80337296 128.01126282 1.18877716 127.64752563 0.55555725 127.27276611 C-4.60843454 124.21350857 -9.75669566 121.1283886 -14.89790344 118.03100586 C-17.83246475 116.26522678 -20.7757324 114.51679347 -23.73803711 112.7980957 C-32.39320143 107.7648254 -40.34394665 102.00825939 -45.0625 92.9375 C-45.0625 91.9475 -45.0625 90.9575 -45.0625 89.9375 C-45.7225 89.9375 -46.3825 89.9375 -47.0625 89.9375 C-48.19748286 86.53255141 -48.20336425 83.90499851 -48.22363281 80.31396484 C-48.22859772 79.64523346 -48.23356262 78.97650208 -48.23867798 78.2875061 C-48.25328368 76.07447273 -48.260101 73.86151117 -48.265625 71.6484375 C-48.27138035 70.10486856 -48.27713803 68.56129963 -48.28289795 67.01773071 C-48.2934052 63.77793038 -48.29924881 60.53815482 -48.30273438 57.29833984 C-48.30820066 53.16602973 -48.33218948 49.03405219 -48.36070633 44.90184593 C-48.37942544 41.71032795 -48.38454334 38.51888832 -48.38607025 35.3273201 C-48.38907942 33.8052248 -48.39704866 32.2831303 -48.41025543 30.76108932 C-48.51191211 18.13832571 -47.57700252 9.45700747 -38.58203125 0.11328125 C-27.3136669 -9.61769385 -11.83914377 -7.57133779 0 0 Z " fill={color} transform="translate(587.0625,330.0625)"/>
   </svg>
 )
+
+
+// ── LEAVE VORTIS LOGO AS-IS (too long, keep your existing one) ──
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -18,6 +21,8 @@ const GithubIcon = () => (
 const FacebookIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
 )
+
+// after FacebookIcon, before export default
 
 const shaderSrc = `#version 300 es
 precision highp float;
@@ -56,7 +61,6 @@ function useShader() {
   useEffect(() => {
     const canvas = ref.current
     if (!canvas) return
-
     const gl = canvas.getContext('webgl2')
     if (!gl) return
 
@@ -68,8 +72,7 @@ function useShader() {
     }
 
     const mk = (t: number, s: string): WebGLShader => {
-      const x = gl.createShader(t)
-      if (!x) throw new Error('createShader failed')
+      const x = gl.createShader(t)!
       gl.shaderSource(x, s)
       gl.compileShader(x)
       return x
@@ -77,17 +80,14 @@ function useShader() {
 
     const vs = mk(gl.VERTEX_SHADER, `#version 300 es\nin vec4 position;\nvoid main(){gl_Position=position;}`)
     const fs = mk(gl.FRAGMENT_SHADER, shaderSrc)
-
-    const p = gl.createProgram()
-    if (!p) return
+    const p = gl.createProgram()!
     gl.attachShader(p, vs)
     gl.attachShader(p, fs)
     gl.linkProgram(p)
 
-    const b = gl.createBuffer()
-    if (!b) return
+    const b = gl.createBuffer()!
     gl.bindBuffer(gl.ARRAY_BUFFER, b)
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, 1, -1, -1, 1, 1, 1, -1]), gl.STATIC_DRAW)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,1,-1,-1,1,1,1,-1]), gl.STATIC_DRAW)
 
     const pos = gl.getAttribLocation(p, 'position')
     gl.enableVertexAttribArray(pos)
@@ -115,9 +115,19 @@ function useShader() {
   return ref
 }
 
-export default function VortisLanding() {
-  const canvasRef = useShader()
+export default function VortisLanding({ 
+  onLogin, 
+  authLoading = false, 
+  authError = '' 
+}: { 
+  onLogin?: (provider: string) => void
+  authLoading?: boolean
+  authError?: string
+}) {
+
+  // ✅ useState is INSIDE the function body — this was the bug
   const [showAuth, setShowAuth] = useState(false)
+  const canvasRef = useShader()
 
   const nav = [
     { name: 'Features', href: '#features' },
@@ -128,20 +138,20 @@ export default function VortisLanding() {
   ]
 
   const AUTH = [
-    { provider: 'google', label: 'Continue with Google',  color: 'white', icon: <GoogleIcon /> },
-    { provider: 'github', label: 'Continue with GitHub',  color: 'white', icon: <GithubIcon /> },
-    { provider: 'facebook', label: 'Continue with Facebook', color: 'white', icon: <FacebookIcon /> },
+    { provider: 'google',   label: 'Continue with Google',   icon: <GoogleIcon /> },
+    { provider: 'github',   label: 'Continue with GitHub',   icon: <GithubIcon /> },
+    { provider: 'facebook', label: 'Continue with Facebook', icon: <FacebookIcon /> },
   ]
 
   const FEATURES = [
-    { icon: <Zap size={18} />, color: '#a78bfa', bg: 'rgba(167,139,250,.15)', label: 'AI Automation', desc: 'Automate repetitive workflows with intelligent agents that learn and adapt.' },
-    { icon: <Globe size={18} />, color: '#818cf8', bg: 'rgba(129,140,248,.15)', label: 'Integrations', desc: 'Connect 500+ tools and services seamlessly into your existing stack.' },
-    { icon: <BarChart3 size={18} />, color: '#c084fc', bg: 'rgba(192,132,252,.15)', label: 'Analytics', desc: 'Real-time insights and dashboards to track every workflow in detail.' },
-    { icon: <Users size={18} />, color: '#e879f9', bg: 'rgba(232,121,249,.15)', label: 'Team Collaboration', desc: 'Built for teams — share, iterate, and ship together faster.' },
-    { icon: <Search size={18} />, color: '#6366f1', bg: 'rgba(99,102,241,.15)', label: 'Web Search', desc: 'Real-time answers and research built directly into your workflow.' },
-    { icon: <Brain size={18} />, color: '#8b5cf6', bg: 'rgba(139,92,246,.15)', label: 'AI Memory', desc: 'Remembers context, preferences, and past work across every session.' },
-    { icon: <Image size={18} />, color: '#a855f7', bg: 'rgba(168,85,247,.15)', label: 'Image Generation', desc: 'Create stunning visuals and design assets on demand.' },
-    { icon: <Mic size={18} />, color: '#d946ef', bg: 'rgba(217,70,239,.15)', label: 'Voice Mode', desc: 'Talk naturally and control your workspace completely hands-free.' },
+    { icon: <Zap size={18} />,      color: '#a78bfa', bg: 'rgba(167,139,250,.15)', label: 'AI Automation',      desc: 'Automate repetitive workflows with intelligent agents that learn and adapt.' },
+    { icon: <Globe size={18} />,     color: '#818cf8', bg: 'rgba(129,140,248,.15)', label: 'Integrations',        desc: 'Connect 500+ tools and services seamlessly into your existing stack.' },
+    { icon: <BarChart3 size={18} />, color: '#c084fc', bg: 'rgba(192,132,252,.15)', label: 'Analytics',           desc: 'Real-time insights and dashboards to track every workflow in detail.' },
+    { icon: <Users size={18} />,     color: '#e879f9', bg: 'rgba(232,121,249,.15)', label: 'Team Collaboration',  desc: 'Built for teams — share, iterate, and ship together faster.' },
+    { icon: <Search size={18} />,    color: '#6366f1', bg: 'rgba(99,102,241,.15)',  label: 'Web Search',          desc: 'Real-time answers and research built directly into your workflow.' },
+    { icon: <Brain size={18} />,     color: '#8b5cf6', bg: 'rgba(139,92,246,.15)', label: 'AI Memory',            desc: 'Remembers context, preferences, and past work across every session.' },
+    { icon: <Image size={18} />,     color: '#a855f7', bg: 'rgba(168,85,247,.15)', label: 'Image Generation',    desc: 'Create stunning visuals and design assets on demand.' },
+    { icon: <Mic size={18} />,       color: '#d946ef', bg: 'rgba(217,70,239,.15)', label: 'Voice Mode',           desc: 'Talk naturally and control your workspace completely hands-free.' },
   ]
 
   return (
@@ -150,33 +160,28 @@ export default function VortisLanding() {
       {/* HERO */}
       <div style={{ position: 'relative', height: '100vh', overflow: 'hidden' }}>
         <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
-
-        {/* dark vignette overlay to deepen bg like screenshot */}
         <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(7,7,15,0.1) 0%, rgba(7,7,15,0.55) 70%, rgba(7,7,15,0.85) 100%)', pointerEvents: 'none' }} />
 
         {/* NAV */}
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 20 }}>
           <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '22px 48px', borderBottom: '1px solid rgba(255,255,255,0.06)', backdropFilter: 'blur(12px)', background: 'rgba(7,7,15,0.3)' }}>
-            {/* Logo */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
               <VortisLogo size={28} color="#8b5cf6" />
               <span style={{ fontSize: 15, fontWeight: 700, color: 'white', letterSpacing: '.1em' }}>VORTIS</span>
             </div>
-
-            {/* Nav links — matching the screenshot layout */}
             <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
               {nav.map(item => (
                 <a key={item.name} href={item.href}
-                  style={{ fontSize: 13.5, fontWeight: 500, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', transition: 'color .15s', letterSpacing: '.01em' }}
+                  style={{ fontSize: 13.5, fontWeight: 500, color: 'rgba(255,255,255,0.55)', textDecoration: 'none', transition: 'color .15s' }}
                   onMouseEnter={e => e.currentTarget.style.color = 'white'}
                   onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}>
                   {item.name}
                 </a>
               ))}
             </div>
-
-            {/* Sign In button — pill style like screenshot */}
-            <button onClick={() => setShowAuth(true)}
+            {/* ✅ Sign In opens the internal modal */}
+            <button
+              onClick={() => setShowAuth(true)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: 'white', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 999, padding: '8px 18px', cursor: 'pointer', transition: 'all .15s', backdropFilter: 'blur(8px)' }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.25)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)' }}
               onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}>
@@ -185,41 +190,26 @@ export default function VortisLanding() {
           </nav>
         </div>
 
-        {/* HERO TEXT — matching screenshot layout */}
+        {/* HERO TEXT */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '80px 24px 0' }}>
-
-          {/* Badge / Announcement banner */}
-          <div style={{ marginBottom: 36, padding: '7px 18px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.35)', color: 'rgba(255,255,255,0.6)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.1)', display: 'inline-flex', alignItems: 'center', gap: 8, letterSpacing: '.01em' }}>
+          <div style={{ marginBottom: 36, padding: '7px 18px', borderRadius: 999, border: '1px solid rgba(139,92,246,0.35)', color: 'rgba(255,255,255,0.6)', fontSize: 13, backdropFilter: 'blur(8px)', background: 'rgba(139,92,246,0.1)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <span>🎉</span>
             <span>Now with Image AI &amp; Voice Mode!</span>
-            <a href="#features" style={{ color: '#a78bfa', fontWeight: 700, textDecoration: 'none', transition: 'color .15s' }}
+            <a href="#features" style={{ color: '#a78bfa', fontWeight: 700, textDecoration: 'none' }}
               onMouseEnter={e => e.currentTarget.style.color = '#c4b5fd'}
               onMouseLeave={e => e.currentTarget.style.color = '#a78bfa'}>
               See what's new →
             </a>
           </div>
-
-          {/* Main headline — two-tone like screenshot */}
           <h1 style={{ fontSize: 'clamp(40px,7.5vw,84px)', fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.035em', maxWidth: 860, margin: '0 0 28px' }}>
             <span style={{ color: 'white', display: 'block' }}>Launch Your</span>
-            <span style={{
-              display: 'block',
-              background: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #6366f1 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
+            <span style={{ display: 'block', background: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
               Workflow Into Orbit
             </span>
           </h1>
-
-          {/* Subheading */}
           <p style={{ fontSize: 'clamp(15px,1.8vw,18px)', color: 'rgba(255,255,255,0.42)', maxWidth: 560, margin: '0 0 44px', lineHeight: 1.7, fontWeight: 400 }}>
             Supercharge productivity with AI-powered automation and integrations built for the next generation of teams — fast, seamless, and limitless.
           </p>
-
-          {/* No CTA buttons in hero */}
-
         </div>
       </div>
 
@@ -227,12 +217,8 @@ export default function VortisLanding() {
       <div id="features" style={{ background: '#09091a', padding: '90px 48px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
         <div style={{ maxWidth: 1080, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
-            <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>
-              Everything you need, in one place
-            </h2>
-            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)', maxWidth: 480, margin: '0 auto' }}>
-              Vortis combines the best AI capabilities into a single, seamless experience.
-            </p>
+            <h2 style={{ fontSize: 'clamp(26px,4vw,44px)', fontWeight: 800, color: 'white', margin: '0 0 14px', letterSpacing: '-.03em' }}>Everything you need, in one place</h2>
+            <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.35)', maxWidth: 480, margin: '0 auto' }}>Vortis combines the best AI capabilities into a single, seamless experience.</p>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16 }}>
             {FEATURES.map(f => (
@@ -258,23 +244,24 @@ export default function VortisLanding() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 18 }}>
             {[
-              { name: 'Free', price: '$0', period: 'forever', features: ['10 messages/day', '2 image generations', 'Basic web search', '1 document upload'], cta: 'Start Free', highlight: false },
-              { name: 'Gold', price: '$19', period: '/month', features: ['500 messages/day', '40 image generations', 'Deep web research', '50 document uploads', 'Voice mode', 'Priority support'], cta: 'Upgrade to Gold', highlight: true },
-              { name: 'Platinum', price: '$29', period: '/month', features: ['Unlimited messages', 'Unlimited images', 'Unlimited documents', 'Unlimited vision', 'VIP support', 'Early features'], cta: 'Go Platinum', highlight: false },
+              { name: 'Free',     price: '$0',  period: 'forever',  features: ['10 messages/day', '2 image generations', 'Basic web search', '1 document upload'], cta: 'Start Free',        highlight: false },
+              { name: 'Gold',     price: '$19', period: '/month',   features: ['500 messages/day', '40 image generations', 'Deep web research', '50 document uploads', 'Voice mode', 'Priority support'], cta: 'Upgrade to Gold',  highlight: true },
+              { name: 'Platinum', price: '$29', period: '/month',   features: ['Unlimited messages', 'Unlimited images', 'Unlimited documents', 'Unlimited vision', 'VIP support', 'Early features'], cta: 'Go Platinum', highlight: false },
             ].map(plan => (
               <div key={plan.name} style={{ background: plan.highlight ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.025)', border: `1px solid ${plan.highlight ? 'rgba(99,102,241,0.45)' : 'rgba(255,255,255,0.06)'}`, borderRadius: 16, padding: '28px 22px', position: 'relative' }}>
-                {plan.highlight && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '3px 14px', borderRadius: 20, fontSize: 10.5, color: 'white', fontWeight: 700, whiteSpace: 'nowrap', letterSpacing: '.04em' }}>MOST POPULAR</div>}
+                {plan.highlight && <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', padding: '3px 14px', borderRadius: 20, fontSize: 10.5, color: 'white', fontWeight: 700, whiteSpace: 'nowrap' }}>MOST POPULAR</div>}
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'white', marginBottom: 8 }}>{plan.name}</div>
-                <div style={{ fontSize: 34, fontWeight: 800, color: plan.highlight ? '#a78bfa' : 'white', marginBottom: 3, fontVariantNumeric: 'tabular-nums' }}>{plan.price}</div>
+                <div style={{ fontSize: 34, fontWeight: 800, color: plan.highlight ? '#a78bfa' : 'white', marginBottom: 3 }}>{plan.price}</div>
                 <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.35)', marginBottom: 22 }}>{plan.period}</div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 22px' }}>
                   {plan.features.map(f => (
                     <li key={f} style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ color: '#10b981', fontSize: 10, flexShrink: 0 }}>✓</span>{f}
+                      <span style={{ color: '#10b981', fontSize: 10 }}>✓</span>{f}
                     </li>
                   ))}
                 </ul>
-                <button onClick={() => setShowAuth(true)}
+                <button
+                  onClick={() => setShowAuth(true)}
                   style={{ width: '100%', padding: '11px', background: plan.highlight ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'rgba(255,255,255,0.07)', border: `1px solid ${plan.highlight ? 'transparent' : 'rgba(255,255,255,0.1)'}`, borderRadius: 9, color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', transition: 'opacity .15s' }}
                   onMouseEnter={e => e.currentTarget.style.opacity = '.8'}
                   onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
@@ -304,34 +291,58 @@ export default function VortisLanding() {
 
       {/* AUTH MODAL */}
       {showAuth && (
-        <div onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
-          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowAuth(false) }}
+          style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.88)', backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+        >
           <div style={{ background: '#0d0d1e', border: '1px solid rgba(139,92,246,0.2)', borderRadius: 20, padding: '32px 28px', width: '100%', maxWidth: 380 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <VortisLogo size={26} color="#8b5cf6" />
                 <div>
                   <h2 style={{ fontSize: 17, fontWeight: 700, color: 'white', margin: '0 0 2px' }}>Welcome to Vortis</h2>
-                  <p style={{ fontSize: 12, color: 'rgba(255, 255, 255, 0.77)', margin: 0 }}>Sign in to continue</p>
+                  <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', margin: 0 }}>Sign in to continue</p>
                 </div>
               </div>
-              <button onClick={() => setShowAuth(false)} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
+              <button
+                onClick={() => setShowAuth(false)}
+                style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.4)', flexShrink: 0 }}>
                 <X size={13} />
               </button>
             </div>
+
+            {/* ERROR */}
+            {authError && (
+              <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, fontSize: 12.5, color: '#ef4444', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                {authError}
+              </div>
+            )}
+
+            {/* BUTTONS */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {AUTH.map(b => (
-                <button key={b.provider}
-                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, transition: 'all .15s' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)' }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{b.icon}</div>
+                <button
+                  key={b.provider}
+                  onClick={() => onLogin?.(b.provider)}
+                  disabled={authLoading}
+                  style={{ width: '100%', padding: '0 16px', height: 50, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 12, cursor: authLoading ? 'not-allowed' : 'pointer', color: 'rgba(255,255,255,0.8)', fontSize: 14, fontFamily: 'inherit', fontWeight: 500, opacity: authLoading ? 0.6 : 1, transition: 'all .15s' }}
+                  onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.background = 'rgba(139,92,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.4)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+                >
+                  <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {authLoading
+                      ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                      : b.icon
+                    }
+                  </div>
                   <span style={{ flex: 1, textAlign: 'left' }}>{b.label}</span>
                   <svg width="12" height="12" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: 11, color: 'rgba(255, 255, 255, 0.77)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
+
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textAlign: 'center', marginTop: 20, lineHeight: 1.8 }}>
               By continuing you agree to our Terms of Service and Privacy Policy
             </p>
           </div>
