@@ -181,12 +181,21 @@ export default function VortisLanding({
             </div>
             {/* ✅ Sign In opens the internal modal */}
             <button
-              onClick={() => setShowAuth(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: 'white', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 999, padding: '8px 18px', cursor: 'pointer', transition: 'all .15s', backdropFilter: 'blur(8px)' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(139,92,246,0.25)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,0.5)' }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}>
-              Sign In <span style={{ opacity: 0.6 }}>→</span>
-            </button>
+  onClick={() => setShowAuth(true)}
+  style={{ 
+    display: 'inline-flex', alignItems: 'center', gap: 10,
+    padding: '14px 32px', borderRadius: 999,
+    background: 'linear-gradient(135deg, #7c3aed, #6366f1)',
+    border: 'none', color: 'white', fontSize: 16, fontWeight: 700,
+    cursor: 'pointer', letterSpacing: '.02em',
+    boxShadow: '0 8px 32px rgba(99,102,241,0.4)',
+    transition: 'all .2s'
+  }}
+  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(99,102,241,0.6)' }}
+  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(99,102,241,0.4)' }}
+>
+  Start for Free <span style={{ fontSize: 18 }}>→</span>
+</button>
           </nav>
         </div>
 
