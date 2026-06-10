@@ -25,7 +25,13 @@
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script>
+    if (!localStorage.getItem('vortis_user') && 
+        !localStorage.getItem('vortis_guest')) {
+      window.location.replace('/landing.html');
+    }
+  </script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
   </body>
 </html> 

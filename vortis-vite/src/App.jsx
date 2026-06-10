@@ -1352,6 +1352,8 @@ export default function VortisAI() {
         setProfile({ name: '', email: '', avatar: '', provider: 'none' });
         setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setSavedChats([]); setMemories([]); setAuthError('');
+        localStorage.removeItem('vortis_guest'); // ADD THIS
+        window.location.href = '/';      
         startNewChat();
         try { localStorage.removeItem('vortis_user'); } catch(_) {}
         signOut(auth).catch(() => {});
