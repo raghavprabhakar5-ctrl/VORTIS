@@ -35,6 +35,13 @@ function StyleInjector() {
 }
 
 
+if (typeof window !== 'undefined') {
+  window.onerror = (msg, src, line, col, err) => {
+    document.body.innerHTML = `<pre style="color:red;padding:20px;white-space:pre-wrap">${msg}\n${src}:${line}:${col}\n${err?.stack}</pre>`;
+  };
+}
+
+
 //about section 
 
 const capabilities = [
