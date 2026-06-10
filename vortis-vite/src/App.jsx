@@ -7,10 +7,6 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import LandingPage from './hero-1'
-
-export default function App() {
-  return <LandingPage />
-}
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
@@ -1053,7 +1049,7 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
 const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
-export default function VortisAI() {
+function VortisAI() {
   const [messages, setMessages] = useState([]);
   useEffect(() => {
   const handleBeforeUnload = () => {
@@ -2559,9 +2555,9 @@ setProcessingStatus('');
       }, 50);
     }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
-   {showLogin && (
+  {showLogin && (
   <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-    <HeroLanding
+    <LandingPage
       onLogin={handleLogin}
       authLoading={authLoading}
       authError={authError}
