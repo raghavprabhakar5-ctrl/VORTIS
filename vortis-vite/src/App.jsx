@@ -6,7 +6,11 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
-export { default as HeroLanding } from './hero-1'
+import LandingPage from './hero-1'
+
+export default function App() {
+  return <LandingPage />
+}
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
