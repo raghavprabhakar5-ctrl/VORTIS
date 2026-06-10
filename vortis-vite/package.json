@@ -19,6 +19,7 @@
     "edge-tts": "^1.0.1",
     "edge-tts-universal": "^1.4.0",
     "firebase": "^12.13.0",
+    "framer-motion": "^12.40.0",
     "franc": "^6.2.0",
     "lucide-react": "^1.17.0",
     "react": "^19.2.0",
