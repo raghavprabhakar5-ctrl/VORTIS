@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useInView, useScroll, useTransform } from "framer-motion";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, Mic, FileText,
-  Image as ImageIcon, Microscope, Check, Plus, Zap, ArrowRight
+  Image as ImageIcon, Microscope, Check, Plus, Star, Send, Zap, ArrowRight
 } from "lucide-react";
 
 
@@ -280,7 +280,13 @@ function Nav() {
   const bg = useTransform(scrollY, [0, 80], [0, 1]);
   return (
     <motion.nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-3.5">
-      <motion.div style={{ opacity: bg, background: "rgba(5,5,16,0.88)" }} className="absolute inset-0 border-b border-white/5 backdrop-blur-xl backdrop-blur-xl" />
+      <motion.div
+  style={{
+    opacity: bg,
+    background: "rgba(5,5,16,0.88)"
+  }}
+  className="absolute inset-0 border-b border-white/5 backdrop-blur-xl"
+/>
       <div className="absolute inset-0 border-b border-white/5" style={{ background: "rgba(5,5,16,0)", backdropFilter: "blur(20px)" }} />
       <div className="relative flex items-center gap-8">
         <motion.a href="#" initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }} className="flex items-center gap-2.5 no-underline">
@@ -1060,13 +1066,19 @@ function Footer() {
 // ══════════════════════════════════════════════════════════════════
 export default function LandingPage() {
   return (
-    <div style={{
-      color: "white",
-      background: "black",
-      minHeight: "100vh",
-      padding: "50px"
-    }}>
-      HELLO VORTIS
+    <div style={{ background: "#050510", color: "#ffffff", overflowX: "hidden", minHeight: "100vh", position: "relative", fontFamily: "'Inter',sans-serif", isolation: "isolate" }}>
+      <StyleInjector />
+      <CosmicBg />
+      <CursorOrb />
+      <Nav />
+      <main>
+        <Hero />
+        <Logos />
+        <Showcase />
+        <Pricing />
+        <FAQ />
+        <Footer />
+      </main>
     </div>
   );
 }
