@@ -7,6 +7,7 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import LandingPage from './hero-1'
+export default VortisAI;
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
