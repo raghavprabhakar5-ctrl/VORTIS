@@ -2559,10 +2559,10 @@ setProcessingStatus('');
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
   {showLogin && (
   <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-    <LandingPage
-      onLogin={handleLogin}
-      authLoading={authLoading}
-      authError={authError}
+    <HeroLanding
+    onLogin={handleLogin}
+    authLoading={authLoading}
+    authError={authError}
     />
   </div>
 )}
