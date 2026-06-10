@@ -2558,7 +2558,7 @@ setProcessingStatus('');
     }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
   {showLogin && (
-  <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+ <div style={{ position: 'relative', minHeight: '100vh' }}>
     <LandingPage
   onLogin={handleLogin}
   authLoading={authLoading}
