@@ -1060,19 +1060,13 @@ function Footer() {
 // ══════════════════════════════════════════════════════════════════
 export default function LandingPage() {
   return (
-    <div style={{ background: "#050510", color: "#ffffff", overflowX: "hidden", minHeight: "100vh", position: "relative", fontFamily: "'Inter',sans-serif", isolation: "isolate" }}>
-      <StyleInjector />
-      <CosmicBg />
-      <CursorOrb />
-      <Nav />
-      <main>
-        <Hero />
-        <Logos />
-        <Showcase />
-        <Pricing />
-        <FAQ />
-        <Footer />
-      </main>
+    <div style={{
+      color: "white",
+      background: "black",
+      minHeight: "100vh",
+      padding: "50px"
+    }}>
+      HELLO VORTIS
     </div>
   );
 }
