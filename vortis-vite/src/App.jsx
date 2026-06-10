@@ -22,7 +22,6 @@ import {
   Shield, Lock, Cpu, Edit2, Brain, Trash2
 } from 'lucide-react';
 
-export default VortisAI;
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
@@ -1051,7 +1050,8 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
 const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
-function VortisAI() {
+export default function VortisAI() {
+
   const [messages, setMessages] = useState([]);
   useEffect(() => {
   const handleBeforeUnload = () => {
