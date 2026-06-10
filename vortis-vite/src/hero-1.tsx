@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useInView, useScroll, useTransform } from "framer-motion";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, Mic, FileText,
-  Image as ImageIcon, Microscope, Check, Plus, Star, Send, Zap, ArrowRight
+  Image as ImageIcon, Microscope, Check, Plus, Zap, ArrowRight
 } from "lucide-react";
 
 
