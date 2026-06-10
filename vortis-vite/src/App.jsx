@@ -7,7 +7,6 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import LandingPage from './hero-1'
-export default VortisAI;
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
@@ -22,6 +21,8 @@ import {
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2
 } from 'lucide-react';
+
+export default VortisAI;
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
