@@ -6,7 +6,7 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
-import HeroLanding from './hero-1'
+import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
@@ -1050,7 +1050,7 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
 const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
-export default function VortisAI() {
+export default function LandingPage() {
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {
@@ -2559,11 +2559,11 @@ setProcessingStatus('');
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
   {showLogin && (
   <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-    <HeroLanding
-    onLogin={handleLogin}
-    authLoading={authLoading}
-    authError={authError}
-    />
+    <LandingPage
+  onLogin={handleLogin}
+  authLoading={authLoading}
+  authError={authError}
+/>
   </div>
 )}
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
