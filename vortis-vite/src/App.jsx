@@ -1050,7 +1050,7 @@ const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, se
 const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
-export default function LandingPage() {
+export default function VortisAI() {
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {
