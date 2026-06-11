@@ -282,7 +282,7 @@ function CosmicBg() {
 // ══════════════════════════════════════════════════════════════════
 const NAV_LINKS = [{ label: "Capabilities", href: "#capabilities" }, { label: "About", href: "#about" }, { label: "Pricing", href: "#pricing" }, { label: "FAQ", href: "#faq" }];
 
-function Nav() {
+function Nav({ onLogin }: { onLogin: (provider: string) => void }) {
   const { scrollY } = useScroll();
   const bg = useTransform(scrollY, [0, 80], [0, 1]);
   return (
@@ -334,7 +334,11 @@ function Nav() {
 const CYCLE_WORDS = ["INTELLIGENCE", "REASONING", "CREATIVITY", "RESEARCH", "UNDERSTANDING", "AUTOMATION"];
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
-function Hero() {
+function Hero({ onLogin, authLoading, authError }: { 
+  onLogin: (provider: string) => void;
+  authLoading: boolean;
+  authError: string;
+}) {
   const [wordIdx, setWordIdx] = useState(0);
   const [display, setDisplay] = useState(CYCLE_WORDS[0]);
   useEffect(() => {
@@ -388,9 +392,9 @@ function Hero() {
         </motion.p>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7, duration: 0.7 }} className="flex flex-wrap items-center justify-center gap-4 mb-16">
-          <motion.a href="#" whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.96 }} className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-white text-sm" style={{ background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", boxShadow: "0 0 40px rgba(124,58,237,0.4)", willChange: "transform" }}>
-            <Zap className="w-4 h-4" /> Start Free
-          </motion.a>
+         <motion.button onClick={() => onLogin('google')} whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.96 }} className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-white text-sm" style={{ background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", boxShadow: "0 0 40px rgba(124,58,237,0.4)", willChange: "transform", border: "none", cursor: "pointer" }}>
+  <Zap className="w-4 h-4" /> {authLoading ? 'Signing in…' : 'Start Free'}
+</motion.button>
           <motion.a href="#capabilities" whileHover={{ scale: 1.03, borderColor: "rgba(255,255,255,0.2)" }} className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full font-semibold text-sm transition-all" style={{ border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)", background: "rgba(255,255,255,0.04)" }}>
             See Capabilities
           </motion.a>
@@ -1071,88 +1075,26 @@ function Footer() {
 // ══════════════════════════════════════════════════════════════════
 //  LANDING PAGE  (default export)
 // ══════════════════════════════════════════════════════════════════
-export default function LandingPage({ onLogin, authLoading, authError }) {
+export default function LandingPage({ onLogin, authLoading, authError }: { 
+  onLogin: (provider: string) => void; 
+  authLoading: boolean; 
+  authError: string; 
+}) {
   return (
-    <div style={{ 
-      background: "#050510", 
-      minHeight: "100vh", 
-      display: "flex", 
-      alignItems: "center", 
-      justifyContent: "center",
-      fontFamily: "'Inter',sans-serif",
-      position: "relative"
-    }}>
-      {/* Cosmic background */}
-      <div style={{ position: "fixed", inset: 0, background: "radial-gradient(ellipse 80% 60% at 50% 30%, rgba(124,58,237,0.15) 0%, transparent 70%)", pointerEvents: "none" }}/>
-      <div style={{ position: "fixed", top: "5%", left: "10%", width: 600, height: 600, borderRadius: "50%", background: "rgba(124,58,237,0.06)", filter: "blur(110px)", pointerEvents: "none" }}/>
-      <div style={{ position: "fixed", top: "40%", right: "5%", width: 500, height: 500, borderRadius: "50%", background: "rgba(168,85,247,0.05)", filter: "blur(130px)", pointerEvents: "none" }}/>
-
-      {/* Login card */}
-      <div style={{ 
-        position: "relative", zIndex: 10,
-        background: "rgba(13,13,26,0.95)", 
-        border: "1px solid rgba(139,92,246,0.3)", 
-        borderRadius: 24, 
-        padding: "40px 36px", 
-        width: "100%", 
-        maxWidth: 400,
-        boxShadow: "0 0 60px rgba(124,58,237,0.2)"
-      }}>
-        {/* Logo */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
-          <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", letterSpacing: "0.1em", marginBottom: 6 }}>
-            <span style={{ background: "linear-gradient(135deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>VORTIS</span>
-          </div>
-          <div style={{ fontSize: 14, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>The AI that does everything</div>
-          <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.25)" }}>
-            {["Chat", "Images", "Search", "Code", "Vision"].map(f => (
-              <span key={f} style={{ padding: "3px 10px", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 20, background: "rgba(139,92,246,0.06)" }}>{f}</span>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: 24 }}/>
-
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "#fff", marginBottom: 6 }}>Welcome back</div>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)" }}>Sign in to continue</div>
-        </div>
-
-        {authError && (
-          <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: "#ef4444", marginBottom: 14 }}>
-            {authError}
-          </div>
-        )}
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[
-            { provider: "google", label: "Continue with Google", bg: "#fff", color: "#000", icon: "G" },
-            { provider: "github", label: "Continue with GitHub", bg: "#24292e", color: "#fff", icon: "⌥" },
-            { provider: "facebook", label: "Continue with Facebook", bg: "#1877F2", color: "#fff", icon: "f" },
-          ].map(btn => (
-            <button 
-              key={btn.provider} 
-              onClick={() => onLogin(btn.provider)} 
-              disabled={authLoading}
-              style={{ 
-                width: "100%", padding: "13px", borderRadius: 12, 
-                background: btn.bg, color: btn.color, border: "none", 
-                fontSize: 14, fontWeight: 600, cursor: authLoading ? "not-allowed" : "pointer", 
-                opacity: authLoading ? 0.6 : 1, fontFamily: "Inter,sans-serif",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                transition: "opacity 0.2s, transform 0.15s",
-              }}
-            >
-              <span style={{ fontWeight: 800, fontSize: 16 }}>{btn.icon}</span>
-              {authLoading ? "Signing in…" : btn.label}
-            </button>
-          ))}
-        </div>
-
-        <p style={{ textAlign: "center", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 20 }}>
-          By signing in you agree to our Terms & Privacy Policy
-        </p>
-      </div>
+    <div style={{ background: "#050510", color: "#ffffff", overflowX: "hidden", minHeight: "100vh", position: "relative", fontFamily: "'Inter',sans-serif", isolation: "isolate" }}>
+      <StyleInjector />
+      <CosmicBg />
+      <CursorOrb />
+      <Nav onLogin={onLogin} />
+      <main>
+        <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
+        <Logos />
+        <Showcase />
+        <About />
+        <Pricing />
+        <FAQ />
+        <Footer />
+      </main>
     </div>
   );
 }
