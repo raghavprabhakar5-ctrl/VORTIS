@@ -1072,7 +1072,6 @@ function Footer() {
 //  LANDING PAGE  (default export)
 // ══════════════════════════════════════════════════════════════════
 export default function LandingPage({ onLogin, authLoading, authError }) {
-  // wire onLogin to your Google/GitHub/Facebook buttons
   return (
     <div style={{ background: "#050510", color: "#ffffff", overflowX: "hidden", minHeight: "100vh", position: "relative", fontFamily: "'Inter',sans-serif", isolation: "isolate" }}>
       <StyleInjector />
@@ -1083,10 +1082,32 @@ export default function LandingPage({ onLogin, authLoading, authError }) {
         <Hero />
         <Logos />
         <Showcase />
+        <About />
         <Pricing />
         <FAQ />
         <Footer />
       </main>
+
+      {/* Login overlay */}
+      <div style={{ position: 'fixed', inset: 0, zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(12px)' }}>
+        <div style={{ background: '#0d0d1a', border: '1px solid rgba(139,92,246,0.3)', borderRadius: 20, padding: 32, width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ textAlign: 'center', marginBottom: 8 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', marginBottom: 6 }}>Welcome to Vortis</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Sign in to get started</div>
+          </div>
+          {authError && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '10px 14px', fontSize: 13, color: '#ef4444' }}>{authError}</div>}
+          {[
+            { provider: 'google', label: 'Continue with Google', bg: '#fff', color: '#000' },
+            { provider: 'github', label: 'Continue with GitHub', bg: '#24292e', color: '#fff' },
+            { provider: 'facebook', label: 'Continue with Facebook', bg: '#1877F2', color: '#fff' },
+          ].map(btn => (
+            <button key={btn.provider} onClick={() => onLogin(btn.provider)} disabled={authLoading}
+              style={{ width: '100%', padding: '12px', borderRadius: 12, background: btn.bg, color: btn.color, border: 'none', fontSize: 14, fontWeight: 600, cursor: authLoading ? 'not-allowed' : 'pointer', opacity: authLoading ? 0.6 : 1, fontFamily: 'Inter,sans-serif' }}>
+              {authLoading ? 'Signing in…' : btn.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
