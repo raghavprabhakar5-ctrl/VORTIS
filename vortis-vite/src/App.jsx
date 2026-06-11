@@ -7,6 +7,11 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import LandingPage from './hero-1';
+import VortisAI from './Vortis.js';
+
+export default function App() {
+  return <VortisAI />;
+}
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
@@ -2610,7 +2615,7 @@ return (
           </div>
         </>
       )}
-      
+
       <div className={`sidebar scr ${showSidebar ? 'open' : 'hidden'}`}>
         <div className="sb-top">
           <div className="sb-logo-row" style={{ justifyContent: 'center' }}>
