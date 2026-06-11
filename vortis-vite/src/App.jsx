@@ -2544,7 +2544,17 @@ setProcessingStatus('');
     { provider: 'facebook', label: 'Continue with Facebook', icon: <FacebookIcon /> },
   ];
 
+ if (showLogin) {
   return (
+    <LandingPage
+      onLogin={handleLogin}
+      authLoading={authLoading}
+      authError={authError}
+    />
+  );
+}
+
+return (
   <div className="v-app">
     <SelectionReply onReply={(text) => {
       setInput(text);
@@ -2557,15 +2567,7 @@ setProcessingStatus('');
       }, 50);
     }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
-  {showLogin && (
- <div style={{ position: 'relative', minHeight: '100vh' }}>
-    <LandingPage
-  onLogin={handleLogin}
-  authLoading={authLoading}
-  authError={authError}
-/>
-  </div>
-)}
+
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
 
       {showStarredPanel && (
@@ -2608,7 +2610,7 @@ setProcessingStatus('');
           </div>
         </>
       )}
-
+      
       <div className={`sidebar scr ${showSidebar ? 'open' : 'hidden'}`}>
         <div className="sb-top">
           <div className="sb-logo-row" style={{ justifyContent: 'center' }}>

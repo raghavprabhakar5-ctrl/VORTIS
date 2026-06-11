@@ -1071,7 +1071,8 @@ function Footer() {
 // ══════════════════════════════════════════════════════════════════
 //  LANDING PAGE  (default export)
 // ══════════════════════════════════════════════════════════════════
-export default function LandingPage() {
+export default function LandingPage({ onLogin, authLoading, authError }) {
+  // wire onLogin to your Google/GitHub/Facebook buttons
   return (
     <div style={{ background: "#050510", color: "#ffffff", overflowX: "hidden", minHeight: "100vh", position: "relative", fontFamily: "'Inter',sans-serif", isolation: "isolate" }}>
       <StyleInjector />
