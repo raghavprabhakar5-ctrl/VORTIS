@@ -693,16 +693,22 @@ function Logos() {
 // ══════════════════════════════════════════════════════════════════
 function BentoGrid() {
   const [ref, inView] = useInView(0.08);
+  
   const features = [
-    { icon: Globe, color: "124,58,237", title: "Live Web Search", desc: "Real-time results from across the internet with source attribution and smart summarization.", size: "large" },
+    // 1. Changed size to "small" so it matches the rest
+    { icon: Globe, color: "124,58,237", title: "Live Web Search", desc: "Real-time results from across the internet with source attribution and smart summarization.", size: "small" },
     { icon: ImageIcon, color: "168,85,247", title: "Image Generation", desc: "Create stunning visuals in any style — photorealistic, anime, oil painting, cyberpunk.", size: "small" },
     { icon: Code2, color: "6,182,212", title: "Code Mastery", desc: "Write, debug, explain, and refactor across all languages with principal-level quality.", size: "small" },
     { icon: Eye, color: "99,102,241", title: "Vision AI", desc: "Analyze images, read text, extract data — your eyes for any visual content.", size: "small" },
     { icon: Brain, color: "168,85,247", title: "Persistent Memory", desc: "Vortis remembers your preferences, projects, and context across every conversation.", size: "small" },
-    { icon: Microscope, color: "6,182,212", title: "Deep Research", desc: "Autonomous agents synthesize 50+ sources into comprehensive reports in minutes.", size: "large" },
+    // 2. Changed size to "small" here too
+    { icon: Microscope, color: "6,182,212", title: "Deep Research", desc: "Autonomous agents synthesize 50+ sources into comprehensive reports in minutes.", size: "small" },
     { icon: FileText, color: "124,58,237", title: "Document Analysis", desc: "Chat with PDFs, CSVs, Word docs — extract insights from any file instantly.", size: "small" },
     { icon: Cpu, color: "168,85,247", title: "Voice Mode", desc: "Speak naturally, hear responses — hands-free AI with multilingual support.", size: "small" },
+    // 3. New 9th item to perfectly balance the 3x3 grid!
+    { icon: BarChart3, color: "99,102,241", title: "Advanced Analytics", desc: "Track usage patterns, monitor latency, and optimize your AI workflows with built-in deep data insights.", size: "small" },
   ];
+  
 
   return (
     <section ref={ref} style={{ padding: "80px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
