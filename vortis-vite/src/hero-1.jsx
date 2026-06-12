@@ -662,7 +662,7 @@ function MarqueeRow({ items, reverse }) {
     <div style={{ overflow: "hidden" }}>
       <div style={{
         display: "flex", gap: 10, width: "max-content",
-        animation: `${reverse ? "marquee-r" : "marquee-l"} ${reverse ? 48 : 40}s linear infinite`,
+        animation: `${reverse ? "marquee-r" : "marquee-l"} 45s linear infinite`,
         willChange: "transform",
       }}>
         {all.map((name, i) => <LogoItem key={i} name={name} />)}
