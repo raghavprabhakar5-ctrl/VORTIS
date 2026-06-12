@@ -3,8 +3,8 @@ import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
-  BarChart3, Wifi, ChevronDown, Star, Award, Crown,
-  Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
+  ROW1, ROW2, BarChart3, Wifi, ChevronDown, Star, Award, 
+  Crown, Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
   TrendingUp, Clock, Database, Search, Palette
 } from "lucide-react";
 
@@ -636,7 +636,8 @@ const row1 = [
   "Google", "Microsoft", "Apple", "Meta", "Amazon", "Netflix", "Spotify", "Adobe", "Stripe", "Vercel", "GitHub", "Notion", "Figma", "LinkedIn", "Discord",
 ];
 const row2 = [
-  "Linear", "Salesforce", "Airbnb", "Uber", "X", "OpenAI", "Anthropic", "Shopify", "Dropbox", "Atlassian", "PayPal", "Zoom", "Pinterest", "Reddit", "TikTok",
+
+  "Linear", "Salesforce", "Airbnb", "Uber", "X", "OpenAI", "Anthropic", "Shopify", "Dropbox", "Atlassian", "PayPal", "Zoom", "Pinterest", "Reddit", 
 ];
 
 function LogoItem({ name }) {
