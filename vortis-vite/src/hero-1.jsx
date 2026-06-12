@@ -429,7 +429,7 @@ function HeroVisual() {
   );
 }
 
-export default function Hero({ onLogin, authLoading, authError }) {
+export function Hero({ onLogin, authLoading, authError }) {
   const [wordIdx, setWordIdx] = useState(0);
 
   useEffect(() => {
