@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
-  Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
+  Star, Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
   BarChart3, Wifi, ChevronDown
 } from "lucide-react";
 
