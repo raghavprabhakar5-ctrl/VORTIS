@@ -826,125 +826,356 @@ function HowItWorks() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  NODE GRAPH SHOWCASE
+//  LIVE DEMO SHOWCASE (replaces NodeGraph)
 // ══════════════════════════════════════════════════════════════════
-const CAPS = [
-  { id: "chat", name: "AI Chat", icon: MessageSquare, color: "124,58,237", tagline: "Reason and create at the speed of thought", nodes: [{ x: 50, y: 18, label: "Context", size: 11 }, { x: 22, y: 50, label: "Memory", size: 8 }, { x: 78, y: 50, label: "Reasoning", size: 8 }, { x: 50, y: 82, label: "Response", size: 11 }], streams: [{ x1: 50, y1: 18, x2: 22, y2: 50 }, { x1: 50, y1: 18, x2: 78, y2: 50 }, { x1: 22, y1: 50, x2: 50, y2: 82 }, { x1: 78, y1: 50, x2: 50, y2: 82 }] },
-  { id: "code", name: "Coding", icon: Code2, color: "6,182,212", tagline: "Write, refactor, review — principal quality", nodes: [{ x: 50, y: 18, label: "Analyze", size: 10 }, { x: 22, y: 48, label: "Refactor", size: 8 }, { x: 78, y: 48, label: "Generate", size: 8 }, { x: 35, y: 78, label: "Review", size: 8 }, { x: 65, y: 78, label: "Test", size: 8 }], streams: [{ x1: 50, y1: 18, x2: 22, y2: 48 }, { x1: 50, y1: 18, x2: 78, y2: 48 }, { x1: 22, y1: 48, x2: 35, y2: 78 }, { x1: 78, y1: 48, x2: 65, y2: 78 }, { x1: 35, y1: 78, x2: 65, y2: 78 }] },
-  { id: "image", name: "Image Gen", icon: ImageIcon, color: "168,85,247", tagline: "Studio-quality visuals in milliseconds", nodes: [{ x: 50, y: 18, label: "Prompt", size: 9 }, { x: 20, y: 48, label: "Style", size: 8 }, { x: 80, y: 48, label: "Detail", size: 8 }, { x: 35, y: 78, label: "Compose", size: 8 }, { x: 65, y: 78, label: "Render", size: 8 }], streams: [{ x1: 50, y1: 18, x2: 20, y2: 48 }, { x1: 50, y1: 18, x2: 80, y2: 48 }, { x1: 20, y1: 48, x2: 35, y2: 78 }, { x1: 80, y1: 48, x2: 65, y2: 78 }] },
-  { id: "search", name: "Web Search", icon: Globe, color: "124,58,237", tagline: "Real-time internet with perfect attribution", nodes: [{ x: 50, y: 50, label: "Query", size: 13 }, { x: 18, y: 22, label: "Source A", size: 7 }, { x: 50, y: 14, label: "Source B", size: 7 }, { x: 82, y: 22, label: "Source C", size: 7 }, { x: 82, y: 76, label: "Source D", size: 7 }, { x: 18, y: 76, label: "Source E", size: 7 }], streams: [{ x1: 18, y1: 22, x2: 50, y2: 50 }, { x1: 50, y1: 14, x2: 50, y2: 50 }, { x1: 82, y1: 22, x2: 50, y2: 50 }, { x1: 82, y1: 76, x2: 50, y2: 50 }, { x1: 18, y1: 76, x2: 50, y2: 50 }] },
-  { id: "memory", name: "Memory", icon: Brain, color: "168,85,247", tagline: "Persistent context that never forgets", nodes: [{ x: 50, y: 50, label: "Core", size: 13 }, { x: 20, y: 24, label: "Session", size: 8 }, { x: 80, y: 24, label: "Long-term", size: 8 }, { x: 15, y: 70, label: "Projects", size: 7 }, { x: 85, y: 70, label: "Profile", size: 7 }], streams: [{ x1: 20, y1: 24, x2: 50, y2: 50 }, { x1: 80, y1: 24, x2: 50, y2: 50 }, { x1: 15, y1: 70, x2: 50, y2: 50 }, { x1: 85, y1: 70, x2: 50, y2: 50 }] },
-  { id: "research", name: "Deep Research", icon: Microscope, color: "6,182,212", tagline: "Autonomous agents synthesizing 50+ sources", nodes: [{ x: 50, y: 50, label: "Agent", size: 13 }, { x: 18, y: 18, label: "Source A", size: 6 }, { x: 82, y: 18, label: "Source B", size: 6 }, { x: 12, y: 64, label: "Source C", size: 6 }, { x: 88, y: 64, label: "Source D", size: 6 }, { x: 50, y: 86, label: "Report", size: 9 }], streams: [{ x1: 18, y1: 18, x2: 50, y2: 50 }, { x1: 82, y1: 18, x2: 50, y2: 50 }, { x1: 12, y1: 64, x2: 50, y2: 50 }, { x1: 88, y1: 64, x2: 50, y2: 50 }, { x1: 50, y1: 50, x2: 50, y2: 86 }] },
+const DEMO_TABS = [
+  { id: "chat", name: "AI Chat", icon: MessageSquare, color: "124,58,237" },
+  { id: "code", name: "Code", icon: Code2, color: "6,182,212" },
+  { id: "search", name: "Web Search", icon: Globe, color: "168,85,247" },
+  { id: "image", name: "Image Gen", icon: ImageIcon, color: "251,191,36" },
+  { id: "research", name: "Deep Research", icon: Microscope, color: "6,182,212" },
+  { id: "vision", name: "Vision AI", icon: Eye, color: "168,85,247" },
 ];
 
-function NodeGraph({ cap }) {
-  return (
-    <div style={{ position: "relative", width: "100%", height: "100%" }}>
-      <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", overflow: "visible" }} viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <filter id={`glow-${cap.id}`} x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="2.5" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-        {cap.streams.map((s, i) => (
-          <g key={i}>
-            <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={`rgba(${cap.color},0.1)`} strokeWidth="1" strokeLinecap="round" />
-            <line x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={`rgba(${cap.color},0.65)`} strokeWidth="0.35" strokeLinecap="round" filter={`url(#glow-${cap.id})`}>
-              <animate attributeName="opacity" values="0;0.9;0.3;0.9;0" dur={`${2.4 + i * 0.18}s`} begin={`${i * 0.14}s`} repeatCount="indefinite" />
-            </line>
-            <circle r="1.6" fill={`rgb(${cap.color})`} filter={`url(#glow-${cap.id})`}>
-              <animateMotion dur={`${1.7 + i * 0.22}s`} repeatCount="indefinite" begin={`${i * 0.15}s`} path={`M${s.x1},${s.y1} L${s.x2},${s.y2}`} />
-              <animate attributeName="opacity" values="0;1;1;0" dur={`${1.7 + i * 0.22}s`} repeatCount="indefinite" begin={`${i * 0.15}s`} />
-            </circle>
-          </g>
+const DEMO_CONTENT = {
+  chat: {
+    messages: [
+      { role: "user", text: "Explain quantum entanglement simply" },
+      { role: "ai", text: "Imagine two coins that always land opposite — flip one anywhere in the universe, the other instantly mirrors it. That's entanglement: particles share a quantum state, measurement of one instantly defines the other, regardless of distance.", typing: false },
+      { role: "user", text: "Give me an analogy a 10-year-old would get" },
+      { role: "ai", text: "Think of magic gloves: you pack one in a box and ship it to Mars. The moment you open your box and see it's a left glove, you instantly know the Mars glove is right — no signal needed.", typing: false },
+    ]
+  },
+  code: {
+    filename: "auth.ts",
+    language: "typescript",
+    lines: [
+      { n: 1,  t: "import", c: "keyword", text: `import { jwt, bcrypt } from '@vortis/auth';` },
+      { n: 2,  t: "blank",  text: "" },
+      { n: 3,  t: "comment", text: `// 🔐 Vortis-generated secure auth handler` },
+      { n: 4,  t: "code",   text: `export async function signIn(email: string, password: string) {` },
+      { n: 5,  t: "code",   text: `  const user = await db.users.findUnique({ where: { email } });` },
+      { n: 6,  t: "code",   text: `  if (!user) throw new AuthError('User not found');` },
+      { n: 7,  t: "blank",  text: "" },
+      { n: 8,  t: "code",   text: `  const valid = await bcrypt.compare(password, user.passwordHash);` },
+      { n: 9,  t: "code",   text: `  if (!valid) throw new AuthError('Invalid credentials');` },
+      { n: 10, t: "blank",  text: "" },
+      { n: 11, t: "return", text: `  return jwt.sign({ userId: user.id, role: user.role }, {` },
+      { n: 12, t: "return", text: `    expiresIn: '7d', algorithm: 'RS256'` },
+      { n: 13, t: "return", text: `  });` },
+      { n: 14, t: "code",   text: `}` },
+    ]
+  },
+  search: {
+    query: "Latest breakthroughs in fusion energy 2026",
+    results: [
+      { source: "nature.com", title: "ITER achieves Q>1 sustained plasma for 47 seconds", time: "2h ago", snippet: "The International Thermonuclear Experimental Reactor reported a historic milestone..." },
+      { source: "science.org", title: "Commonwealth Fusion's SPARC magnet sets world record", time: "5h ago", snippet: "High-temperature superconducting magnets reached 20 tesla field strength..." },
+      { source: "reuters.com", title: "Three private fusion startups reach profitability", time: "1d ago", snippet: "Helion Energy, TAE Technologies and Zap Energy all reported positive..." },
+    ]
+  },
+  image: {
+    prompt: "Futuristic city at golden hour, cinematic, 8K",
+    style: "Photorealistic",
+    steps: ["Analyzing prompt…", "Applying style transfer…", "Rendering details…", "Upscaling 4×…", "✓ Complete"],
+    colors: ["#FF6B35", "#F7C59F", "#EFEFD0", "#004E89", "#1A936F"],
+  },
+  research: {
+    topic: "Impact of AI on software engineering jobs 2025–2030",
+    sources: 47,
+    sections: [
+      { title: "Executive Summary", status: "done", words: 340 },
+      { title: "Market Analysis", status: "done", words: 1240 },
+      { title: "Role-by-Role Breakdown", status: "done", words: 2100 },
+      { title: "Emerging Opportunities", status: "active", words: 890 },
+      { title: "Recommendations", status: "pending", words: 0 },
+    ]
+  },
+  vision: {
+    imageLabel: "Uploaded: dashboard_screenshot.png",
+    findings: [
+      { icon: "📊", label: "Chart detected", detail: "Bar chart — Q3 revenue by region" },
+      { icon: "📝", label: "Text extracted", detail: "142 words, 3 tables parsed" },
+      { icon: "⚠️", label: "Anomaly found", detail: "APAC revenue down 23% vs forecast" },
+      { icon: "💡", label: "Insight", detail: "Seasonality pattern matches 2024 Q3" },
+    ]
+  }
+};
+
+function DemoPanel({ tabId, color }) {
+  const data = DEMO_CONTENT[tabId];
+  const [tick, setTick] = useState(0);
+  const [codeLines, setCodeLines] = useState(0);
+  const [searchDone, setSearchDone] = useState(false);
+  const [imgStep, setImgStep] = useState(0);
+  const [researchProgress, setResearchProgress] = useState(0);
+
+  useEffect(() => {
+    setTick(0); setCodeLines(0); setSearchDone(false); setImgStep(0); setResearchProgress(0);
+    const id = setInterval(() => setTick(t => t + 1), 400);
+    return () => clearInterval(id);
+  }, [tabId]);
+
+  useEffect(() => {
+    if (tabId === "code") {
+      const id = setInterval(() => setCodeLines(l => Math.min(l + 1, data.lines.length)), 120);
+      return () => clearInterval(id);
+    }
+    if (tabId === "search") {
+      const id = setTimeout(() => setSearchDone(true), 1200);
+      return () => clearTimeout(id);
+    }
+    if (tabId === "image") {
+      const id = setInterval(() => setImgStep(s => Math.min(s + 1, data.steps.length - 1)), 700);
+      return () => clearInterval(id);
+    }
+    if (tabId === "research") {
+      const id = setInterval(() => setResearchProgress(p => Math.min(p + 2, 100)), 40);
+      return () => clearInterval(id);
+    }
+  }, [tabId]);
+
+  const rgb = color;
+
+  // CHAT
+  if (tabId === "chat") return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 20, height: "100%", overflowY: "auto" }}>
+      {data.messages.map((m, i) => (
+        <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.5 ? 1 : 0, transform: tick > i * 1.5 ? "translateY(0)" : "translateY(12px)", transition: "all 0.5s ease" }}>
+          {m.role === "ai" && (
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.7))`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <VortisLogo size={14} color="#fff" />
+            </div>
+          )}
+          <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px", background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)", border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none", fontSize: 13, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.85)" }}>
+            {m.text}
+          </div>
+        </div>
+      ))}
+      <div style={{ display: "flex", gap: 10, opacity: tick > 6 ? 1 : 0, transition: "opacity 0.5s" }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: `rgba(${rgb},0.2)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <VortisLogo size={14} color={`rgb(${rgb})`} />
+        </div>
+        <div style={{ padding: "10px 14px", borderRadius: "4px 16px 16px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 5, alignItems: "center" }}>
+          {[0,1,2].map(d => <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${rgb})`, animation: `pulse 1.2s ease-in-out ${d*0.2}s infinite` }} />)}
+        </div>
+      </div>
+    </div>
+  );
+
+  // CODE
+  if (tabId === "code") return (
+    <div style={{ height: "100%", overflowY: "auto" }}>
+      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
+        <Code2 size={13} color={`rgb(${rgb})`} />
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace" }}>{data.filename}</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, padding: "2px 8px", borderRadius: 99, background: `rgba(${rgb},0.15)`, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace" }}>TypeScript</span>
+      </div>
+      <div style={{ padding: "12px 0", fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }}>
+        {data.lines.slice(0, codeLines).map((line) => (
+          <div key={line.n} style={{ display: "flex", padding: "1.5px 16px", animation: "fadeUp 0.2s ease both" }}>
+            <span style={{ width: 24, color: "rgba(255,255,255,0.2)", userSelect: "none", flexShrink: 0 }}>{line.n}</span>
+            <span style={{ color: line.t === "comment" ? "rgba(134,239,172,0.7)" : line.t === "keyword" ? "rgba(196,181,253,0.9)" : line.t === "return" ? "rgba(251,191,36,0.85)" : "rgba(255,255,255,0.75)" }}>
+              {line.text}
+            </span>
+          </div>
         ))}
-        {cap.nodes.map((node, i) => {
-          const r = node.size * 0.46;
-          const big = node.size >= 10;
-          return (
-            <g key={i}>
-              <circle cx={node.x} cy={node.y} fill="none" stroke={`rgba(${cap.color},0.25)`} strokeWidth="0.5">
-                <animate attributeName="r" values={`${r*1.5};${r*2.6};${r*1.5}`} dur={`${2.5+i*.28}s`} begin={`${i*.22}s`} repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.5;0;0.5" dur={`${2.5+i*.28}s`} begin={`${i*.22}s`} repeatCount="indefinite" />
-              </circle>
-              <circle cx={node.x} cy={node.y} r={r} fill={`rgba(${cap.color},${big?"0.2":"0.1"})`} stroke={`rgba(${cap.color},0.9)`} strokeWidth={big?0.9:0.6} filter={`url(#glow-${cap.id})`} />
-              {big && <circle cx={node.x} cy={node.y} r={r*0.38} fill={`rgba(${cap.color},0.75)`}><animate attributeName="opacity" values="0.5;1;0.5" dur="1.8s" repeatCount="indefinite"/></circle>}
-            </g>
-          );
-        })}
-      </svg>
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-        {cap.nodes.map((n, i) => (
-          <div key={i} style={{ position: "absolute", left: `${n.x}%`, top: `${n.y}%`, transform: `translate(-50%, ${n.y > 62 ? "12px" : "-145%"})` }}>
-            <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 99, whiteSpace: "nowrap", display: "block", background: `rgba(${cap.color},0.18)`, color: `rgb(${cap.color})`, border: `1px solid rgba(${cap.color},0.45)`, boxShadow: `0 0 10px rgba(${cap.color},0.3)`, backdropFilter: "blur(4px)" }}>{n.label}</span>
+        {codeLines < data.lines.length && (
+          <div style={{ display: "flex", padding: "1.5px 16px" }}>
+            <span style={{ width: 24, color: "rgba(255,255,255,0.2)" }}>{codeLines + 1}</span>
+            <span style={{ display: "inline-block", width: 2, height: 14, background: `rgb(${rgb})`, animation: "blink 0.8s step-end infinite" }} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // SEARCH
+  if (tabId === "search") return (
+    <div style={{ padding: 20, height: "100%", overflowY: "auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 16 }}>
+        <Globe size={14} color={`rgb(${rgb})`} />
+        <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.7)", flex: 1 }}>{data.query}</span>
+        <span style={{ fontSize: 10, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace" }}>{searchDone ? "47 results" : "Searching…"}</span>
+      </div>
+      {searchDone ? data.results.map((r, i) => (
+        <div key={i} style={{ padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", animation: `fadeUp 0.4s ${i * 0.12}s ease both` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <div style={{ width: 16, height: 16, borderRadius: 4, background: `rgba(${rgb},0.2)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Globe size={9} color={`rgb(${rgb})`} />
+            </div>
+            <span style={{ fontSize: 10.5, color: `rgb(${rgb})` }}>{r.source}</span>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginLeft: "auto" }}>{r.time}</span>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 3 }}>{r.title}</div>
+          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", lineHeight: 1.5 }}>{r.snippet}</div>
+        </div>
+      )) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {[100, 75, 90].map((w, i) => (
+            <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ height: 12, borderRadius: 4, background: "rgba(255,255,255,0.06)", width: `${w}%`, animation: "pulse 1.5s ease-in-out infinite" }} />
+              <div style={{ height: 10, borderRadius: 4, background: "rgba(255,255,255,0.04)", width: "60%", animation: `pulse 1.5s ease-in-out ${i*0.2}s infinite` }} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // IMAGE GEN
+  if (tabId === "image") return (
+    <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.7)" }}>
+        <span style={{ color: `rgb(${rgb})` }}>Prompt: </span>{data.prompt}
+      </div>
+      <div style={{ flex: 1, borderRadius: 12, overflow: "hidden", position: "relative", minHeight: 180, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, rgba(${rgb},0.3) 0%, rgba(6,182,212,0.2) 50%, rgba(251,191,36,0.15) 100%)`, filter: "blur(20px)", transform: "scale(1.1)" }} />
+        <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "repeat(8,1fr)", gridTemplateRows: "repeat(6,1fr)", gap: 1, opacity: imgStep > 1 ? 0.6 : 0.2, transition: "opacity 0.8s" }}>
+          {Array.from({length: 48}).map((_, i) => (
+            <div key={i} style={{ background: `rgba(${rgb},${Math.random()*0.4+0.1})`, borderRadius: 2, animation: `pulse ${1+Math.random()}s ease-in-out infinite` }} />
+          ))}
+        </div>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            {data.colors.map((c, i) => (
+              <div key={i} style={{ width: 32, height: 32, borderRadius: 8, background: c, opacity: imgStep > i * 0.8 ? 1 : 0.2, transition: "opacity 0.4s", boxShadow: `0 0 12px ${c}60` }} />
+            ))}
+          </div>
+          <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: `rgb(${rgb})` }}>{data.steps[imgStep]}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {data.steps.map((s, i) => (
+          <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= imgStep ? `rgb(${rgb})` : "rgba(255,255,255,0.1)", transition: "background 0.4s" }} />
+        ))}
+      </div>
+    </div>
+  );
+
+  // DEEP RESEARCH
+  if (tabId === "research") return (
+    <div style={{ padding: 20, height: "100%", overflowY: "auto" }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontSize: 12, color: `rgb(${rgb})`, marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>RESEARCH TOPIC</div>
+        <div style={{ fontSize: 13.5, color: "#fff", fontWeight: 600, lineHeight: 1.4 }}>{data.topic}</div>
+        <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>📄 {data.sources} sources</span>
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>⏱ ~4 min remaining</span>
+        </div>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", marginBottom: 16, overflow: "hidden" }}>
+        <div style={{ height: "100%", borderRadius: 2, background: `linear-gradient(90deg,rgb(${rgb}),rgba(6,182,212,1))`, width: `${researchProgress}%`, transition: "width 0.1s linear" }} />
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {data.sections.map((s, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: s.status === "active" ? `rgba(${rgb},0.1)` : "rgba(255,255,255,0.03)", border: `1px solid ${s.status === "active" ? `rgba(${rgb},0.3)` : "rgba(255,255,255,0.05)"}`, transition: "all 0.3s" }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: s.status === "done" ? "rgba(16,185,129,0.2)" : s.status === "active" ? `rgba(${rgb},0.2)` : "rgba(255,255,255,0.05)", flexShrink: 0 }}>
+              {s.status === "done" ? <Check size={11} color="#10b981" /> : s.status === "active" ? <span style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${rgb})`, animation: "pulse 1s ease-in-out infinite" }} /> : <span style={{ width: 6, height: 6, borderRadius: "50%", background: "rgba(255,255,255,0.2)" }} />}
+            </div>
+            <span style={{ flex: 1, fontSize: 13, color: s.status === "pending" ? "rgba(255,255,255,0.3)" : "#fff" }}>{s.title}</span>
+            {s.words > 0 && <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>{s.words}w</span>}
           </div>
         ))}
       </div>
     </div>
   );
+
+  // VISION AI
+  if (tabId === "vision") return (
+    <div style={{ padding: 20, height: "100%", overflowY: "auto" }}>
+      <div style={{ borderRadius: 10, border: "1px dashed rgba(255,255,255,0.15)", padding: "16px", textAlign: "center", marginBottom: 16, background: "rgba(255,255,255,0.02)" }}>
+        <div style={{ fontSize: 28, marginBottom: 6 }}>🖼️</div>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{data.imageLabel}</div>
+        <div style={{ fontSize: 10, color: `rgb(${rgb})`, marginTop: 4, fontFamily: "'JetBrains Mono',monospace" }}>Analyzing…</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {data.findings.map((f, i) => (
+          <div key={i} style={{ display: "flex", gap: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", opacity: tick > i * 1.2 ? 1 : 0, transform: tick > i * 1.2 ? "translateX(0)" : "translateX(-12px)", transition: "all 0.4s ease" }}>
+            <span style={{ fontSize: 18 }}>{f.icon}</span>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: `rgb(${rgb})`, marginBottom: 2 }}>{f.label}</div>
+              <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.65)" }}>{f.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return null;
 }
 
 function Showcase() {
   const [ref, inView] = useInView(0.08);
   const [active, setActive] = useState(0);
-  const cap = CAPS[active];
+  const tab = DEMO_TABS[active];
 
   return (
     <section id="capabilities" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 50% at 15% 50%, rgba(124,58,237,0.04), transparent)", pointerEvents: "none" }} />
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 52 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease" }}>
-            <Layers size={11} color="#a855f7" />
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Intelligence Graph</span>
+            <Zap size={11} color="#a855f7" />
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Live Demo</span>
           </div>
           <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease" }}>
-            Every mode.{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>One platform.</span>
+            See Vortis{" "}
+            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>in action.</span>
           </h2>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: 16 }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {CAPS.map((c, i) => {
-              const Icon = c.icon;
+        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
+          {/* Tabs */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {DEMO_TABS.map((t, i) => {
+              const Icon = t.icon;
               const isActive = i === active;
               return (
-                <button key={c.id} onClick={() => setActive(i)} style={{
-                  display: "flex", alignItems: "center", gap: 12, padding: "12px 14px",
+                <button key={t.id} onClick={() => setActive(i)} style={{
+                  display: "flex", alignItems: "center", gap: 10, padding: "11px 13px",
                   borderRadius: 12, textAlign: "left", cursor: "pointer",
-                  border: isActive ? `1px solid rgba(${c.color},0.5)` : "1px solid rgba(255,255,255,0.05)",
-                  background: isActive ? `rgba(${c.color},0.18)` : "rgba(255,255,255,0.02)",
-                  boxShadow: isActive ? `0 0 24px rgba(${c.color},0.2), inset 0 1px 0 rgba(255,255,255,0.05)` : "none",
+                  border: isActive ? `1px solid rgba(${t.color},0.5)` : "1px solid rgba(255,255,255,0.05)",
+                  background: isActive ? `rgba(${t.color},0.15)` : "rgba(255,255,255,0.02)",
+                  boxShadow: isActive ? `0 0 20px rgba(${t.color},0.15)` : "none",
                   transition: "all 0.2s",
-                  opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-30px)",
-                  transitionDelay: `${i * 0.06 + 0.2}s`,
+                  opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-20px)",
+                  transitionDelay: `${i * 0.05 + 0.2}s`,
                 }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `rgba(${c.color},0.3)` : `rgba(${c.color},0.1)`, border: `1px solid rgba(${c.color},0.3)`, flexShrink: 0 }}>
-                    <Icon size={16} style={{ color: `rgb(${c.color})` }} />
+                  <div style={{ width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `rgba(${t.color},0.25)` : `rgba(${t.color},0.1)`, border: `1px solid rgba(${t.color},0.25)`, flexShrink: 0 }}>
+                    <Icon size={15} style={{ color: `rgb(${t.color})` }} />
                   </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: isActive ? "#fff" : "rgba(255,255,255,0.55)" }}>{c.name}</div>
-                    {isActive && <div style={{ fontSize: 10.5, color: `rgba(${c.color},0.8)`, marginTop: 2 }}>{c.tagline}</div>}
-                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? "#fff" : "rgba(255,255,255,0.5)" }}>{t.name}</span>
+                  {isActive && <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: `rgb(${t.color})`, animation: "pulse 2s ease-in-out infinite" }} />}
                 </button>
               );
             })}
           </div>
 
-          <div key={cap.id} style={{
-            borderRadius: 20, padding: 24, minHeight: 400,
-            background: "rgba(5,5,18,0.9)", border: "1px solid rgba(255,255,255,0.06)",
-            position: "relative", overflow: "hidden",
-            opacity: inView ? 1 : 0, transition: "all 0.4s ease",
+          {/* Demo panel */}
+          <div key={tab.id} style={{
+            borderRadius: 20, minHeight: 420, overflow: "hidden",
+            background: "rgba(5,5,18,0.95)", border: "1px solid rgba(255,255,255,0.07)",
+            position: "relative",
+            opacity: inView ? 1 : 0, transition: "opacity 0.5s ease",
           }}>
-            <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.5) 1px, transparent 1px)", backgroundSize: "26px 26px", opacity: 0.035, pointerEvents: "none" }} />
-            <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 65% 60% at 50% 50%, rgba(${cap.color},0.08), transparent)`, pointerEvents: "none" }} />
-            {/* Scan line effect */}
-            <div style={{ position: "absolute", left: 0, right: 0, height: 2, background: `linear-gradient(to right, transparent, rgba(${cap.color},0.4), transparent)`, animation: "scanLine 4s linear infinite", pointerEvents: "none", zIndex: 2 }} />
-            <div style={{ position: "relative", height: 380 }}>
-              <NodeGraph cap={cap} />
+            {/* Top bar */}
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
+              {["#ef4444","#f59e0b","#10b981"].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.6 }} />)}
+              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>vortis.ai — {tab.name}</span>
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {DEMO_TABS.map((t, i) => (
+                  <button key={t.id} onClick={() => setActive(i)} style={{ padding: "3px 10px", borderRadius: 6, fontSize: 10.5, fontWeight: 600, cursor: "pointer", background: i === active ? `rgba(${t.color},0.2)` : "transparent", color: i === active ? `rgb(${t.color})` : "rgba(255,255,255,0.25)", border: i === active ? `1px solid rgba(${t.color},0.3)` : "1px solid transparent", transition: "all 0.2s" }}>
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ height: 380 }}>
+              <DemoPanel key={tab.id} tabId={tab.id} color={tab.color} />
             </div>
           </div>
         </div>
@@ -953,6 +1184,516 @@ function Showcase() {
   );
 }
 
+
+
+
+// ══════════════════════════════════════════════════════════════════
+//  3D DASHBOARD PREVIEW
+// ══════════════════════════════════════════════════════════════════
+function DashboardPreview() {
+  const [ref, inView] = useInView(0.1);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [hovered, setHovered] = useState(false);
+  const cardRef = useRef(null);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (e.clientX - cx) / (rect.width / 2);
+    const dy = (e.clientY - cy) / (rect.height / 2);
+    setTilt({ x: dy * -10, y: dx * 10 });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setTilt({ x: 0, y: 0 });
+    setHovered(false);
+  }, []);
+
+  const BARS = [65, 82, 47, 91, 73, 88, 55, 79, 94, 61, 85, 70];
+  const SPARKLINE = [40, 55, 48, 72, 65, 80, 75, 90, 85, 95, 88, 100];
+
+  return (
+    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(124,58,237,0.06), transparent)", pointerEvents: "none" }} />
+
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 64 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease" }}>
+            <BarChart3 size={11} color="#a855f7" />
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Your Dashboard</span>
+          </div>
+          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: "0 0 16px", letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease" }}>
+            Everything in{" "}
+            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>one place.</span>
+          </h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.4)", maxWidth: 480, margin: "0 auto", lineHeight: 1.7, opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.2s ease" }}>
+            Your AI workspace — chats, usage, models, and insights, all beautifully organized.
+          </p>
+        </div>
+
+        {/* 3D Card */}
+        <div style={{ perspective: "1200px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(60px)", transition: "all 1s 0.3s ease" }}>
+          <div
+            ref={cardRef}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={handleMouseLeave}
+            style={{
+              transformStyle: "preserve-3d",
+              transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) ${inView && !hovered ? "rotateX(4deg) rotateY(-6deg)" : ""}`,
+              transition: hovered ? "transform 0.1s ease" : "transform 0.8s ease",
+              borderRadius: 24,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.1)",
+              background: "rgba(6,6,20,0.97)",
+              boxShadow: `
+                0 80px 160px rgba(0,0,0,0.6),
+                0 40px 80px rgba(0,0,0,0.4),
+                0 0 0 1px rgba(124,58,237,0.15),
+                inset 0 1px 0 rgba(255,255,255,0.07)
+              `,
+            }}
+          >
+            {/* Top chrome bar */}
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.02)" }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["#ef4444","#f59e0b","#10b981"].map(c => <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c, opacity: 0.7 }} />)}
+              </div>
+              <div style={{ flex: 1, height: 22, borderRadius: 6, background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", paddingLeft: 10, gap: 6 }}>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#10b981", animation: "pulse 2s infinite" }} />
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>app.vortis.ai/dashboard</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ padding: "3px 10px", borderRadius: 6, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", fontSize: 10, color: "#a855f7", fontWeight: 700 }}>PLATINUM</div>
+              </div>
+            </div>
+
+            {/* Dashboard layout */}
+            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", minHeight: 520 }}>
+              {/* Sidebar */}
+              <div style={{ borderRight: "1px solid rgba(255,255,255,0.05)", padding: "20px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 8 }}>
+                  <VortisLogo size={22} color="#8b5cf6" />
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 14, color: "#fff" }}>VORTIS</span>
+                </div>
+                {[
+                  { icon: MessageSquare, label: "Chats", active: false },
+                  { icon: BarChart3, label: "Analytics", active: true },
+                  { icon: Brain, label: "Memory", active: false },
+                  { icon: ImageIcon, label: "Image Gen", active: false },
+                  { icon: Microscope, label: "Research", active: false },
+                  { icon: FileText, label: "Documents", active: false },
+                ].map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: item.active ? "rgba(124,58,237,0.15)" : "transparent", border: item.active ? "1px solid rgba(124,58,237,0.25)" : "1px solid transparent", cursor: "default" }}>
+                      <Icon size={14} style={{ color: item.active ? "#a855f7" : "rgba(255,255,255,0.3)" }} />
+                      <span style={{ fontSize: 12.5, color: item.active ? "#fff" : "rgba(255,255,255,0.35)", fontWeight: item.active ? 600 : 400 }}>{item.label}</span>
+                      {item.active && <div style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s infinite" }} />}
+                    </div>
+                  );
+                })}
+                <div style={{ marginTop: "auto", padding: "10px", borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.15)" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>USAGE THIS MONTH</div>
+                  <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: "67%", borderRadius: 2, background: "linear-gradient(90deg,#7C3AED,#06b6d4)" }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>67% used</div>
+                </div>
+              </div>
+
+              {/* Main content */}
+              <div style={{ padding: 20, overflowY: "auto" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                  <div>
+                    <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 18, margin: 0, color: "#fff" }}>Analytics Overview</h3>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", margin: "3px 0 0" }}>Last 30 days · Updated just now</p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["7d","30d","90d"].map((d, i) => (
+                      <button key={d} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "default", background: i === 1 ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.04)", color: i === 1 ? "#a855f7" : "rgba(255,255,255,0.4)", border: i === 1 ? "1px solid rgba(124,58,237,0.3)" : "1px solid rgba(255,255,255,0.07)" }}>{d}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stat cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+                  {[
+                    { label: "Total Chats", value: "2,847", change: "+12%", color: "124,58,237", icon: MessageSquare },
+                    { label: "Tokens Used", value: "1.2B", change: "+8%", color: "6,182,212", icon: Zap },
+                    { label: "Images Gen", value: "384", change: "+31%", color: "168,85,247", icon: ImageIcon },
+                    { label: "Researches", value: "47", change: "+22%", color: "251,191,36", icon: Microscope },
+                  ].map((s, i) => {
+                    const Icon = s.icon;
+                    return (
+                      <div key={i} style={{ padding: "12px", borderRadius: 12, background: `rgba(${s.color},0.07)`, border: `1px solid rgba(${s.color},0.15)` }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                          <Icon size={13} style={{ color: `rgb(${s.color})` }} />
+                          <span style={{ fontSize: 10, color: "#10b981", fontFamily: "'JetBrains Mono',monospace" }}>{s.change}</span>
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: "#fff", lineHeight: 1 }}>{s.value}</div>
+                        <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>{s.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Chart + sparklines */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 12 }}>
+                  {/* Bar chart */}
+                  <div style={{ padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12, fontWeight: 600 }}>Daily Conversations</div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
+                      {BARS.map((h, i) => (
+                        <div key={i} style={{ flex: 1, borderRadius: "3px 3px 0 0", background: i === 9 ? "linear-gradient(to top,#7C3AED,#a855f7)" : `rgba(124,58,237,${0.15 + (h/100)*0.35})`, height: `${h}%`, transition: "height 0.8s ease", transitionDelay: `${i*0.05}s` }} />
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                      {["Jun 1","","","","","","","","","","","Jun 12"].map((l, i) => (
+                        <span key={i} style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace" }}>{l}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right panel - top models */}
+                  <div style={{ padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12, fontWeight: 600 }}>Top Modes</div>
+                    {[
+                      { name: "Chat", pct: 45, color: "124,58,237" },
+                      { name: "Code", pct: 28, color: "6,182,212" },
+                      { name: "Research", pct: 18, color: "168,85,247" },
+                      { name: "Vision", pct: 9, color: "251,191,36" },
+                    ].map((m, i) => (
+                      <div key={i} style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)" }}>{m.name}</span>
+                          <span style={{ fontSize: 10, color: `rgb(${m.color})`, fontFamily: "'JetBrains Mono',monospace" }}>{m.pct}%</span>
+                        </div>
+                        <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)" }}>
+                          <div style={{ height: "100%", borderRadius: 2, background: `rgb(${m.color})`, width: `${m.pct}%`, transition: "width 1s ease", transitionDelay: `${i*0.1+0.5}s` }} />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Sparkline */}
+                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 6 }}>Trend</div>
+                      <svg width="100%" height="32" viewBox="0 0 130 32" preserveAspectRatio="none">
+                        <polyline
+                          points={SPARKLINE.map((v, i) => `${i * (130/11)},${32 - (v/100)*28}`).join(" ")}
+                          fill="none" stroke="rgba(139,92,246,0.8)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                        />
+                        <polyline
+                          points={[...SPARKLINE.map((v, i) => `${i * (130/11)},${32 - (v/100)*28}`), "130,32", "0,32"].join(" ")}
+                          fill="rgba(124,58,237,0.12)" stroke="none"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent activity */}
+                <div style={{ marginTop: 12, padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 10, fontWeight: 600 }}>Recent Activity</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {[
+                      { action: "Deep Research", topic: "AI in healthcare 2026", time: "2m ago", color: "6,182,212", icon: Microscope },
+                      { action: "Code Generation", topic: "React dashboard component", time: "18m ago", color: "124,58,237", icon: Code2 },
+                      { action: "Image Created", topic: "Product mockup renders", time: "1h ago", color: "168,85,247", icon: ImageIcon },
+                    ].map((a, i) => {
+                      const Icon = a.icon;
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: `rgba(${a.color},0.15)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Icon size={12} style={{ color: `rgb(${a.color})` }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#fff" }}>{a.action}</div>
+                            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.topic}</div>
+                          </div>
+                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{a.time}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating accent labels */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 32, flexWrap: "wrap", opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.8s ease" }}>
+          {[
+            { icon: <BarChart3 size={12} />, text: "Real-time analytics" },
+            { icon: <Brain size={12} />, text: "Persistent memory" },
+            { icon: <Shield size={12} />, text: "Private & encrypted" },
+            { icon: <Zap size={12} />, text: "Instant sync" },
+          ].map((f, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 99, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.5)" }}>
+              <span style={{ color: "rgba(139,92,246,0.8)" }}>{f.icon}</span>{f.text}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}// ══════════════════════════════════════════════════════════════════
+//  3D DASHBOARD PREVIEW
+// ══════════════════════════════════════════════════════════════════
+function DashboardPreview() {
+  const [ref, inView] = useInView(0.1);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const [hovered, setHovered] = useState(false);
+  const cardRef = useRef(null);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (e.clientX - cx) / (rect.width / 2);
+    const dy = (e.clientY - cy) / (rect.height / 2);
+    setTilt({ x: dy * -10, y: dx * 10 });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setTilt({ x: 0, y: 0 });
+    setHovered(false);
+  }, []);
+
+  const BARS = [65, 82, 47, 91, 73, 88, 55, 79, 94, 61, 85, 70];
+  const SPARKLINE = [40, 55, 48, 72, 65, 80, 75, 90, 85, 95, 88, 100];
+
+  return (
+    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, overflow: "hidden" }}>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(124,58,237,0.06), transparent)", pointerEvents: "none" }} />
+
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+        <div style={{ textAlign: "center", marginBottom: 64 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease" }}>
+            <BarChart3 size={11} color="#a855f7" />
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Your Dashboard</span>
+          </div>
+          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: "0 0 16px", letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease" }}>
+            Everything in{" "}
+            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>one place.</span>
+          </h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.4)", maxWidth: 480, margin: "0 auto", lineHeight: 1.7, opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.2s ease" }}>
+            Your AI workspace — chats, usage, models, and insights, all beautifully organized.
+          </p>
+        </div>
+
+        {/* 3D Card */}
+        <div style={{ perspective: "1200px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(60px)", transition: "all 1s 0.3s ease" }}>
+          <div
+            ref={cardRef}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={handleMouseLeave}
+            style={{
+              transformStyle: "preserve-3d",
+              transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) ${inView && !hovered ? "rotateX(4deg) rotateY(-6deg)" : ""}`,
+              transition: hovered ? "transform 0.1s ease" : "transform 0.8s ease",
+              borderRadius: 24,
+              overflow: "hidden",
+              border: "1px solid rgba(255,255,255,0.1)",
+              background: "rgba(6,6,20,0.97)",
+              boxShadow: `
+                0 80px 160px rgba(0,0,0,0.6),
+                0 40px 80px rgba(0,0,0,0.4),
+                0 0 0 1px rgba(124,58,237,0.15),
+                inset 0 1px 0 rgba(255,255,255,0.07)
+              `,
+            }}
+          >
+            {/* Top chrome bar */}
+            <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.02)" }}>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["#ef4444","#f59e0b","#10b981"].map(c => <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c, opacity: 0.7 }} />)}
+              </div>
+              <div style={{ flex: 1, height: 22, borderRadius: 6, background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", paddingLeft: 10, gap: 6 }}>
+                <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#10b981", animation: "pulse 2s infinite" }} />
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>app.vortis.ai/dashboard</span>
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ padding: "3px 10px", borderRadius: 6, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", fontSize: 10, color: "#a855f7", fontWeight: 700 }}>PLATINUM</div>
+              </div>
+            </div>
+
+            {/* Dashboard layout */}
+            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", minHeight: 520 }}>
+              {/* Sidebar */}
+              <div style={{ borderRight: "1px solid rgba(255,255,255,0.05)", padding: "20px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 8 }}>
+                  <VortisLogo size={22} color="#8b5cf6" />
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 14, color: "#fff" }}>VORTIS</span>
+                </div>
+                {[
+                  { icon: MessageSquare, label: "Chats", active: false },
+                  { icon: BarChart3, label: "Analytics", active: true },
+                  { icon: Brain, label: "Memory", active: false },
+                  { icon: ImageIcon, label: "Image Gen", active: false },
+                  { icon: Microscope, label: "Research", active: false },
+                  { icon: FileText, label: "Documents", active: false },
+                ].map((item, i) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: item.active ? "rgba(124,58,237,0.15)" : "transparent", border: item.active ? "1px solid rgba(124,58,237,0.25)" : "1px solid transparent", cursor: "default" }}>
+                      <Icon size={14} style={{ color: item.active ? "#a855f7" : "rgba(255,255,255,0.3)" }} />
+                      <span style={{ fontSize: 12.5, color: item.active ? "#fff" : "rgba(255,255,255,0.35)", fontWeight: item.active ? 600 : 400 }}>{item.label}</span>
+                      {item.active && <div style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s infinite" }} />}
+                    </div>
+                  );
+                })}
+                <div style={{ marginTop: "auto", padding: "10px", borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.15)" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>USAGE THIS MONTH</div>
+                  <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: "67%", borderRadius: 2, background: "linear-gradient(90deg,#7C3AED,#06b6d4)" }} />
+                  </div>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>67% used</div>
+                </div>
+              </div>
+
+              {/* Main content */}
+              <div style={{ padding: 20, overflowY: "auto" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                  <div>
+                    <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 18, margin: 0, color: "#fff" }}>Analytics Overview</h3>
+                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", margin: "3px 0 0" }}>Last 30 days · Updated just now</p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {["7d","30d","90d"].map((d, i) => (
+                      <button key={d} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "default", background: i === 1 ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.04)", color: i === 1 ? "#a855f7" : "rgba(255,255,255,0.4)", border: i === 1 ? "1px solid rgba(124,58,237,0.3)" : "1px solid rgba(255,255,255,0.07)" }}>{d}</button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Stat cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+                  {[
+                    { label: "Total Chats", value: "2,847", change: "+12%", color: "124,58,237", icon: MessageSquare },
+                    { label: "Tokens Used", value: "1.2B", change: "+8%", color: "6,182,212", icon: Zap },
+                    { label: "Images Gen", value: "384", change: "+31%", color: "168,85,247", icon: ImageIcon },
+                    { label: "Researches", value: "47", change: "+22%", color: "251,191,36", icon: Microscope },
+                  ].map((s, i) => {
+                    const Icon = s.icon;
+                    return (
+                      <div key={i} style={{ padding: "12px", borderRadius: 12, background: `rgba(${s.color},0.07)`, border: `1px solid rgba(${s.color},0.15)` }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                          <Icon size={13} style={{ color: `rgb(${s.color})` }} />
+                          <span style={{ fontSize: 10, color: "#10b981", fontFamily: "'JetBrains Mono',monospace" }}>{s.change}</span>
+                        </div>
+                        <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: "#fff", lineHeight: 1 }}>{s.value}</div>
+                        <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>{s.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Chart + sparklines */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 12 }}>
+                  {/* Bar chart */}
+                  <div style={{ padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12, fontWeight: 600 }}>Daily Conversations</div>
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
+                      {BARS.map((h, i) => (
+                        <div key={i} style={{ flex: 1, borderRadius: "3px 3px 0 0", background: i === 9 ? "linear-gradient(to top,#7C3AED,#a855f7)" : `rgba(124,58,237,${0.15 + (h/100)*0.35})`, height: `${h}%`, transition: "height 0.8s ease", transitionDelay: `${i*0.05}s` }} />
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                      {["Jun 1","","","","","","","","","","","Jun 12"].map((l, i) => (
+                        <span key={i} style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace" }}>{l}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right panel - top models */}
+                  <div style={{ padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12, fontWeight: 600 }}>Top Modes</div>
+                    {[
+                      { name: "Chat", pct: 45, color: "124,58,237" },
+                      { name: "Code", pct: 28, color: "6,182,212" },
+                      { name: "Research", pct: 18, color: "168,85,247" },
+                      { name: "Vision", pct: 9, color: "251,191,36" },
+                    ].map((m, i) => (
+                      <div key={i} style={{ marginBottom: 8 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)" }}>{m.name}</span>
+                          <span style={{ fontSize: 10, color: `rgb(${m.color})`, fontFamily: "'JetBrains Mono',monospace" }}>{m.pct}%</span>
+                        </div>
+                        <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)" }}>
+                          <div style={{ height: "100%", borderRadius: 2, background: `rgb(${m.color})`, width: `${m.pct}%`, transition: "width 1s ease", transitionDelay: `${i*0.1+0.5}s` }} />
+                        </div>
+                      </div>
+                    ))}
+                    {/* Sparkline */}
+                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 6 }}>Trend</div>
+                      <svg width="100%" height="32" viewBox="0 0 130 32" preserveAspectRatio="none">
+                        <polyline
+                          points={SPARKLINE.map((v, i) => `${i * (130/11)},${32 - (v/100)*28}`).join(" ")}
+                          fill="none" stroke="rgba(139,92,246,0.8)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                        />
+                        <polyline
+                          points={[...SPARKLINE.map((v, i) => `${i * (130/11)},${32 - (v/100)*28}`), "130,32", "0,32"].join(" ")}
+                          fill="rgba(124,58,237,0.12)" stroke="none"
+                        />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent activity */}
+                <div style={{ marginTop: 12, padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 10, fontWeight: 600 }}>Recent Activity</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {[
+                      { action: "Deep Research", topic: "AI in healthcare 2026", time: "2m ago", color: "6,182,212", icon: Microscope },
+                      { action: "Code Generation", topic: "React dashboard component", time: "18m ago", color: "124,58,237", icon: Code2 },
+                      { action: "Image Created", topic: "Product mockup renders", time: "1h ago", color: "168,85,247", icon: ImageIcon },
+                    ].map((a, i) => {
+                      const Icon = a.icon;
+                      return (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 7, background: `rgba(${a.color},0.15)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <Icon size={12} style={{ color: `rgb(${a.color})` }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#fff" }}>{a.action}</div>
+                            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.topic}</div>
+                          </div>
+                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{a.time}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Floating accent labels */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 32, flexWrap: "wrap", opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.8s ease" }}>
+          {[
+            { icon: <BarChart3 size={12} />, text: "Real-time analytics" },
+            { icon: <Brain size={12} />, text: "Persistent memory" },
+            { icon: <Shield size={12} />, text: "Private & encrypted" },
+            { icon: <Zap size={12} />, text: "Instant sync" },
+          ].map((f, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 99, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.5)" }}>
+              <span style={{ color: "rgba(139,92,246,0.8)" }}>{f.icon}</span>{f.text}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 // ══════════════════════════════════════════════════════════════════
 //  TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════
@@ -1292,6 +2033,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         <BentoGrid />
         <HowItWorks />
         <Showcase />
+        <DashboardPreview /> 
         <Testimonials />
         <Pricing />
         <FAQ />
