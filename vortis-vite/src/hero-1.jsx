@@ -1,10 +1,13 @@
-// @ts-nocheck
 import { useState, useRef, useEffect, useCallback } from "react";
+import Typewriter from "typewriter-effect";
+import { ArrowRight } from "lucide-react";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
-  BarChart3, Wifi, ChevronDown
+  BarChart3, Wifi, ChevronDown, Star, Award, Crown,
+  Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
+  TrendingUp, Clock, Database, Search, Palette
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════
@@ -298,8 +301,19 @@ function Nav({ onLogin }) {
 // ══════════════════════════════════════════════════════════════════
 //  HERO
 // ══════════════════════════════════════════════════════════════════
-const CYCLE_WORDS = ["INTELLIGENCE", "REASONING", "CREATIVITY", "RESEARCH", "UNDERSTANDING", "AUTOMATION"];
+const CYCLE_WORDS = [
+  "INTELLIGENCE",
+  "REASONING",
+  "CREATIVITY",
+  "RESEARCH",
+  "UNDERSTANDING",
+  "AUTOMATION",
+  "VISION",
+  "FUTURE",
+  "INNOVATION"
+];
 
+// Custom typewriter component for the headline string parsing
 function TypewriterWord({ word }) {
   const [displayed, setDisplayed] = useState("");
   const [phase, setPhase] = useState("typing");
@@ -322,17 +336,26 @@ function TypewriterWord({ word }) {
 
   return (
     <span style={{ position: "relative", display: "inline-block" }}>
-      {displayed}
+      <span style={{
+        background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)",
+        backgroundSize: "200% auto",
+        backgroundClip: "text",
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        animation: "gradientShift 4s ease-in-out infinite",
+      }}>
+        {displayed}
+      </span>
       <span style={{
         display: "inline-block", width: 4, height: "0.85em",
         background: "#a855f7", marginLeft: 3, verticalAlign: "middle",
         animation: phase === "done" ? "blink 0.8s step-end infinite" : "none",
-        opacity: phase === "done" ? 1 : 1,
+        opacity: 1,
       }} />
     </span>
   );
 }
-
+// Interactive chat module mock up for the right side visual container
 function HeroVisual() {
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -348,7 +371,7 @@ function HeroVisual() {
   ];
 
   return (
-    <div style={{
+    <div className="hero-visual" style={{
       width: "100%", maxWidth: 480, borderRadius: 20,
       background: "rgba(255,255,255,0.03)",
       border: "1px solid rgba(255,255,255,0.08)",
@@ -366,6 +389,7 @@ function HeroVisual() {
           LIVE
         </div>
       </div>
+      
       {/* Messages */}
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         {messages.map((m, i) => (
@@ -378,6 +402,7 @@ function HeroVisual() {
           }}>
             {m.role === "ai" && (
               <div style={{ width: 26, height: 26, borderRadius: 8, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {/* Ensure component is present or switch to a fallback icon/text */}
                 <VortisLogo size={14} color="#fff" />
               </div>
             )}
@@ -399,6 +424,7 @@ function HeroVisual() {
           </div>
         ))}
       </div>
+      
       {/* Input bar */}
       <div style={{ padding: "10px 16px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ flex: 1, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", padding: "0 12px" }}>
@@ -412,7 +438,7 @@ function HeroVisual() {
   );
 }
 
-function Hero({ onLogin, authLoading, authError }) {
+export function Hero({ onLogin, authLoading, authError }) {
   const [wordIdx, setWordIdx] = useState(0);
 
   useEffect(() => {
@@ -421,7 +447,7 @@ function Hero({ onLogin, authLoading, authError }) {
   }, []);
 
   return (
-    <section style={{
+    <section className="hero-grid" style={{
       minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr",
       alignItems: "center", gap: 60,
       padding: "100px 80px 80px", position: "relative", zIndex: 1,
@@ -436,18 +462,21 @@ function Hero({ onLogin, authLoading, authError }) {
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
-        {/* Headline */}
-        <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
-          <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
-          <span style={{ display: "block", background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>
-            <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
-          </span>
-          <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
-        </h1>
+       {/* Headline */}
+<h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
+  <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
 
+  <span style={{ display: "block" }}>
+    <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
+  </span>
+
+  <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
+</h1>
+        {/* Description Sub-headline */}
         <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
           Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
         </p>
+        
 
         {/* CTA */}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
@@ -461,7 +490,7 @@ function Hero({ onLogin, authLoading, authError }) {
           onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; }}
           onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
           >
-            <Zap size={16} /> {authLoading ? "Signing in…" : "Start Free — No card needed"}
+            <Zap size={16} /> {authLoading ? "Signing in…" : "Start Free"}
           </button>
           <a href="#capabilities" style={{
             padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
@@ -672,16 +701,22 @@ function Logos() {
 // ══════════════════════════════════════════════════════════════════
 function BentoGrid() {
   const [ref, inView] = useInView(0.08);
+  
   const features = [
-    { icon: Globe, color: "124,58,237", title: "Live Web Search", desc: "Real-time results from across the internet with source attribution and smart summarization.", size: "large" },
+    // 1. Changed size to "small" so it matches the rest
+    { icon: Globe, color: "124,58,237", title: "Live Web Search", desc: "Real-time results from across the internet with source attribution and smart summarization.", size: "small" },
     { icon: ImageIcon, color: "168,85,247", title: "Image Generation", desc: "Create stunning visuals in any style — photorealistic, anime, oil painting, cyberpunk.", size: "small" },
     { icon: Code2, color: "6,182,212", title: "Code Mastery", desc: "Write, debug, explain, and refactor across all languages with principal-level quality.", size: "small" },
     { icon: Eye, color: "99,102,241", title: "Vision AI", desc: "Analyze images, read text, extract data — your eyes for any visual content.", size: "small" },
     { icon: Brain, color: "168,85,247", title: "Persistent Memory", desc: "Vortis remembers your preferences, projects, and context across every conversation.", size: "small" },
-    { icon: Microscope, color: "6,182,212", title: "Deep Research", desc: "Autonomous agents synthesize 50+ sources into comprehensive reports in minutes.", size: "large" },
+    // 2. Changed size to "small" here too
+    { icon: Microscope, color: "6,182,212", title: "Deep Research", desc: "Autonomous agents synthesize 50+ sources into comprehensive reports in minutes.", size: "small" },
     { icon: FileText, color: "124,58,237", title: "Document Analysis", desc: "Chat with PDFs, CSVs, Word docs — extract insights from any file instantly.", size: "small" },
     { icon: Cpu, color: "168,85,247", title: "Voice Mode", desc: "Speak naturally, hear responses — hands-free AI with multilingual support.", size: "small" },
+    // 3. New 9th item to perfectly balance the 3x3 grid!
+    { icon: BarChart3, color: "99,102,241", title: "Advanced Analytics", desc: "Track usage patterns, monitor latency, and optimize your AI workflows with built-in deep data insights.", size: "small" },
   ];
+  
 
   return (
     <section ref={ref} style={{ padding: "80px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
@@ -981,110 +1016,101 @@ function Testimonials() {
 //  PRICING
 // ══════════════════════════════════════════════════════════════════
 const PLANS = [
-  { name: "Silver", color: "124,58,237", popular: false, prices: { monthly: "$9", q: "$24", h: "$43", y: "$81" }, features: ["300 messages/day", "40 documents/day", "20 images/day", "3 vision/day", "Priority access", "Voice mode"] },
-  { name: "Gold", color: "168,85,247", popular: true, prices: { monthly: "$19", q: "$51", h: "$91", y: "$171" }, features: ["500 messages/day", "50 documents/day", "40 images/day", "10 vision/day", "Priority responses", "Deep research"] },
-  { name: "Platinum", color: "6,182,212", popular: false, prices: { monthly: "$29", q: "$78", h: "$139", y: "$261" }, features: ["Unlimited messages", "Unlimited documents", "Unlimited images", "Unlimited vision", "VIP support", "Early features"] },
+  {
+    name: "Silver", colorStr: "148,163,184", color: "#94a3b8", popular: false,
+    icon: Star, iconBg: "rgba(148,163,184,0.15)", iconBorder: "rgba(148,163,184,0.35)",
+    prices: { monthly: "$9", q: "$24", h: "$43", y: "$81" },
+    badge: null, glowAnim: "silverGlow",
+    features: ["300 messages/day", "40 documents/day", "20 images/day", "3 vision/day", "Priority access", "Voice mode"],
+  },
+  {
+    name: "Gold", colorStr: "251,191,36", color: "#fbbf24", popular: true,
+    icon: Crown, iconBg: "rgba(251,191,36,0.15)", iconBorder: "rgba(251,191,36,0.4)",
+    prices: { monthly: "$19", q: "$51", h: "$91", y: "$171" },
+    badge: "✦ Most Popular", glowAnim: "goldGlow",
+    features: ["500 messages/day", "50 documents/day", "40 images/day", "10 vision/day", "Priority responses", "Deep research"],
+  },
+  {
+    name: "Platinum", colorStr: "6,182,212", color: "#06b6d4", popular: false,
+    icon: Gem, iconBg: "rgba(6,182,212,0.15)", iconBorder: "rgba(6,182,212,0.35)",
+    prices: { monthly: "$29", q: "$78", h: "$139", y: "$261" },
+    badge: null, glowAnim: "platinumGlow",
+    features: ["Unlimited messages", "Unlimited documents", "Unlimited images", "Unlimited vision", "VIP support", "Early features"],
+  },
 ];
 const BILLING_NAMES = { monthly: "Monthly", q: "3 Months", h: "6 Months", y: "Annual" };
 const BILLING_LABELS = { monthly: "/mo", q: "/3 mo", h: "/6 mo", y: "/yr" };
 const BILLING_SAVINGS = { monthly: null, q: "Save 11%", h: "Save 20%", y: "Save 25%" };
-
+ 
 function Pricing() {
   const [billing, setBilling] = useState("monthly");
   const [ref, inView] = useInView(0.08);
-
   return (
     <section id="pricing" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto" }}>
+      <div style={{ maxWidth: 1040, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-40px)", transition: "all 0.7s ease" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Pricing</span>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "all 0.7s ease" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#c4b5fd", fontFamily: "'JetBrains Mono',monospace" }}>Pricing</span>
           </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: "0 0 28px", letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(40px)", transition: "all 0.8s 0.1s ease" }}>
+          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: "0 0 28px", letterSpacing: "-0.03em", color: "#fff", opacity: inView ? 1 : 0, transition: "all 0.8s 0.1s ease" }}>
             Choose Your{" "}
             <span style={{ background: "linear-gradient(90deg,#7C3AED,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Plan.</span>
           </h2>
-
           <div style={{ display: "inline-flex", padding: 4, borderRadius: 99, border: "1px solid rgba(255,255,255,0.09)", background: "rgba(255,255,255,0.03)", gap: 3, opacity: inView ? 1 : 0, transition: "opacity 0.7s 0.2s ease" }}>
             {Object.keys(BILLING_NAMES).map(b => (
-              <button key={b} onClick={() => setBilling(b)} style={{
-                padding: "8px 18px", borderRadius: 99, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer",
-                background: billing === b ? "linear-gradient(135deg,#7C3AED,#a855f7)" : "transparent",
-                color: billing === b ? "#fff" : "rgba(255,255,255,0.45)", transition: "all 0.2s",
-                boxShadow: billing === b ? "0 0 16px rgba(124,58,237,0.4)" : "none",
-              }}>
+              <button key={b} onClick={() => setBilling(b)} style={{ padding: "8px 18px", borderRadius: 99, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: billing === b ? "linear-gradient(135deg,#7C3AED,#a855f7)" : "transparent", color: billing === b ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.2s", boxShadow: billing === b ? "0 0 16px rgba(124,58,237,0.4)" : "none" }}>
                 {BILLING_NAMES[b]}
                 {BILLING_SAVINGS[b] && billing === b && <span style={{ marginLeft: 6, fontSize: 10, background: "rgba(16,185,129,0.2)", color: "#10b981", padding: "1px 5px", borderRadius: 99 }}>{BILLING_SAVINGS[b]}</span>}
               </button>
             ))}
           </div>
         </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18 }}>
-          {PLANS.map((plan, idx) => (
-            <div key={plan.name} style={{
-              borderRadius: 22, padding: "32px 28px", position: "relative",
-              border: plan.popular ? `1px solid rgba(${plan.color},0.6)` : "1px solid rgba(255,255,255,0.07)",
-              background: plan.popular ? `rgba(${plan.color},0.08)` : "rgba(255,255,255,0.02)",
-              boxShadow: plan.popular ? `0 0 60px -12px rgba(${plan.color},0.4)` : "none",
-              animation: plan.popular ? "goldGlow 3s ease-in-out infinite" : "none",
-              display: "flex", flexDirection: "column",
-              opacity: inView ? 1 : 0,
-              transform: inView ? "translateY(0)" : `translateY(${idx === 1 ? 80 : 0}px) translateX(${idx === 0 ? -80 : idx === 2 ? 80 : 0}px)`,
-              transition: `all 0.75s ${idx * 0.12 + 0.3}s ease`,
-            }}>
-              {plan.popular && (
-                <>
-                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "22px 22px 0 0", background: `linear-gradient(90deg, transparent, rgb(${plan.color}), transparent)` }} />
-                  <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(135deg,rgb(${plan.color}),#7C3AED)`, padding: "4px 18px", borderRadius: 99, fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", boxShadow: `0 4px 16px rgba(${plan.color},0.4)` }}>
-                    ✦ Most Popular
+ 
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+          {PLANS.map((plan, idx) => {
+            const PlanIcon = plan.icon;
+            return (
+              <div key={plan.name} style={{ borderRadius: 24, padding: "36px 30px", position: "relative", border: plan.popular ? `1px solid rgba(${plan.colorStr},0.6)` : "1px solid rgba(255,255,255,0.07)", background: plan.popular ? `rgba(${plan.colorStr},0.07)` : "rgba(255,255,255,0.02)", animation: `${plan.glowAnim} 3s ease-in-out infinite`, display: "flex", flexDirection: "column", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : `translateY(${idx === 1 ? 80 : 0}px)`, transition: `all 0.75s ${idx * 0.12 + 0.3}s ease` }}>
+                {plan.popular && (
+                  <>
+                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "24px 24px 0 0", background: `linear-gradient(90deg, transparent, ${plan.color}, transparent)` }} />
+                    <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(135deg,${plan.color},#a855f7)`, padding: "4px 18px", borderRadius: 99, fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", boxShadow: `0 4px 16px rgba(${plan.colorStr},0.5)` }}>{plan.badge}</div>
+                  </>
+                )}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                  <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 20, margin: 0, color: "#fff" }}>{plan.name}</h3>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: plan.iconBg, border: `1px solid ${plan.iconBorder}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <PlanIcon size={18} style={{ color: plan.color }} />
                   </div>
-                </>
-              )}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-                <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 20, margin: 0, color: "#fff" }}>{plan.name}</h3>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: `rgba(${plan.color},0.15)`, border: `1px solid rgba(${plan.color},0.3)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Zap size={16} style={{ color: `rgb(${plan.color})` }} />
                 </div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginBottom: 26 }}>
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 46, color: "#fff", lineHeight: 1 }}>{plan.prices[billing]}</span>
+                  <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", paddingBottom: 5 }}>{BILLING_LABELS[billing]}</span>
+                </div>
+                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", flex: 1, display: "flex", flexDirection: "column", gap: 11 }}>
+                  {plan.features.map(f => (
+                    <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "rgba(255,255,255,0.7)" }}>
+                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: `rgba(${plan.colorStr},0.18)`, border: `1px solid rgba(${plan.colorStr},0.4)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Check size={11} style={{ color: plan.color }} />
+                      </div>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <button style={{ width: "100%", padding: "14px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", background: plan.popular ? `linear-gradient(135deg,${plan.color},#7C3AED)` : "rgba(255,255,255,0.06)", color: "#fff", border: plan.popular ? "none" : "1px solid rgba(255,255,255,0.1)", boxShadow: plan.popular ? `0 0 24px rgba(${plan.colorStr},0.4)` : "none", transition: "all 0.2s" }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}>
+                  Get Started →
+                </button>
               </div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginBottom: 24 }}>
-                <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 44, color: "#fff", lineHeight: 1 }}>{plan.prices[billing]}</span>
-                <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", paddingBottom: 4 }}>{BILLING_LABELS[billing]}</span>
-              </div>
-              <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", flex: 1, display: "flex", flexDirection: "column", gap: 11 }}>
-                {plan.features.map(f => (
-                  <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "rgba(255,255,255,0.62)" }}>
-                    <div style={{ width: 19, height: 19, borderRadius: "50%", background: `rgba(${plan.color},0.18)`, border: `1px solid rgba(${plan.color},0.35)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <Check size={10} style={{ color: `rgb(${plan.color})` }} />
-                    </div>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <button style={{
-                width: "100%", padding: "13px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer",
-                background: plan.popular ? `linear-gradient(135deg,rgb(${plan.color}),#7C3AED)` : "rgba(255,255,255,0.06)",
-                color: "#fff", border: plan.popular ? "none" : "1px solid rgba(255,255,255,0.1)",
-                boxShadow: plan.popular ? `0 0 24px rgba(${plan.color},0.45), 0 8px 32px rgba(${plan.color},0.2)` : "none",
-                transition: "all 0.2s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = plan.popular ? `0 0 40px rgba(${plan.color},0.6), 0 16px 48px rgba(${plan.color},0.3)` : "0 8px 24px rgba(255,255,255,0.05)"; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = plan.popular ? `0 0 24px rgba(${plan.color},0.45), 0 8px 32px rgba(${plan.color},0.2)` : "none"; }}
-              >Get Started →</button>
-            </div>
-          ))}
+            );
+          })}
         </div>
-
-        {/* Trust signals */}
+ 
         <div style={{ display: "flex", justifyContent: "center", gap: 32, marginTop: 36, flexWrap: "wrap", opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.5s ease" }}>
-          {[
-            { icon: <Shield size={13} />, text: "Cancel anytime" },
-            { icon: <Lock size={13} />, text: "Enterprise-grade security" },
-            { icon: <Wifi size={13} />, text: "99.9% uptime SLA" },
-          ].map(s => (
+          {[{ icon: <Shield size={13} />, text: "Cancel anytime" }, { icon: <Lock size={13} />, text: "Enterprise-grade security" }, { icon: <Wifi size={13} />, text: "99.9% uptime SLA" }].map(s => (
             <div key={s.text} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "rgba(255,255,255,0.35)" }}>
-              <span style={{ color: "rgba(139,92,246,0.7)" }}>{s.icon}</span>
-              {s.text}
+              <span style={{ color: "rgba(139,92,246,0.7)" }}>{s.icon}</span>{s.text}
             </div>
           ))}
         </div>
@@ -1092,7 +1118,7 @@ function Pricing() {
     </section>
   );
 }
-
+ 
 // ══════════════════════════════════════════════════════════════════
 //  FAQ
 // ══════════════════════════════════════════════════════════════════
@@ -1174,7 +1200,7 @@ function CTA({ onLogin }) {
             <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>faster.</span>
           </h2>
           <p style={{ fontSize: 18, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 40 }}>
-            Join 50,000+ professionals who use Vortis every day. Free to start — no credit card required.
+            Join 50,000+ professionals who use Vortis every day. Free to start.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
             <button onClick={() => onLogin('google')} style={{
