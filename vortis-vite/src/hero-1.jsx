@@ -1611,7 +1611,6 @@ const FAQS = [
   { q: "How does billing work?", a: "Choose monthly, quarterly, semi-annual, or annual billing. Longer commitments unlock big discounts — annual saves 25%. Cancel any time, no questions asked." },
   { q: "What is Deep Research mode?", a: "Autonomous agents browse the web, read documents, cross-reference sources, and synthesize comprehensive reports in minutes. Like having a research team on demand." },
   { q: "Is my data private and secure?", a: "Absolutely. Your conversations, documents, and outputs are never used to train models or shared with third parties. Enterprise-grade AES-256 encryption at rest and in transit." },
-  { q: "Can I use Vortis via API?", a: "Yes — Vortis offers a clean REST API with streaming support. Build your own products on top of Vortis intelligence. Docs available for all paid plans." },
 ];
 
 function FaqItem({ faq, index, inView }) {
