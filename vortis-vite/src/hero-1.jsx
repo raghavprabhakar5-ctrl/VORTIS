@@ -1524,7 +1524,6 @@ const PLANS = [
 ];
 const BILLING_NAMES = { monthly: "Monthly", q: "3 Months", h: "6 Months", y: "Annual" };
 const BILLING_LABELS = { monthly: "/mo", q: "/3 mo", h: "/6 mo", y: "/yr" };
-const BILLING_SAVINGS = { monthly: null, q: "Save 11%", h: "Save 20%", y: "Save 25%" };
  
 function Pricing() {
   const [billing, setBilling] = useState("monthly");
@@ -1544,7 +1543,6 @@ function Pricing() {
             {Object.keys(BILLING_NAMES).map(b => (
               <button key={b} onClick={() => setBilling(b)} style={{ padding: "8px 18px", borderRadius: 99, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: billing === b ? "linear-gradient(135deg,#7C3AED,#a855f7)" : "transparent", color: billing === b ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.2s", boxShadow: billing === b ? "0 0 16px rgba(124,58,237,0.4)" : "none" }}>
                 {BILLING_NAMES[b]}
-                {BILLING_SAVINGS[b] && billing === b && <span style={{ marginLeft: 6, fontSize: 10, background: "rgba(16,185,129,0.2)", color: "#10b981", padding: "1px 5px", borderRadius: 99 }}>{BILLING_SAVINGS[b]}</span>}
               </button>
             ))}
           </div>
