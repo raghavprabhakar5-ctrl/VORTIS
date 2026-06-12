@@ -5,50 +5,8 @@ import {
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
   BarChart3, Wifi, ChevronDown, Star, Award, Crown,
   Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
-  TrendingUp, Clock, Database, Search, Palette,
+  TrendingUp, Clock, Database, Search, Palette
 } from "lucide-react";
-
-function TypewriterEffect({ words }) {
-  const [currentWordIdx, setCurrentWordIdx] = useState(0);
-  const [currentText, setCurrentText] = useState("");
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  useEffect(() => {
-    const word = words[currentWordIdx];
-    let timer;
-    
-    if (!isDeleting && currentText === word) {
-      timer = setTimeout(() => setIsDeleting(true), 1500);
-    } else if (isDeleting && currentText === "") {
-      setIsDeleting(false);
-      setCurrentWordIdx((prev) => (prev + 1) % words.length);
-    } else {
-      const speed = isDeleting ? 50 : 100;
-      timer = setTimeout(() => {
-        setCurrentText(
-          isDeleting 
-            ? word.substring(0, currentText.length - 1)
-            : word.substring(0, currentText.length + 1)
-        );
-      }, speed);
-    }
-    
-    return () => clearTimeout(timer);
-  }, [currentText, isDeleting, currentWordIdx, words]);
-
-  return (
-    <span>
-      {currentText}
-      <span style={{ animation: "blink 0.7s infinite", fontWeight: "normal" }}>|</span>
-      <style>{`
-        @keyframes blink {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0; }
-        }
-      `}</style>
-    </span>
-  );
-}
 
 // ══════════════════════════════════════════════════════════════════
 //  STYLES
@@ -455,12 +413,13 @@ function HeroVisual() {
   );
 }
 
-export default function Hero({ onLogin, authLoading, authError }) {
-  // 1. Just the array. No useState or useEffect needed here!
-  const wordsArray = [
-    "INTELLIGENCE", "VISION", "FUTURE", "CREATIVITY", 
-    "INNOVATION", "EXCELLENCE", "CLARITY", "EXPERIENCE", "RESULTS"
-  ];
+function Hero({ onLogin, authLoading, authError }) {
+  const [wordIdx, setWordIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setWordIdx(i => (i + 1) % CYCLE_WORDS.length), 3200);
+    return () => clearInterval(id);
+  }, []);
 
   return (
     <section style={{
@@ -478,31 +437,39 @@ export default function Hero({ onLogin, authLoading, authError }) {
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
-        {/* Headline */}
-        <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
-          <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
-          
-          <span style={{ 
-            display: "block", 
-            background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)", 
-            backgroundSize: "200% auto", 
-            backgroundClip: "text", 
-            WebkitBackgroundClip: "text", 
-            WebkitTextFillColor: "transparent", 
-            animation: "gradientShift 4s ease-in-out infinite" 
-          }}>
-            {/* 2. Just drop the new effect right here! */}
-            <TypewriterEffect words={wordsArray} />
-          </span>
-          
-          <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
-        </h1>
+     <>
+  {/* Headline */}
+  <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
+    <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
+    <span style={{ 
+      display: "block", 
+      background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)", 
+      backgroundSize: "200% auto", 
+      backgroundClip: "text", 
+      WebkitBackgroundClip: "text", 
+      WebkitTextFillColor: "transparent", 
+      animation: "gradientShift 4s ease-in-out infinite" 
+    }}>
+      <TypewriterWord word={[
+        "INTELLIGENCE", 
+        "VISION", 
+        "FUTURE", 
+        "CREATIVITY", 
+        "INNOVATION", 
+        "EXCELLENCE", 
+        "CLARITY", 
+        "EXPERIENCE", 
+        "RESULTS"
+      ][(wordIdx || 0) % 9]} />
+    </span>
+    <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
+  </h1>
 
-        {/* Description Sub-headline */}
-        <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
-          Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
-        </p>
-
+  {/* Description Sub-headline */}
+  <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
+    Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
+  </p>
+</>
         {/* CTA */}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
           <button onClick={() => onLogin('google')} disabled={authLoading} style={{
