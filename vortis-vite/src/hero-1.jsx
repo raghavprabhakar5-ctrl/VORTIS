@@ -471,7 +471,7 @@ function Hero({ onLogin, authLoading, authError }) {
           onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; }}
           onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
           >
-            <Zap size={16} /> {authLoading ? "Signing in…" : "Start Free — No card needed"}
+            <Zap size={16} /> {authLoading ? "Signing in…" : "Start Free"}
           </button>
           <a href="#capabilities" style={{
             padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
