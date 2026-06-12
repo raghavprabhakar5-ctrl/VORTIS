@@ -437,7 +437,7 @@ function Hero({ onLogin, authLoading, authError }) {
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
-     <>
+   <>
   {/* Headline */}
   <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
     <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
@@ -460,7 +460,7 @@ function Hero({ onLogin, authLoading, authError }) {
         "CLARITY", 
         "EXPERIENCE", 
         "RESULTS"
-      ][(wordIdx || 0) % 9]} />
+      ][(wordIdx ?? 0) % 9]} />
     </span>
     <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
   </h1>
