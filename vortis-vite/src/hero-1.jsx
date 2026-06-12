@@ -5,8 +5,50 @@ import {
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
   BarChart3, Wifi, ChevronDown, Star, Award, Crown,
   Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
-  TrendingUp, Clock, Database, Search, Palette
+  TrendingUp, Clock, Database, Search, Palette,
 } from "lucide-react";
+
+function TypewriterEffect({ words }) {
+  const [currentWordIdx, setCurrentWordIdx] = useState(0);
+  const [currentText, setCurrentText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  useEffect(() => {
+    const word = words[currentWordIdx];
+    let timer;
+    
+    if (!isDeleting && currentText === word) {
+      timer = setTimeout(() => setIsDeleting(true), 1500);
+    } else if (isDeleting && currentText === "") {
+      setIsDeleting(false);
+      setCurrentWordIdx((prev) => (prev + 1) % words.length);
+    } else {
+      const speed = isDeleting ? 50 : 100;
+      timer = setTimeout(() => {
+        setCurrentText(
+          isDeleting 
+            ? word.substring(0, currentText.length - 1)
+            : word.substring(0, currentText.length + 1)
+        );
+      }, speed);
+    }
+    
+    return () => clearTimeout(timer);
+  }, [currentText, isDeleting, currentWordIdx, words]);
+
+  return (
+    <span>
+      {currentText}
+      <span style={{ animation: "blink 0.7s infinite", fontWeight: "normal" }}>|</span>
+      <style>{`
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
+    </span>
+  );
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  STYLES
@@ -415,6 +457,11 @@ function HeroVisual() {
 
 function Hero({ onLogin, authLoading, authError }) {
   const [wordIdx, setWordIdx] = useState(0);
+  // Add the array here at the top of your existing component!
+  const wordsArray = [
+    "INTELLIGENCE", "VISION", "FUTURE", "CREATIVITY", 
+    "INNOVATION", "EXCELLENCE", "CLARITY", "EXPERIENCE", "RESULTS"
+  ];
 
   useEffect(() => {
     const id = setInterval(() => setWordIdx(i => (i + 1) % CYCLE_WORDS.length), 3200);
