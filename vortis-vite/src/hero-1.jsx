@@ -941,7 +941,6 @@ function Testimonials() {
 // ══════════════════════════════════════════════════════════════════
 //  PRICING
 // ══════════════════════════════════════════════════════════════════
-// ── PRICING (different icons per tier) ──
 const PLANS = [
   {
     name: "Silver", colorStr: "148,163,184", color: "#94a3b8", popular: false,
@@ -968,7 +967,7 @@ const PLANS = [
 const BILLING_NAMES = { monthly: "Monthly", q: "3 Months", h: "6 Months", y: "Annual" };
 const BILLING_LABELS = { monthly: "/mo", q: "/3 mo", h: "/6 mo", y: "/yr" };
 const BILLING_SAVINGS = { monthly: null, q: "Save 11%", h: "Save 20%", y: "Save 25%" };
-
+ 
 function Pricing() {
   const [billing, setBilling] = useState("monthly");
   const [ref, inView] = useInView(0.08);
@@ -992,7 +991,7 @@ function Pricing() {
             ))}
           </div>
         </div>
-
+ 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
           {PLANS.map((plan, idx) => {
             const PlanIcon = plan.icon;
@@ -1033,7 +1032,7 @@ function Pricing() {
             );
           })}
         </div>
-
+ 
         <div style={{ display: "flex", justifyContent: "center", gap: 32, marginTop: 36, flexWrap: "wrap", opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.5s ease" }}>
           {[{ icon: <Shield size={13} />, text: "Cancel anytime" }, { icon: <Lock size={13} />, text: "Enterprise-grade security" }, { icon: <Wifi size={13} />, text: "99.9% uptime SLA" }].map(s => (
             <div key={s.text} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "rgba(255,255,255,0.35)" }}>
@@ -1045,7 +1044,7 @@ function Pricing() {
     </section>
   );
 }
-
+ 
 // ══════════════════════════════════════════════════════════════════
 //  FAQ
 // ══════════════════════════════════════════════════════════════════
@@ -1127,7 +1126,7 @@ function CTA({ onLogin }) {
             <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>faster.</span>
           </h2>
           <p style={{ fontSize: 18, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 40 }}>
-            Join 50,000+ professionals who use Vortis every day. Free to start — no credit card required.
+            Join 50,000+ professionals who use Vortis every day. Free to start.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
             <button onClick={() => onLogin('google')} style={{
