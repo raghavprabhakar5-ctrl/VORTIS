@@ -205,10 +205,10 @@ function Nav() {
 const CYCLE_WORDS = ["INTELLIGENCE", "REASONING", "CREATIVITY", "RESEARCH", "UNDERSTANDING", "AUTOMATION"];
 
 function TypewriterWord({ word }) {
-  const [displayed, setDisplayed] = useState("");
-  const [phase, setPhase] = useState("typing");
+  const [displayed, setDisplayed] = useState(word);
+  const [phase, setPhase] = useState("done");
   useEffect(() => {
-    setDisplayed(""); setPhase("typing"); let i = 0;
+    setDisplayed(word[0] || "I"); setPhase("typing"); let i = 1;
     const t = setInterval(() => {
       if (i <= word.length) { setDisplayed(word.slice(0, i)); i++; }
       else { clearInterval(t); setPhase("done"); }
@@ -218,7 +218,7 @@ function TypewriterWord({ word }) {
   return (
     <span style={{ position: "relative", display: "inline-block" }}>
       {displayed}
-      <span style={{ display: "inline-block", width: 4, height: "0.85em", background: "#a855f7", marginLeft: 3, verticalAlign: "middle", animation: phase === "done" ? "blink 0.8s step-end infinite" : "none" }} />
+      <span style={{ display: "inline-block", width: 3, height: "0.82em", background: "#a855f7", marginLeft: 2, verticalAlign: "middle", animation: phase === "done" ? "blink 0.9s step-end infinite" : "none" }} />
     </span>
   );
 }
@@ -286,9 +286,9 @@ function Hero() {
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s ease-in-out infinite" }} />
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#c4b5fd", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
-        <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
+        <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
           <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
-          <span style={{ display: "block", background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 45%,#06B6D4 100%)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>
+          <span style={{ display: "block", minHeight: "1.05em", background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 45%,#06B6D4 100%)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>
             <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
           </span>
           <span style={{ display: "block", color: "rgba(255,255,255,0.22)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
