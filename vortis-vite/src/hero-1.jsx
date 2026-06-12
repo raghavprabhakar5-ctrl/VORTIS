@@ -300,8 +300,19 @@ function Nav({ onLogin }) {
 // ══════════════════════════════════════════════════════════════════
 //  HERO
 // ══════════════════════════════════════════════════════════════════
-const CYCLE_WORDS = ["INTELLIGENCE", "REASONING", "CREATIVITY", "RESEARCH", "UNDERSTANDING", "AUTOMATION"];
+const CYCLE_WORDS = [
+  "INTELLIGENCE",
+  "REASONING",
+  "CREATIVITY",
+  "RESEARCH",
+  "UNDERSTANDING",
+  "AUTOMATION",
+  "VISION",
+  "FUTURE",
+  "INNOVATION"
+];
 
+// Custom typewriter component for the headline string parsing
 function TypewriterWord({ word }) {
   const [displayed, setDisplayed] = useState("");
   const [phase, setPhase] = useState("typing");
@@ -329,12 +340,13 @@ function TypewriterWord({ word }) {
         display: "inline-block", width: 4, height: "0.85em",
         background: "#a855f7", marginLeft: 3, verticalAlign: "middle",
         animation: phase === "done" ? "blink 0.8s step-end infinite" : "none",
-        opacity: phase === "done" ? 1 : 1,
+        opacity: 1,
       }} />
     </span>
   );
 }
 
+// Interactive chat module mock up for the right side visual container
 function HeroVisual() {
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -350,7 +362,7 @@ function HeroVisual() {
   ];
 
   return (
-    <div style={{
+    <div className="hero-visual" style={{
       width: "100%", maxWidth: 480, borderRadius: 20,
       background: "rgba(255,255,255,0.03)",
       border: "1px solid rgba(255,255,255,0.08)",
@@ -368,6 +380,7 @@ function HeroVisual() {
           LIVE
         </div>
       </div>
+      
       {/* Messages */}
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         {messages.map((m, i) => (
@@ -380,6 +393,7 @@ function HeroVisual() {
           }}>
             {m.role === "ai" && (
               <div style={{ width: 26, height: 26, borderRadius: 8, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {/* Ensure component is present or switch to a fallback icon/text */}
                 <VortisLogo size={14} color="#fff" />
               </div>
             )}
@@ -401,6 +415,7 @@ function HeroVisual() {
           </div>
         ))}
       </div>
+      
       {/* Input bar */}
       <div style={{ padding: "10px 16px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8, alignItems: "center" }}>
         <div style={{ flex: 1, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", padding: "0 12px" }}>
@@ -414,29 +429,16 @@ function HeroVisual() {
   );
 }
 
-const CYCLE_WORDS = [
-  "INTELLIGENCE", 
-  "VISION", 
-  "FUTURE", 
-  "CREATIVITY", 
-  "INNOVATION", 
-  "EXCELLENCE", 
-  "CLARITY", 
-  "EXPERIENCE", 
-  "RESULTS"
-];
-
-function Hero({ onLogin, authLoading, authError }) {
+export default function Hero({ onLogin, authLoading, authError }) {
   const [wordIdx, setWordIdx] = useState(0);
 
   useEffect(() => {
-    // Now CYCLE_WORDS.length will work perfectly!
     const id = setInterval(() => setWordIdx(i => (i + 1) % CYCLE_WORDS.length), 3200);
     return () => clearInterval(id);
   }, []);
 
   return (
-    <section style={{
+    <section className="hero-grid" style={{
       minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr",
       alignItems: "center", gap: 60,
       padding: "100px 80px 80px", position: "relative", zIndex: 1,
@@ -464,7 +466,6 @@ function Hero({ onLogin, authLoading, authError }) {
             WebkitTextFillColor: "transparent", 
             animation: "gradientShift 4s ease-in-out infinite" 
           }}>
-            {/* 2. Pass the safely selected word from CYCLE_WORDS */}
             <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
           </span>
           
@@ -475,7 +476,7 @@ function Hero({ onLogin, authLoading, authError }) {
         <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
           Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
         </p>
-
+        
 
         {/* CTA */}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
