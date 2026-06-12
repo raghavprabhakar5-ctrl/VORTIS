@@ -437,15 +437,24 @@ function Hero({ onLogin, authLoading, authError }) {
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
-        {/* Headline */}
-        <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
-          <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
-          <span style={{ display: "block", background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>
-            <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
-          </span>
-          <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
-        </h1>
-
+       {/* Headline */}
+<h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
+  <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
+  <span style={{ display: "block", background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>
+    <TypewriterWord word={[
+      "INTELLIGENCE", 
+      "VISION", 
+      "FUTURE", 
+      "CREATIVITY", 
+      "INNOVATION", 
+      "EXCELLENCE", 
+      "CLARITY", 
+      "EXPERIENCE", 
+      "RESULTS"
+    ][wordIdx]} />
+  </span>
+  <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
+</h1>
         <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
           Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
         </p>
