@@ -2,8 +2,10 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
-  Star, Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
-  BarChart3, Wifi, ChevronDown
+  Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
+  BarChart3, Wifi, ChevronDown, Star, Award, Crown,
+  Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
+  TrendingUp, Clock, Database, Search, Palette
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════
