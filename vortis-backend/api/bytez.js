@@ -756,10 +756,11 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       }
 
       // ── Helper: Try Gemini 2.0 Flash Image Gen ──
-      async function tryGemini(promptText) {
-        try {
-          const geminiKey = process.env.GEMINI_IMAGE_KEY;
-          if (!geminiKey) return null;
+     async function tryGemini(promptText) {
+  try {
+    const geminiKey = process.env.GEMINI_IMAGE_KEY;
+    console.log('Gemini key exists:', !!geminiKey, '| key preview:', geminiKey?.slice(0, 8));
+    if (!geminiKey) return null;
           const gemRes = await fetchWithTimeout(
             `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiKey}`,
             {
