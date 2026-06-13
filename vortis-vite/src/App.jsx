@@ -1994,12 +1994,16 @@ const addMsg = (type, text, speak = false) => {
     return null;
   };
 
-  const callImageAPI = async (prompt) => {
-    const seed = Math.floor(Math.random() * 999999);
-    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'image', prompt: prompt.trim(), seed }) });
-    if (!res.ok) throw new Error(`SERVICE_UNAVAILABLE:${res.status}`);
-    return await res.json();
-  };
+  const callImageAPI = async (prompt, forceGemini = false) => {
+  const seed = Math.floor(Math.random() * 999999);
+  const res = await fetch(API, { 
+    method: 'POST', 
+    headers: await getAuthHeader(), 
+    body: JSON.stringify({ action: 'image', prompt: prompt.trim(), seed, forceGemini }) 
+  });
+  if (!res.ok) throw new Error(`SERVICE_UNAVAILABLE:${res.status}`);
+  return await res.json();
+};
 
  const enrichImagePrompt = (rawPrompt, style) => {
   // Don't over-process — backend Llama will handle enrichment
@@ -2021,19 +2025,27 @@ const addMsg = (type, text, speak = false) => {
   return `${rawPrompt.trim()}, ${styleTag}, highly detailed, sharp focus, 8k resolution`;
 };
 
-  const runImageGeneration = async (imagePrompt, detectedStyle) => {
-    if (imgGenLock.current) return; imgGenLock.current = true;
-    if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
-    setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
-    pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
-    const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
-    try {
-      const imgData = await callImageAPI(enriched); const imgUrl = extractImageUrl(imgData);
-      if (imgUrl) { setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m)); setTimeout(() => addMsg('system', '💾 Images are not stored — save yours before leaving'), 500); }
-      else { setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Couldn't get an image back — try a different description." } : m)); }
-    } catch(_) { setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m)); }
-    finally { imgGenLock.current = false; setIsProcessing(false); setProcessingStatus(''); }
-  };
+  const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = false) => {
+  if (imgGenLock.current) return; imgGenLock.current = true;
+  if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
+  setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
+  pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
+  const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
+  try {
+    const imgData = await callImageAPI(enriched, forceGemini);
+    const imgUrl = extractImageUrl(imgData);
+    if (imgUrl) { 
+      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m)); 
+      setTimeout(() => addMsg('system', '💾 Images are not stored — save yours before leaving'), 500); 
+    } else { 
+      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Couldn't get an image back — try a different description." } : m)); 
+    }
+  } catch(_) { 
+    setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m)); 
+  } finally { 
+    imgGenLock.current = false; setIsProcessing(false); setProcessingStatus(''); 
+  }
+};
 
   const getAI = async (userInput, shouldSpeak) => {
     clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
@@ -2793,7 +2805,7 @@ return (
                         <span className="ai-name">VORTIS</span>
                         {starred[msg.id] && <Star size={10} color="var(--amber)" fill="var(--amber)"/>}
                       </div>
-                      <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle) : null}/></div>
+                      <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },

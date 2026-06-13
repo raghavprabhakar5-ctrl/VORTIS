@@ -722,6 +722,8 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
       if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
 
+      const forceGemini = body.forceGemini === true;
+
       // ── Helper: Try Flux Worker ──
       async function tryFlux(promptText) {
         try {
@@ -739,7 +741,7 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
           const contentType = imgRes.headers.get('content-type') || '';
           if (contentType.includes('json')) {
             const json = await imgRes.json();
-            return json?.imageUrl || json?.success ? json : null;
+            return json?.imageUrl ? json : null;
           }
           const responseText = await imgRes.text();
           try {
@@ -783,9 +785,16 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         }
       }
 
-      // ── Helper: AI decides if prompt is complex ──
+      // ── Helper: AI + keyword decides if prompt needs Gemini ──
       async function isComplexImagePrompt(promptText) {
-        if (promptText.trim().length <= 100) return false;
+        // Keyword shortcut — always Gemini for these
+        const GEMINI_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
+        if (GEMINI_KEYWORDS.test(promptText)) return true;
+
+        // Short simple prompts → Flux
+        if (promptText.trim().length <= 80) return false;
+
+        // AI judge for everything else
         try {
           const result = await Promise.race([
             groq.chat.completions.create({
@@ -793,10 +802,10 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
               messages: [
                 {
                   role:    'system',
-                  content: `You decide if an image generation prompt is COMPLEX or SIMPLE.
-COMPLEX = highly detailed scenes, specific lighting, photorealistic people, intricate compositions, multi-element scenes, technical art styles, abstract concepts.
-SIMPLE = basic objects, simple backgrounds, cartoons, icons, logos, straightforward subjects.
-Reply with ONLY one word: COMPLEX or SIMPLE.`,
+                  content: `You decide if an image prompt needs HIGH-QUALITY AI (Gemini) or BASIC AI (Flux).
+Use Gemini for: religious figures, gods, goddesses, realistic humans/faces, cinematic scenes, mythology, intricate art, portraits, epic/dramatic scenes, cultural icons, detailed illustrations.
+Use Flux for: simple objects, logos, icons, cartoons, basic backgrounds, abstract patterns, simple illustrations.
+Reply ONLY one word: GEMINI or FLUX`,
                 },
                 { role: 'user', content: promptText },
               ],
@@ -805,33 +814,60 @@ Reply with ONLY one word: COMPLEX or SIMPLE.`,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
           ]);
-          const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'SIMPLE';
-          return answer.includes('COMPLEX');
+          const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'FLUX';
+          return answer.includes('GEMINI');
         } catch (e) {
           console.error('Complexity check failed:', e.message);
-          return false;
+          return promptText.length > 100;
         }
       }
 
       try {
-        // ── Step 1: Always try Flux first ──
-        const fluxResult = await tryFlux(prompt);
-        if (fluxResult?.imageUrl) {
-          return res.status(200).json(fluxResult);
-        }
-
-        // ── Step 2: AI decides if complex enough for Gemini ──
-        const needsGemini = await isComplexImagePrompt(prompt);
-
-        if (needsGemini) {
-          // ── Step 3: Try Gemini ──
+        // ── forceGemini: user clicked Redo — skip Flux entirely ──
+        if (forceGemini) {
+          console.log('Force Gemini requested');
           const geminiResult = await tryGemini(prompt);
           if (geminiResult?.imageUrl) {
-            return res.status(200).json(geminiResult);
+            return res.status(200).json({ ...geminiResult, provider: 'gemini' });
+          }
+          // Gemini failed — fallback to Flux
+          const fluxFallback = await tryFlux(prompt);
+          if (fluxFallback?.imageUrl) {
+            return res.status(200).json({ ...fluxFallback, provider: 'flux' });
+          }
+          return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+        }
+
+        // ── Normal flow: check complexity first ──
+        const needsGemini = await isComplexImagePrompt(prompt);
+        console.log(`Prompt complexity: ${needsGemini ? 'GEMINI' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
+
+        if (needsGemini) {
+          // Complex prompt → Gemini first
+          const geminiResult = await tryGemini(prompt);
+          if (geminiResult?.imageUrl) {
+            return res.status(200).json({ ...geminiResult, provider: 'gemini' });
+          }
+          // Gemini failed → fallback Flux
+          console.log('Gemini failed, falling back to Flux');
+          const fluxFallback = await tryFlux(prompt);
+          if (fluxFallback?.imageUrl) {
+            return res.status(200).json({ ...fluxFallback, provider: 'flux' });
+          }
+        } else {
+          // Simple prompt → Flux first
+          const fluxResult = await tryFlux(prompt);
+          if (fluxResult?.imageUrl) {
+            return res.status(200).json({ ...fluxResult, provider: 'flux' });
+          }
+          // Flux failed → try Gemini anyway
+          console.log('Flux failed, trying Gemini as fallback');
+          const geminiResult = await tryGemini(prompt);
+          if (geminiResult?.imageUrl) {
+            return res.status(200).json({ ...geminiResult, provider: 'gemini' });
           }
         }
 
-        // Both failed or simple prompt that Flux couldn't handle
         return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
 
       } catch (error) {
