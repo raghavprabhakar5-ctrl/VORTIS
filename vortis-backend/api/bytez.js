@@ -762,6 +762,7 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
     const seed = Math.floor(Math.random() * 999999);
     const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true&model=flux-pro`;
 
+    console.log('Trying Pollinations:', url.slice(0, 80));
     const imgRes = await fetchWithTimeout(url, { method: 'GET' }, 30000);
     console.log('Pollinations status:', imgRes.status);
     if (!imgRes.ok) return null;
