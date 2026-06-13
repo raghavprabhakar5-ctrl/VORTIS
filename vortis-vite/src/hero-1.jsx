@@ -676,7 +676,7 @@ function Logos() {
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 140, zIndex: 2, background: "linear-gradient(to right,#03030a,transparent)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 140, zIndex: 2, background: "linear-gradient(to left,#03030a,transparent)", pointerEvents: "none" }} />
       <p style={{ textAlign: "center", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.28)", marginBottom: 28, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", opacity: inView ? 1 : 0, transition: "opacity 0.8s ease" }}>
-        ♥ LOVED BY LEADING TEAMS
+        💜 LOVED BY LEADING TEAMS
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, opacity: inView ? 1 : 0, transition: "opacity 1s 0.2s ease" }}>
         <MarqueeRow items={ROW1} reverse={false} />
