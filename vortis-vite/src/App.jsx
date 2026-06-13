@@ -19,7 +19,8 @@ import {
   ThumbsUp, ThumbsDown, RefreshCw,
   AlertTriangle, Layers,
   BookOpen, PenTool,
-  Shield, Lock, Cpu, Edit2, Brain, Trash2
+  Shield, Lock, Cpu, Edit2, Brain, Trash2,
+  Gem  
 } from 'lucide-react';
 
 
@@ -3037,7 +3038,9 @@ onChange={e => {
                     <div key={plan.tier} className={`plan-card ${plan.popular ? 'featured' : ''}`} style={{ position: 'relative' }}>
                       {plan.popular && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,var(--indigo),var(--violet))', padding: '3px 14px', borderRadius: 20, fontSize: 10.5, color: 'white', fontFamily: 'JetBrains Mono', fontWeight: 700, whiteSpace: 'nowrap' }}>Most popular</div>}
                       <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                        <Crown size={18} color={plan.popular ? 'var(--indigo)' : 'var(--text3)'} style={{ margin: '0 auto 10px' }}/>
+                        {plan.tier === 'silver' && <Star size={18} color="#94a3b8" fill="#94a3b8" style={{ margin: '0 auto 10px', display: 'block' }}/>}
+{plan.tier === 'gold' && <Crown size={18} color="#fbbf24" fill="#fbbf24" style={{ margin: '0 auto 10px', display: 'block' }}/>}
+{plan.tier === 'platinum' && <Gem size={18} color="#06b6d4" fill="#06b6d4" style={{ margin: '0 auto 10px', display: 'block' }}/>}
                         <h3 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{plan.name}</h3>
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                           {plan.durations.map((d, i) => (
@@ -3070,7 +3073,9 @@ onChange={e => {
           <div className="modal-box" style={{ maxWidth: 380 }}>
             <button className="modal-close" onClick={() => setShowPayment(false)}><X size={13}/></button>
             <div style={{ textAlign: 'center', marginBottom: 18 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}><Crown size={22} color="var(--indigo)"/></div>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>{selectedPlan?.tier === 'silver' && <Star size={22} color="#94a3b8" fill="#94a3b8"/>}
+{selectedPlan?.tier === 'gold' && <Crown size={22} color="#fbbf24" fill="#fbbf24"/>}
+{selectedPlan?.tier === 'platinum' && <Gem size={22} color="#06b6d4" fill="#06b6d4"/>}</div>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>{selectedPlan?.name} Plan</h3>
               <p style={{ fontSize: 26, fontWeight: 800, color: 'var(--indigo)', fontFamily: 'JetBrains Mono' }}>{selectedPlan?.price}</p>
               <p style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedPlan?.label}</p>
