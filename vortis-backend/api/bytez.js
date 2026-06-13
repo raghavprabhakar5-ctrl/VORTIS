@@ -756,37 +756,38 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       }
 
       // ── Helper: Try Gemini 2.0 Flash Image Gen ──
-    async function tryGemini(promptText) {
+   async function tryGemini(promptText) {
   try {
     const geminiKey = process.env.GEMINI_IMAGE_KEY;
     console.log('Gemini key exists:', !!geminiKey);
     if (!geminiKey) return null;
+
     const gemRes = await fetchWithTimeout(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
       {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText.trim() }] }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+          instances: [{ prompt: promptText.trim() }],
+          parameters: { sampleCount: 1 },
         }),
       },
       30000
     );
-    // ── ADD THESE LOGS ──
+
     console.log('Gemini status:', gemRes.status);
     if (!gemRes.ok) {
       const errText = await gemRes.text();
       console.log('Gemini error body:', errText.slice(0, 500));
       return null;
     }
-    const data  = await gemRes.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    console.log('Gemini parts count:', parts.length, '| has image:', parts.some(p => p.inlineData?.mimeType?.startsWith('image/')));
-    const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
-    if (!imagePart?.inlineData?.data) return null;
-    const mime = imagePart.inlineData.mimeType || 'image/png';
-    return { success: true, imageUrl: `data:${mime};base64,${imagePart.inlineData.data}` };
+
+    const data = await gemRes.json();
+    const b64  = data?.predictions?.[0]?.bytesBase64Encoded;
+    console.log('Gemini image received:', !!b64);
+    if (!b64) return null;
+    return { success: true, imageUrl: `data:image/png;base64,${b64}` };
+
   } catch (e) {
     console.error('Gemini image failed:', e.message);
     return null;
