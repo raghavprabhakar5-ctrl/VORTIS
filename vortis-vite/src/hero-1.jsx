@@ -495,7 +495,7 @@ export function Hero({ onLogin, authLoading, authError }) {
 
         {/* Stats */}
         <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.7s 0.8s ease both" }}>
-          {[["50K+", "Users"], ["10B+", "Tokens/mo"], ["4.9★", "Rating"]].map(([n, l]) => (
+          {[["50K+", "Users"], ["99.9%", "Uptime"], ["4.9★", "Rating"]].map(([n, l]) => (
             <div key={l}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 24, background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{n}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{l}</div>
