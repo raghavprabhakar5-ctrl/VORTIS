@@ -758,32 +758,57 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       // ── Helper: Try Gemini 2.0 Flash Image Gen ──
    async function tryGemini(promptText) {
   try {
-    const encoded = encodeURIComponent(promptText.trim());
-    const seed = Math.floor(Math.random() * 999999);
-    const models = ['flux', 'turbo'];
+    const geminiKey = process.env.GEMINI_IMAGE_KEY;
+    if (!geminiKey) return null;
+
+    // gemini-2.0-flash-exp supports image generation free — 500/day
+    const models = [
+      'gemini-2.0-flash-exp-image-generation',
+      'gemini-2.0-flash-thinking-exp',
+    ];
 
     for (const model of models) {
       try {
-        const url = `https://gen.pollinations.ai/image/${encoded}?width=1024&height=1024&seed=${seed}&model=${model}`;
-        console.log(`Trying Pollinations model: ${model}`);
-        const imgRes = await fetchWithTimeout(url, { method: 'GET' }, 30000);
-        console.log(`Pollinations ${model} status:`, imgRes.status);
-        if (!imgRes.ok) continue;
+        console.log('Trying Gemini model:', model);
+        const gemRes = await fetchWithTimeout(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptText.trim() }] }],
+              generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+            }),
+          },
+          30000
+        );
 
-        const buffer = await imgRes.arrayBuffer();
-        const b64 = Buffer.from(buffer).toString('base64');
-        if (!b64 || b64.length < 100) continue;
+        console.log(`Gemini ${model} status:`, gemRes.status);
+        if (!gemRes.ok) {
+          const err = await gemRes.text();
+          console.log(`Gemini ${model} error:`, err.slice(0, 200));
+          continue;
+        }
 
-        console.log(`Pollinations ${model} ✅`);
-        return { success: true, imageUrl: `data:image/jpeg;base64,${b64}` };
+        const data  = await gemRes.json();
+        const parts = data?.candidates?.[0]?.content?.parts || [];
+        const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+        if (!imagePart?.inlineData?.data) {
+          console.log(`Gemini ${model} — no image in response`);
+          continue;
+        }
+
+        const mime = imagePart.inlineData.mimeType || 'image/png';
+        console.log(`Gemini ${model} image received ✅`);
+        return { success: true, imageUrl: `data:${mime};base64,${imagePart.inlineData.data}` };
       } catch (e) {
-        console.log(`Model ${model} failed:`, e.message);
+        console.log(`Gemini ${model} failed:`, e.message);
         continue;
       }
     }
     return null;
   } catch (e) {
-    console.error('Pollinations failed:', e.message);
+    console.error('Gemini image failed:', e.message);
     return null;
   }
 }
