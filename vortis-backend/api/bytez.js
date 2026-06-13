@@ -715,32 +715,128 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       }
     }
 
-    // ╔══════════════════════════════════════╗
+ // ╔══════════════════════════════════════╗
     // ║  IMAGE GENERATION                    ║
     // ╚══════════════════════════════════════╝
     if (action === 'image') {
       if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
       if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
+
+      // ── Helper: Try Flux Worker ──
+      async function tryFlux(promptText) {
+        try {
+          const seed   = Math.floor(Math.random() * 999999);
+          const imgRes = await fetchWithTimeout(
+            `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
+              body:    JSON.stringify({ prompt: promptText.trim(), model: 'flux', seed }),
+            },
+            25000
+          );
+          if (!imgRes.ok) return null;
+          const contentType = imgRes.headers.get('content-type') || '';
+          if (contentType.includes('json')) {
+            const json = await imgRes.json();
+            return json?.imageUrl || json?.success ? json : null;
+          }
+          const responseText = await imgRes.text();
+          try {
+            return JSON.parse(responseText);
+          } catch {
+            return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
+          }
+        } catch (e) {
+          console.error('Flux failed:', e.message);
+          return null;
+        }
+      }
+
+      // ── Helper: Try Gemini 2.0 Flash Image Gen ──
+      async function tryGemini(promptText) {
+        try {
+          const geminiKey = process.env.GEMINI_IMAGE_KEY;
+          if (!geminiKey) return null;
+          const gemRes = await fetchWithTimeout(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${geminiKey}`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText.trim() }] }],
+                generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+              }),
+            },
+            30000
+          );
+          if (!gemRes.ok) return null;
+          const data  = await gemRes.json();
+          const parts = data?.candidates?.[0]?.content?.parts || [];
+          const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+          if (!imagePart?.inlineData?.data) return null;
+          const mime = imagePart.inlineData.mimeType || 'image/png';
+          return { success: true, imageUrl: `data:${mime};base64,${imagePart.inlineData.data}` };
+        } catch (e) {
+          console.error('Gemini image failed:', e.message);
+          return null;
+        }
+      }
+
+      // ── Helper: AI decides if prompt is complex ──
+      async function isComplexImagePrompt(promptText) {
+        if (promptText.trim().length <= 100) return false;
+        try {
+          const result = await Promise.race([
+            groq.chat.completions.create({
+              model:    GROQ_CHAT_PRIMARY,
+              messages: [
+                {
+                  role:    'system',
+                  content: `You decide if an image generation prompt is COMPLEX or SIMPLE.
+COMPLEX = highly detailed scenes, specific lighting, photorealistic people, intricate compositions, multi-element scenes, technical art styles, abstract concepts.
+SIMPLE = basic objects, simple backgrounds, cartoons, icons, logos, straightforward subjects.
+Reply with ONLY one word: COMPLEX or SIMPLE.`,
+                },
+                { role: 'user', content: promptText },
+              ],
+              max_tokens:  5,
+              temperature: 0,
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+          ]);
+          const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'SIMPLE';
+          return answer.includes('COMPLEX');
+        } catch (e) {
+          console.error('Complexity check failed:', e.message);
+          return false;
+        }
+      }
+
       try {
-        const seed   = Math.floor(Math.random() * 999999);
-        const imgRes = await fetchWithTimeout(
-          `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
-          {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
-            body:    JSON.stringify({ prompt: prompt.trim(), model: 'flux', seed }),
-          },
-          25000
-        );
-        if (!imgRes.ok) throw new Error(`Worker: ${imgRes.status}`);
-        const contentType = imgRes.headers.get('content-type') || '';
-        if (contentType.includes('json')) return res.status(200).json(await imgRes.json());
-        const responseText = await imgRes.text();
-        try { return res.status(200).json(JSON.parse(responseText)); }
-        catch { return res.status(200).json({ success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` }); }
+        // ── Step 1: Always try Flux first ──
+        const fluxResult = await tryFlux(prompt);
+        if (fluxResult?.imageUrl || fluxResult?.success) {
+          return res.status(200).json(fluxResult);
+        }
+
+        // ── Step 2: AI decides if complex enough for Gemini ──
+        const needsGemini = await isComplexImagePrompt(prompt);
+
+        if (needsGemini) {
+          // ── Step 3: Try Gemini ──
+          const geminiResult = await tryGemini(prompt);
+          if (geminiResult?.imageUrl) {
+            return res.status(200).json(geminiResult);
+          }
+        }
+
+        // Both failed or simple prompt that Flux couldn't handle
+        return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+
       } catch (error) {
         console.error('IMAGE GEN ERROR:', error.message);
-        return res.status(500).json({ error: 'Image generation failed' });
+        return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
       }
     }
 
