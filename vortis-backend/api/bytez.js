@@ -760,13 +760,11 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
   try {
     const encoded = encodeURIComponent(promptText.trim());
     const seed = Math.floor(Math.random() * 999999);
-    
-    // Try seedream first (best free quality)
-    const models = ['seedream', 'nanobanana', 'flux'];
-    
+    const models = ['flux', 'turbo'];
+
     for (const model of models) {
       try {
-        const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true&model=${model}`;
+        const url = `https://gen.pollinations.ai/image/${encoded}?width=1024&height=1024&seed=${seed}&model=${model}`;
         console.log(`Trying Pollinations model: ${model}`);
         const imgRes = await fetchWithTimeout(url, { method: 'GET' }, 30000);
         console.log(`Pollinations ${model} status:`, imgRes.status);
@@ -776,7 +774,7 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         const b64 = Buffer.from(buffer).toString('base64');
         if (!b64 || b64.length < 100) continue;
 
-        console.log(`Pollinations ${model} image received ✅`);
+        console.log(`Pollinations ${model} ✅`);
         return { success: true, imageUrl: `data:image/jpeg;base64,${b64}` };
       } catch (e) {
         console.log(`Model ${model} failed:`, e.message);
