@@ -760,19 +760,30 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
   try {
     const encoded = encodeURIComponent(promptText.trim());
     const seed = Math.floor(Math.random() * 999999);
-    const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true&model=flux-pro`;
+    
+    // Try seedream first (best free quality)
+    const models = ['seedream', 'nanobanana', 'flux'];
+    
+    for (const model of models) {
+      try {
+        const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true&model=${model}`;
+        console.log(`Trying Pollinations model: ${model}`);
+        const imgRes = await fetchWithTimeout(url, { method: 'GET' }, 30000);
+        console.log(`Pollinations ${model} status:`, imgRes.status);
+        if (!imgRes.ok) continue;
 
-    console.log('Trying Pollinations:', url.slice(0, 80));
-    const imgRes = await fetchWithTimeout(url, { method: 'GET' }, 30000);
-    console.log('Pollinations status:', imgRes.status);
-    if (!imgRes.ok) return null;
+        const buffer = await imgRes.arrayBuffer();
+        const b64 = Buffer.from(buffer).toString('base64');
+        if (!b64 || b64.length < 100) continue;
 
-    const buffer = await imgRes.arrayBuffer();
-    const b64 = Buffer.from(buffer).toString('base64');
-    if (!b64 || b64.length < 100) return null;
-
-    console.log('Pollinations image received ✅');
-    return { success: true, imageUrl: `data:image/jpeg;base64,${b64}` };
+        console.log(`Pollinations ${model} image received ✅`);
+        return { success: true, imageUrl: `data:image/jpeg;base64,${b64}` };
+      } catch (e) {
+        console.log(`Model ${model} failed:`, e.message);
+        continue;
+      }
+    }
+    return null;
   } catch (e) {
     console.error('Pollinations failed:', e.message);
     return null;
