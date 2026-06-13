@@ -816,7 +816,7 @@ Reply with ONLY one word: COMPLEX or SIMPLE.`,
       try {
         // ── Step 1: Always try Flux first ──
         const fluxResult = await tryFlux(prompt);
-        if (fluxResult?.imageUrl || fluxResult?.success) {
+        if (fluxResult?.imageUrl) {
           return res.status(200).json(fluxResult);
         }
 
