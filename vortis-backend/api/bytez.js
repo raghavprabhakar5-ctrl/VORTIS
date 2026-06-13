@@ -758,38 +758,22 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       // ── Helper: Try Gemini 2.0 Flash Image Gen ──
    async function tryGemini(promptText) {
   try {
-    const geminiKey = process.env.GEMINI_IMAGE_KEY;
-    console.log('Gemini key exists:', !!geminiKey);
-    if (!geminiKey) return null;
+    const encoded = encodeURIComponent(promptText.trim());
+    const seed = Math.floor(Math.random() * 999999);
+    const url = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&seed=${seed}&nologo=true&enhance=true&model=flux-pro`;
 
-    const gemRes = await fetchWithTimeout(
-      `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${geminiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instances: [{ prompt: promptText.trim() }],
-          parameters: { sampleCount: 1 },
-        }),
-      },
-      30000
-    );
+    const imgRes = await fetchWithTimeout(url, { method: 'GET' }, 30000);
+    console.log('Pollinations status:', imgRes.status);
+    if (!imgRes.ok) return null;
 
-    console.log('Gemini status:', gemRes.status);
-    if (!gemRes.ok) {
-      const errText = await gemRes.text();
-      console.log('Gemini error body:', errText.slice(0, 500));
-      return null;
-    }
+    const buffer = await imgRes.arrayBuffer();
+    const b64 = Buffer.from(buffer).toString('base64');
+    if (!b64 || b64.length < 100) return null;
 
-    const data = await gemRes.json();
-    const b64  = data?.predictions?.[0]?.bytesBase64Encoded;
-    console.log('Gemini image received:', !!b64);
-    if (!b64) return null;
-    return { success: true, imageUrl: `data:image/png;base64,${b64}` };
-
+    console.log('Pollinations image received ✅');
+    return { success: true, imageUrl: `data:image/jpeg;base64,${b64}` };
   } catch (e) {
-    console.error('Gemini image failed:', e.message);
+    console.error('Pollinations failed:', e.message);
     return null;
   }
 }
