@@ -7,7 +7,7 @@ import "./index.css";
 // Firebase configuration - MUST BE BEFORE ReactDOM.render
 const firebaseConfig = {
   apiKey: "AIzaSyBaq5Eq8Spt9xt2Pezt49oSgWoLbm-SzIU",
-  authDomain: "vortis-4eb80.firebaseapp.com",
+  authDomain: "vortis-ai.vercel.app",
   projectId: "vortis-4eb80",
   storageBucket: "vortis-4eb80.firebasestorage.app",
   messagingSenderId: "163080093012",
