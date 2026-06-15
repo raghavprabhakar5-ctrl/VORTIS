@@ -1054,6 +1054,7 @@ const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
 export default function VortisAI() {
    useDevToolsGuard();
+   const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {
@@ -1496,6 +1497,7 @@ export default function VortisAI() {
 
 const saveChat = useCallback(async (msgsToSave) => {
   if (!userUidRef.current) return;
+  if (isIncognito) return; 
   try {
     const firstUser = msgsToSave.find(m => m.type === 'user');
     if (!firstUser) return;
@@ -1533,7 +1535,7 @@ const saveChat = useCallback(async (msgsToSave) => {
 
     loadChats(userUidRef.current);
   } catch(_) {}
-}, []);
+},[isIncognito]);
 
 
   const startNewChat = async () => {
@@ -2674,8 +2676,25 @@ return (
         </div>
       </div>
 
-      <div className="main">
-        <div className="header">
+     <div className="main">
+  {isIncognito && (
+    <div style={{
+      background: 'linear-gradient(135deg,rgba(99,102,241,.12),rgba(139,92,246,.08))',
+      borderBottom: '1px solid rgba(99,102,241,.3)',
+      padding: '7px 16px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      fontSize: 12,
+      color: '#9090b0',
+      fontFamily: 'JetBrains Mono',
+      flexShrink: 0
+    }}>
+      🕵️&nbsp;<strong style={{color:'#a78bfa'}}>Incognito chat</strong>
+      &nbsp;— This session won't be saved to history
+    </div>
+  )}
+  <div className="header">
           <div className="hdr-left">
             <button className="sidebar-toggle-btn" onClick={() => setShowSidebar(!showSidebar)} title="Toggle sidebar (⌘/)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
