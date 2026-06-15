@@ -602,6 +602,202 @@ const SelectionReply = ({ onReply }) => {
     </div>
   );
 };
+
+
+const CodeBlock = ({ lang, codeText }) => {
+  const [output, setOutput] = React.useState(null);
+  const [running, setRunning] = React.useState(false);
+  const [hasError, setHasError] = React.useState(false);
+  const isRunnable = lang && lang.trim().length > 0;
+
+  const runCode = async () => {
+    setRunning(true);
+    setOutput(null);
+    setHasError(false);
+
+    const LANG_MAP = {
+      python:     { language: 'python',     version: '3.10.0' },
+      py:         { language: 'python',     version: '3.10.0' },
+      javascript: { language: 'javascript', version: '18.15.0' },
+      js:         { language: 'javascript', version: '18.15.0' },
+      typescript: { language: 'typescript', version: '5.0.3' },
+      ts:         { language: 'typescript', version: '5.0.3' },
+      java:       { language: 'java',       version: '15.0.2' },
+      c:          { language: 'c',          version: '10.2.0' },
+      cpp:        { language: 'c++',        version: '10.2.0' },
+      'c++':      { language: 'c++',        version: '10.2.0' },
+      csharp:     { language: 'csharp',     version: '6.12.0' },
+      cs:         { language: 'csharp',     version: '6.12.0' },
+      go:         { language: 'go',         version: '1.16.2' },
+      rust:       { language: 'rust',       version: '1.50.0' },
+      ruby:       { language: 'ruby',       version: '3.0.1' },
+      php:        { language: 'php',        version: '8.0.2' },
+      swift:      { language: 'swift',      version: '5.3.3' },
+      kotlin:     { language: 'kotlin',     version: '1.8.20' },
+      r:          { language: 'r',          version: '4.1.1' },
+      bash:       { language: 'bash',       version: '5.1.0' },
+      sh:         { language: 'bash',       version: '5.1.0' },
+      lua:        { language: 'lua',        version: '5.4.4' },
+      perl:       { language: 'perl',       version: '5.36.0' },
+      dart:       { language: 'dart',       version: '2.19.6' },
+      scala:      { language: 'scala',      version: '3.2.2' },
+      haskell:    { language: 'haskell',    version: '9.0.1' },
+    };
+
+    const langKey = lang.toLowerCase();
+
+    if (langKey === 'html' || langKey === 'svg') {
+      setOutput({ type: 'html', content: codeText });
+      setRunning(false);
+      return;
+    }
+
+    if (langKey === 'css') {
+      const wrapped = `<!DOCTYPE html><html><head><style>${codeText}</style></head><body style="padding:20px;font-family:sans-serif;color:#888">CSS preview</body></html>`;
+      setOutput({ type: 'html', content: wrapped });
+      setRunning(false);
+      return;
+    }
+
+    const pistonLang = LANG_MAP[langKey];
+
+    if (!pistonLang) {
+      setHasError(true);
+      setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\nCode copied to clipboard.` });
+      navigator.clipboard.writeText(codeText);
+      setRunning(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: pistonLang.language,
+          version: pistonLang.version,
+          files: [{ content: codeText }],
+        }),
+      });
+
+      const data = await res.json();
+      const stdout = data.run?.stdout || '';
+      const stderr = data.run?.stderr || '';
+      const combined = (stdout + stderr).trim() || 'No output.';
+      const isErr = !!stderr && !stdout;
+
+      setHasError(isErr);
+      setOutput({ type: 'text', content: combined });
+    } catch (err) {
+      setHasError(true);
+      setOutput({ type: 'text', content: 'Could not reach the code runner. Check your internet connection.' });
+    }
+
+    setRunning(false);
+  };
+
+  return (
+    <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {isRunnable && (
+            <button
+              onClick={runCode}
+              disabled={running}
+              style={{
+                background: running ? 'rgba(99,102,241,.1)' : 'rgba(16,185,129,.12)',
+                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
+                color: running ? 'var(--indigo)' : '#10b981',
+                fontFamily: 'JetBrains Mono',
+                fontSize: 11,
+                padding: '3px 10px',
+                borderRadius: 6,
+                cursor: running ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'all .15s',
+              }}
+            >
+              {running ? (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  Running...
+                </>
+              ) : (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981">
+                    <polygon points="5,3 19,12 5,21"/>
+                  </svg>
+                  Run
+                </>
+              )}
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              navigator.clipboard.writeText(codeText).then(() => {
+                e.target.textContent = 'Copied!';
+                e.target.style.color = '#10b981';
+                setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
+              });
+            }}
+            style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+
+      {/* Code */}
+      <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <code>{codeText}</code>
+      </pre>
+
+      {/* Inline Output Panel */}
+      {output && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: hasError ? 'rgba(239,68,68,.06)' : 'rgba(16,185,129,.06)', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: hasError ? '#ef4444' : '#10b981' }}/>
+              <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: hasError ? '#ef4444' : '#10b981', fontWeight: 700, letterSpacing: '.06em' }}>
+                {hasError ? 'ERROR' : 'OUTPUT'}
+              </span>
+            </div>
+            <button
+              onClick={() => { setOutput(null); setHasError(false); }}
+              style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 5, transition: 'all .12s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          {output.type === 'html' ? (
+            <iframe
+              srcDoc={output.content}
+              style={{ width: '100%', height: 320, border: 'none', background: 'white', display: 'block' }}
+              sandbox="allow-scripts"
+              title="Code output"
+            />
+          ) : (
+            <pre style={{ margin: 0, padding: '14px 16px', background: '#080810', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.75, color: hasError ? '#f87171' : '#a5f3fc', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
+              {output.content}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -726,10 +922,6 @@ const MsgContent = ({ text, onRetryImage }) => {
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
   const codeText = String(children).replace(/\n$/, '');
-  const isRunnable = lang && lang.trim().length > 0;
-  const [output, setOutput] = React.useState(null);
-  const [running, setRunning] = React.useState(false);
-  const [hasError, setHasError] = React.useState(false);
 
   if (inline) {
     return (
@@ -739,196 +931,7 @@ const MsgContent = ({ text, onRetryImage }) => {
     );
   }
 
-  const runCode = async () => {
-    setRunning(true);
-    setOutput(null);
-    setHasError(false);
-
-    const LANG_MAP = {
-      python:     { language: 'python',     version: '3.10.0' },
-      py:         { language: 'python',     version: '3.10.0' },
-      javascript: { language: 'javascript', version: '18.15.0' },
-      js:         { language: 'javascript', version: '18.15.0' },
-      typescript: { language: 'typescript', version: '5.0.3' },
-      ts:         { language: 'typescript', version: '5.0.3' },
-      java:       { language: 'java',       version: '15.0.2' },
-      c:          { language: 'c',          version: '10.2.0' },
-      cpp:        { language: 'c++',        version: '10.2.0' },
-      'c++':      { language: 'c++',        version: '10.2.0' },
-      csharp:     { language: 'csharp',     version: '6.12.0' },
-      cs:         { language: 'csharp',     version: '6.12.0' },
-      go:         { language: 'go',         version: '1.16.2' },
-      rust:       { language: 'rust',       version: '1.50.0' },
-      ruby:       { language: 'ruby',       version: '3.0.1' },
-      php:        { language: 'php',        version: '8.0.2' },
-      swift:      { language: 'swift',      version: '5.3.3' },
-      kotlin:     { language: 'kotlin',     version: '1.8.20' },
-      r:          { language: 'r',          version: '4.1.1' },
-      bash:       { language: 'bash',       version: '5.1.0' },
-      sh:         { language: 'bash',       version: '5.1.0' },
-      lua:        { language: 'lua',        version: '5.4.4' },
-      perl:       { language: 'perl',       version: '5.36.0' },
-      dart:       { language: 'dart',       version: '2.19.6' },
-      scala:      { language: 'scala',      version: '3.2.2' },
-      haskell:    { language: 'haskell',    version: '9.0.1' },
-    };
-
-    const langKey = lang.toLowerCase();
-
-    // HTML/SVG — render in iframe inline
-    if (langKey === 'html' || langKey === 'svg') {
-      setOutput({ type: 'html', content: codeText });
-      setRunning(false);
-      return;
-    }
-
-    // CSS preview
-    if (langKey === 'css') {
-      const wrapped = `<!DOCTYPE html><html><head><style>${codeText}</style></head><body style="padding:20px;font-family:sans-serif;color:#888">CSS preview</body></html>`;
-      setOutput({ type: 'html', content: wrapped });
-      setRunning(false);
-      return;
-    }
-
-    const pistonLang = LANG_MAP[langKey];
-
-    if (!pistonLang) {
-      setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\n\nCode copied to clipboard — paste it at replit.com` });
-      setHasError(true);
-      navigator.clipboard.writeText(codeText);
-      setRunning(false);
-      return;
-    }
-
-    try {
-      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: pistonLang.language,
-          version: pistonLang.version,
-          files: [{ content: codeText }],
-        }),
-      });
-
-      const data = await res.json();
-      const stdout = data.run?.stdout || '';
-      const stderr = data.run?.stderr || '';
-      const combined = (stdout + stderr).trim() || 'No output.';
-      const isErr = !!stderr && !stdout;
-
-      setHasError(isErr);
-      setOutput({ type: 'text', content: combined });
-    } catch (err) {
-      setHasError(true);
-      setOutput({ type: 'text', content: 'Could not reach the code runner. Check your internet connection.' });
-    }
-
-    setRunning(false);
-  };
-
-  return (
-    <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {isRunnable && (
-            <button
-              onClick={runCode}
-              disabled={running}
-              style={{
-                background: running ? 'rgba(99,102,241,.1)' : 'rgba(16,185,129,.12)',
-                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
-                color: running ? 'var(--indigo)' : '#10b981',
-                fontFamily: 'JetBrains Mono',
-                fontSize: 11,
-                padding: '3px 10px',
-                borderRadius: 6,
-                cursor: running ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 5,
-                transition: 'all .15s',
-              }}
-            >
-              {running ? (
-                <>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                  </svg>
-                  Running...
-                </>
-              ) : (
-                <>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981">
-                    <polygon points="5,3 19,12 5,21"/>
-                  </svg>
-                  Run
-                </>
-              )}
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              navigator.clipboard.writeText(codeText).then(() => {
-                e.target.textContent = 'Copied!';
-                e.target.style.color = '#10b981';
-                setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
-              });
-            }}
-            style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
-          >
-            Copy
-          </button>
-        </div>
-      </div>
-
-      {/* Code */}
-      <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-        <code>{codeText}</code>
-      </pre>
-
-      {/* Output Panel — inline inside Vortis */}
-      {output && (
-        <div style={{ borderTop: '1px solid var(--border)' }}>
-          {/* Output Header */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: hasError ? 'rgba(239,68,68,.06)' : 'rgba(16,185,129,.06)', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: hasError ? '#ef4444' : '#10b981' }}/>
-              <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: hasError ? '#ef4444' : '#10b981', fontWeight: 700, letterSpacing: '.06em' }}>
-                {hasError ? 'ERROR' : 'OUTPUT'}
-              </span>
-            </div>
-            <button
-              onClick={() => { setOutput(null); setHasError(false); }}
-              style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 5, transition: 'all .12s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-              </svg>
-            </button>
-          </div>
-
-          {/* Output Content */}
-          {output.type === 'html' ? (
-            <iframe
-              srcDoc={output.content}
-              style={{ width: '100%', height: 320, border: 'none', background: 'white', display: 'block' }}
-              sandbox="allow-scripts"
-              title="Code output"
-            />
-          ) : (
-            <pre style={{ margin: 0, padding: '14px 16px', background: '#080810', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.75, color: hasError ? '#f87171' : '#a5f3fc', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
-              {output.content}
-            </pre>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  return <CodeBlock lang={lang} codeText={codeText} />;
 },
 
           // Table
