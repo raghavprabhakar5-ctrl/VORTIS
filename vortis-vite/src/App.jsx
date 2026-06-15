@@ -697,10 +697,17 @@ try {
 });
 
   const data = await res.json();
-  const stdout = data.run?.stdout || '';
-  const stderr = data.run?.stderr || '';
-  const combined = (stdout + stderr).trim() || 'No output.';
-  const isErr = !!stderr && !stdout;
+ const output = data.run?.output || '';
+const stderr = data.run?.stderr || '';
+
+const combined = (output || stderr).trim() || 'No output.';
+const isErr = !!stderr;
+
+setHasError(isErr);
+setOutput({
+  type: 'text',
+  content: combined
+});
 
   setHasError(isErr);
   setOutput({ type: 'text', content: combined });
