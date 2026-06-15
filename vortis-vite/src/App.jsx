@@ -727,6 +727,9 @@ const MsgContent = ({ text, onRetryImage }) => {
   const lang = match ? match[1] : '';
   const codeText = String(children).replace(/\n$/, '');
   const isRunnable = lang && lang.trim().length > 0;
+  const [output, setOutput] = React.useState(null);
+  const [running, setRunning] = React.useState(false);
+  const [hasError, setHasError] = React.useState(false);
 
   if (inline) {
     return (
@@ -736,71 +739,64 @@ const MsgContent = ({ text, onRetryImage }) => {
     );
   }
 
-  const runCode = async (e) => {
-    const btn = e.currentTarget;
-    const originalContent = btn.innerHTML;
-    btn.innerHTML = '⏳ Running...';
-    btn.disabled = true;
+  const runCode = async () => {
+    setRunning(true);
+    setOutput(null);
+    setHasError(false);
 
     const LANG_MAP = {
-      python: { language: 'python', version: '3.10.0' },
-      py:     { language: 'python', version: '3.10.0' },
+      python:     { language: 'python',     version: '3.10.0' },
+      py:         { language: 'python',     version: '3.10.0' },
       javascript: { language: 'javascript', version: '18.15.0' },
-      js:     { language: 'javascript', version: '18.15.0' },
+      js:         { language: 'javascript', version: '18.15.0' },
       typescript: { language: 'typescript', version: '5.0.3' },
-      ts:     { language: 'typescript', version: '5.0.3' },
-      java:   { language: 'java', version: '15.0.2' },
-      c:      { language: 'c', version: '10.2.0' },
-      cpp:    { language: 'c++', version: '10.2.0' },
-      'c++':  { language: 'c++', version: '10.2.0' },
-      csharp: { language: 'csharp', version: '6.12.0' },
-      cs:     { language: 'csharp', version: '6.12.0' },
-      go:     { language: 'go', version: '1.16.2' },
-      rust:   { language: 'rust', version: '1.50.0' },
-      ruby:   { language: 'ruby', version: '3.0.1' },
-      php:    { language: 'php', version: '8.0.2' },
-      swift:  { language: 'swift', version: '5.3.3' },
-      kotlin: { language: 'kotlin', version: '1.8.20' },
-      r:      { language: 'r', version: '4.1.1' },
-      bash:   { language: 'bash', version: '5.1.0' },
-      sh:     { language: 'bash', version: '5.1.0' },
-      lua:    { language: 'lua', version: '5.4.4' },
-      perl:   { language: 'perl', version: '5.36.0' },
-      dart:   { language: 'dart', version: '2.19.6' },
-      scala:  { language: 'scala', version: '3.2.2' },
-      haskell:{ language: 'haskell', version: '9.0.1' },
+      ts:         { language: 'typescript', version: '5.0.3' },
+      java:       { language: 'java',       version: '15.0.2' },
+      c:          { language: 'c',          version: '10.2.0' },
+      cpp:        { language: 'c++',        version: '10.2.0' },
+      'c++':      { language: 'c++',        version: '10.2.0' },
+      csharp:     { language: 'csharp',     version: '6.12.0' },
+      cs:         { language: 'csharp',     version: '6.12.0' },
+      go:         { language: 'go',         version: '1.16.2' },
+      rust:       { language: 'rust',       version: '1.50.0' },
+      ruby:       { language: 'ruby',       version: '3.0.1' },
+      php:        { language: 'php',        version: '8.0.2' },
+      swift:      { language: 'swift',      version: '5.3.3' },
+      kotlin:     { language: 'kotlin',     version: '1.8.20' },
+      r:          { language: 'r',          version: '4.1.1' },
+      bash:       { language: 'bash',       version: '5.1.0' },
+      sh:         { language: 'bash',       version: '5.1.0' },
+      lua:        { language: 'lua',        version: '5.4.4' },
+      perl:       { language: 'perl',       version: '5.36.0' },
+      dart:       { language: 'dart',       version: '2.19.6' },
+      scala:      { language: 'scala',      version: '3.2.2' },
+      haskell:    { language: 'haskell',    version: '9.0.1' },
     };
 
     const langKey = lang.toLowerCase();
 
-    // HTML/SVG — run directly in browser
+    // HTML/SVG — render in iframe inline
     if (langKey === 'html' || langKey === 'svg') {
-      const win = window.open('', '_blank');
-      win.document.write(codeText);
-      win.document.close();
-      btn.innerHTML = originalContent;
-      btn.disabled = false;
+      setOutput({ type: 'html', content: codeText });
+      setRunning(false);
       return;
     }
 
-    // CSS — preview in browser
+    // CSS preview
     if (langKey === 'css') {
-      const win = window.open('', '_blank');
-      win.document.write(`<!DOCTYPE html><html><head><style>${codeText}</style></head><body style="padding:20px;font-family:sans-serif;color:#888">CSS loaded.</body></html>`);
-      win.document.close();
-      btn.innerHTML = originalContent;
-      btn.disabled = false;
+      const wrapped = `<!DOCTYPE html><html><head><style>${codeText}</style></head><body style="padding:20px;font-family:sans-serif;color:#888">CSS preview</body></html>`;
+      setOutput({ type: 'html', content: wrapped });
+      setRunning(false);
       return;
     }
 
     const pistonLang = LANG_MAP[langKey];
 
-    // Unknown language — copy and open replit
     if (!pistonLang) {
+      setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\n\nCode copied to clipboard — paste it at replit.com` });
+      setHasError(true);
       navigator.clipboard.writeText(codeText);
-      window.open('https://replit.com/languages/' + langKey, '_blank');
-      btn.innerHTML = originalContent;
-      btn.disabled = false;
+      setRunning(false);
       return;
     }
 
@@ -816,70 +812,61 @@ const MsgContent = ({ text, onRetryImage }) => {
       });
 
       const data = await res.json();
-      const output = data.run?.output || data.run?.stderr || 'No output.';
-      const hasError = !!data.run?.stderr && !data.run?.stdout;
+      const stdout = data.run?.stdout || '';
+      const stderr = data.run?.stderr || '';
+      const combined = (stdout + stderr).trim() || 'No output.';
+      const isErr = !!stderr && !stdout;
 
-      const outputWin = window.open('', '_blank');
-      outputWin.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <title>Vortis — ${pistonLang.language} output</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #080810; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; min-height: 100vh; display: flex; flex-direction: column; }
-    .header { background: #0d0d18; border-bottom: 1px solid #1e1e35; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; }
-    .lang-badge { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); color: #818cf8; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
-    .status { margin-left: auto; font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 700; }
-    .ok  { background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3); color: #10b981; }
-    .err { background: rgba(239,68,68,.1);  border: 1px solid rgba(239,68,68,.3);  color: #ef4444; }
-    .output { flex: 1; padding: 24px; white-space: pre-wrap; word-break: break-all; font-size: 14px; line-height: 1.8; color: ${hasError ? '#f87171' : '#a5f3fc'}; }
-    .footer { background: #0d0d18; border-top: 1px solid #1e1e35; padding: 10px 20px; font-size: 11px; color: #555575; text-align: center; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="dot" style="background:${hasError ? '#ef4444' : '#10b981'}"></div>
-    <span class="lang-badge">${pistonLang.language}</span>
-    <span class="status ${hasError ? 'err' : 'ok'}">${hasError ? '✕ Error' : '✓ Success'}</span>
-  </div>
-  <div class="output">${output.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
-  <div class="footer">Powered by Piston · Vortis AI</div>
-</body>
-</html>`);
-      outputWin.document.close();
-
+      setHasError(isErr);
+      setOutput({ type: 'text', content: combined });
     } catch (err) {
-      alert('Could not reach the code runner. Check your internet connection.');
+      setHasError(true);
+      setOutput({ type: 'text', content: 'Could not reach the code runner. Check your internet connection.' });
     }
 
-    btn.innerHTML = originalContent;
-    btn.disabled = false;
+    setRunning(false);
   };
 
   return (
     <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
         <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {isRunnable && (
             <button
               onClick={runCode}
+              disabled={running}
               style={{
-                background: 'rgba(16,185,129,.12)',
-                border: '1px solid rgba(16,185,129,.3)',
-                color: '#10b981',
+                background: running ? 'rgba(99,102,241,.1)' : 'rgba(16,185,129,.12)',
+                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
+                color: running ? 'var(--indigo)' : '#10b981',
                 fontFamily: 'JetBrains Mono',
                 fontSize: 11,
                 padding: '3px 10px',
                 borderRadius: 6,
-                cursor: 'pointer',
+                cursor: running ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 4,
+                gap: 5,
+                transition: 'all .15s',
               }}
             >
-              ▶ Run
+              {running ? (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  Running...
+                </>
+              ) : (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981">
+                    <polygon points="5,3 19,12 5,21"/>
+                  </svg>
+                  Run
+                </>
+              )}
             </button>
           )}
           <button
@@ -896,9 +883,50 @@ const MsgContent = ({ text, onRetryImage }) => {
           </button>
         </div>
       </div>
+
+      {/* Code */}
       <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         <code>{codeText}</code>
       </pre>
+
+      {/* Output Panel — inline inside Vortis */}
+      {output && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          {/* Output Header */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: hasError ? 'rgba(239,68,68,.06)' : 'rgba(16,185,129,.06)', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div style={{ width: 7, height: 7, borderRadius: '50%', background: hasError ? '#ef4444' : '#10b981' }}/>
+              <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: hasError ? '#ef4444' : '#10b981', fontWeight: 700, letterSpacing: '.06em' }}>
+                {hasError ? 'ERROR' : 'OUTPUT'}
+              </span>
+            </div>
+            <button
+              onClick={() => { setOutput(null); setHasError(false); }}
+              style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 5, transition: 'all .12s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* Output Content */}
+          {output.type === 'html' ? (
+            <iframe
+              srcDoc={output.content}
+              style={{ width: '100%', height: 320, border: 'none', background: 'white', display: 'block' }}
+              sandbox="allow-scripts"
+              title="Code output"
+            />
+          ) : (
+            <pre style={{ margin: 0, padding: '14px 16px', background: '#080810', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.75, color: hasError ? '#f87171' : '#a5f3fc', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
+              {output.content}
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   );
 },
