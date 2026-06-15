@@ -637,7 +637,7 @@ const CodeBlock = ({ lang, codeText }) => {
   scala: 'scala',
   haskell: 'haskell',
 };
-    const langKey = lang.toLowerCase();
+   const langKey = (lang || '').toLowerCase().trim();
 
     if (langKey === 'html' || langKey === 'svg') {
       setOutput({ type: 'html', content: codeText });
@@ -705,10 +705,17 @@ try {
   setHasError(isErr);
   setOutput({ type: 'text', content: combined });
 } catch (err) {
+  console.error(err);
+
   setHasError(true);
-  setOutput({ type: 'text', content: 'Could not reach the code runner. Check your internet connection and try again.' });
+  setOutput({
+    type: 'text',
+    content: String(err?.message || err)
+  });
 }
-    setRunning(false);
+   finally {
+  setRunning(false);
+}
   };
 
   return (
