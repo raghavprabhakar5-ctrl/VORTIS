@@ -726,7 +726,7 @@ const MsgContent = ({ text, onRetryImage }) => {
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
   const codeText = String(children).replace(/\n$/, '');
-  const isRunnable = ['html', 'javascript', 'js', 'css', 'svg'].includes(lang.toLowerCase());
+  const isRunnable = lang && lang.trim().length > 0;
 
   if (inline) {
     return (
@@ -736,16 +736,125 @@ const MsgContent = ({ text, onRetryImage }) => {
     );
   }
 
-  const runCode = () => {
-    let html = codeText;
-    if (lang === 'javascript' || lang === 'js') {
-      html = `<!DOCTYPE html><html><body><script>${codeText}<\/script></body></html>`;
-    } else if (lang === 'css') {
-      html = `<!DOCTYPE html><html><head><style>${codeText}</style></head><body><p style="color:#888;font-family:sans-serif;padding:20px">CSS preview — add HTML to see styled output.</p></body></html>`;
+  const runCode = async (e) => {
+    const btn = e.currentTarget;
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = '⏳ Running...';
+    btn.disabled = true;
+
+    const LANG_MAP = {
+      python: { language: 'python', version: '3.10.0' },
+      py:     { language: 'python', version: '3.10.0' },
+      javascript: { language: 'javascript', version: '18.15.0' },
+      js:     { language: 'javascript', version: '18.15.0' },
+      typescript: { language: 'typescript', version: '5.0.3' },
+      ts:     { language: 'typescript', version: '5.0.3' },
+      java:   { language: 'java', version: '15.0.2' },
+      c:      { language: 'c', version: '10.2.0' },
+      cpp:    { language: 'c++', version: '10.2.0' },
+      'c++':  { language: 'c++', version: '10.2.0' },
+      csharp: { language: 'csharp', version: '6.12.0' },
+      cs:     { language: 'csharp', version: '6.12.0' },
+      go:     { language: 'go', version: '1.16.2' },
+      rust:   { language: 'rust', version: '1.50.0' },
+      ruby:   { language: 'ruby', version: '3.0.1' },
+      php:    { language: 'php', version: '8.0.2' },
+      swift:  { language: 'swift', version: '5.3.3' },
+      kotlin: { language: 'kotlin', version: '1.8.20' },
+      r:      { language: 'r', version: '4.1.1' },
+      bash:   { language: 'bash', version: '5.1.0' },
+      sh:     { language: 'bash', version: '5.1.0' },
+      lua:    { language: 'lua', version: '5.4.4' },
+      perl:   { language: 'perl', version: '5.36.0' },
+      dart:   { language: 'dart', version: '2.19.6' },
+      scala:  { language: 'scala', version: '3.2.2' },
+      haskell:{ language: 'haskell', version: '9.0.1' },
+    };
+
+    const langKey = lang.toLowerCase();
+
+    // HTML/SVG — run directly in browser
+    if (langKey === 'html' || langKey === 'svg') {
+      const win = window.open('', '_blank');
+      win.document.write(codeText);
+      win.document.close();
+      btn.innerHTML = originalContent;
+      btn.disabled = false;
+      return;
     }
-    const win = window.open('', '_blank');
-    win.document.write(html);
-    win.document.close();
+
+    // CSS — preview in browser
+    if (langKey === 'css') {
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html><html><head><style>${codeText}</style></head><body style="padding:20px;font-family:sans-serif;color:#888">CSS loaded.</body></html>`);
+      win.document.close();
+      btn.innerHTML = originalContent;
+      btn.disabled = false;
+      return;
+    }
+
+    const pistonLang = LANG_MAP[langKey];
+
+    // Unknown language — copy and open replit
+    if (!pistonLang) {
+      navigator.clipboard.writeText(codeText);
+      window.open('https://replit.com/languages/' + langKey, '_blank');
+      btn.innerHTML = originalContent;
+      btn.disabled = false;
+      return;
+    }
+
+    try {
+      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          language: pistonLang.language,
+          version: pistonLang.version,
+          files: [{ content: codeText }],
+        }),
+      });
+
+      const data = await res.json();
+      const output = data.run?.output || data.run?.stderr || 'No output.';
+      const hasError = !!data.run?.stderr && !data.run?.stdout;
+
+      const outputWin = window.open('', '_blank');
+      outputWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <title>Vortis — ${pistonLang.language} output</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #080810; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; min-height: 100vh; display: flex; flex-direction: column; }
+    .header { background: #0d0d18; border-bottom: 1px solid #1e1e35; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; }
+    .lang-badge { background: rgba(99,102,241,.15); border: 1px solid rgba(99,102,241,.3); color: #818cf8; padding: 3px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+    .status { margin-left: auto; font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 700; }
+    .ok  { background: rgba(16,185,129,.1); border: 1px solid rgba(16,185,129,.3); color: #10b981; }
+    .err { background: rgba(239,68,68,.1);  border: 1px solid rgba(239,68,68,.3);  color: #ef4444; }
+    .output { flex: 1; padding: 24px; white-space: pre-wrap; word-break: break-all; font-size: 14px; line-height: 1.8; color: ${hasError ? '#f87171' : '#a5f3fc'}; }
+    .footer { background: #0d0d18; border-top: 1px solid #1e1e35; padding: 10px 20px; font-size: 11px; color: #555575; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="dot" style="background:${hasError ? '#ef4444' : '#10b981'}"></div>
+    <span class="lang-badge">${pistonLang.language}</span>
+    <span class="status ${hasError ? 'err' : 'ok'}">${hasError ? '✕ Error' : '✓ Success'}</span>
+  </div>
+  <div class="output">${output.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+  <div class="footer">Powered by Piston · Vortis AI</div>
+</body>
+</html>`);
+      outputWin.document.close();
+
+    } catch (err) {
+      alert('Could not reach the code runner. Check your internet connection.');
+    }
+
+    btn.innerHTML = originalContent;
+    btn.disabled = false;
   };
 
   return (
@@ -770,8 +879,7 @@ const MsgContent = ({ text, onRetryImage }) => {
                 gap: 4,
               }}
             >
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981"><polygon points="5,3 19,12 5,21"/></svg>
-              Run
+              ▶ Run
             </button>
           )}
           <button
