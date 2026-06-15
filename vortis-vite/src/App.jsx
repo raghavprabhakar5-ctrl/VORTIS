@@ -696,17 +696,17 @@ try {
   })
 });
 
-  const data = await res.json();
- const output = data.run?.output || '';
-const stderr = data.run?.stderr || '';
+  const output =
+  data.run?.output ||
+  data.run?.stdout ||
+  data.run?.stderr ||
+  JSON.stringify(data, null, 2);
 
-const combined = (output || stderr).trim() || 'No output.';
-const isErr = !!stderr;
+setHasError(!!data.run?.stderr);
 
-setHasError(isErr);
 setOutput({
   type: 'text',
-  content: combined
+  content: output.trim()
 });
 
   setHasError(isErr);
@@ -2712,6 +2712,7 @@ setProcessingStatus('');
       const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      console.log(data);
       const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
       if (result && typeof result === 'string' && result.length > 2) {
         pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
