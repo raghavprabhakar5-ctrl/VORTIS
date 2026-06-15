@@ -2865,7 +2865,7 @@ return (
           </div>
         )}
       </div>
-    )}
+    )} 
             {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (
