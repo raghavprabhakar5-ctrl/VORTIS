@@ -664,7 +664,7 @@ const CodeBlock = ({ lang, codeText }) => {
     }
 
     try {
-      // Step 1: get available runtimes to find the correct version
+      // Step 1: Get available runtimes
       const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes', {
         mode: 'cors'
       });
@@ -678,7 +678,7 @@ const CodeBlock = ({ lang, codeText }) => {
         return;
       }
 
-      // Step 2: execute with the correct version
+      // Step 2: Execute code
       const res = await fetch('https://emkc.org/api/v2/piston/execute', {
         method: 'POST',
         headers: {
@@ -689,31 +689,47 @@ const CodeBlock = ({ lang, codeText }) => {
           version: runtime.version,
           files: [
             {
-              name: 'main',
-              content: codeText
+              content: codeText // Omitted 'name' so Piston auto-assigns extensions cleanly
             }
           ]
         })
       });
 
       const data = await res.json();
-      console.log(data);
 
-      // Renamed to 'pistonOutput' to avoid shadowing state variable 'output'
+      // 1. Handle API Failures (e.g., 429 Rate Limits)
+      if (!res.ok || data.message) {
+        setHasError(true);
+        setOutput({
+          type: 'text',
+          content: `API Error (${res.status}): ${data.message || res.statusText}`
+        });
+        return;
+      }
+
+      // 2. Handle Compilation Failures (for C, C++, Rust, etc.)
+      if (data.compile && data.compile.code !== 0) {
+        setHasError(true);
+        setOutput({
+          type: 'text',
+          content: (data.compile.stderr || data.compile.output || 'Compilation failed.').trim()
+        });
+        return;
+      }
+
+      // 3. Parse output cleanly without state shadowing conflicts
       const pistonOutput =
         data.run?.output ||
         data.run?.stdout ||
         data.run?.stderr ||
-        'No output.';
+        '';
 
-      setHasError(!!data.run?.stderr);
+      setHasError(data.run?.code !== 0 || !!data.run?.stderr);
 
       setOutput({
         type: 'text',
-        content: pistonOutput.trim()
+        content: pistonOutput.trim() || 'No output.'
       });
-      
-      // REMOVED the broken duplicated lines here that used 'isErr' and 'combined'
 
     } catch (err) {
       console.error(err);
@@ -785,7 +801,7 @@ const CodeBlock = ({ lang, codeText }) => {
         </div>
       </div>
 
-      {/* Code */}
+      {/* Code Area */}
       <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         <code>{codeText}</code>
       </pre>
