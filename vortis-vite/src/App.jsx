@@ -616,28 +616,29 @@ const CodeBlock = ({ lang, codeText }) => {
     setHasError(false);
 
     const LANG_MAP = {
-  python: 'python', py: 'python',
-  javascript: 'javascript', js: 'javascript',
-  typescript: 'typescript', ts: 'typescript',
-  java: 'java',
-  c: 'c',
-  cpp: 'c++', 'c++': 'c++',
-  csharp: 'csharp', cs: 'csharp',
-  go: 'go',
-  rust: 'rust',
-  ruby: 'ruby',
-  php: 'php',
-  swift: 'swift',
-  kotlin: 'kotlin',
-  r: 'r',
-  bash: 'bash', sh: 'bash',
-  lua: 'lua',
-  perl: 'perl',
-  dart: 'dart',
-  scala: 'scala',
-  haskell: 'haskell',
-};
-   const langKey = (lang || '').toLowerCase().trim();
+      python: 'python', py: 'python',
+      javascript: 'javascript', js: 'javascript',
+      typescript: 'typescript', ts: 'typescript',
+      java: 'java',
+      c: 'c',
+      cpp: 'c++', 'c++': 'c++',
+      csharp: 'csharp', cs: 'csharp',
+      go: 'go',
+      rust: 'rust',
+      ruby: 'ruby',
+      php: 'php',
+      swift: 'swift',
+      kotlin: 'kotlin',
+      r: 'r',
+      bash: 'bash', sh: 'bash',
+      lua: 'lua',
+      perl: 'perl',
+      dart: 'dart',
+      scala: 'scala',
+      haskell: 'haskell',
+    };
+    
+    const langKey = (lang || '').toLowerCase().trim();
 
     if (langKey === 'html' || langKey === 'svg') {
       setOutput({ type: 'html', content: codeText });
@@ -654,77 +655,76 @@ const CodeBlock = ({ lang, codeText }) => {
 
     const pistonLangName = LANG_MAP[langKey];
 
-if (!pistonLangName) {
-  setHasError(true);
-  setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\nCode copied to clipboard.` });
-  navigator.clipboard.writeText(codeText).catch(() => {});
-  setRunning(false);
-  return;
-}
+    if (!pistonLangName) {
+      setHasError(true);
+      setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\nCode copied to clipboard.` });
+      navigator.clipboard.writeText(codeText).catch(() => {});
+      setRunning(false);
+      return;
+    }
 
-try {
-  // Step 1: get available runtimes to find the correct version
-  const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes', {
-  mode: 'cors'
-});
-  const runtimes = await rtRes.json();
-  const runtime = runtimes.find(r => r.language === pistonLangName || r.aliases?.includes(pistonLangName));
+    try {
+      // Step 1: get available runtimes to find the correct version
+      const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes', {
+        mode: 'cors'
+      });
+      const runtimes = await rtRes.json();
+      const runtime = runtimes.find(r => r.language === pistonLangName || r.aliases?.includes(pistonLangName));
 
-  if (!runtime) {
-    setHasError(true);
-    setOutput({ type: 'text', content: `Runtime for "${lang}" not found on Piston.` });
-    setRunning(false);
-    return;
-  }
-
-  // Step 2: execute with the correct version
-  const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    language: runtime.language,
-    version: runtime.version,
-    files: [
-      {
-        name: 'main',
-        content: codeText
+      if (!runtime) {
+        setHasError(true);
+        setOutput({ type: 'text', content: `Runtime for "${lang}" not found on Piston.` });
+        setRunning(false);
+        return;
       }
-    ]
-  })
-});
 
-const data = await res.json();
+      // Step 2: execute with the correct version
+      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          language: runtime.language,
+          version: runtime.version,
+          files: [
+            {
+              name: 'main',
+              content: codeText
+            }
+          ]
+        })
+      });
 
-console.log(data);
+      const data = await res.json();
+      console.log(data);
 
-const output =
-  data.run?.output ||
-  data.run?.stdout ||
-  data.run?.stderr ||
-  'No output.';
+      // Renamed to 'pistonOutput' to avoid shadowing state variable 'output'
+      const pistonOutput =
+        data.run?.output ||
+        data.run?.stdout ||
+        data.run?.stderr ||
+        'No output.';
 
-setHasError(!!data.run?.stderr);
+      setHasError(!!data.run?.stderr);
 
-setOutput({
-  type: 'text',
-  content: output.trim()
-});
-  setHasError(isErr);
-  setOutput({ type: 'text', content: combined });
-} catch (err) {
-  console.error(err);
+      setOutput({
+        type: 'text',
+        content: pistonOutput.trim()
+      });
+      
+      // REMOVED the broken duplicated lines here that used 'isErr' and 'combined'
 
-  setHasError(true);
-  setOutput({
-    type: 'text',
-    content: String(err?.message || err)
-  });
-}
-   finally {
-  setRunning(false);
-}
+    } catch (err) {
+      console.error(err);
+      setHasError(true);
+      setOutput({
+        type: 'text',
+        content: String(err?.message || err)
+      });
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
@@ -772,9 +772,10 @@ setOutput({
           <button
             onClick={(e) => {
               navigator.clipboard.writeText(codeText).then(() => {
-                e.target.textContent = 'Copied!';
-                e.target.style.color = '#10b981';
-                setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
+                const target = e.currentTarget;
+                target.textContent = 'Copied!';
+                target.style.color = '#10b981';
+                setTimeout(() => { target.textContent = 'Copy'; target.style.color = ''; }, 2000);
               });
             }}
             style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
@@ -828,7 +829,6 @@ setOutput({
     </div>
   );
 };
-
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -2714,7 +2714,6 @@ setProcessingStatus('');
       const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      console.log(data);
       const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
       if (result && typeof result === 'string' && result.length > 2) {
         pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
