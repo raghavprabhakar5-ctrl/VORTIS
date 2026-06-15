@@ -616,34 +616,27 @@ const CodeBlock = ({ lang, codeText }) => {
     setHasError(false);
 
     const LANG_MAP = {
-      python:     { language: 'python',     version: '3.10.0' },
-      py:         { language: 'python',     version: '3.10.0' },
-      javascript: { language: 'javascript', version: '18.15.0' },
-      js:         { language: 'javascript', version: '18.15.0' },
-      typescript: { language: 'typescript', version: '5.0.3' },
-      ts:         { language: 'typescript', version: '5.0.3' },
-      java:       { language: 'java',       version: '15.0.2' },
-      c:          { language: 'c',          version: '10.2.0' },
-      cpp:        { language: 'c++',        version: '10.2.0' },
-      'c++':      { language: 'c++',        version: '10.2.0' },
-      csharp:     { language: 'csharp',     version: '6.12.0' },
-      cs:         { language: 'csharp',     version: '6.12.0' },
-      go:         { language: 'go',         version: '1.16.2' },
-      rust:       { language: 'rust',       version: '1.50.0' },
-      ruby:       { language: 'ruby',       version: '3.0.1' },
-      php:        { language: 'php',        version: '8.0.2' },
-      swift:      { language: 'swift',      version: '5.3.3' },
-      kotlin:     { language: 'kotlin',     version: '1.8.20' },
-      r:          { language: 'r',          version: '4.1.1' },
-      bash:       { language: 'bash',       version: '5.1.0' },
-      sh:         { language: 'bash',       version: '5.1.0' },
-      lua:        { language: 'lua',        version: '5.4.4' },
-      perl:       { language: 'perl',       version: '5.36.0' },
-      dart:       { language: 'dart',       version: '2.19.6' },
-      scala:      { language: 'scala',      version: '3.2.2' },
-      haskell:    { language: 'haskell',    version: '9.0.1' },
-    };
-
+  python: 'python', py: 'python',
+  javascript: 'javascript', js: 'javascript',
+  typescript: 'typescript', ts: 'typescript',
+  java: 'java',
+  c: 'c',
+  cpp: 'c++', 'c++': 'c++',
+  csharp: 'csharp', cs: 'csharp',
+  go: 'go',
+  rust: 'rust',
+  ruby: 'ruby',
+  php: 'php',
+  swift: 'swift',
+  kotlin: 'kotlin',
+  r: 'r',
+  bash: 'bash', sh: 'bash',
+  lua: 'lua',
+  perl: 'perl',
+  dart: 'dart',
+  scala: 'scala',
+  haskell: 'haskell',
+};
     const langKey = lang.toLowerCase();
 
     if (langKey === 'html' || langKey === 'svg') {
@@ -659,40 +652,52 @@ const CodeBlock = ({ lang, codeText }) => {
       return;
     }
 
-    const pistonLang = LANG_MAP[langKey];
+    const pistonLangName = LANG_MAP[langKey];
 
-    if (!pistonLang) {
-      setHasError(true);
-      setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\nCode copied to clipboard.` });
-      navigator.clipboard.writeText(codeText);
-      setRunning(false);
-      return;
-    }
+if (!pistonLangName) {
+  setHasError(true);
+  setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\nCode copied to clipboard.` });
+  navigator.clipboard.writeText(codeText).catch(() => {});
+  setRunning(false);
+  return;
+}
 
-    try {
-      const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          language: pistonLang.language,
-          version: pistonLang.version,
-          files: [{ content: codeText }],
-        }),
-      });
+try {
+  // Step 1: get available runtimes to find the correct version
+  const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes');
+  const runtimes = await rtRes.json();
+  const runtime = runtimes.find(r => r.language === pistonLangName || r.aliases?.includes(pistonLangName));
 
-      const data = await res.json();
-      const stdout = data.run?.stdout || '';
-      const stderr = data.run?.stderr || '';
-      const combined = (stdout + stderr).trim() || 'No output.';
-      const isErr = !!stderr && !stdout;
+  if (!runtime) {
+    setHasError(true);
+    setOutput({ type: 'text', content: `Runtime for "${lang}" not found on Piston.` });
+    setRunning(false);
+    return;
+  }
 
-      setHasError(isErr);
-      setOutput({ type: 'text', content: combined });
-    } catch (err) {
-      setHasError(true);
-      setOutput({ type: 'text', content: 'Could not reach the code runner. Check your internet connection.' });
-    }
+  // Step 2: execute with the correct version
+  const res = await fetch('https://emkc.org/api/v2/piston/execute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      language: runtime.language,
+      version: runtime.version,
+      files: [{ name: 'main', content: codeText }],
+    }),
+  });
 
+  const data = await res.json();
+  const stdout = data.run?.stdout || '';
+  const stderr = data.run?.stderr || '';
+  const combined = (stdout + stderr).trim() || 'No output.';
+  const isErr = !!stderr && !stdout;
+
+  setHasError(isErr);
+  setOutput({ type: 'text', content: combined });
+} catch (err) {
+  setHasError(true);
+  setOutput({ type: 'text', content: 'Could not reach the code runner. Check your internet connection and try again.' });
+}
     setRunning(false);
   };
 
