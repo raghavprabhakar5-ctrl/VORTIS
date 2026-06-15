@@ -680,7 +680,6 @@ try {
   // Step 2: execute with the correct version
   const res = await fetch('https://emkc.org/api/v2/piston/execute', {
   method: 'POST',
-  mode: 'cors',
   headers: {
     'Content-Type': 'application/json'
   },
@@ -696,11 +695,15 @@ try {
   })
 });
 
-  const output =
+const data = await res.json();
+
+console.log(data);
+
+const output =
   data.run?.output ||
   data.run?.stdout ||
   data.run?.stderr ||
-  JSON.stringify(data, null, 2);
+  'No output.';
 
 setHasError(!!data.run?.stderr);
 
@@ -708,7 +711,6 @@ setOutput({
   type: 'text',
   content: output.trim()
 });
-
   setHasError(isErr);
   setOutput({ type: 'text', content: combined });
 } catch (err) {
@@ -2712,7 +2714,6 @@ setProcessingStatus('');
       const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      console.log(data);
       const result = data.description || data.content || data.text || data.result || data.message || data.response || data.output || (data.choices?.[0]?.message?.content) || (typeof data === 'string' ? data : null);
       if (result && typeof result === 'string' && result.length > 2) {
         pushHistory(convHistory, 'user', `[User sent an image${question ? `: "${question}"` : ''}]`);
