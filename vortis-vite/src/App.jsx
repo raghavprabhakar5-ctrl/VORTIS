@@ -664,7 +664,9 @@ if (!pistonLangName) {
 
 try {
   // Step 1: get available runtimes to find the correct version
-  const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes');
+  const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes', {
+  mode: 'cors'
+});
   const runtimes = await rtRes.json();
   const runtime = runtimes.find(r => r.language === pistonLangName || r.aliases?.includes(pistonLangName));
 
@@ -677,14 +679,22 @@ try {
 
   // Step 2: execute with the correct version
   const res = await fetch('https://emkc.org/api/v2/piston/execute', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      language: runtime.language,
-      version: runtime.version,
-      files: [{ name: 'main', content: codeText }],
-    }),
-  });
+  method: 'POST',
+  mode: 'cors',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    language: runtime.language,
+    version: runtime.version,
+    files: [
+      {
+        name: 'main',
+        content: codeText
+      }
+    ]
+  })
+});
 
   const data = await res.json();
   const stdout = data.run?.stdout || '';
