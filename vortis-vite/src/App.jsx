@@ -723,41 +723,77 @@ const MsgContent = ({ text, onRetryImage }) => {
 
           // Inline and block code
           code: ({node, inline, className, children, ...props}) => {
-            const match = /language-(\w+)/.exec(className || '');
-            const lang = match ? match[1] : '';
-            const codeText = String(children).replace(/\n$/, '');
+  const match = /language-(\w+)/.exec(className || '');
+  const lang = match ? match[1] : '';
+  const codeText = String(children).replace(/\n$/, '');
+  const isRunnable = ['html', 'javascript', 'js', 'css', 'svg'].includes(lang.toLowerCase());
 
-            if (inline) {
-              return (
-                <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
-                  {children}
-                </code>
-              );
-            }
+  if (inline) {
+    return (
+      <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
+        {children}
+      </code>
+    );
+  }
 
-            return (
-              <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
-                  <button
-                    onClick={(e) => {
-                      navigator.clipboard.writeText(codeText).then(() => {
-                        e.target.textContent = 'Copied!';
-                        e.target.style.color = '#10b981';
-                        setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
-                      });
-                    }}
-                    style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
-                  >
-                    Copy
-                  </button>
-                </div>
-                <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                  <code>{codeText}</code>
-                </pre>
-              </div>
-            );
-          },
+  const runCode = () => {
+    let html = codeText;
+    if (lang === 'javascript' || lang === 'js') {
+      html = `<!DOCTYPE html><html><body><script>${codeText}<\/script></body></html>`;
+    } else if (lang === 'css') {
+      html = `<!DOCTYPE html><html><head><style>${codeText}</style></head><body><p style="color:#888;font-family:sans-serif;padding:20px">CSS preview — add HTML to see styled output.</p></body></html>`;
+    }
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  };
+
+  return (
+    <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {isRunnable && (
+            <button
+              onClick={runCode}
+              style={{
+                background: 'rgba(16,185,129,.12)',
+                border: '1px solid rgba(16,185,129,.3)',
+                color: '#10b981',
+                fontFamily: 'JetBrains Mono',
+                fontSize: 11,
+                padding: '3px 10px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981"><polygon points="5,3 19,12 5,21"/></svg>
+              Run
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              navigator.clipboard.writeText(codeText).then(() => {
+                e.target.textContent = 'Copied!';
+                e.target.style.color = '#10b981';
+                setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
+              });
+            }}
+            style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+      <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <code>{codeText}</code>
+      </pre>
+    </div>
+  );
+},
 
           // Table
           table: ({children}) => (
