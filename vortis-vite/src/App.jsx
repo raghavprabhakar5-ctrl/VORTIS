@@ -2684,58 +2684,57 @@ return (
      <div className="main">
  {isIncognito && (
   <div style={{
-    background: 'linear-gradient(90deg,rgba(10,10,20,.98) 0%,rgba(18,12,40,.98) 50%,rgba(10,10,20,.98) 100%)',
-    borderBottom: '1px solid rgba(139,92,246,.25)',
-    padding: '0 20px',
-    height: 36,
+    background: 'rgba(8,8,16,.95)',
+    borderBottom: '1px solid rgba(139,92,246,.2)',
+    padding: '0 24px',
+    height: 38,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 12,
     flexShrink: 0,
     position: 'relative',
-    overflow: 'hidden',
   }}>
-    {/* animated shimmer line */}
-    <div style={{
-      position: 'absolute', inset: 0,
-      background: 'linear-gradient(90deg,transparent 0%,rgba(139,92,246,.06) 50%,transparent 100%)',
-      animation: 'shimmer 3s ease-in-out infinite',
-    }}/>
-    <style>{`@keyframes shimmer{0%,100%{opacity:0}50%{opacity:1}}`}</style>
+    <style>{`
+      @keyframes incogPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
+      @keyframes incogFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+    `}</style>
 
-    {/* ghost icon */}
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}>
-      <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.7)"/>
-      <circle cx="9" cy="10" r="1.5" fill="#0a0a14"/>
-      <circle cx="15" cy="10" r="1.5" fill="#0a0a14"/>
-    </svg>
+    <div style={{ display:'flex', alignItems:'center', gap:7, animation:'incogFade .4s ease' }}>
+      {/* pulsing dot */}
+      <div style={{
+        width:6, height:6, borderRadius:'50%',
+        background:'#8b5cf6',
+        boxShadow:'0 0 10px rgba(139,92,246,.8)',
+        animation:'incogPulse 2s ease-in-out infinite',
+        flexShrink:0
+      }}/>
 
-    <span style={{
-      fontSize: 11.5,
-      fontFamily: 'JetBrains Mono',
-      fontWeight: 700,
-      color: '#a78bfa',
-      letterSpacing: '.08em',
-    }}>INCOGNITO</span>
+      {/* ghost icon */}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,opacity:.85}}>
+        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#8b5cf6"/>
+        <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
+        <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+      </svg>
 
-    <div style={{width:1,height:12,background:'rgba(139,92,246,.3)'}}/>
+      <span style={{
+        fontSize:11,
+        fontFamily:'JetBrains Mono',
+        fontWeight:700,
+        color:'#a78bfa',
+        letterSpacing:'.12em',
+        textTransform:'uppercase'
+      }}>Incognito</span>
 
-    <span style={{
-      fontSize: 11,
-      fontFamily: 'JetBrains Mono',
-      color: 'rgba(144,144,176,.6)',
-      letterSpacing: '.03em',
-    }}>Chats won't be saved · History hidden · Press Ctrl+Shift+I to exit</span>
+      <div style={{width:1,height:14,background:'rgba(139,92,246,.25)',margin:'0 2px'}}/>
 
-    {/* right dot */}
-    <div style={{
-      position: 'absolute', right: 16,
-      width: 6, height: 6, borderRadius: '50%',
-      background: '#8b5cf6',
-      boxShadow: '0 0 8px #8b5cf6',
-      animation: 'pulse 2s ease-in-out infinite',
-    }}/>
+      <span style={{
+        fontSize:11,
+        fontFamily:'JetBrains Mono',
+        color:'rgba(144,144,176,.45)',
+        letterSpacing:'.02em'
+      }}>No history · No saved chats · Nothing stored</span>
+    </div>
   </div>
 )}
   <div className="header">
@@ -2865,7 +2864,7 @@ return (
           </div>
         )}
       </div>
-    )} 
+    )}
             {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (

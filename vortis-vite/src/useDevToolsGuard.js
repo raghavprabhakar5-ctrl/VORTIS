@@ -2,9 +2,17 @@ import { useEffect } from 'react';
 
 export default function useDevToolsGuard() {
   useEffect(() => {
-    const openIncognitoMode = () => {
-      const incognitoUrl = `${window.location.origin}/?incognito=true`;
-      window.open(incognitoUrl, '_blank');
+    const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
+
+    const handleShortcut = () => {
+      if (isIncognito) {
+        // Already in incognito → go back to normal page
+        window.location.href = window.location.origin + '/';
+      } else {
+        // Normal → open incognito (only one tab, replace current or open new)
+        const incognitoUrl = `${window.location.origin}/?incognito=true`;
+        window.open(incognitoUrl, 'vortis_incognito');
+      }
     };
 
     const blockKeys = (e) => {
@@ -21,7 +29,7 @@ export default function useDevToolsGuard() {
       if (isDevToolsShortcut) {
         e.preventDefault();
         e.stopPropagation();
-        openIncognitoMode();
+        handleShortcut();
         return false;
       }
     };
