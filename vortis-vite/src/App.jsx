@@ -2644,19 +2644,24 @@ return (
               <button onClick={() => setShowSettings(true)} style={{ width: '100%', padding: '5px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 7, color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'Geist,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Trash2 size={10}/> Free Up Space</button>
             </div>
           )}
-          {savedChats.length > 0 ? (
-            <div className="sb-section">
-              <div className="sb-section-label">Recent Chats</div>
-              {savedChats.map(c => (
-                <div key={c.id} className={`chat-item ${c.id === chatIdRef.current ? 'active' : ''}`} onClick={() => loadChat(c.id)}>
-                  <MessageSquare size={12} style={{ flexShrink: 0, opacity: .5 }}/><span>{c.preview}</span>
-                  <button className="chat-del-btn" onClick={e => { e.stopPropagation(); delChat(c.id); }}><X size={11}/></button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '24px 12px', textAlign: 'center' }}><MessageSquare size={18} color="var(--text4)" style={{ margin: '0 auto 8px' }}/><p style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No chats yet</p></div>
-          )}
+          {savedChats.length > 0 && !isIncognito ? (
+  <div className="sb-section">
+    <div className="sb-section-label">Recent Chats</div>
+    {savedChats.map(c => (
+      <div key={c.id} className={`chat-item ${c.id === chatIdRef.current ? 'active' : ''}`} onClick={() => loadChat(c.id)}>
+        <MessageSquare size={12} style={{ flexShrink: 0, opacity: .5 }}/><span>{c.preview}</span>
+        <button className="chat-del-btn" onClick={e => { e.stopPropagation(); delChat(c.id); }}><X size={11}/></button>
+      </div>
+    ))}
+  </div>
+) : (
+  <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+    <MessageSquare size={18} color="var(--text4)" style={{ margin: '0 auto 8px' }}/>
+    <p style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>
+      {isIncognito ? 'No history in incognito' : 'No chats yet'}
+    </p>
+  </div>
+)}
         </div>
         {tier !== 'platinum' && (
           <div className="upgrade-card">
@@ -2677,23 +2682,62 @@ return (
       </div>
 
      <div className="main">
-  {isIncognito && (
+ {isIncognito && (
+  <div style={{
+    background: 'linear-gradient(90deg,rgba(10,10,20,.98) 0%,rgba(18,12,40,.98) 50%,rgba(10,10,20,.98) 100%)',
+    borderBottom: '1px solid rgba(139,92,246,.25)',
+    padding: '0 20px',
+    height: 36,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    flexShrink: 0,
+    position: 'relative',
+    overflow: 'hidden',
+  }}>
+    {/* animated shimmer line */}
     <div style={{
-      background: 'linear-gradient(135deg,rgba(99,102,241,.12),rgba(139,92,246,.08))',
-      borderBottom: '1px solid rgba(99,102,241,.3)',
-      padding: '7px 16px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      fontSize: 12,
-      color: '#9090b0',
+      position: 'absolute', inset: 0,
+      background: 'linear-gradient(90deg,transparent 0%,rgba(139,92,246,.06) 50%,transparent 100%)',
+      animation: 'shimmer 3s ease-in-out infinite',
+    }}/>
+    <style>{`@keyframes shimmer{0%,100%{opacity:0}50%{opacity:1}}`}</style>
+
+    {/* ghost icon */}
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0}}>
+      <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.7)"/>
+      <circle cx="9" cy="10" r="1.5" fill="#0a0a14"/>
+      <circle cx="15" cy="10" r="1.5" fill="#0a0a14"/>
+    </svg>
+
+    <span style={{
+      fontSize: 11.5,
       fontFamily: 'JetBrains Mono',
-      flexShrink: 0
-    }}>
-      🕵️&nbsp;<strong style={{color:'#a78bfa'}}>Incognito chat</strong>
-      &nbsp;— This session won't be saved to history
-    </div>
-  )}
+      fontWeight: 700,
+      color: '#a78bfa',
+      letterSpacing: '.08em',
+    }}>INCOGNITO</span>
+
+    <div style={{width:1,height:12,background:'rgba(139,92,246,.3)'}}/>
+
+    <span style={{
+      fontSize: 11,
+      fontFamily: 'JetBrains Mono',
+      color: 'rgba(144,144,176,.6)',
+      letterSpacing: '.03em',
+    }}>Chats won't be saved · History hidden · Press Ctrl+Shift+I to exit</span>
+
+    {/* right dot */}
+    <div style={{
+      position: 'absolute', right: 16,
+      width: 6, height: 6, borderRadius: '50%',
+      background: '#8b5cf6',
+      boxShadow: '0 0 8px #8b5cf6',
+      animation: 'pulse 2s ease-in-out infinite',
+    }}/>
+  </div>
+)}
   <div className="header">
           <div className="hdr-left">
             <button className="sidebar-toggle-btn" onClick={() => setShowSidebar(!showSidebar)} title="Toggle sidebar (⌘/)">
@@ -2768,40 +2812,60 @@ return (
         )}
 
         <div className="chat-feed scr">
-          <div className="chat-inner">
-            {messages.length === 0 && (
-              <div className="welcome-wrap">
-                <div className="welcome-greeting">{getGreeting(profile.name)}</div>
-                <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
-                <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
-                  {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
-                </div>
-                <div className="recent-label" style={{ width: '100%', maxWidth: 680 }} onClick={() => setShowRecentChats(p => !p)}>
-                  <MessageSquare size={13}/>Recent chats
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', transition: 'transform .2s', transform: showRecentChats ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-                {showRecentChats && (
-                  savedChats.length > 0 ? (
-                    <div className="recent-grid" style={{ maxWidth: 680 }}>
-                      {savedChats.slice(0, 3).map(c => (
-                        <div key={c.id} className="recent-card" onClick={() => loadChat(c.id)}>
-                          <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
-                          <div className="rc-title">{c.preview}</div>
-                          <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ width: '100%', maxWidth: 680, padding: '20px', textAlign: 'center', border: '1px dashed rgba(99,102,241,.2)', borderRadius: 12, background: 'rgba(99,102,241,.03)' }}>
-                      <MessageSquare size={20} color="var(--text4)" style={{ margin: '0 auto 8px', opacity: .4, display: 'block' }}/>
-                      <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>No recent chats</p>
-                      <p style={{ fontSize: 12, color: 'var(--text3)' }}>Start a conversation and it'll show up here.</p>
-                    </div>
-                  )
-                )}
-              </div>
-            )}
+  <div className="chat-inner">
+    {messages.length === 0 && (
+      <div className="welcome-wrap">
+        <div className="welcome-greeting">{getGreeting(profile.name)}</div>
+        <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
+        <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
+          {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
+        </div>
 
+        {!isIncognito && (
+          <>
+            <div className="recent-label" style={{ width: '100%', maxWidth: 680 }} onClick={() => setShowRecentChats(p => !p)}>
+              <MessageSquare size={13}/>Recent chats
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', transition: 'transform .2s', transform: showRecentChats ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            {showRecentChats && (
+              savedChats.length > 0 ? (
+                <div className="recent-grid" style={{ maxWidth: 680 }}>
+                  {savedChats.slice(0, 3).map(c => (
+                    <div key={c.id} className="recent-card" onClick={() => loadChat(c.id)}>
+                      <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
+                      <div className="rc-title">{c.preview}</div>
+                      <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ width: '100%', maxWidth: 680, padding: '20px', textAlign: 'center', border: '1px dashed rgba(99,102,241,.2)', borderRadius: 12, background: 'rgba(99,102,241,.03)' }}>
+                  <MessageSquare size={20} color="var(--text4)" style={{ margin: '0 auto 8px', opacity: .4, display: 'block' }}/>
+                  <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>No recent chats</p>
+                  <p style={{ fontSize: 12, color: 'var(--text3)' }}>Start a conversation and it'll show up here.</p>
+                </div>
+              )
+            )}
+          </>
+        )}
+
+        {isIncognito && (
+          <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,.12)', border: '1px solid rgba(139,92,246,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.8)"/>
+                <circle cx="9" cy="10" r="1.5" fill="#080810"/>
+                <circle cx="15" cy="10" r="1.5" fill="#080810"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: '#a78bfa', fontFamily: 'JetBrains Mono', marginBottom: 2 }}>Incognito mode active</p>
+              <p style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No history • No saved chats • Nothing stored</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
             {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (

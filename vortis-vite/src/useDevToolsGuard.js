@@ -2,9 +2,7 @@ import { useEffect } from 'react';
 
 export default function useDevToolsGuard() {
   useEffect(() => {
-
     const openIncognitoMode = () => {
-      // Open YOUR OWN app with incognito flag — just like Claude does
       const incognitoUrl = `${window.location.origin}/?incognito=true`;
       window.open(incognitoUrl, '_blank');
     };
