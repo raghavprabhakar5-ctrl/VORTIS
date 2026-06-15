@@ -6,6 +6,7 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
+import useDevToolsGuard from './useDevToolsGuard';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -1052,6 +1053,7 @@ const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
 export default function VortisAI() {
+   useDevToolsGuard();
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {

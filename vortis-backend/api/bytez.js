@@ -761,52 +761,34 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
     const geminiKey = process.env.GEMINI_IMAGE_KEY;
     if (!geminiKey) return null;
 
-    // gemini-2.0-flash-exp supports image generation free — 500/day
-    const models = [
-      'gemini-2.0-flash-exp-image-generation',
-      'gemini-2.0-flash-thinking-exp',
-    ];
+    const gemRes = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiKey}`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText.trim() }] }],
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+        }),
+      },
+      30000
+    );
 
-    for (const model of models) {
-      try {
-        console.log('Trying Gemini model:', model);
-        const gemRes = await fetchWithTimeout(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: promptText.trim() }] }],
-              generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-            }),
-          },
-          30000
-        );
-
-        console.log(`Gemini ${model} status:`, gemRes.status);
-        if (!gemRes.ok) {
-          const err = await gemRes.text();
-          console.log(`Gemini ${model} error:`, err.slice(0, 200));
-          continue;
-        }
-
-        const data  = await gemRes.json();
-        const parts = data?.candidates?.[0]?.content?.parts || [];
-        const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
-        if (!imagePart?.inlineData?.data) {
-          console.log(`Gemini ${model} — no image in response`);
-          continue;
-        }
-
-        const mime = imagePart.inlineData.mimeType || 'image/png';
-        console.log(`Gemini ${model} image received ✅`);
-        return { success: true, imageUrl: `data:${mime};base64,${imagePart.inlineData.data}` };
-      } catch (e) {
-        console.log(`Gemini ${model} failed:`, e.message);
-        continue;
-      }
+    console.log('Gemini 2.5 status:', gemRes.status);
+    if (!gemRes.ok) {
+      const err = await gemRes.text();
+      console.log('Gemini 2.5 error:', err.slice(0, 300));
+      return null;
     }
-    return null;
+
+    const data  = await gemRes.json();
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
+    if (!imagePart?.inlineData?.data) return null;
+
+    const mime = imagePart.inlineData.mimeType || 'image/png';
+    console.log('Gemini 2.5 image received ✅');
+    return { success: true, imageUrl: `data:${mime};base64,${imagePart.inlineData.data}` };
   } catch (e) {
     console.error('Gemini image failed:', e.message);
     return null;
