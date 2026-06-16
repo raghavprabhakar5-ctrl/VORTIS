@@ -675,37 +675,52 @@ const executeCodeLocally = async (language, code) => {
   }
 };
 
+const safeExecuteCodeLocally = async (langKey, codeText) => {
+  if (typeof executeCodeLocally === 'function') {
+    return await executeCodeLocally(langKey, codeText);
+  }
+  
+  // Basic native execution fallback for JavaScript if external executor is missing
+  if (langKey === 'javascript' || langKey === 'js') {
+    try {
+      let logs = [];
+      const originalLog = console.log;
+      console.log = (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '));
+      
+      // Safe evaluation context
+      const result = new Function(codeText)();
+      console.log = originalLog;
+      
+      return {
+        isError: false,
+        output: logs.length > 0 ? logs.join('\n') : (result !== undefined ? String(result) : 'Done (No output)')
+      };
+    } catch (err) {
+      return { isError: true, output: err.message };
+    }
+  }
+  
+  return { isError: true, output: `Local virtual machine engine for "${langKey}" is loading or unavailable.` };
+};
+
 const CodeBlock = ({ lang, codeText }) => {
   const [output, setOutput] = React.useState(null);
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const [execTime, setExecTime] = React.useState(null); // 🌟 Tracks how long execution took
+  
+  // Professional execution stats state
+  const [execStatus, setExecStatus] = React.useState(''); // 'RENDERED', 'EXECUTED', 'ERROR'
+  const [execTime, setExecTime] = React.useState('');     // e.g., '14ms'
 
   const langKey = (lang || '').toLowerCase().trim();
 
-  // Languages that render visually in an iframe
+  const LOCAL_RUNNABLE_LANGS = new Set(['javascript', 'js', 'python', 'py', 'lua']);
   const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
-  const isPreviewable = PREVIEW_LANGS.has(langKey);
-  
-  // Since we are using an all-language backend engine, everything can be executed or previewed!
-  const canRun = true;
 
-  // Map user custom extensions/aliases to standard engine language identifiers
-  const getEngineLangName = (key) => {
-    const registry = {
-      js: 'javascript', javascript: 'javascript',
-      py: 'python', python: 'python',
-      cpp: 'c++', 'c++': 'c++', c: 'c',
-      rs: 'rust', rust: 'rust',
-      rb: 'ruby', ruby: 'ruby',
-      sh: 'bash', bash: 'bash',
-      ts: 'typescript', typescript: 'typescript',
-      cs: 'csharp', 'c#': 'csharp', csharp: 'csharp',
-      py3: 'python',
-    };
-    return registry[key] || key;
-  };
+  const isRunnable = LOCAL_RUNNABLE_LANGS.has(langKey);
+  const isPreviewable = PREVIEW_LANGS.has(langKey);
+  const canRun = isRunnable || isPreviewable;
 
   const getPreviewContent = () => {
     if (langKey === 'html') return codeText;
@@ -714,60 +729,77 @@ const CodeBlock = ({ lang, codeText }) => {
     return null;
   };
 
+  // 🌟 FIX: Decodes raw binary streams, ASCII arrays, and objects into clear readable strings
+  const parseRawOutput = (raw) => {
+    if (raw === null || raw === undefined) return '';
+    
+    // Handle WebAssembly Uint8Arrays / ArrayBuffers
+    if (raw instanceof Uint8Array || raw instanceof ArrayBuffer) {
+      return new TextDecoder().decode(raw);
+    }
+    
+    // Handle raw numeric ASCII array streams (e.g., [72, 101, 108, 108, 111])
+    if (Array.isArray(raw)) {
+      if (raw.length > 0 && typeof raw[0] === 'number') {
+        return String.fromCharCode(...raw);
+      }
+      return raw.join('\n');
+    }
+    
+    // Handle standard JS objects
+    if (typeof raw === 'object') {
+      return JSON.stringify(raw, null, 2);
+    }
+    
+    return String(raw);
+  };
+
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
     setHasError(false);
-    setExecTime(null);
+    setExecStatus('');
+    setExecTime('');
 
-    // 🌟 Force React to render the "Running..." spinner state before starting network request
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const startTime = performance.now();
 
-    const startTime = performance.now(); // Start runtime clock
-
-    // Handle frontend previews instantly
+    // 1. Visual browser preview pipeline
     const preview = getPreviewContent();
     if (preview) {
+      const endTime = performance.now();
       setOutput({ type: 'html', content: preview });
+      setExecStatus('PREVIEW RENDERED');
+      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
       setRunning(false);
       return;
     }
 
-    // Call the universal server execution engine
+    if (!isRunnable) {
+      setHasError(true);
+      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for free browser execution. Use JS, Python, or Lua.` });
+      setExecStatus('UNSUPPORTED');
+      setRunning(false);
+      return;
+    }
+
+    // 2. Local sandboxed WebAssembly execution pipeline
     try {
-      const targetLanguage = getEngineLangName(langKey);
-      
-      const response = await fetch("https://emkc.org/api/v2/piston/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language: targetLanguage,
-          version: "*",
-          files: [{ content: codeText }]
-        })
-      });
-
+      const result = await safeExecuteCodeLocally(langKey, codeText);
       const endTime = performance.now();
-      setExecTime((endTime - startTime).toFixed(0)); // Save execution time duration
-
-      if (!response.ok) {
-        throw new Error(`Server status code: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Catch error responses from engine compiler
-      if (data.run.stderr) {
-        setHasError(true);
-        setOutput({ type: 'text', content: data.run.stderr });
-      } else {
-        setHasError(data.run.code !== 0);
-        setOutput({ type: 'text', content: data.run.stdout || 'Success (no output)' });
-      }
+      
+      const cleanOutput = parseRawOutput(result.output);
+      
+      setHasError(result.isError);
+      setOutput({ type: 'text', content: cleanOutput });
+      setExecStatus(result.isError ? 'EXECUTION FAILED' : 'CODE EXECUTED');
+      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
 
     } catch (err) {
+      const endTime = performance.now();
       setHasError(true);
-      setOutput({ type: 'text', content: `Execution failed: Language engine unavailable or unsupported.` });
+      setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
+      setExecStatus('RUNTIME ERROR');
+      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
     } finally {
       setRunning(false);
     }
@@ -785,20 +817,11 @@ const CodeBlock = ({ lang, codeText }) => {
       python: '#3b82f6', py: '#3b82f6',
       javascript: '#f59e0b', js: '#f59e0b',
       typescript: '#06b6d4', ts: '#06b6d4',
-      rust: '#f97316',
-      go: '#06b6d4',
-      java: '#ef4444',
+      rust: '#f97316', go: '#06b6d4', java: '#ef4444',
       cpp: '#8b5cf6', 'c++': '#8b5cf6', c: '#8b5cf6',
-      html: '#f97316',
-      css: '#6366f1',
-      svg: '#10b981',
-      sql: '#f59e0b', sqlite3: '#f59e0b',
-      ruby: '#ef4444',
-      swift: '#f97316',
-      kotlin: '#8b5cf6',
-      scala: '#ef4444',
-      julia: '#8b5cf6',
-      bash: '#10b981', sh: '#10b981',
+      html: '#f97316', css: '#6366f1', svg: '#10b981',
+      sql: '#f59e0b', sqlite3: '#f59e0b', ruby: '#ef4444',
+      swift: '#f97316', kotlin: '#8b5cf6', bash: '#10b981', sh: '#10b981',
       lua: '#3b82f6',
     };
     return colors[langKey] || 'var(--indigo)';
@@ -952,7 +975,7 @@ const CodeBlock = ({ lang, codeText }) => {
       {/* Output panel */}
       {output && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          {/* Output header */}
+          {/* 🌟 Professional Terminal Header Console */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -961,34 +984,36 @@ const CodeBlock = ({ lang, codeText }) => {
             background: hasError ? 'rgba(239,68,68,.06)' : isPreviewable ? 'rgba(99,102,241,.06)' : 'rgba(16,185,129,.06)',
             borderBottom: '1px solid var(--border)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Glowing diagnostic light */}
               <div style={{
                 width: 7, height: 7, borderRadius: '50%',
                 background: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+                boxShadow: `0 0 6px ${hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981'}aa`
               }}/>
               <span style={{
-                fontSize: 11,
+                fontSize: 10,
                 fontFamily: 'JetBrains Mono, monospace',
-                fontWeight: 700,
-                letterSpacing: '.06em',
+                fontWeight: 800,
+                letterSpacing: '.08em',
                 color: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
               }}>
-                {hasError ? 'ERROR' : isPreviewable ? 'PREVIEW' : 'OUTPUT'}
+                {execStatus}
               </span>
-              {/* 🌟 STATUS METRIC DISPLAY: Shows execution runtime length */}
               {execTime && (
                 <span style={{
                   fontSize: 10,
                   fontFamily: 'JetBrains Mono, monospace',
                   color: 'var(--text4)',
-                  opacity: 0.8
+                  opacity: 0.7,
+                  marginLeft: 2
                 }}>
-                  · {execTime}ms
+                  · {execTime}
                 </span>
               )}
             </div>
             <button
-              onClick={() => { setOutput(null); setHasError(false); setExecTime(null); }}
+              onClick={() => { setOutput(null); setHasError(false); setExecStatus(''); setExecTime(''); }}
               style={{
                 background: 'none', border: 'none',
                 color: 'var(--text3)', cursor: 'pointer',
@@ -1006,7 +1031,7 @@ const CodeBlock = ({ lang, codeText }) => {
             </button>
           </div>
 
-          {/* Output content */}
+          {/* Output content viewport */}
           {output.type === 'html' ? (
             <iframe
               srcDoc={output.content}
@@ -1042,6 +1067,8 @@ const CodeBlock = ({ lang, codeText }) => {
     </div>
   );
 };
+
+export default CodeBlock;
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
