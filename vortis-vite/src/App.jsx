@@ -1842,7 +1842,7 @@ export default function VortisAI() {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. No quotes, no punctuation.',
+        prompt: 'You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. Never use ** **  this is making of title, No quotes, no punctuation.',
         history: [{ role: 'user', content: firstUserMsg }]
       })
     });
