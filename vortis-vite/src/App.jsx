@@ -608,164 +608,243 @@ const CodeBlock = ({ lang, codeText }) => {
   const [output, setOutput] = React.useState(null);
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
-  const isRunnable = lang && lang.trim().length > 0;
+  const [copied, setCopied] = React.useState(false);
+
+  const langKey = (lang || '').toLowerCase().trim();
+
+  const PISTON_VERSIONS = {
+    python: { language: 'python', version: '3.10.0' },
+    py: { language: 'python', version: '3.10.0' },
+    javascript: { language: 'javascript', version: '18.15.0' },
+    js: { language: 'javascript', version: '18.15.0' },
+    typescript: { language: 'typescript', version: '5.0.3' },
+    ts: { language: 'typescript', version: '5.0.3' },
+    java: { language: 'java', version: '15.0.2' },
+    c: { language: 'c', version: '10.2.0' },
+    cpp: { language: 'c++', version: '10.2.0' },
+    'c++': { language: 'c++', version: '10.2.0' },
+    csharp: { language: 'csharp', version: '6.12.0' },
+    cs: { language: 'csharp', version: '6.12.0' },
+    go: { language: 'go', version: '1.16.2' },
+    rust: { language: 'rust', version: '1.50.0' },
+    ruby: { language: 'ruby', version: '3.0.1' },
+    php: { language: 'php', version: '8.2.3' },
+    swift: { language: 'swift', version: '5.3.3' },
+    kotlin: { language: 'kotlin', version: '1.8.20' },
+    r: { language: 'r', version: '4.1.1' },
+    bash: { language: 'bash', version: '5.2.0' },
+    sh: { language: 'bash', version: '5.2.0' },
+    lua: { language: 'lua', version: '5.4.4' },
+    perl: { language: 'perl', version: '5.36.0' },
+    dart: { language: 'dart', version: '2.19.6' },
+    scala: { language: 'scala', version: '3.2.2' },
+    haskell: { language: 'haskell', version: '9.4.3' },
+    elixir: { language: 'elixir', version: '1.14.3' },
+    erlang: { language: 'erlang', version: '25.3' },
+    clojure: { language: 'clojure', version: '1.11.1' },
+    fsharp: { language: 'fsharp.net', version: '7.0.400' },
+    'f#': { language: 'fsharp.net', version: '7.0.400' },
+    ocaml: { language: 'ocaml', version: '4.14.0' },
+    nim: { language: 'nim', version: '1.6.12' },
+    zig: { language: 'zig', version: '0.10.1' },
+    crystal: { language: 'crystal', version: '1.7.3' },
+    groovy: { language: 'groovy', version: '3.0.7' },
+    julia: { language: 'julia', version: '1.8.5' },
+    coffeescript: { language: 'coffeescript', version: '2.7.0' },
+    coffee: { language: 'coffeescript', version: '2.7.0' },
+    powershell: { language: 'powershell', version: '7.1.7' },
+    ps1: { language: 'powershell', version: '7.1.7' },
+    nasm: { language: 'nasm', version: '2.15.05' },
+    asm: { language: 'nasm', version: '2.15.05' },
+    assembly: { language: 'nasm', version: '2.15.05' },
+    sqlite3: { language: 'sqlite3', version: '3.36.0' },
+    sql: { language: 'sqlite3', version: '3.36.0' },
+    prolog: { language: 'prolog', version: '8.4.3' },
+    cobol: { language: 'cobol', version: '3.1.2' },
+    fortran: { language: 'fortran', version: '10.2.0' },
+    pascal: { language: 'pascal', version: '3.2.2' },
+    basic: { language: 'basic', version: '1.0.0' },
+  };
+
+  // Languages that render visually
+  const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
+
+  // Languages that run via Piston
+  const isRunnable = !!PISTON_VERSIONS[langKey];
+  const isPreviewable = PREVIEW_LANGS.has(langKey);
+  const canRun = isRunnable || isPreviewable;
+
+  const getPreviewContent = () => {
+    if (langKey === 'html') return codeText;
+    if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>`;
+    if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>`;
+    return null;
+  };
 
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
     setHasError(false);
 
-    const LANG_MAP = {
-      python: 'python', py: 'python',
-      javascript: 'javascript', js: 'javascript',
-      typescript: 'typescript', ts: 'typescript',
-      java: 'java',
-      c: 'c',
-      cpp: 'c++', 'c++': 'c++',
-      csharp: 'csharp', cs: 'csharp',
-      go: 'go',
-      rust: 'rust',
-      ruby: 'ruby',
-      php: 'php',
-      swift: 'swift',
-      kotlin: 'kotlin',
-      r: 'r',
-      bash: 'bash', sh: 'bash',
-      lua: 'lua',
-      perl: 'perl',
-      dart: 'dart',
-      scala: 'scala',
-      haskell: 'haskell',
-    };
-    
-    const langKey = (lang || '').toLowerCase().trim();
-
-    if (langKey === 'html' || langKey === 'svg') {
-      setOutput({ type: 'html', content: codeText });
+    // Visual preview — no Piston
+    const preview = getPreviewContent();
+    if (preview) {
+      setOutput({ type: 'html', content: preview });
       setRunning(false);
       return;
     }
 
-    if (langKey === 'css') {
-      const wrapped = `<!DOCTYPE html><html><head><style>${codeText}</style></head><body style="padding:20px;font-family:sans-serif;color:#888">CSS preview</body></html>`;
-      setOutput({ type: 'html', content: wrapped });
-      setRunning(false);
-      return;
-    }
-
-    const pistonLangName = LANG_MAP[langKey];
-
-    if (!pistonLangName) {
+    const runtime = PISTON_VERSIONS[langKey];
+    if (!runtime) {
       setHasError(true);
-      setOutput({ type: 'text', content: `Language "${lang}" is not supported yet.\nCode copied to clipboard.` });
-      navigator.clipboard.writeText(codeText).catch(() => {});
+      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for execution.` });
       setRunning(false);
       return;
     }
 
     try {
-      // Step 1: Get available runtimes
-      const rtRes = await fetch('https://emkc.org/api/v2/piston/runtimes', {
-        mode: 'cors'
-      });
-      const runtimes = await rtRes.json();
-      const runtime = runtimes.find(r => r.language === pistonLangName || r.aliases?.includes(pistonLangName));
-
-      if (!runtime) {
-        setHasError(true);
-        setOutput({ type: 'text', content: `Runtime for "${lang}" not found on Piston.` });
-        setRunning(false);
-        return;
-      }
-
-      // Step 2: Execute code
       const res = await fetch('https://emkc.org/api/v2/piston/execute', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           language: runtime.language,
           version: runtime.version,
-          files: [
-            {
-              content: codeText // Omitted 'name' so Piston auto-assigns extensions cleanly
-            }
-          ]
-        })
+          files: [{ content: codeText }],
+        }),
       });
+
+      if (!res.ok) {
+        setHasError(true);
+        setOutput({ type: 'text', content: `Piston API error ${res.status}: ${res.statusText}` });
+        return;
+      }
 
       const data = await res.json();
 
-      // 1. Handle API Failures (e.g., 429 Rate Limits)
-      if (!res.ok || data.message) {
-        setHasError(true);
-        setOutput({
-          type: 'text',
-          content: `API Error (${res.status}): ${data.message || res.statusText}`
-        });
-        return;
-      }
-
-      // 2. Handle Compilation Failures (for C, C++, Rust, etc.)
+      // Compilation error (C, C++, Rust, Java, etc.)
       if (data.compile && data.compile.code !== 0) {
         setHasError(true);
-        setOutput({
-          type: 'text',
-          content: (data.compile.stderr || data.compile.output || 'Compilation failed.').trim()
-        });
+        setOutput({ type: 'text', content: (data.compile.stderr || data.compile.output || 'Compilation failed.').trim() });
         return;
       }
 
-      // 3. Parse output cleanly without state shadowing conflicts
-      const pistonOutput =
-        data.run?.output ||
-        data.run?.stdout ||
-        data.run?.stderr ||
-        '';
+      const stdout = data.run?.stdout || '';
+      const stderr = data.run?.stderr || '';
+      const exitCode = data.run?.code ?? 0;
+      const combined = (stdout + stderr).trim();
 
-      setHasError(data.run?.code !== 0 || !!data.run?.stderr);
-
-      setOutput({
-        type: 'text',
-        content: pistonOutput.trim() || 'No output.'
-      });
+      setHasError(exitCode !== 0 || (!!stderr && !stdout));
+      setOutput({ type: 'text', content: combined || 'No output.' });
 
     } catch (err) {
-      console.error(err);
       setHasError(true);
-      setOutput({
-        type: 'text',
-        content: String(err?.message || err)
-      });
+      setOutput({ type: 'text', content: `Network error: ${err?.message || String(err)}` });
     } finally {
       setRunning(false);
     }
   };
 
+  const copyCode = () => {
+    navigator.clipboard.writeText(codeText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const getLangColor = () => {
+    const colors = {
+      python: '#3b82f6', py: '#3b82f6',
+      javascript: '#f59e0b', js: '#f59e0b',
+      typescript: '#06b6d4', ts: '#06b6d4',
+      rust: '#f97316',
+      go: '#06b6d4',
+      java: '#ef4444',
+      cpp: '#8b5cf6', 'c++': '#8b5cf6', c: '#8b5cf6',
+      python3: '#3b82f6',
+      html: '#f97316',
+      css: '#6366f1',
+      svg: '#10b981',
+      sql: '#f59e0b', sqlite3: '#f59e0b',
+      ruby: '#ef4444',
+      swift: '#f97316',
+      kotlin: '#8b5cf6',
+      scala: '#ef4444',
+      julia: '#8b5cf6',
+      bash: '#10b981', sh: '#10b981',
+    };
+    return colors[langKey] || 'var(--indigo)';
+  };
+
+  const langColor = getLangColor();
+
   return (
-    <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
-        <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
+    <div style={{
+      position: 'relative',
+      margin: '10px 0',
+      borderRadius: 12,
+      overflow: 'hidden',
+      border: '1px solid var(--border)',
+      background: 'var(--bg2)',
+    }}>
+      {/* Header bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '7px 12px',
+        background: 'var(--bg3)',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        {/* Left: dot + lang label */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: langColor,
+            boxShadow: `0 0 6px ${langColor}88`,
+          }}/>
+          <span style={{
+            fontSize: 11,
+            fontFamily: 'JetBrains Mono, monospace',
+            fontWeight: 700,
+            color: langColor,
+            letterSpacing: '.08em',
+            textTransform: 'uppercase',
+          }}>
+            {lang || 'code'}
+          </span>
+          {canRun && (
+            <span style={{
+              fontSize: 10,
+              fontFamily: 'JetBrains Mono, monospace',
+              color: 'var(--text4)',
+              letterSpacing: '.04em',
+            }}>
+              {isPreviewable ? '· preview' : '· runnable'}
+            </span>
+          )}
+        </div>
+
+        {/* Right: Run + Copy buttons */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {isRunnable && (
+          {canRun && (
             <button
               onClick={runCode}
               disabled={running}
               style={{
-                background: running ? 'rgba(99,102,241,.1)' : 'rgba(16,185,129,.12)',
-                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
-                color: running ? 'var(--indigo)' : '#10b981',
-                fontFamily: 'JetBrains Mono',
-                fontSize: 11,
-                padding: '3px 10px',
-                borderRadius: 6,
-                cursor: running ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 5,
+                padding: '4px 11px',
+                borderRadius: 7,
+                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
+                background: running ? 'rgba(99,102,241,.08)' : 'rgba(16,185,129,.08)',
+                color: running ? 'var(--indigo)' : '#10b981',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: running ? 'not-allowed' : 'pointer',
                 transition: 'all .15s',
+                letterSpacing: '.04em',
               }}
             >
               {running ? (
@@ -773,52 +852,111 @@ const CodeBlock = ({ lang, codeText }) => {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
                     <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
                   </svg>
-                  Running...
+                  Running…
                 </>
               ) : (
                 <>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
                     <polygon points="5,3 19,12 5,21"/>
                   </svg>
-                  Run
+                  {isPreviewable ? 'Preview' : 'Run'}
                 </>
               )}
             </button>
           )}
+
           <button
-            onClick={(e) => {
-              navigator.clipboard.writeText(codeText).then(() => {
-                const target = e.currentTarget;
-                target.textContent = 'Copied!';
-                target.style.color = '#10b981';
-                setTimeout(() => { target.textContent = 'Copy'; target.style.color = ''; }, 2000);
-              });
+            onClick={copyCode}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 11px',
+              borderRadius: 7,
+              border: '1px solid var(--border2)',
+              background: 'transparent',
+              color: copied ? '#10b981' : 'var(--text3)',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 11,
+              cursor: 'pointer',
+              transition: 'all .15s',
+              letterSpacing: '.04em',
             }}
-            style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
           >
-            Copy
+            {copied ? (
+              <>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                Copy
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Code Area */}
-      <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+      {/* Code area */}
+      <pre style={{
+        margin: 0,
+        padding: '14px 16px',
+        overflowX: 'auto',
+        background: 'var(--bg3)',
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 13,
+        lineHeight: 1.7,
+        color: 'var(--cyan)',
+        whiteSpace: 'pre',
+        wordBreak: 'normal',
+        maxHeight: 420,
+        overflowY: 'auto',
+      }}>
         <code>{codeText}</code>
       </pre>
 
-      {/* Inline Output Panel */}
+      {/* Output panel */}
       {output && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: hasError ? 'rgba(239,68,68,.06)' : 'rgba(16,185,129,.06)', borderBottom: '1px solid var(--border)' }}>
+          {/* Output header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 12px',
+            background: hasError ? 'rgba(239,68,68,.06)' : isPreviewable ? 'rgba(99,102,241,.06)' : 'rgba(16,185,129,.06)',
+            borderBottom: '1px solid var(--border)',
+          }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: hasError ? '#ef4444' : '#10b981' }}/>
-              <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono', color: hasError ? '#ef4444' : '#10b981', fontWeight: 700, letterSpacing: '.06em' }}>
-                {hasError ? 'ERROR' : 'OUTPUT'}
+              <div style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+              }}/>
+              <span style={{
+                fontSize: 11,
+                fontFamily: 'JetBrains Mono, monospace',
+                fontWeight: 700,
+                letterSpacing: '.06em',
+                color: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+              }}>
+                {hasError ? 'ERROR' : isPreviewable ? 'PREVIEW' : 'OUTPUT'}
               </span>
             </div>
             <button
               onClick={() => { setOutput(null); setHasError(false); }}
-              style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: 5, transition: 'all .12s' }}
+              style={{
+                background: 'none', border: 'none',
+                color: 'var(--text3)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
+                width: 22, height: 22, borderRadius: 5,
+                justifyContent: 'center',
+                transition: 'all .12s',
+              }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
             >
@@ -828,15 +966,34 @@ const CodeBlock = ({ lang, codeText }) => {
             </button>
           </div>
 
+          {/* Output content */}
           {output.type === 'html' ? (
             <iframe
               srcDoc={output.content}
-              style={{ width: '100%', height: 320, border: 'none', background: 'white', display: 'block' }}
-              sandbox="allow-scripts"
-              title="Code output"
+              style={{
+                width: '100%',
+                height: 360,
+                border: 'none',
+                background: '#fff',
+                display: 'block',
+              }}
+              sandbox="allow-scripts allow-same-origin"
+              title="Code preview"
             />
           ) : (
-            <pre style={{ margin: 0, padding: '14px 16px', background: '#080810', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.75, color: hasError ? '#f87171' : '#a5f3fc', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflowY: 'auto' }}>
+            <pre style={{
+              margin: 0,
+              padding: '14px 16px',
+              background: '#080810',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 13,
+              lineHeight: 1.75,
+              color: hasError ? '#f87171' : '#a5f3fc',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 320,
+              overflowY: 'auto',
+            }}>
               {output.content}
             </pre>
           )}
