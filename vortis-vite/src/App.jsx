@@ -683,23 +683,15 @@ const CodeBlock = ({ lang, codeText }) => {
 
   const langKey = (lang || '').toLowerCase().trim();
 
-  // Languages that render visually in an iframe
+  // Languages that run locally in the browser
+  const LOCAL_RUNNABLE_LANGS = new Set(['javascript', 'js', 'python', 'py', 'lua']);
+  
+  // Languages that render visually
   const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
-  const isPreviewable = PREVIEW_LANGS.has(langKey);
 
-  // Map your custom aliases to standard Piston API language names
-  const getPistonLangName = (key) => {
-    const registry = {
-      js: 'javascript', javascript: 'javascript',
-      py: 'python', python: 'python',
-      cpp: 'c++', 'c++': 'c++', c: 'c',
-      rs: 'rust', rust: 'rust',
-      rb: 'ruby', ruby: 'ruby',
-      sh: 'bash', bash: 'bash',
-      ts: 'typescript', typescript: 'typescript',
-    };
-    return registry[key] || key;
-  };
+  const isRunnable = LOCAL_RUNNABLE_LANGS.has(langKey);
+  const isPreviewable = PREVIEW_LANGS.has(langKey);
+  const canRun = isRunnable || isPreviewable;
 
   const getPreviewContent = () => {
     if (langKey === 'html') return codeText;
@@ -713,10 +705,7 @@ const CodeBlock = ({ lang, codeText }) => {
     setOutput(null);
     setHasError(false);
 
-    // Give React time to show the "Running..." spinner animation
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    // Handle frontend previews instantly
+    // Visual preview 
     const preview = getPreviewContent();
     if (preview) {
       setOutput({ type: 'html', content: preview });
@@ -724,38 +713,23 @@ const CodeBlock = ({ lang, codeText }) => {
       return;
     }
 
-    // Call the universal, open-source Piston engine API
-    try {
-      const targetLanguage = getPistonLangName(langKey);
-      
-     const response = await fetch("https://piston.picoctf.org/api/v2/piston/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          language: targetLanguage,
-          version: "*", // Automatically grabs the latest installed version of that language
-          files: [{ content: codeText }]
-        })
-      });
+    if (!isRunnable) {
+      setHasError(true);
+      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for free browser execution. Use JS, Python, or Lua.` });
+      setRunning(false);
+      return;
+    }
 
-      if (!response.ok) {
-        throw new Error(`Server responded with status code ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // If Piston throws a compile or runtime error
-      if (data.run.stderr) {
-        setHasError(true);
-        setOutput({ type: 'text', content: data.run.stderr });
-      } else {
-        setHasError(data.run.code !== 0); // Mark as error if process exit code is not 0
-        setOutput({ type: 'text', content: data.run.stdout || 'Success (no output)' });
-      }
+     try {
+       // Replaced fetch with the local WebAssembly executor
+       const result = await executeCodeLocally(langKey, codeText);
+       
+       setHasError(result.isError);
+       setOutput({ type: 'text', content: result.output });
 
     } catch (err) {
       setHasError(true);
-      setOutput({ type: 'text', content: `Execution failed: Could not reach compile server.` });
+      setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
     } finally {
       setRunning(false);
     }
@@ -829,54 +803,58 @@ const CodeBlock = ({ lang, codeText }) => {
           }}>
             {lang || 'code'}
           </span>
-          <span style={{
-            fontSize: 10,
-            fontFamily: 'JetBrains Mono, monospace',
-            color: 'var(--text4)',
-            letterSpacing: '.04em',
-          }}>
-            {isPreviewable ? '· preview' : '· runnable'}
-          </span>
+          {canRun && (
+            <span style={{
+              fontSize: 10,
+              fontFamily: 'JetBrains Mono, monospace',
+              color: 'var(--text4)',
+              letterSpacing: '.04em',
+            }}>
+              {isPreviewable ? '· preview' : '· runnable'}
+            </span>
+          )}
         </div>
 
         {/* Right: Run + Copy buttons */}
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button
-            onClick={runCode}
-            disabled={running}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '4px 11px',
-              borderRadius: 7,
-              border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
-              background: running ? 'rgba(99,102,241,.08)' : 'rgba(16,185,129,.08)',
-              color: running ? 'var(--indigo)' : '#10b981',
-              fontFamily: 'JetBrains Mono, monospace',
-              fontSize: 11,
-              fontWeight: 700,
-              cursor: running ? 'not-allowed' : 'pointer',
-              transition: 'all .15s',
-              letterSpacing: '.04em',
-            }}
-          >
-            {running ? (
-              <>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
-                </svg>
-                Running…
-              </>
-            ) : (
-              <>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5,3 19,12 5,21"/>
-                </svg>
-                {isPreviewable ? 'Preview' : 'Run'}
-              </>
-            )}
-          </button>
+          {canRun && (
+            <button
+              onClick={runCode}
+              disabled={running}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 11px',
+                borderRadius: 7,
+                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
+                background: running ? 'rgba(99,102,241,.08)' : 'rgba(16,185,129,.08)',
+                color: running ? 'var(--indigo)' : '#10b981',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: running ? 'not-allowed' : 'pointer',
+                transition: 'all .15s',
+                letterSpacing: '.04em',
+              }}
+            >
+              {running ? (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  </svg>
+                  Running…
+                </>
+              ) : (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5,3 19,12 5,21"/>
+                  </svg>
+                  {isPreviewable ? 'Preview' : 'Run'}
+                </>
+              )}
+            </button>
+          )}
 
           <button
             onClick={copyCode}
