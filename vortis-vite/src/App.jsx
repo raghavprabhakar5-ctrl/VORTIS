@@ -769,7 +769,7 @@ const CodeBlock = ({ lang, codeText }) => {
     
     return stringified;
   };
-  
+
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
@@ -808,7 +808,6 @@ const CodeBlock = ({ lang, codeText }) => {
       setHasError(result.isError);
       setOutput({ type: 'text', content: cleanOutput });
       setExecStatus(result.isError ? 'EXECUTION FAILED' : 'CODE EXECUTED');
-      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
 
     } catch (err) {
       const endTime = performance.now();
