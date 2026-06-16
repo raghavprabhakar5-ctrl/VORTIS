@@ -705,8 +705,11 @@ const CodeBlock = ({ lang, codeText }) => {
     setOutput(null);
     setHasError(false);
 
-    // 🌟 UI FIX: Gives React a brief moment to update the DOM and show "Running..." before freezing the main thread
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    // 🌟 FIX 1: Force browser to paint "Running..." UI before engine starts
+    await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 60)));
+
+    // Record the exact time the execution started
+    const startTime = Date.now();
 
     // Visual preview 
     const preview = getPreviewContent();
@@ -724,9 +727,16 @@ const CodeBlock = ({ lang, codeText }) => {
     }
 
     try {
-      // Replaced fetch with the local WebAssembly executor
       const result = await executeCodeLocally(langKey, codeText);
        
+      // 🌟 FIX 2: Calculate how long execution took
+      const duration = Date.now() - startTime;
+      const minimumWait = 500; // Force loading state to show for at least 500ms
+      
+      if (duration < minimumWait) {
+        await new Promise((resolve) => setTimeout(resolve, minimumWait - duration));
+      }
+
       setHasError(result.isError);
       setOutput({ type: 'text', content: result.output });
 
