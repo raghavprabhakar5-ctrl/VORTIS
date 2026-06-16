@@ -886,7 +886,7 @@ Reply ONLY one word: GEMINI or FLUX`,
       }
     }
 
-    // ╔══════════════════════════════════════╗
+ // ╔══════════════════════════════════════╗
 // ║  CODE EXECUTION                      ║
 // ╚══════════════════════════════════════╝
 if (action === 'execute') {
@@ -895,51 +895,80 @@ if (action === 'execute') {
   if (!code)     return res.status(400).json({ error: 'Missing code' });
   if (!language) return res.status(400).json({ error: 'Missing language' });
 
-  const WANDBOX_COMPILERS = {
-    python: 'cpython-3.12.0', py: 'cpython-3.12.0',
-    javascript: 'nodejs-20.3.0', js: 'nodejs-20.3.0',
-    typescript: 'typescript-5.0.4', ts: 'typescript-5.0.4',
-    c: 'gcc-13.2.0', cpp: 'gcc-13.2.0', 'c++': 'gcc-13.2.0',
-    ruby: 'ruby-3.2.0', rust: 'rust-1.70.0', go: 'go-1.20.4',
-    haskell: 'ghc-9.4.4', erlang: 'erlang-26.0', elixir: 'elixir-1.15.0',
-    lua: 'lua-5.4.4', perl: 'perl-5.36.0', php: 'php-8.2.0',
-    swift: 'swift-5.8.1', java: 'openjdk-20.0.0', kotlin: 'kotlin-1.8.20',
-    scala: 'scala-3.3.0', r: 'r-4.3.0', bash: 'bash', sh: 'bash',
-    ocaml: 'ocaml-5.0.0', nim: 'nim-1.6.12',
+  const GLOT_LANGS = {
+    python: { lang: 'python',     file: 'main.py'   },
+    py:     { lang: 'python',     file: 'main.py'   },
+    javascript: { lang: 'javascript', file: 'main.js'   },
+    js:     { lang: 'javascript', file: 'main.js'   },
+    typescript: { lang: 'typescript', file: 'main.ts'   },
+    ts:     { lang: 'typescript', file: 'main.ts'   },
+    c:      { lang: 'c',          file: 'main.c'    },
+    cpp:    { lang: 'cpp',        file: 'main.cpp'  },
+    'c++':  { lang: 'cpp',        file: 'main.cpp'  },
+    java:   { lang: 'java',       file: 'Main.java' },
+    kotlin: { lang: 'kotlin',     file: 'main.kt'   },
+    rust:   { lang: 'rust',       file: 'main.rs'   },
+    go:     { lang: 'go',         file: 'main.go'   },
+    ruby:   { lang: 'ruby',       file: 'main.rb'   },
+    php:    { lang: 'php',        file: 'main.php'  },
+    swift:  { lang: 'swift',      file: 'main.swift'},
+    r:      { lang: 'r',          file: 'main.r'    },
+    bash:   { lang: 'bash',       file: 'main.sh'   },
+    sh:     { lang: 'bash',       file: 'main.sh'   },
+    lua:    { lang: 'lua',        file: 'main.lua'  },
+    perl:   { lang: 'perl',       file: 'main.pl'   },
+    scala:  { lang: 'scala',      file: 'main.scala'},
+    haskell:{ lang: 'haskell',    file: 'main.hs'   },
+    elixir: { lang: 'elixir',     file: 'main.ex'   },
+    clojure:{ lang: 'clojure',    file: 'main.clj'  },
+    csharp: { lang: 'csharp',     file: 'main.cs'   },
+    'c#':   { lang: 'csharp',     file: 'main.cs'   },
+    erlang: { lang: 'erlang',     file: 'main.erl'  },
+    nim:    { lang: 'nim',        file: 'main.nim'  },
   };
 
-  const compiler = WANDBOX_COMPILERS[language];
-  if (!compiler) {
+  const lang = GLOT_LANGS[language.toLowerCase()];
+  if (!lang) {
     return res.status(200).json({ output: `Language "${language}" is not supported.`, isError: true });
   }
 
   try {
-    const wRes = await fetchWithTimeout(
-      'https://wandbox.org/api/compile.json',
+    const gRes = await fetchWithTimeout(
+      `https://glot.io/api/run/${lang.lang}/latest`,
       {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ compiler, code }),
+        body: JSON.stringify({
+          files: [{ name: lang.file, content: code }],
+        }),
       },
       20000
     );
 
-    if (!wRes.ok) {
-      return res.status(200).json({ output: `Execution service error (${wRes.status}).`, isError: true });
+    if (!gRes.ok) {
+      return res.status(200).json({ output: `Execution service error (${gRes.status}).`, isError: true });
     }
 
-    const data = await wRes.json();
-    const output  = (data.program_output || data.compiler_error || '').trim();
-    const isError = !!data.compiler_error && !data.program_output;
+    const data    = await gRes.json();
+    const stdout  = (data.stdout  || '').trim();
+    const stderr  = (data.stderr  || '').trim();
+    const error   = (data.error   || '').trim();
 
-    return res.status(200).json({ output: output || 'No output.', isError });
+    if (error && !stdout) {
+      return res.status(200).json({ output: error, isError: true });
+    }
+    if (stderr && !stdout) {
+      return res.status(200).json({ output: stderr, isError: true });
+    }
+
+    const output = stdout || stderr || 'No output.';
+    return res.status(200).json({ output, isError: !!stderr && !stdout });
 
   } catch (e) {
     console.error('Execute error:', e.message);
     return res.status(200).json({ output: 'Execution service unavailable — try again shortly.', isError: true });
   }
 }
-
     return res.status(400).json({ error: 'Invalid action' });
 
   } catch (error) {
