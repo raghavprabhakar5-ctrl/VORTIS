@@ -1068,7 +1068,6 @@ const CodeBlock = ({ lang, codeText }) => {
   );
 };
 
-export default CodeBlock;
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
