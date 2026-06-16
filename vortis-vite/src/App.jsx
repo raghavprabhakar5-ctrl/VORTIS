@@ -729,16 +729,32 @@ const CodeBlock = ({ lang, codeText }) => {
     return null;
   };
 
-  // 🌟 FIX: Decodes raw binary streams, ASCII arrays, and objects into clear readable strings
   const parseRawOutput = (raw) => {
     if (raw === null || raw === undefined) return '';
     
-    // Handle WebAssembly Uint8Arrays / ArrayBuffers
+    // Force to a clean string format to analyze its characteristics
+    let stringified = String(raw).trim();
+
+    // 1. Target strings containing only digits, commas, and whitespace (e.g., "72,101,108...")
+    if (/^[\d,\s]+$/.test(stringified) && stringified.includes(',')) {
+      try {
+        const charCodes = stringified
+          .split(',')
+          .map(num => parseInt(num.trim(), 10))
+          .filter(num => !isNaN(num)); // Eliminate any structural anomalies
+          
+        return String.fromCharCode(...charCodes);
+      } catch (e) {
+        // Fall back gracefully if string parsing anomalies occur
+      }
+    }
+    
+    // 2. Handle native WebAssembly Uint8Arrays / ArrayBuffers
     if (raw instanceof Uint8Array || raw instanceof ArrayBuffer) {
       return new TextDecoder().decode(raw);
     }
     
-    // Handle raw numeric ASCII array streams (e.g., [72, 101, 108, 108, 111])
+    // 3. Handle actual JavaScript arrays of number primitives
     if (Array.isArray(raw)) {
       if (raw.length > 0 && typeof raw[0] === 'number') {
         return String.fromCharCode(...raw);
@@ -746,14 +762,14 @@ const CodeBlock = ({ lang, codeText }) => {
       return raw.join('\n');
     }
     
-    // Handle standard JS objects
+    // 4. Handle standard JSON structured objects
     if (typeof raw === 'object') {
       return JSON.stringify(raw, null, 2);
     }
     
-    return String(raw);
+    return stringified;
   };
-
+  
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
