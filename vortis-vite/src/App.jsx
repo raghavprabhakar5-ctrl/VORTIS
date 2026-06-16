@@ -604,6 +604,77 @@ const SelectionReply = ({ onReply }) => {
 };
 
 
+// Add this helper function outside the component
+const executeCodeLocally = async (language, code) => {
+  const loadScript = (src) => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) return resolve();
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.head.appendChild(script);
+    });
+  };
+
+  const lang = language.toLowerCase();
+
+  try {
+    if (lang === 'js' || lang === 'javascript') {
+      let output = '';
+      const originalLog = console.log;
+      console.log = (...args) => { output += args.join(' ') + '\n'; };
+      
+      try {
+        new Function(code)();
+        console.log = originalLog;
+        return { output: output || 'Success (no output)', isError: false };
+      } catch (err) {
+        console.log = originalLog;
+        return { output: err.message, isError: true };
+      }
+    }
+
+    if (lang === 'py' || lang === 'python') {
+      if (!window.loadPyodide) {
+        await loadScript("https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js");
+      }
+      const py = await window.loadPyodide();
+      try {
+        let stdout = "";
+        py.setStdout({ write: (text) => { stdout += text; return text.length; } });
+        py.setStderr({ write: (text) => { stdout += text; return text.length; } });
+        
+        await py.runPythonAsync(code);
+        return { output: stdout || 'Success (no output)', isError: false };
+      } catch (err) {
+        return { output: err.message, isError: true };
+      }
+    }
+
+    if (lang === 'lua') {
+      if (!window.Lua) {
+        await loadScript("https://cdn.jsdelivr.net/npm/wasmoon/dist/index.js");
+      }
+      const factory = new window.Lua.LuaFactory();
+      const lua = await factory.createEngine();
+      try {
+        let output = "";
+        lua.global.set('print', (...args) => { output += args.join('\t') + '\n'; });
+        await lua.doString(code);
+        return { output: output || 'Success (no output)', isError: false };
+      } catch (err) {
+        return { output: err.message, isError: true };
+      }
+    }
+
+    return { output: `Language "${language}" not configured yet.`, isError: true };
+
+  } catch (e) {
+    return { output: `Failed to load execution engine: ${e.message}`, isError: true };
+  }
+};
+
 const CodeBlock = ({ lang, codeText }) => {
   const [output, setOutput] = React.useState(null);
   const [running, setRunning] = React.useState(false);
@@ -612,65 +683,13 @@ const CodeBlock = ({ lang, codeText }) => {
 
   const langKey = (lang || '').toLowerCase().trim();
 
-  const PISTON_VERSIONS = {
-    python: { language: 'python', version: '3.10.0' },
-    py: { language: 'python', version: '3.10.0' },
-    javascript: { language: 'javascript', version: '18.15.0' },
-    js: { language: 'javascript', version: '18.15.0' },
-    typescript: { language: 'typescript', version: '5.0.3' },
-    ts: { language: 'typescript', version: '5.0.3' },
-    java: { language: 'java', version: '15.0.2' },
-    c: { language: 'c', version: '10.2.0' },
-    cpp: { language: 'c++', version: '10.2.0' },
-    'c++': { language: 'c++', version: '10.2.0' },
-    csharp: { language: 'csharp', version: '6.12.0' },
-    cs: { language: 'csharp', version: '6.12.0' },
-    go: { language: 'go', version: '1.16.2' },
-    rust: { language: 'rust', version: '1.50.0' },
-    ruby: { language: 'ruby', version: '3.0.1' },
-    php: { language: 'php', version: '8.2.3' },
-    swift: { language: 'swift', version: '5.3.3' },
-    kotlin: { language: 'kotlin', version: '1.8.20' },
-    r: { language: 'r', version: '4.1.1' },
-    bash: { language: 'bash', version: '5.2.0' },
-    sh: { language: 'bash', version: '5.2.0' },
-    lua: { language: 'lua', version: '5.4.4' },
-    perl: { language: 'perl', version: '5.36.0' },
-    dart: { language: 'dart', version: '2.19.6' },
-    scala: { language: 'scala', version: '3.2.2' },
-    haskell: { language: 'haskell', version: '9.4.3' },
-    elixir: { language: 'elixir', version: '1.14.3' },
-    erlang: { language: 'erlang', version: '25.3' },
-    clojure: { language: 'clojure', version: '1.11.1' },
-    fsharp: { language: 'fsharp.net', version: '7.0.400' },
-    'f#': { language: 'fsharp.net', version: '7.0.400' },
-    ocaml: { language: 'ocaml', version: '4.14.0' },
-    nim: { language: 'nim', version: '1.6.12' },
-    zig: { language: 'zig', version: '0.10.1' },
-    crystal: { language: 'crystal', version: '1.7.3' },
-    groovy: { language: 'groovy', version: '3.0.7' },
-    julia: { language: 'julia', version: '1.8.5' },
-    coffeescript: { language: 'coffeescript', version: '2.7.0' },
-    coffee: { language: 'coffeescript', version: '2.7.0' },
-    powershell: { language: 'powershell', version: '7.1.7' },
-    ps1: { language: 'powershell', version: '7.1.7' },
-    nasm: { language: 'nasm', version: '2.15.05' },
-    asm: { language: 'nasm', version: '2.15.05' },
-    assembly: { language: 'nasm', version: '2.15.05' },
-    sqlite3: { language: 'sqlite3', version: '3.36.0' },
-    sql: { language: 'sqlite3', version: '3.36.0' },
-    prolog: { language: 'prolog', version: '8.4.3' },
-    cobol: { language: 'cobol', version: '3.1.2' },
-    fortran: { language: 'fortran', version: '10.2.0' },
-    pascal: { language: 'pascal', version: '3.2.2' },
-    basic: { language: 'basic', version: '1.0.0' },
-  };
-
+  // Languages that run locally in the browser
+  const LOCAL_RUNNABLE_LANGS = new Set(['javascript', 'js', 'python', 'py', 'lua']);
+  
   // Languages that render visually
   const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
 
-  // Languages that run via Piston
-  const isRunnable = !!PISTON_VERSIONS[langKey];
+  const isRunnable = LOCAL_RUNNABLE_LANGS.has(langKey);
   const isPreviewable = PREVIEW_LANGS.has(langKey);
   const canRun = isRunnable || isPreviewable;
 
@@ -686,7 +705,7 @@ const CodeBlock = ({ lang, codeText }) => {
     setOutput(null);
     setHasError(false);
 
-    // Visual preview — no Piston
+    // Visual preview 
     const preview = getPreviewContent();
     if (preview) {
       setOutput({ type: 'html', content: preview });
@@ -694,43 +713,28 @@ const CodeBlock = ({ lang, codeText }) => {
       return;
     }
 
-    const runtime = PISTON_VERSIONS[langKey];
-    if (!runtime) {
+    if (!isRunnable) {
       setHasError(true);
-      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for execution.` });
+      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for free browser execution. Use JS, Python, or Lua.` });
       setRunning(false);
       return;
     }
 
      try {
-      const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
-        method: 'POST',
-        headers: await getAuthHeader(),
-        body: JSON.stringify({
-          action: 'execute',
-          language: langKey,
-          code: codeText,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setHasError(data.isError);
-        setOutput({ type: 'text', content: data.output });
-        setRunning(false);
-        return;
-      }
-
-      setHasError(true);
-      setOutput({ type: 'text', content: 'Execution failed.' });
+       // Replaced fetch with the local WebAssembly executor
+       const result = await executeCodeLocally(langKey, codeText);
+       
+       setHasError(result.isError);
+       setOutput({ type: 'text', content: result.output });
 
     } catch (err) {
       setHasError(true);
-      setOutput({ type: 'text', content: `Network error: ${err?.message || String(err)}` });
+      setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
     } finally {
       setRunning(false);
     }
   };
+
   const copyCode = () => {
     navigator.clipboard.writeText(codeText).then(() => {
       setCopied(true);
@@ -747,7 +751,6 @@ const CodeBlock = ({ lang, codeText }) => {
       go: '#06b6d4',
       java: '#ef4444',
       cpp: '#8b5cf6', 'c++': '#8b5cf6', c: '#8b5cf6',
-      python3: '#3b82f6',
       html: '#f97316',
       css: '#6366f1',
       svg: '#10b981',
@@ -758,6 +761,7 @@ const CodeBlock = ({ lang, codeText }) => {
       scala: '#ef4444',
       julia: '#8b5cf6',
       bash: '#10b981', sh: '#10b981',
+      lua: '#3b82f6',
     };
     return colors[langKey] || 'var(--indigo)';
   };
