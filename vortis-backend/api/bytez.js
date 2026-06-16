@@ -33,6 +33,7 @@ const RATE_LIMITS = {
   search: { window: 60000, max: 20 },
   vision: { window: 60000, max: 5  },
   tts:    { window: 60000, max: 20 },
+  execute: { window: 60000, max: 15 },
 };
 
 setInterval(() => {
@@ -410,7 +411,7 @@ export default async function handler(req, res) {
     const action = sanitizeString(body.action || '', 20);
 
     if (!action) return res.status(400).json({ error: 'Missing action' });
-    if (!['chat', 'search', 'image', 'vision', 'tts'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
+    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
     const prompt  = sanitizeString(body.prompt  || '', 15000);
@@ -884,6 +885,60 @@ Reply ONLY one word: GEMINI or FLUX`,
         return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
       }
     }
+
+    // ╔══════════════════════════════════════╗
+// ║  CODE EXECUTION                      ║
+// ╚══════════════════════════════════════╝
+if (action === 'execute') {
+  const code     = sanitizeString(body.code     || '', 5000);
+  const language = sanitizeString(body.language || '', 30);
+  if (!code)     return res.status(400).json({ error: 'Missing code' });
+  if (!language) return res.status(400).json({ error: 'Missing language' });
+
+  const WANDBOX_COMPILERS = {
+    python: 'cpython-3.12.0', py: 'cpython-3.12.0',
+    javascript: 'nodejs-20.3.0', js: 'nodejs-20.3.0',
+    typescript: 'typescript-5.0.4', ts: 'typescript-5.0.4',
+    c: 'gcc-13.2.0', cpp: 'gcc-13.2.0', 'c++': 'gcc-13.2.0',
+    ruby: 'ruby-3.2.0', rust: 'rust-1.70.0', go: 'go-1.20.4',
+    haskell: 'ghc-9.4.4', erlang: 'erlang-26.0', elixir: 'elixir-1.15.0',
+    lua: 'lua-5.4.4', perl: 'perl-5.36.0', php: 'php-8.2.0',
+    swift: 'swift-5.8.1', java: 'openjdk-20.0.0', kotlin: 'kotlin-1.8.20',
+    scala: 'scala-3.3.0', r: 'r-4.3.0', bash: 'bash', sh: 'bash',
+    ocaml: 'ocaml-5.0.0', nim: 'nim-1.6.12',
+  };
+
+  const compiler = WANDBOX_COMPILERS[language];
+  if (!compiler) {
+    return res.status(200).json({ output: `Language "${language}" is not supported.`, isError: true });
+  }
+
+  try {
+    const wRes = await fetchWithTimeout(
+      'https://wandbox.org/api/compile.json',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ compiler, code }),
+      },
+      20000
+    );
+
+    if (!wRes.ok) {
+      return res.status(200).json({ output: `Execution service error (${wRes.status}).`, isError: true });
+    }
+
+    const data = await wRes.json();
+    const output  = (data.program_output || data.compiler_error || '').trim();
+    const isError = !!data.compiler_error && !data.program_output;
+
+    return res.status(200).json({ output: output || 'No output.', isError });
+
+  } catch (e) {
+    console.error('Execute error:', e.message);
+    return res.status(200).json({ output: 'Execution service unavailable — try again shortly.', isError: true });
+  }
+}
 
     return res.status(400).json({ error: 'Invalid action' });
 

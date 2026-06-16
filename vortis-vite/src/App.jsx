@@ -702,116 +702,27 @@ const CodeBlock = ({ lang, codeText }) => {
       return;
     }
 
-    try {
-     // --- Wandbox first ---
-const WANDBOX_COMPILERS = {
-  python: 'cpython-3.12.0', py: 'cpython-3.12.0',
-  javascript: 'nodejs-20.3.0', js: 'nodejs-20.3.0',
-  typescript: 'typescript-5.0.4', ts: 'typescript-5.0.4',
-  c: 'gcc-13.2.0', cpp: 'gcc-13.2.0', 'c++': 'gcc-13.2.0',
-  ruby: 'ruby-3.2.0',
-  rust: 'rust-1.70.0',
-  go: 'go-1.20.4',
-  haskell: 'ghc-9.4.4',
-  erlang: 'erlang-26.0',
-  elixir: 'elixir-1.15.0',
-  lua: 'lua-5.4.4',
-  perl: 'perl-5.36.0',
-  php: 'php-8.2.0',
-  swift: 'swift-5.8.1',
-  java: 'openjdk-20.0.0',
-  kotlin: 'kotlin-1.8.20',
-  scala: 'scala-3.3.0',
-  r: 'r-4.3.0',
-  bash: 'bash',  sh: 'bash',
-  ocaml: 'ocaml-5.0.0',
-  nim: 'nim-1.6.12',
-  crystal: 'crystal-1.8.2',
-  pascal: 'fpc-3.2.2',
-};
+     try {
+      const res = await fetch('https://vortis-backend.vercel.app/api/bytez', {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({
+          action: 'execute',
+          language: langKey,
+          code: codeText,
+        }),
+      });
 
-const GLOT_TOKEN = 'YOUR_GLOT_TOKEN_HERE'; // optional fallback
-const GLOT_LANGS = {
-  python: 'python', py: 'python',
-  javascript: 'javascript', js: 'javascript',
-  typescript: 'typescript', ts: 'typescript',
-  c: 'c', cpp: 'cpp', 'c++': 'cpp',
-  java: 'java', go: 'go', rust: 'rust',
-  ruby: 'ruby', php: 'php', swift: 'swift',
-  kotlin: 'kotlin', scala: 'scala', r: 'r',
-  bash: 'bash', sh: 'bash', lua: 'lua',
-  perl: 'perl', haskell: 'haskell', erlang: 'erlang',
-  elixir: 'elixir', clojure: 'clojure', dart: 'dart',
-  groovy: 'groovy', julia: 'julia', fsharp: 'fsharp',
-  ocaml: 'ocaml', coffeescript: 'coffeescript',
-};
+      if (res.ok) {
+        const data = await res.json();
+        setHasError(data.isError);
+        setOutput({ type: 'text', content: data.output });
+        setRunning(false);
+        return;
+      }
 
-const GLOT_EXT = {
-  python: 'py', py: 'py', javascript: 'js', js: 'js',
-  typescript: 'ts', ts: 'ts', c: 'c', cpp: 'cpp', 'c++': 'cpp',
-  java: 'java', go: 'go', rust: 'rs', ruby: 'rb', php: 'php',
-  swift: 'swift', kotlin: 'kt', scala: 'scala', r: 'r',
-  bash: 'sh', sh: 'sh', lua: 'lua', perl: 'pl', haskell: 'hs',
-  erlang: 'erl', elixir: 'ex', clojure: 'clj', dart: 'dart',
-  groovy: 'groovy', julia: 'jl', fsharp: 'fs', ocaml: 'ml',
-  coffeescript: 'coffee',
-};
-
-let output = null;
-let usedFallback = false;
-
-// Try Wandbox
-const wandboxCompiler = WANDBOX_COMPILERS[langKey];
-if (wandboxCompiler) {
-  try {
-    const wRes = await fetch('https://wandbox.org/api/compile.json', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ compiler: wandboxCompiler, code: codeText }),
-    });
-    if (wRes.ok) {
-      const wData = await wRes.json();
-      const text = (wData.program_output || wData.compiler_error || '').trim();
-      const isErr = !!wData.compiler_error && !wData.program_output;
-      setHasError(isErr);
-      setOutput({ type: 'text', content: text || 'No output.' });
-      setRunning(false);
-      return;
-    }
-  } catch (_) {
-    // Wandbox failed, fall through to Glot
-    usedFallback = true;
-  }
-}
-
-// Fallback: Glot.io
-const glotLang = GLOT_LANGS[langKey];
-const glotExt = GLOT_EXT[langKey] || 'txt';
-
-if (glotLang && GLOT_TOKEN !== 'YOUR_GLOT_TOKEN_HERE') {
-  try {
-    const gRes = await fetch(`https://glot.io/api/run/${glotLang}/latest`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Token ${GLOT_TOKEN}`,
-      },
-      body: JSON.stringify({ files: [{ name: `main.${glotExt}`, content: codeText }] }),
-    });
-    if (gRes.ok) {
-      const gData = await gRes.json();
-      const text = (gData.stdout || gData.stderr || '').trim();
-      setHasError(!!gData.stderr && !gData.stdout);
-      setOutput({ type: 'text', content: text || 'No output.' });
-      setRunning(false);
-      return;
-    }
-  } catch (_) {}
-}
-
-// Both failed
-setHasError(true);
-setOutput({ type: 'text', content: `Could not execute "${lang}". Wandbox and Glot both unavailable.` });
+      setHasError(true);
+      setOutput({ type: 'text', content: 'Execution failed.' });
 
     } catch (err) {
       setHasError(true);
@@ -820,7 +731,6 @@ setOutput({ type: 'text', content: `Could not execute "${lang}". Wandbox and Glo
       setRunning(false);
     }
   };
-
   const copyCode = () => {
     navigator.clipboard.writeText(codeText).then(() => {
       setCopied(true);
