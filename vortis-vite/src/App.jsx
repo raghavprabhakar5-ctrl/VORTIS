@@ -683,7 +683,7 @@ const CodeBlock = ({ lang, codeText }) => {
 
   const langKey = (lang || '').toLowerCase().trim();
 
-  // Languages that run locally in the browser
+  // Languages that run locally in the browser via WebAssembly or Native JS
   const LOCAL_RUNNABLE_LANGS = new Set(['javascript', 'js', 'python', 'py', 'lua']);
   
   // Languages that render visually
@@ -705,6 +705,9 @@ const CodeBlock = ({ lang, codeText }) => {
     setOutput(null);
     setHasError(false);
 
+    // 🌟 UI FIX: Gives React a brief moment to update the DOM and show "Running..." before freezing the main thread
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     // Visual preview 
     const preview = getPreviewContent();
     if (preview) {
@@ -720,12 +723,12 @@ const CodeBlock = ({ lang, codeText }) => {
       return;
     }
 
-     try {
-       // Replaced fetch with the local WebAssembly executor
-       const result = await executeCodeLocally(langKey, codeText);
+    try {
+      // Replaced fetch with the local WebAssembly executor
+      const result = await executeCodeLocally(langKey, codeText);
        
-       setHasError(result.isError);
-       setOutput({ type: 'text', content: result.output });
+      setHasError(result.isError);
+      setOutput({ type: 'text', content: result.output });
 
     } catch (err) {
       setHasError(true);
