@@ -680,18 +680,32 @@ const CodeBlock = ({ lang, codeText }) => {
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
+  const [execTime, setExecTime] = React.useState(null); // 🌟 Tracks how long execution took
 
   const langKey = (lang || '').toLowerCase().trim();
 
-  // Languages that run locally in the browser
-  const LOCAL_RUNNABLE_LANGS = new Set(['javascript', 'js', 'python', 'py', 'lua']);
-  
-  // Languages that render visually
+  // Languages that render visually in an iframe
   const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
-
-  const isRunnable = LOCAL_RUNNABLE_LANGS.has(langKey);
   const isPreviewable = PREVIEW_LANGS.has(langKey);
-  const canRun = isRunnable || isPreviewable;
+  
+  // Since we are using an all-language backend engine, everything can be executed or previewed!
+  const canRun = true;
+
+  // Map user custom extensions/aliases to standard engine language identifiers
+  const getEngineLangName = (key) => {
+    const registry = {
+      js: 'javascript', javascript: 'javascript',
+      py: 'python', python: 'python',
+      cpp: 'c++', 'c++': 'c++', c: 'c',
+      rs: 'rust', rust: 'rust',
+      rb: 'ruby', ruby: 'ruby',
+      sh: 'bash', bash: 'bash',
+      ts: 'typescript', typescript: 'typescript',
+      cs: 'csharp', 'c#': 'csharp', csharp: 'csharp',
+      py3: 'python',
+    };
+    return registry[key] || key;
+  };
 
   const getPreviewContent = () => {
     if (langKey === 'html') return codeText;
@@ -704,8 +718,14 @@ const CodeBlock = ({ lang, codeText }) => {
     setRunning(true);
     setOutput(null);
     setHasError(false);
+    setExecTime(null);
 
-    // Visual preview 
+    // 🌟 Force React to render the "Running..." spinner state before starting network request
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const startTime = performance.now(); // Start runtime clock
+
+    // Handle frontend previews instantly
     const preview = getPreviewContent();
     if (preview) {
       setOutput({ type: 'html', content: preview });
@@ -713,23 +733,41 @@ const CodeBlock = ({ lang, codeText }) => {
       return;
     }
 
-    if (!isRunnable) {
-      setHasError(true);
-      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for free browser execution. Use JS, Python, or Lua.` });
-      setRunning(false);
-      return;
-    }
+    // Call the universal server execution engine
+    try {
+      const targetLanguage = getEngineLangName(langKey);
+      
+      const response = await fetch("https://emkc.org/api/v2/piston/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          language: targetLanguage,
+          version: "*",
+          files: [{ content: codeText }]
+        })
+      });
 
-     try {
-       // Replaced fetch with the local WebAssembly executor
-       const result = await executeCodeLocally(langKey, codeText);
-       
-       setHasError(result.isError);
-       setOutput({ type: 'text', content: result.output });
+      const endTime = performance.now();
+      setExecTime((endTime - startTime).toFixed(0)); // Save execution time duration
+
+      if (!response.ok) {
+        throw new Error(`Server status code: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Catch error responses from engine compiler
+      if (data.run.stderr) {
+        setHasError(true);
+        setOutput({ type: 'text', content: data.run.stderr });
+      } else {
+        setHasError(data.run.code !== 0);
+        setOutput({ type: 'text', content: data.run.stdout || 'Success (no output)' });
+      }
 
     } catch (err) {
       setHasError(true);
-      setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
+      setOutput({ type: 'text', content: `Execution failed: Language engine unavailable or unsupported.` });
     } finally {
       setRunning(false);
     }
@@ -937,9 +975,20 @@ const CodeBlock = ({ lang, codeText }) => {
               }}>
                 {hasError ? 'ERROR' : isPreviewable ? 'PREVIEW' : 'OUTPUT'}
               </span>
+              {/* 🌟 STATUS METRIC DISPLAY: Shows execution runtime length */}
+              {execTime && (
+                <span style={{
+                  fontSize: 10,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  color: 'var(--text4)',
+                  opacity: 0.8
+                }}>
+                  · {execTime}ms
+                </span>
+              )}
             </div>
             <button
-              onClick={() => { setOutput(null); setHasError(false); }}
+              onClick={() => { setOutput(null); setHasError(false); setExecTime(null); }}
               style={{
                 background: 'none', border: 'none',
                 color: 'var(--text3)', cursor: 'pointer',
