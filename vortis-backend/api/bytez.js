@@ -568,7 +568,8 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         messages.push(...history);
 
        if (!messages.length || messages[messages.length - 1].role !== 'user') {
-  messages.push({ role: 'user', content: prompt.trim() || 'Hello' });
+ const lastUserContent = body.history?.slice(-1)?.[0]?.content || prompt.trim();
+messages.push({ role: 'user', content: lastUserContent });
 }
 
         const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
