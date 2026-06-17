@@ -64,7 +64,6 @@ function sanitizeString(str, maxLen = 2000) {
   return str.trim().slice(0, maxLen)
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/javascript:/gi, '')
-    .replace(/on\w+\s*=/gi, '');
 }
 
 function sanitizeHistory(history, maxMessages = 30) {
@@ -568,9 +567,9 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         if (sysContent) messages.push({ role: 'system', content: sysContent });
         messages.push(...history);
 
-        if (!messages.length || messages[messages.length - 1].role !== 'user') {
-          return res.status(400).json({ error: 'Last message must be from user' });
-        }
+       if (!messages.length || messages[messages.length - 1].role !== 'user') {
+  messages.push({ role: 'user', content: prompt.trim() || 'Hello' });
+}
 
         const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
         if (!ok) {
