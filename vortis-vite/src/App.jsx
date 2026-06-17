@@ -507,343 +507,388 @@ const AIImageCard = ({ src, onRetry }) => {
 };
 
 
-const SelectionReply = ({ onReply }) => {
-  const [pos, setPos] = React.useState(null);
-  const [sel, setSel] = React.useState('');
-
-  React.useEffect(() => {
-   const handler = () => {
-  setTimeout(() => {
-    const selection = window.getSelection();
-    const text = selection?.toString().trim();
-    // Only show Reply if selection is inside an AI bubble
-    const anchorNode = selection?.anchorNode;
-    const isInsideAIBubble = anchorNode?.parentElement?.closest('.bubble-ai');
-    if (text && text.length > 2 && isInsideAIBubble) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          setSel(text);
-         setPos({
-  top: rect.top - 44,
-  left: Math.min(Math.max(rect.left + rect.width / 2, 80), window.innerWidth - 80)
-});
-        } else {
-          setPos(null);
-          setSel('');
-        }
-      }, 10);
-    };
-
-    const clearHandler = (e) => {
-      if (e.target.closest && e.target.closest('button')) return;
-      setTimeout(() => {
-        if (!window.getSelection()?.toString().trim()) {
-          setPos(null);
-          setSel('');
-        }
-      }, 100);
-    };
-
-    document.addEventListener('mouseup', handler);
-    document.addEventListener('touchend', handler);
-    document.addEventListener('mousedown', clearHandler);
-    return () => {
-      document.removeEventListener('mouseup', handler);
-      document.removeEventListener('touchend', handler);
-      document.removeEventListener('mousedown', clearHandler);
-    };
-  }, []);
-
-  if (!pos || !sel) return null;
-
-  return (
-    <div style={{
-  position: 'fixed',
-  top: Math.max(pos.top, 10),
-  left: pos.left,
-  transform: 'translateX(-50%)',
-  zIndex: 99999,
-  pointerEvents: 'all',
-  willChange: 'transform',
-}}>
-     <button
-  onMouseDown={e => {
-    e.preventDefault();
-    e.stopPropagation();
-    onReply(`> ${sel}\n\n`);
-    window.getSelection()?.removeAllRanges();
-    setPos(null);
-    setSel('');
-  }}
-  style={{
-    background: 'rgba(99,102,241,0.12)',
-    border: '1px solid rgba(99,102,241,0.4)',
-    color: '#6366f1',
-    borderRadius: 8,
-    padding: '8px 18px',
-    fontSize: 13.5,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'Geist,sans-serif',
-    boxShadow: '0 2px 12px rgba(0,0,0,.4)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    whiteSpace: 'nowrap',
-    userSelect: 'none',
-  }}
->
-  Reply
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 17 4 12 9 7"/>
-    <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
-  </svg>
-</button>
-    </div>
-  );
+const LANG_ENGINE = {
+  js: 'js', javascript: 'js', jsx: 'js', mjs: 'js', node: 'js',
+  ts: 'ts', typescript: 'ts', tsx: 'ts',
+  py: 'python', python: 'python', python3: 'python',
+  lua: 'lua',
+  rb: 'ruby', ruby: 'ruby',
+  php: 'php',
+  sql: 'sql', sqlite: 'sql', sqlite3: 'sql', mysql: 'sql', postgres: 'sql', postgresql: 'sql', plsql: 'sql', tsql: 'sql',
+  c: 'cpp', cpp: 'cpp', 'c++': 'cpp', cc: 'cpp', h: 'cpp', hpp: 'cpp',
+  json: 'json',
 };
-
-
-// Add this helper function outside the component
-const executeCodeLocally = async (language, code) => {
-  const loadScript = (src) => {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${src}"]`)) return resolve();
-      const script = document.createElement('script');
-      script.src = src;
-      script.onload = resolve;
-      script.onerror = reject;
-      document.head.appendChild(script);
-    });
-  };
-
-  const lang = language.toLowerCase();
-
+ 
+// ── friendly label + button verb shown in the UI for each engine ──
+const ENGINE_META = {
+  js:     { name: 'Native JS',        verb: 'Run' },
+  ts:     { name: 'tsc → JS',         verb: 'Run' },
+  python: { name: 'Pyodide',          verb: 'Run' },
+  lua:    { name: 'wasmoon',          verb: 'Run' },
+  ruby:   { name: 'ruby.wasm',        verb: 'Run' },
+  php:    { name: 'php-wasm',         verb: 'Run' },
+  sql:    { name: 'sql.js · SQLite',  verb: 'Query' },
+  cpp:    { name: 'JSCPP',            verb: 'Run' },
+  json:   { name: 'JSON',             verb: 'Validate' },
+};
+ 
+const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
+ 
+// ── one-time <script> loader, cached on window so remounts don't re-fetch ──
+const loadScriptOnce = (src) => {
+  if (!window.__vortisLoaded) window.__vortisLoaded = {};
+  if (window.__vortisLoaded[src]) return window.__vortisLoaded[src];
+  const p = new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Failed to load ' + src));
+    document.head.appendChild(s);
+  });
+  window.__vortisLoaded[src] = p;
+  return p;
+};
+ 
+// ── booted engines live here for the lifetime of the tab ──
+const _engineCache = {};
+ 
+const bootPython = async (onStatus) => {
+  if (_engineCache.python) return _engineCache.python;
+  onStatus?.('Booting Python runtime (Pyodide, ~6MB first time)…');
+  if (!window.loadPyodide) await loadScriptOnce('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
+  const py = await window.loadPyodide();
+  _engineCache.python = py;
+  return py;
+};
+ 
+const bootLua = async (onStatus) => {
+  if (_engineCache.lua) return _engineCache.lua;
+  onStatus?.('Booting Lua runtime (wasmoon)…');
+  if (!window.Lua) await loadScriptOnce('https://cdn.jsdelivr.net/npm/wasmoon/dist/index.js');
+  _engineCache.lua = new window.Lua.LuaFactory();
+  return _engineCache.lua;
+};
+ 
+const bootTS = async (onStatus) => {
+  if (_engineCache.ts) return _engineCache.ts;
+  onStatus?.('Loading TypeScript compiler…');
+  if (!window.ts) await loadScriptOnce('https://cdn.jsdelivr.net/npm/typescript@5.4.5/lib/typescript.js');
+  _engineCache.ts = window.ts;
+  return _engineCache.ts;
+};
+ 
+const bootSQL = async (onStatus) => {
+  if (_engineCache.sql) return _engineCache.sql;
+  onStatus?.('Booting SQLite (sql.js, WASM)…');
+  if (!window.initSqlJs) await loadScriptOnce('https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js');
+  const SQL = await window.initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}` });
+  _engineCache.sql = SQL;
+  return SQL;
+};
+ 
+const bootPHP = async (onStatus) => {
+  if (_engineCache.php) return _engineCache.php;
+  onStatus?.('Booting PHP runtime (php-wasm)…');
+  const mod = await import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/php-wasm@0.0.7/PhpWeb.mjs');
+  _engineCache.php = mod;
+  return mod;
+};
+ 
+const bootRuby = async (onStatus) => {
+  if (_engineCache.ruby) return _engineCache.ruby;
+  onStatus?.('Booting Ruby runtime (ruby.wasm) — first run takes longer…');
+  const { DefaultRubyVM } = await import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/@ruby/3.3-wasm-wasi@2.7.1/dist/browser/+esm');
+  const resp = await fetch('https://cdn.jsdelivr.net/npm/@ruby/3.3-wasm-wasi@2.7.1/dist/ruby+stdlib.wasm');
+  const buffer = await resp.arrayBuffer();
+  const module = await WebAssembly.compile(buffer);
+  const { vm } = await DefaultRubyVM(module);
+  _engineCache.ruby = vm;
+  return vm;
+};
+ 
+const bootCpp = async (onStatus) => {
+  if (_engineCache.cpp) return _engineCache.cpp;
+  onStatus?.('Loading C/C++ interpreter (JSCPP)…');
+  if (!window.JSCPP) await loadScriptOnce('https://cdn.jsdelivr.net/npm/jscpp@2.0.13/dist/JSCPP.es5.min.js');
+  _engineCache.cpp = window.JSCPP;
+  return _engineCache.cpp;
+};
+ 
+// ── normalizes whatever weird shape a runtime hands back into a clean string ──
+const tidyOutput = (raw) => {
+  if (raw === null || raw === undefined) return '';
+  if (raw instanceof Uint8Array || raw instanceof ArrayBuffer) return new TextDecoder().decode(raw);
+  if (Array.isArray(raw)) return raw.length && typeof raw[0] === 'number' ? String.fromCharCode(...raw) : raw.join('\n');
+  if (typeof raw === 'object') { try { return JSON.stringify(raw, null, 2); } catch (_) { return String(raw); } }
+  return String(raw);
+};
+ 
+// ── the actual multi-language executor ──
+const executeCodeLocally = async (language, code, onStatus) => {
+  const lang = (language || '').toLowerCase().trim();
+  const engine = LANG_ENGINE[lang];
+ 
   try {
-    if (lang === 'js' || lang === 'javascript') {
-      let output = '';
-      const originalLog = console.log;
-      console.log = (...args) => { output += args.join(' ') + '\n'; };
-      
-      try {
-        new Function(code)();
-        console.log = originalLog;
-        return { output: output || 'Success (no output)', isError: false };
-      } catch (err) {
-        console.log = originalLog;
-        return { output: err.message, isError: true };
+    switch (engine) {
+ 
+      case 'js': {
+        let output = '';
+        const orig = { log: console.log, error: console.error, warn: console.warn };
+        const capture = (...a) => { output += a.map(x => (typeof x === 'object' ? tidyOutput(x) : String(x))).join(' ') + '\n'; };
+        console.log = capture; console.error = capture; console.warn = capture;
+        try {
+          const result = await new Function(`return (async () => {\n${code}\n})()`)();
+          console.log = orig.log; console.error = orig.error; console.warn = orig.warn;
+          if (output) return { output, isError: false };
+          return { output: result !== undefined ? tidyOutput(result) : 'Success (no output)', isError: false };
+        } catch (err) {
+          console.log = orig.log; console.error = orig.error; console.warn = orig.warn;
+          return { output: output + (output ? '\n' : '') + err.message, isError: true };
+        }
       }
+ 
+      case 'ts': {
+        onStatus?.('Compiling TypeScript…');
+        const ts = await bootTS(onStatus);
+        const js = ts.transpileModule(code, {
+          compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.None }
+        }).outputText;
+        onStatus?.('Running…');
+        return await executeCodeLocally('javascript', js, onStatus);
+      }
+ 
+      case 'python': {
+        const py = await bootPython(onStatus);
+        onStatus?.('Running…');
+        let stdout = '';
+        py.setStdout({ write: (t) => { stdout += t; return t.length; } });
+        py.setStderr({ write: (t) => { stdout += t; return t.length; } });
+        try {
+          try { await py.loadPackagesFromImports(code); } catch (_) {}
+          await py.runPythonAsync(code);
+          return { output: tidyOutput(stdout) || 'Success (no output)', isError: false };
+        } catch (err) {
+          return { output: stdout + (stdout ? '\n' : '') + err.message, isError: true };
+        }
+      }
+ 
+      case 'lua': {
+        const factory = await bootLua(onStatus);
+        onStatus?.('Running…');
+        const lua = await factory.createEngine();
+        try {
+          let output = '';
+          lua.global.set('print', (...a) => { output += a.join('\t') + '\n'; });
+          await lua.doString(code);
+          return { output: output || 'Success (no output)', isError: false };
+        } catch (err) {
+          return { output: err.message, isError: true };
+        } finally {
+          lua.global.close?.();
+        }
+      }
+ 
+      case 'ruby': {
+        const vm = await bootRuby(onStatus);
+        onStatus?.('Running…');
+        try {
+          vm.eval(`
+            $vortis_buf = []
+            def puts(*a)
+              a = [""] if a.empty?
+              $vortis_buf << a.map(&:to_s).join("\\n")
+              nil
+            end
+            def print(*a); $vortis_buf << a.map(&:to_s).join; nil; end
+            def p(*a); a.each { |x| $vortis_buf << x.inspect }; a.length == 1 ? a[0] : a; end
+          `);
+          vm.eval(code);
+          const buf = vm.eval('$vortis_buf.join("\\n")').toString();
+          return { output: buf || 'Success (no output)', isError: false };
+        } catch (err) {
+          return { output: (err && err.message) || String(err), isError: true };
+        }
+      }
+ 
+      case 'php': {
+        const { PhpWeb } = await bootPHP(onStatus);
+        onStatus?.('Running…');
+        return await new Promise(async (resolve) => {
+          const php = new PhpWeb();
+          let output = ''; let errored = false;
+          const collect = (e) => { output += (Array.isArray(e.detail) ? e.detail.join(' ') : e.detail) + '\n'; };
+          php.addEventListener('output', collect);
+          php.addEventListener('error', (e) => { errored = true; collect(e); });
+          await php.ready;
+          try {
+            await php.run(code.includes('<?php') ? code : `<?php\n${code}\n?>`);
+          } catch (err) {
+            errored = true; output += err.message;
+          }
+          resolve({ output: output.trim() || 'Success (no output)', isError: errored });
+        });
+      }
+ 
+      case 'sql': {
+        const SQL = await bootSQL(onStatus);
+        onStatus?.('Running query…');
+        const db = new SQL.Database();
+        try {
+          const results = db.exec(code);
+          db.close();
+          if (!results.length) return { output: 'Query executed — no result set returned.', isError: false };
+          const text = results.map(r => {
+            const widths = r.columns.map((c, i) => Math.max(c.length, ...r.values.map(row => String(row[i] ?? 'NULL').length)));
+            const fmtRow = (cells) => cells.map((c, i) => String(c).padEnd(widths[i])).join('  ');
+            return [
+              fmtRow(r.columns),
+              widths.map(w => '─'.repeat(w)).join('  '),
+              ...r.values.map(row => fmtRow(row.map(v => (v === null ? 'NULL' : v))))
+            ].join('\n');
+          }).join('\n\n');
+          return { output: text, isError: false };
+        } catch (err) {
+          db.close();
+          return { output: err.message, isError: true };
+        }
+      }
+ 
+      case 'cpp': {
+        const JSCPP = await bootCpp(onStatus);
+        onStatus?.('Running…');
+        let output = '';
+        try {
+          const exitCode = JSCPP.run(code, '', { stdio: { write: (s) => { output += s; } } });
+          return { output: output || `Program exited with code ${exitCode}`, isError: false };
+        } catch (err) {
+          return { output: output + (output ? '\n' : '') + (err.message || String(err)), isError: true };
+        }
+      }
+ 
+      case 'json': {
+        try {
+          const parsed = JSON.parse(code);
+          return { output: JSON.stringify(parsed, null, 2), isError: false };
+        } catch (err) {
+          return { output: `Invalid JSON — ${err.message}`, isError: true };
+        }
+      }
+ 
+      default:
+        return { output: `No in-browser runtime is wired up for "${language || 'this language'}" yet.`, isError: true, unsupported: true };
     }
-
-    if (lang === 'py' || lang === 'python') {
-      if (!window.loadPyodide) {
-        await loadScript("https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js");
-      }
-      const py = await window.loadPyodide();
-      try {
-        let stdout = "";
-        py.setStdout({ write: (text) => { stdout += text; return text.length; } });
-        py.setStderr({ write: (text) => { stdout += text; return text.length; } });
-        
-        await py.runPythonAsync(code);
-        return { output: stdout || 'Success (no output)', isError: false };
-      } catch (err) {
-        return { output: err.message, isError: true };
-      }
-    }
-
-    if (lang === 'lua') {
-      if (!window.Lua) {
-        await loadScript("https://cdn.jsdelivr.net/npm/wasmoon/dist/index.js");
-      }
-      const factory = new window.Lua.LuaFactory();
-      const lua = await factory.createEngine();
-      try {
-        let output = "";
-        lua.global.set('print', (...args) => { output += args.join('\t') + '\n'; });
-        await lua.doString(code);
-        return { output: output || 'Success (no output)', isError: false };
-      } catch (err) {
-        return { output: err.message, isError: true };
-      }
-    }
-
-    return { output: `Language "${language}" not configured yet.`, isError: true };
-
   } catch (e) {
     return { output: `Failed to load execution engine: ${e.message}`, isError: true };
   }
 };
-
-const safeExecuteCodeLocally = async (langKey, codeText) => {
-  if (typeof executeCodeLocally === 'function') {
-    return await executeCodeLocally(langKey, codeText);
+ 
+const safeExecuteCodeLocally = async (langKey, codeText, onStatus) => {
+  try {
+    return await executeCodeLocally(langKey, codeText, onStatus);
+  } catch (e) {
+    return { isError: true, output: `Unexpected error: ${e.message}` };
   }
-  
-  // Basic native execution fallback for JavaScript if external executor is missing
-  if (langKey === 'javascript' || langKey === 'js') {
-    try {
-      let logs = [];
-      const originalLog = console.log;
-      console.log = (...args) => logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '));
-      
-      // Safe evaluation context
-      const result = new Function(codeText)();
-      console.log = originalLog;
-      
-      return {
-        isError: false,
-        output: logs.length > 0 ? logs.join('\n') : (result !== undefined ? String(result) : 'Done (No output)')
-      };
-    } catch (err) {
-      return { isError: true, output: err.message };
-    }
-  }
-  
-  return { isError: true, output: `Local virtual machine engine for "${langKey}" is loading or unavailable.` };
 };
-
+ 
+// ── live-preview HTML wrapper for HTML / SVG / CSS blocks (unchanged behavior) ──
+const getPreviewContent = (langKey, codeText) => {
+  if (langKey === 'html') return codeText;
+  if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>`;
+  if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>`;
+  return null;
+};
+ 
 const CodeBlock = ({ lang, codeText }) => {
   const [output, setOutput] = React.useState(null);
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  
-  // Professional execution stats state
-  const [execStatus, setExecStatus] = React.useState(''); // 'RENDERED', 'EXECUTED', 'ERROR'
-  const [execTime, setExecTime] = React.useState('');     // e.g., '14ms'
-
+  const [execStatus, setExecStatus] = React.useState('');
+  const [execTime, setExecTime] = React.useState('');
+  const [bootMsg, setBootMsg] = React.useState('');
+ 
   const langKey = (lang || '').toLowerCase().trim();
-
-  const LOCAL_RUNNABLE_LANGS = new Set(['javascript', 'js', 'python', 'py', 'lua']);
-  const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
-
-  const isRunnable = LOCAL_RUNNABLE_LANGS.has(langKey);
+  const engine = LANG_ENGINE[langKey];
+  const meta = ENGINE_META[engine];
   const isPreviewable = PREVIEW_LANGS.has(langKey);
+  const isRunnable = !!engine;
   const canRun = isRunnable || isPreviewable;
-
-  const getPreviewContent = () => {
-    if (langKey === 'html') return codeText;
-    if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>`;
-    if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>`;
-    return null;
-  };
-
-  const parseRawOutput = (raw) => {
-    if (raw === null || raw === undefined) return '';
-    
-    // Force to a clean string format to analyze its characteristics
-    let stringified = String(raw).trim();
-
-    // 1. Target strings containing only digits, commas, and whitespace (e.g., "72,101,108...")
-    if (/^[\d,\s]+$/.test(stringified) && stringified.includes(',')) {
-      try {
-        const charCodes = stringified
-          .split(',')
-          .map(num => parseInt(num.trim(), 10))
-          .filter(num => !isNaN(num)); // Eliminate any structural anomalies
-          
-        return String.fromCharCode(...charCodes);
-      } catch (e) {
-        // Fall back gracefully if string parsing anomalies occur
-      }
-    }
-    
-    // 2. Handle native WebAssembly Uint8Arrays / ArrayBuffers
-    if (raw instanceof Uint8Array || raw instanceof ArrayBuffer) {
-      return new TextDecoder().decode(raw);
-    }
-    
-    // 3. Handle actual JavaScript arrays of number primitives
-    if (Array.isArray(raw)) {
-      if (raw.length > 0 && typeof raw[0] === 'number') {
-        return String.fromCharCode(...raw);
-      }
-      return raw.join('\n');
-    }
-    
-    // 4. Handle standard JSON structured objects
-    if (typeof raw === 'object') {
-      return JSON.stringify(raw, null, 2);
-    }
-    
-    return stringified;
-  };
-
+ 
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
     setHasError(false);
     setExecStatus('');
     setExecTime('');
-
+    setBootMsg('');
+ 
     const startTime = performance.now();
-
+ 
     // 1. Visual browser preview pipeline
-    const preview = getPreviewContent();
+    const preview = getPreviewContent(langKey, codeText);
     if (preview) {
-      const endTime = performance.now();
       setOutput({ type: 'html', content: preview });
       setExecStatus('PREVIEW RENDERED');
-      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
+      setExecTime(`${(performance.now() - startTime).toFixed(0)}ms`);
       setRunning(false);
       return;
     }
-
+ 
     if (!isRunnable) {
       setHasError(true);
-      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" is not supported for free browser execution. Use JS, Python, or Lua.` });
+      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" doesn't have a browser runtime wired up yet.` });
       setExecStatus('UNSUPPORTED');
       setRunning(false);
       return;
     }
-
-    // 2. Local sandboxed WebAssembly execution pipeline
+ 
+    // 2. Local sandboxed execution pipeline (WASM / interpreter / native)
     try {
-      const result = await safeExecuteCodeLocally(langKey, codeText);
+      const result = await safeExecuteCodeLocally(langKey, codeText, (msg) => setBootMsg(msg));
       const endTime = performance.now();
-      
-      const cleanOutput = parseRawOutput(result.output);
-      
-      setHasError(result.isError);
-      setOutput({ type: 'text', content: cleanOutput });
-      setExecStatus(result.isError ? 'EXECUTION FAILED' : 'CODE EXECUTED');
-
+      setHasError(!!result.isError);
+      setOutput({ type: 'text', content: tidyOutput(result.output) });
+      setExecStatus(result.unsupported ? 'UNSUPPORTED' : result.isError ? 'EXECUTION FAILED' : 'CODE EXECUTED');
+      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
     } catch (err) {
-      const endTime = performance.now();
       setHasError(true);
       setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
       setExecStatus('RUNTIME ERROR');
-      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
     } finally {
       setRunning(false);
+      setBootMsg('');
     }
   };
-
+ 
   const copyCode = () => {
     navigator.clipboard.writeText(codeText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
   };
-
+ 
   const getLangColor = () => {
     const colors = {
-      python: '#3b82f6', py: '#3b82f6',
-      javascript: '#f59e0b', js: '#f59e0b',
-      typescript: '#06b6d4', ts: '#06b6d4',
+      python: '#3b82f6', py: '#3b82f6', python3: '#3b82f6',
+      javascript: '#f59e0b', js: '#f59e0b', jsx: '#f59e0b', mjs: '#f59e0b', node: '#f59e0b',
+      typescript: '#06b6d4', ts: '#06b6d4', tsx: '#06b6d4',
+      ruby: '#e11d48', rb: '#e11d48',
+      php: '#8b5cf6',
+      sql: '#10b981', sqlite: '#10b981', sqlite3: '#10b981', mysql: '#10b981', postgres: '#10b981', postgresql: '#10b981', plsql: '#10b981', tsql: '#10b981',
       rust: '#f97316', go: '#06b6d4', java: '#ef4444',
-      cpp: '#8b5cf6', 'c++': '#8b5cf6', c: '#8b5cf6',
+      cpp: '#a78bfa', 'c++': '#a78bfa', c: '#a78bfa', cc: '#a78bfa', h: '#a78bfa', hpp: '#a78bfa',
       html: '#f97316', css: '#6366f1', svg: '#10b981',
-      sql: '#f59e0b', sqlite3: '#f59e0b', ruby: '#ef4444',
-      swift: '#f97316', kotlin: '#8b5cf6', bash: '#10b981', sh: '#10b981',
+      sh: '#10b981', bash: '#10b981',
+      swift: '#f97316', kotlin: '#8b5cf6',
       lua: '#3b82f6',
+      json: '#84cc16',
     };
     return colors[langKey] || 'var(--indigo)';
   };
-
+ 
   const langColor = getLangColor();
-
+ 
   return (
     <div style={{
       position: 'relative',
@@ -862,13 +907,13 @@ const CodeBlock = ({ lang, codeText }) => {
         background: 'var(--bg3)',
         borderBottom: '1px solid var(--border)',
       }}>
-        {/* Left: dot + lang label */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
           <div style={{
             width: 8, height: 8, borderRadius: '50%',
             background: langColor,
             boxShadow: `0 0 6px ${langColor}88`,
-          }}/>
+            flexShrink: 0,
+          }} />
           <span style={{
             fontSize: 11,
             fontFamily: 'JetBrains Mono, monospace',
@@ -876,6 +921,7 @@ const CodeBlock = ({ lang, codeText }) => {
             color: langColor,
             letterSpacing: '.08em',
             textTransform: 'uppercase',
+            flexShrink: 0,
           }}>
             {lang || 'code'}
           </span>
@@ -884,15 +930,17 @@ const CodeBlock = ({ lang, codeText }) => {
               fontSize: 10,
               fontFamily: 'JetBrains Mono, monospace',
               color: 'var(--text4)',
-              letterSpacing: '.04em',
+              letterSpacing: '.03em',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}>
-              {isPreviewable ? '· preview' : '· runnable'}
+              {isPreviewable ? '· live preview' : meta ? `· via ${meta.name}` : '· runnable'}
             </span>
           )}
         </div>
-
-        {/* Right: Run + Copy buttons */}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+ 
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
           {canRun && (
             <button
               onClick={runCode}
@@ -912,26 +960,27 @@ const CodeBlock = ({ lang, codeText }) => {
                 cursor: running ? 'not-allowed' : 'pointer',
                 transition: 'all .15s',
                 letterSpacing: '.04em',
+                whiteSpace: 'nowrap',
               }}
             >
               {running ? (
                 <>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}>
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
                   Running…
                 </>
               ) : (
                 <>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-                    <polygon points="5,3 19,12 5,21"/>
+                    <polygon points="5,3 19,12 5,21" />
                   </svg>
-                  {isPreviewable ? 'Preview' : 'Run'}
+                  {isPreviewable ? 'Preview' : (meta?.verb || 'Run')}
                 </>
               )}
             </button>
           )}
-
+ 
           <button
             onClick={copyCode}
             style={{
@@ -948,19 +997,20 @@ const CodeBlock = ({ lang, codeText }) => {
               cursor: 'pointer',
               transition: 'all .15s',
               letterSpacing: '.04em',
+              whiteSpace: 'nowrap',
             }}
           >
             {copied ? (
               <>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <polyline points="20 6 9 17 4 12"/>
+                  <polyline points="20 6 9 17 4 12" />
                 </svg>
                 Copied!
               </>
             ) : (
               <>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
                 Copy
               </>
@@ -968,7 +1018,25 @@ const CodeBlock = ({ lang, codeText }) => {
           </button>
         </div>
       </div>
-
+ 
+      {/* Boot status strip — only visible while a fresh engine is loading */}
+      {running && bootMsg && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '6px 12px',
+          background: 'rgba(99,102,241,.05)',
+          borderBottom: '1px solid var(--border)',
+          fontSize: 10.5,
+          fontFamily: 'JetBrains Mono, monospace',
+          color: 'var(--indigo)',
+        }}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bootMsg}</span>
+        </div>
+      )}
+ 
       {/* Code area */}
       <pre style={{
         margin: 0,
@@ -986,11 +1054,10 @@ const CodeBlock = ({ lang, codeText }) => {
       }}>
         <code>{codeText}</code>
       </pre>
-
+ 
       {/* Output panel */}
       {output && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          {/* 🌟 Professional Terminal Header Console */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -999,30 +1066,30 @@ const CodeBlock = ({ lang, codeText }) => {
             background: hasError ? 'rgba(239,68,68,.06)' : isPreviewable ? 'rgba(99,102,241,.06)' : 'rgba(16,185,129,.06)',
             borderBottom: '1px solid var(--border)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {/* Glowing diagnostic light */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <div style={{
                 width: 7, height: 7, borderRadius: '50%',
                 background: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
-                boxShadow: `0 0 6px ${hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981'}aa`
-              }}/>
+                boxShadow: `0 0 6px ${hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981'}aa`,
+                flexShrink: 0,
+              }} />
               <span style={{
                 fontSize: 10,
                 fontFamily: 'JetBrains Mono, monospace',
                 fontWeight: 800,
                 letterSpacing: '.08em',
                 color: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+                whiteSpace: 'nowrap',
               }}>
                 {execStatus}
               </span>
+              {meta && !isPreviewable && (
+                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: .8, whiteSpace: 'nowrap' }}>
+                  · {meta.name}
+                </span>
+              )}
               {execTime && (
-                <span style={{
-                  fontSize: 10,
-                  fontFamily: 'JetBrains Mono, monospace',
-                  color: 'var(--text4)',
-                  opacity: 0.7,
-                  marginLeft: 2
-                }}>
+                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: 0.7, marginLeft: 2, whiteSpace: 'nowrap' }}>
                   · {execTime}
                 </span>
               )}
@@ -1036,17 +1103,17 @@ const CodeBlock = ({ lang, codeText }) => {
                 width: 22, height: 22, borderRadius: 5,
                 justifyContent: 'center',
                 transition: 'all .12s',
+                flexShrink: 0,
               }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
-
-          {/* Output content viewport */}
+ 
           {output.type === 'html' ? (
             <iframe
               srcDoc={output.content}
@@ -1082,7 +1149,6 @@ const CodeBlock = ({ lang, codeText }) => {
     </div>
   );
 };
-
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
