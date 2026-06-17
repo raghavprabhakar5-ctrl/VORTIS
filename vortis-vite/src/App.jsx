@@ -1268,13 +1268,15 @@ const MsgContent = ({ text, onRetryImage }) => {
             </blockquote>
           ),
 
-          // Inline and block code
-          code: ({node, inline, className, children, ...props}) => {
+        code: ({node, inline, className, children, ...props}) => {
   const match = /language-(\w+)/.exec(className || '');
   const lang = match ? match[1] : '';
   const codeText = String(children).replace(/\n$/, '');
 
-  if (inline) {
+  // Detect inline vs block — works with all react-markdown versions
+  const isInline = !String(children).includes('\n') && !match;
+
+  if (isInline) {
     return (
       <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
         {children}
@@ -1284,7 +1286,6 @@ const MsgContent = ({ text, onRetryImage }) => {
 
   return <CodeBlock lang={lang} codeText={codeText} />;
 },
-
           // Table
           table: ({children}) => (
             <div style={{ overflowX: 'auto', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
