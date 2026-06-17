@@ -569,7 +569,7 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         messages.push(...history);
 
        if (!messages.length || messages[messages.length - 1].role !== 'user') {
-  messages.push({ role: 'user', content: prompt.trim() || 'Last message must be from user' });
+  return res.status(400).json({ error: 'Last message must be from user' });
 }
 
         const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
