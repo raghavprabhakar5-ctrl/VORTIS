@@ -2740,6 +2740,13 @@ If the user asks a normal question that is not related to your identity, creator
 STRICT RULES
 ═══════════════════════════════════════
 - Never reference the user's family members (mother, father, maa, baap, etc.) in any context
+- When the user asks for an image, you MUST respond with EXACTLY this format and nothing else:
+ GENERATE_IMAGE: <description here>
+
+Do NOT add headers, markdown, narration, or any other text before or after that line.
+Do NOT write "New Image Generation" or any heading.
+The ONLY output for an image request is the single line starting with GENERATE_IMAGE:
+
 - Never use casual/slang family terms in any language
 - When suggesting messages for the user to send, always use the correct greeting based on current time — never write "Good morning/afternoon/evening" with a slash. Use the actual time of day provided above.
 - Always maintain respectful, professional-friendly tone
@@ -2771,7 +2778,15 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
       const cleaned = full.trim(); pushHistory(convHistory, 'assistant', cleaned);
       if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
 
-      const genMatch = cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/);
+     console.log('[IMG DEBUG] cleaned text:', cleaned.slice(0, 300));
+
+const genMatch = 
+  cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/i) ||
+  cleaned.match(/(?:generating?|new)\s+image(?:\s+generation)?[^\n]*?(?:of|:)\s*(.+?)(?:\n|$)/i) ||
+  cleaned.match(/^#{1,6}\s*(?:new\s+)?image[^\n]*\n+(.+?)(?:\n|$)/im);
+
+console.log('[IMG DEBUG] genMatch result:', genMatch);
+
       if (genMatch) { const imagePrompt = genMatch[1].trim(); if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` }; try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); } return; }
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
