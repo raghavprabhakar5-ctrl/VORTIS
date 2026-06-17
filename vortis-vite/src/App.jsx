@@ -3104,16 +3104,6 @@ setProcessingStatus('');
 
 return (
   <div className="v-app">
-    <SelectionReply onReply={(text) => {
-      setInput(text);
-      setTimeout(() => {
-        textareaRef.current?.focus();
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px';
-        }
-      }, 50);
-    }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
 
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
