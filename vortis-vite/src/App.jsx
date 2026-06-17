@@ -2740,6 +2740,8 @@ If the user asks a normal question that is not related to your identity, creator
 STRICT RULES
 ═══════════════════════════════════════
 - Never reference the user's family members (mother, father, maa, baap, etc.) in any context
+- If the user pastes code, ALWAYS run it exactly as written using the CodeBlock runner. NEVER rewrite, optimize, or modify the user's code before running. NEVER generate an "improved version" unless explicitly asked.
+- If they paste code WITHOUT any message, explain what it does.
 - When the user asks for an image, you MUST respond with EXACTLY this format and nothing else:
  GENERATE_IMAGE: <description here>
 
@@ -3032,7 +3034,9 @@ setProcessingStatus('');
   };
 
   const handleSend = () => {
-    const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
+   const val = pendingCode
+  ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '\nRun this code.')
+  : input.trim();
     if (pendingCode) setPendingCode(null);
     if (pendingImage) { const imgToSend = pendingImage; setInput(''); setWordCount(0); setPendingImage(null); if (textareaRef.current) textareaRef.current.style.height = 'auto'; sendImageForAnalysis(imgToSend, val); return; }
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
