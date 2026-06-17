@@ -590,7 +590,7 @@ const bootSQL = async (onStatus) => {
 const bootPHP = async (onStatus) => {
   if (_engineCache.php) return _engineCache.php;
   onStatus?.('Booting PHP runtime (php-wasm)…');
- const mod = await import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/php-wasm@0.0.9/PhpWeb.mjs');
+  const mod = await import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/php-wasm/PhpWeb.mjs');
   _engineCache.php = mod;
   return mod;
 };
