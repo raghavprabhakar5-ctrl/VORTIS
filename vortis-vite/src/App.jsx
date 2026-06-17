@@ -3564,7 +3564,7 @@ onChange={e => {
 }}
   onPaste={e => {
     const text = e.clipboardData.getData('text');
-    const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text);
+   const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text) || text.includes('<?php');
     if (isCode && text.length > 100) {
       e.preventDefault();
       setPendingCode({ content: text, lines: text.split('\n').length });
