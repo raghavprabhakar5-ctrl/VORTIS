@@ -569,7 +569,10 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         messages.push(...history);
 
        if (!messages.length || messages[messages.length - 1].role !== 'user') {
-  return res.status(400).json({ error: 'Last message must be from user' });
+  const userMsg = history.length > 0 
+  ? history[history.length - 1].content 
+  : prompt.replace(/^You are VORTIS[\s\S]{0,500}/, '').trim();
+messages.push({ role: 'user', content: userMsg });
 }
 
         const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
