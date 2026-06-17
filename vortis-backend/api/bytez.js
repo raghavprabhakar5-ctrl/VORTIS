@@ -547,6 +547,7 @@ export default async function handler(req, res) {
 FORMATTING RULES — ALWAYS FOLLOW:
 - Always use markdown formatting in your responses
 - Use **bold** for important terms, names, numbers
+- If the user sends a code block without any question, explain what it does.
 - Use bullet points (- item) for lists of 3+ items
 - Use numbered lists (1. item) for steps or sequences
 - Use ### headers for sections in long responses

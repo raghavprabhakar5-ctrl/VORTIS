@@ -610,7 +610,7 @@ const bootRuby = async (onStatus) => {
 const bootCpp = async (onStatus) => {
   if (_engineCache.cpp) return _engineCache.cpp;
   onStatus?.('Loading C/C++ interpreter (JSCPP)…');
-  if (!window.JSCPP) await loadScriptOnce('https://cdn.jsdelivr.net/npm/jscpp@2.0.13/dist/JSCPP.es5.min.js');
+  if (!window.JSCPP) await loadScriptOnce('https://cdn.jsdelivr.net/npm/JSCPP/dist/JSCPP.es5.min.js');
   _engineCache.cpp = window.JSCPP;
   return _engineCache.cpp;
 };
@@ -2703,6 +2703,7 @@ CONFIDENCE & SELF-ASSESSMENT
 RESPONSE QUALITY RULES
 ═══════════════════════════════════════
 - Use **bold** naturally to highlight key facts, important numbers, names, dates — only when it genuinely adds clarity, not on every word
+- If the user sends a code block without any question, explain what it does.
 - Match response length to the question — short questions get short answers, complex ones get detailed answers
 - Use markdown naturally: **bold** for emphasis, bullet points for lists, headers for long structured responses
 - For code always use proper code blocks with the language specified
