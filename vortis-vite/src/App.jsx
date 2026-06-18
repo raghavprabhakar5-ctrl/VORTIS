@@ -1338,238 +1338,629 @@ const Toggle = ({ checked, onChange }) => (
   </label>
 );
 
-const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, setAutoSpeak, isDark, setIsDark, handleLogout, setShowUpgrade, onClose, memories, onDeleteMemory, onClearMemories, setConfirmDialog,  ttsGender, setTtsGender }) => {
+// ── DROP-IN REPLACEMENT: paste this over your existing SettingsModal component ──
+// All props are identical: profile, tier, usage, LIMITS, onClearAll, autoSpeak,
+// setAutoSpeak, isDark, setIsDark, handleLogout, setShowUpgrade, onClose,
+// memories, onDeleteMemory, onClearMemories, setConfirmDialog, ttsGender, setTtsGender
+
+const SettingsModal = ({
+  profile, tier, usage, LIMITS, onClearAll,
+  autoSpeak, setAutoSpeak, isDark, setIsDark,
+  handleLogout, setShowUpgrade, onClose,
+  memories, onDeleteMemory, onClearMemories,
+  setConfirmDialog, ttsGender, setTtsGender
+}) => {
   const [tab, setTab] = useState('account');
-  const usagePct = (k) => { const l = LIMITS[tier]; return l[k] >= 999999 ? 0 : Math.min((usage[k] / l[k]) * 100, 100); };
+
+  const usagePct = (k) => {
+    const l = LIMITS[tier];
+    return l[k] >= 999999 ? 0 : Math.min((usage[k] / l[k]) * 100, 100);
+  };
+
+  // ── shared micro-styles ──
+  const S = {
+    overlay: {
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,.72)',
+      backdropFilter: 'blur(14px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 200, padding: 16, overflowY: 'auto',
+    },
+    modal: {
+      background: 'var(--bg2)',
+      border: '1px solid var(--border)',
+      borderRadius: 18,
+      width: '100%', maxWidth: 680,
+      maxHeight: '88vh',
+      display: 'flex', overflow: 'hidden',
+      animation: 'scaleIn .18s ease',
+      position: 'relative',
+    },
+    // left nav
+    nav: {
+      width: 192,
+      background: 'var(--sb-bg)',
+      borderRight: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column',
+      padding: '20px 10px', flexShrink: 0,
+    },
+    navTitle: {
+      fontSize: 13, fontWeight: 700, color: 'var(--text1)',
+      padding: '0 10px', marginBottom: 16, letterSpacing: '.01em',
+    },
+    navItem: (active) => ({
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 11px', borderRadius: 9,
+      cursor: 'pointer', fontSize: 13, fontFamily: 'Geist,sans-serif',
+      fontWeight: active ? 600 : 400,
+      color: active ? 'var(--indigo)' : 'var(--text3)',
+      background: active ? 'rgba(99,102,241,.1)' : 'transparent',
+      border: `1px solid ${active ? 'rgba(99,102,241,.22)' : 'transparent'}`,
+      marginBottom: 2, transition: 'all .13s',
+      width: '100%', textAlign: 'left',
+    }),
+    navDot: (color, active) => ({
+      width: 7, height: 7, borderRadius: '50%',
+      background: active ? color : 'var(--text4)',
+      flexShrink: 0, transition: 'background .13s',
+    }),
+    // right content
+    content: {
+      flex: 1, overflowY: 'auto', padding: '24px 22px',
+      WebkitOverflowScrolling: 'touch',
+    },
+    sTitle: { fontSize: 17, fontWeight: 700, color: 'var(--text1)', marginBottom: 3 },
+    sSub: { fontSize: 12.5, color: 'var(--text3)', marginBottom: 18 },
+    // card
+    card: {
+      background: 'var(--sb-bg)',
+      border: '1px solid var(--border)',
+      borderRadius: 14, overflow: 'hidden', marginBottom: 12,
+    },
+    row: {
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '13px 16px',
+      borderBottom: '1px solid var(--border)',
+    },
+    rowLast: {
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '13px 16px',
+    },
+    rowIcon: (bg) => ({
+      width: 32, height: 32, borderRadius: 9,
+      background: bg, display: 'flex',
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }),
+    rowLabel: { fontSize: 13.5, fontWeight: 500, color: 'var(--text1)' },
+    rowSub: { fontSize: 11.5, color: 'var(--text3)', marginTop: 2 },
+    // buttons
+    btnPrimary: {
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '8px 14px', borderRadius: 9,
+      background: 'linear-gradient(135deg,var(--indigo),var(--violet))',
+      border: 'none', color: 'white',
+      fontSize: 12.5, fontWeight: 700, fontFamily: 'Geist,sans-serif',
+      cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap',
+    },
+    btnDanger: {
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '7px 13px', borderRadius: 9,
+      background: 'transparent',
+      border: '1px solid rgba(239,68,68,.3)',
+      color: '#ef4444', fontSize: 12.5, fontWeight: 500,
+      fontFamily: 'Geist,sans-serif', cursor: 'pointer', transition: 'all .15s',
+    },
+    btnGhost: {
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '7px 13px', borderRadius: 9,
+      background: 'transparent', border: '1px solid var(--border2)',
+      color: 'var(--text2)', fontSize: 12.5, fontFamily: 'Geist,sans-serif',
+      cursor: 'pointer', transition: 'all .15s',
+    },
+    // status dot
+    dot: (color) => ({
+      width: 7, height: 7, borderRadius: '50%',
+      background: color, flexShrink: 0,
+    }),
+    // close button
+    close: {
+      position: 'absolute', top: 14, right: 14,
+      background: 'var(--bg3)', border: '1px solid var(--border2)',
+      color: 'var(--text3)', cursor: 'pointer',
+      width: 28, height: 28, borderRadius: 7,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: 'all .12s', zIndex: 10,
+    },
+  };
+
   const NAV = [
-    { id: 'account', label: 'Account', color: '#6366f1' },
-    { id: 'memories', label: 'Memories', color: '#8b5cf6' },
-    { id: 'billing', label: 'Billing', color: '#f59e0b' },
-    { id: 'usage', label: 'Usage', color: '#10b981' },
-    { id: 'display', label: 'Display', color: '#06b6d4' },
-    { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899' },
-    { id: 'about', label: 'About', color: '#888780' },
+    { id: 'account',   label: 'Account',   color: '#6366f1', icon: <Crown size={13}/> },
+    { id: 'memories',  label: 'Memories',  color: '#8b5cf6', icon: <Brain size={13}/> },
+    { id: 'billing',   label: 'Billing',   color: '#f59e0b', icon: <CreditCard size={13}/> },
+    { id: 'usage',     label: 'Usage',     color: '#10b981', icon: <BarChart3 size={13}/> },
+    { id: 'display',   label: 'Display',   color: '#06b6d4', icon: <Sun size={13}/> },
+    { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899', icon: <Settings size={13}/> },
+    { id: 'about',     label: 'About',     color: '#888780', icon: <Sparkles size={13}/> },
   ];
-  const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 15px', borderBottom: '1px solid var(--border)' };
-  const iconStyle = { width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
-  return (
-    <div className="settings-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="settings-modal" onClick={e => e.stopPropagation()}>
-        <button className="settings-close" onClick={onClose}><X size={13}/></button>
-        <div className="settings-nav">
-          <div className="settings-nav-title">Settings</div>
-          {NAV.map(item => (
-            <button key={item.id} className={`settings-nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0 }}/>{item.label}
-            </button>
-          ))}
+
+  // ── Toggle ──
+  const Toggle = ({ checked, onChange }) => (
+    <label style={{ cursor: 'pointer', position: 'relative', display: 'inline-block', userSelect: 'none' }}>
+      <input type="checkbox" checked={checked} onChange={onChange} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }}/>
+      <div style={{
+        width: 38, height: 21, borderRadius: 11,
+        background: checked ? 'var(--indigo)' : 'var(--bg4)',
+        border: '1px solid var(--border2)',
+        position: 'relative', transition: 'background .2s', flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 2,
+          left: checked ? 19 : 2,
+          width: 15, height: 15, borderRadius: '50%',
+          background: 'white', transition: 'left .2s',
+          boxShadow: '0 1px 4px rgba(0,0,0,.25)',
+        }}/>
+      </div>
+    </label>
+  );
+
+  // ── ACCOUNT TAB ──
+  const AccountTab = () => (
+    <>
+      <div style={S.sTitle}>Account</div>
+      <div style={S.sSub}>Your profile and sign-in details</div>
+
+      {/* Profile card */}
+      <div style={S.card}>
+        <div style={{ padding: '16px 16px 14px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--border)' }}>
+          <UserAvatar avatar={profile.avatar} name={profile.name} size={52}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile.name || 'User'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono,monospace' }}>
+              {profile.email}
+            </div>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
+              padding: '3px 10px', borderRadius: 20,
+              background: tier === 'free' ? 'rgba(99,102,241,.1)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+              color: tier === 'free' ? 'var(--indigo)' : 'white',
+              border: tier === 'free' ? '1px solid rgba(99,102,241,.2)' : 'none',
+            }}>
+              {tier === 'free' ? 'FREE PLAN' : `★ ${tier.toUpperCase()}`}
+            </span>
+          </div>
+          <button
+            style={S.btnPrimary}
+            onClick={() => { setShowUpgrade(true); onClose(); }}
+          >
+            <Crown size={12}/>
+            {tier === 'free' ? 'Upgrade' : 'Manage'}
+          </button>
         </div>
-        <div className="settings-content scr">
-          {tab === 'account' && (
-            <>
-              <div className="settings-section-title">Account</div>
-              <div className="settings-section-sub">Your profile and sign-in details</div>
-              <div className="settings-card">
-                <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 13, borderBottom: '1px solid var(--border)' }}>
-                  <UserAvatar avatar={profile.avatar} name={profile.name} size={52}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 3 }}>{profile.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', padding: '3px 9px', borderRadius: 20, background: tier === 'free' ? 'rgba(99,102,241,.1)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: tier === 'free' ? 'var(--indigo)' : 'white', border: tier === 'free' ? '1px solid rgba(99,102,241,.2)' : 'none' }}>
-                      {tier === 'free' ? 'FREE PLAN' : `★ ${tier.toUpperCase()}`}
+        <div style={{ padding: '12px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={S.btnDanger} onClick={handleLogout}><LogOut size={12}/> Sign out</button>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div style={S.card}>
+        <div style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)', marginBottom: 4 }}>Danger zone</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>
+            Permanently delete all your chats, memories, and data. This cannot be undone.
+          </div>
+          <button style={S.btnDanger} onClick={onClearAll}><Trash2 size={12}/> Clear all data</button>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── MEMORIES TAB ──
+  const MemoriesTab = () => (
+    <>
+      <div style={S.sTitle}>Memories</div>
+      <div style={S.sSub}>Vortis remembers facts about you to personalise responses</div>
+
+      <div style={S.card}>
+        {memories.length === 0 ? (
+          <div style={{ padding: '36px 20px', textAlign: 'center' }}>
+            <Brain size={28} color="var(--text4)" style={{ margin: '0 auto 10px', opacity: .35, display: 'block' }}/>
+            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 5 }}>No memories yet</p>
+            <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
+              Vortis will remember your name, profession, skills, and preferences as you chat.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: '10px 14px 9px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono,monospace' }}>
+                {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+              </span>
+              <button
+                style={{ ...S.btnDanger, padding: '4px 10px', fontSize: 11 }}
+                onClick={() => setConfirmDialog({
+                  message: 'Clear all memories?',
+                  onConfirm: () => { setConfirmDialog(null); onClearMemories(); }
+                })}
+              >
+                <Trash2 size={10}/> Clear all
+              </button>
+            </div>
+            {memories.map((mem, i) => (
+              <div key={mem.id} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                padding: '11px 14px',
+                borderBottom: i < memories.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0, marginTop: 5 }}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text1)', lineHeight: 1.55, marginBottom: 3 }}>{mem.text}</p>
+                  <p style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono,monospace' }}>
+                    {new Date(mem.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setConfirmDialog({
+                    message: 'Remove this memory?',
+                    onConfirm: () => { setConfirmDialog(null); onDeleteMemory(mem.id); }
+                  })}
+                  style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', flexShrink: 0, transition: 'color .12s' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text4)'}
+                >
+                  <X size={13}/>
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </>
+  );
+
+  // ── BILLING TAB ──
+  const BillingTab = () => (
+    <>
+      <div style={S.sTitle}>Billing</div>
+      <div style={S.sSub}>Plan details and payment options</div>
+
+      <div style={S.card}>
+        <div style={S.row}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(245,158,11,.12)')}>
+              <Crown size={14} color="var(--amber)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>
+                {tier === 'free' ? 'Free Plan' : `${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan`}
+              </div>
+              <div style={S.rowSub}>
+                {tier === 'free' ? 'Upgrade to unlock more features' : 'Premium active'}
+              </div>
+            </div>
+          </div>
+          <button style={S.btnPrimary} onClick={() => { setShowUpgrade(true); onClose(); }}>
+            {tier === 'free' ? 'Upgrade' : 'Change plan'}
+          </button>
+        </div>
+
+        {/* Quick plan comparison */}
+        <div style={{ padding: '14px 16px 4px' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 12, fontFamily: 'JetBrains Mono,monospace', letterSpacing: '.03em' }}>PLAN LIMITS</div>
+          {[
+            { label: 'Messages / day', free: '10', silver: '300', gold: '500', platinum: '∞' },
+            { label: 'Images / day',   free: '2',  silver: '20',  gold: '40',  platinum: '∞' },
+            { label: 'Documents / day',free: '1',  silver: '40',  gold: '50',  platinum: '∞' },
+            { label: 'Vision / day',   free: '—',  silver: '3',   gold: '10',  platinum: '∞' },
+          ].map((row, i, arr) => (
+            <div key={row.label} style={{
+              display: 'grid', gridTemplateColumns: '1fr repeat(4,52px)',
+              gap: 6, alignItems: 'center',
+              padding: '8px 0',
+              borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+            }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{row.label}</span>
+              {['free','silver','gold','platinum'].map(t => (
+                <span key={t} style={{
+                  fontSize: 12, fontFamily: 'JetBrains Mono,monospace',
+                  textAlign: 'center',
+                  fontWeight: tier === t ? 700 : 400,
+                  color: tier === t ? 'var(--indigo)' : 'var(--text3)',
+                  background: tier === t ? 'rgba(99,102,241,.08)' : 'transparent',
+                  borderRadius: 6, padding: '2px 0',
+                }}>
+                  {row[t]}
+                </span>
+              ))}
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr repeat(4,52px)', gap: 6, paddingTop: 8 }}>
+            <span/>
+            {['Free','Silver','Gold','Plat.'].map((l, i) => (
+              <span key={l} style={{
+                fontSize: 10.5, textAlign: 'center', fontFamily: 'JetBrains Mono,monospace',
+                color: ['free','silver','gold','platinum'][i] === tier ? 'var(--indigo)' : 'var(--text4)',
+                fontWeight: ['free','silver','gold','platinum'][i] === tier ? 700 : 400,
+              }}>{l}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── USAGE TAB ──
+  const UsageTab = () => {
+    const items = [
+      { k: 'messages',  label: 'Messages',       color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
+      { k: 'images',    label: 'Image gen',       color: 'var(--cyan)',   icon: <ImageIcon size={14}/> },
+      { k: 'documents', label: 'Documents',       color: 'var(--green)',  icon: <FileText size={14}/> },
+      { k: 'vision',    label: 'Vision',          color: 'var(--violet)', icon: <Eye size={14}/> },
+    ];
+    return (
+      <>
+        <div style={S.sTitle}>Usage</div>
+        <div style={S.sSub}>Daily limits — resets at midnight</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map(({ k, label, color, icon }) => {
+            const limit = LIMITS[tier][k];
+            const pct = usagePct(k);
+            const unlimited = limit >= 999999;
+            return (
+              <div key={k} style={S.card}>
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <div style={{ ...S.rowIcon(`${color}18`), color }}>{icon}</div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 13, color, fontFamily: 'JetBrains Mono,monospace', fontWeight: 700 }}>
+                      {usage[k]} / {unlimited ? '∞' : limit}
                     </span>
                   </div>
-                </div>
-                <div style={{ padding: '12px 15px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => { setShowUpgrade(true); onClose(); }} className="btn-primary" style={{ padding: '8px 14px', fontSize: 12 }}><Crown size={12}/> {tier === 'free' ? 'Upgrade Plan' : 'Manage Plan'}</button>
-                  <button onClick={handleLogout} className="btn-danger" style={{ padding: '8px 13px', fontSize: 12 }}><LogOut size={12}/> Sign out</button>
-                </div>
-              </div>
-              <div className="settings-card">
-                <div style={{ padding: '13px 15px' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Permanently delete all your chats, memories and data.</div>
-                  <button onClick={onClearAll} className="btn-danger" style={{ padding: '8px 13px', fontSize: 12 }}><Trash2 size={12}/> Clear All Data</button>
-                </div>
-              </div>
-            </>
-          )}
-          {tab === 'memories' && (
-            <>
-              <div className="settings-section-title">Memories</div>
-              <div className="settings-section-sub">Vortis remembers facts about you to personalize responses</div>
-              <div className="settings-card">
-                {memories.length === 0 ? (
-                  <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-                    <Brain size={28} color="var(--text4)" style={{ margin: '0 auto 10px', opacity: .4, display: 'block' }}/>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 5 }}>No memories yet</p>
-                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>Vortis will remember your name, profession, skills, and preferences as you chat.</p>
+                  <div style={{ height: 4, borderRadius: 4, background: 'var(--bg4)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${unlimited ? 0 : pct}%`,
+                      background: color, borderRadius: 4, transition: 'width .4s',
+                    }}/>
                   </div>
-                ) : (
-                  <>
-                    <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>{memories.length} memories</span>
-                      <button onClick={() => setConfirmDialog({ message: 'Clear all memories?', onConfirm: () => { setConfirmDialog(null); onClearMemories(); } })} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}><Trash2 size={10}/> Clear all</button>
+                  {unlimited && (
+                    <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: 6, fontFamily: 'JetBrains Mono,monospace' }}>
+                      ✓ Unlimited on your plan
                     </div>
-                    {memories.map((mem) => (
-                      <div key={mem.id} className="memory-item">
-                        <div className="memory-dot"/>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, color: 'var(--text1)', lineHeight: 1.55 }}>{mem.text}</p>
-                          <p style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono', marginTop: 3 }}>{new Date(mem.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        </div>
-                        <button onClick={() => setConfirmDialog({ message: 'Remove this memory?', onConfirm: () => { setConfirmDialog(null); onDeleteMemory(mem.id); } })} style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color='var(--red)'} onMouseLeave={e => e.currentTarget.style.color='var(--text4)'}><X size={13}/></button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-          {tab === 'billing' && (
-            <>
-              <div className="settings-section-title">Billing</div>
-              <div className="settings-section-sub">Plan details and payment options</div>
-              <div className="settings-card">
-                <div style={rowStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div style={{ ...iconStyle, background: 'rgba(245,158,11,.1)' }}><Crown size={14} color="var(--amber)"/></div>
-                    <div>
-                      <div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>{tier === 'free' ? 'Free Plan' : `${tier.charAt(0).toUpperCase()+tier.slice(1)} Plan`}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>{tier === 'free' ? 'Upgrade to unlock more' : 'Premium active'}</div>
-                    </div>
-                  </div>
-                  <button onClick={() => { setShowUpgrade(true); onClose(); }} className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}>{tier === 'free' ? 'Upgrade' : 'Change'}</button>
+                  )}
                 </div>
               </div>
-            </>
-          )}
-          {tab === 'usage' && (
-            <>
-              <div className="settings-section-title">Usage</div>
-              <div className="settings-section-sub">Daily limits — resets at midnight</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[
-                 { k: 'messages', label: 'Messages', color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
-{ k: 'documents', label: 'Documents', color: 'var(--green)', icon: <FileText size={14}/> },
-{ k: 'images', label: 'Image Gen', color: 'var(--cyan)', icon: <ImageIcon size={14}/> },
-{ k: 'vision', label: 'Vision', color: 'var(--violet)', icon: <Eye size={14}/> },
-                ].map(({ k, label, color, icon }) => {
-                  const limit = LIMITS[tier][k]; const pct = usagePct(k);
-                  return (
-                    <div key={k} className="settings-card">
-                      <div style={{ padding: '13px 15px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                          <div style={{ width: 30, height: 30, borderRadius: 8, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>{icon}</div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{label}</span>
-                          <span style={{ marginLeft: 'auto', fontSize: 13, color, fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{usage[k]} / {limit >= 999999 ? '∞' : limit}</span>
-                        </div>
-                        <div style={{ height: 5, borderRadius: 5, background: 'var(--bg4)', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 5, transition: 'width .4s' }}/>
-                        </div>
-                        {limit >= 999999 && <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 6, fontFamily: 'JetBrains Mono' }}>✓ Unlimited</div>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-          {tab === 'display' && (
-            <>
-              <div className="settings-section-title">Display</div>
-              <div className="settings-section-sub">Appearance and voice settings</div>
-              <div className="settings-card">
-                <div style={rowStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div style={{ ...iconStyle, background: 'rgba(139,92,246,.1)' }}>{isDark ? <Moon size={14} color="var(--violet)"/> : <Sun size={14} color="var(--amber)"/>}</div>
-                    <div><div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Dark mode</div><div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Currently {isDark ? 'dark' : 'light'}</div></div>
-                  </div>
-                  <Toggle checked={isDark} onChange={e => setIsDark(e.target.checked)}/>
-                </div>
-                <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div style={{ ...iconStyle, background: 'rgba(6,182,212,.1)' }}><Volume2 size={14} color="var(--cyan)"/></div>
-                    <div><div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Auto-speak responses</div><div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Read AI replies aloud</div></div>
-                  </div>
-                  <Toggle checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}/>
-                </div>
-                <div style={{ ...rowStyle, borderBottom: 'none' }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-    <div style={{ ...iconStyle, background: 'rgba(139,92,246,.1)' }}>
-      <Mic size={14} color="var(--violet)"/>
-    </div>
-    <div>
-      <div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Voice gender</div>
-      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
-        {ttsGender === 'male' ? 'Male voices' : 'Female voices'}
-      </div>
-    </div>
-  </div>
-  <div style={{ display: 'flex', gap: 6 }}>
-    {['male', 'female'].map(g => (
-      <button key={g} onClick={() => {
-        setTtsGender(g);
-        try { localStorage.setItem('vortis_tts_gender', g); } catch(_) {}
-      }} style={{
-        padding: '5px 12px',
-        borderRadius: 8,
-        border: `1px solid ${ttsGender === g ? 'var(--indigo)' : 'var(--border2)'}`,
-        background: ttsGender === g ? 'rgba(99,102,241,.12)' : 'var(--bg3)',
-        color: ttsGender === g ? 'var(--indigo)' : 'var(--text2)',
-        cursor: 'pointer',
-        fontSize: 12,
-        fontFamily: 'Geist',
-        fontWeight: ttsGender === g ? 700 : 400,
-        transition: 'all .15s',
-        textTransform: 'capitalize'
-      }}>{g}</button>
-    ))}
-  </div>
-</div>
+            );
+          })}
+        </div>
+        {tier === 'free' && (
+          <div style={{ marginTop: 4, padding: '12px 14px', background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.18)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ fontSize: 12.5, color: 'var(--text2)' }}>Upgrade for more daily limits</p>
+            <button style={S.btnPrimary} onClick={() => { setShowUpgrade(true); onClose(); }}>
+              <Crown size={12}/> Upgrade
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
 
+  // ── DISPLAY TAB ──
+  const DisplayTab = () => (
+    <>
+      <div style={S.sTitle}>Display</div>
+      <div style={S.sSub}>Appearance and voice preferences</div>
+      <div style={S.card}>
+
+        {/* Dark mode */}
+        <div style={S.row}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon(isDark ? 'rgba(139,92,246,.12)' : 'rgba(245,158,11,.12)')}>
+              {isDark ? <Moon size={14} color="var(--violet)"/> : <Sun size={14} color="var(--amber)"/>}
             </div>
-            </>
-          )}
-          {tab === 'shortcuts' && (
-            <>
-              <div className="settings-section-title">Keyboard Shortcuts</div>
-              <div className="settings-section-sub">Speed up your workflow</div>
-              <div className="settings-card">
-                {[{ label: 'New chat', keys: ['⌘', 'K'] }, { label: 'Toggle sidebar', keys: ['⌘', '/'] }, { label: 'Send message', keys: ['Enter'] }, { label: 'New line', keys: ['Shift', 'Enter'] }].map((s, i, arr) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 15px', borderBottom: i < arr.length-1 ? '1px solid var(--border)' : 'none' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text1)' }}>{s.label}</span>
-                    <div style={{ display: 'flex', gap: 4 }}>{s.keys.map((k, ki) => <kbd key={ki} style={{ background: 'var(--bg4)', border: '1px solid var(--border2)', borderRadius: 5, padding: '3px 8px', fontSize: 11.5, fontFamily: 'JetBrains Mono', color: 'var(--text2)' }}>{k}</kbd>)}</div>
-                  </div>
+            <div>
+              <div style={S.rowLabel}>Dark mode</div>
+              <div style={S.rowSub}>Currently {isDark ? 'dark' : 'light'}</div>
+            </div>
+          </div>
+          <Toggle checked={isDark} onChange={e => setIsDark(e.target.checked)}/>
+        </div>
+
+        {/* Auto-speak */}
+        <div style={S.row}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(6,182,212,.12)')}>
+              <Volume2 size={14} color="var(--cyan)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>Auto-speak responses</div>
+              <div style={S.rowSub}>Read AI replies aloud automatically</div>
+            </div>
+          </div>
+          <Toggle checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}/>
+        </div>
+
+        {/* Voice gender */}
+        <div style={S.rowLast}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(139,92,246,.12)')}>
+              <Mic size={14} color="var(--violet)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>Voice gender</div>
+              <div style={S.rowSub}>{ttsGender === 'male' ? 'Male voices' : 'Female voices'}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['male', 'female'].map(g => (
+              <button
+                key={g}
+                onClick={() => { setTtsGender(g); try { localStorage.setItem('vortis_tts_gender', g); } catch(_) {} }}
+                style={{
+                  padding: '6px 13px', borderRadius: 8,
+                  border: `1px solid ${ttsGender === g ? 'rgba(99,102,241,.5)' : 'var(--border2)'}`,
+                  background: ttsGender === g ? 'rgba(99,102,241,.12)' : 'var(--bg3)',
+                  color: ttsGender === g ? 'var(--indigo)' : 'var(--text2)',
+                  cursor: 'pointer', fontSize: 12.5, fontFamily: 'Geist,sans-serif',
+                  fontWeight: ttsGender === g ? 700 : 400,
+                  transition: 'all .15s', textTransform: 'capitalize',
+                }}
+              >{g}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── SHORTCUTS TAB ──
+  const ShortcutsTab = () => {
+    const shortcuts = [
+      { label: 'New chat',       keys: ['⌘', 'K'] },
+      { label: 'Toggle sidebar', keys: ['⌘', '/'] },
+      { label: 'Send message',   keys: ['Enter'] },
+      { label: 'New line',       keys: ['Shift', 'Enter'] },
+      { label: 'Settings',       keys: ['⌘', ','] },
+    ];
+    return (
+      <>
+        <div style={S.sTitle}>Keyboard shortcuts</div>
+        <div style={S.sSub}>Speed up your workflow</div>
+        <div style={S.card}>
+          {shortcuts.map((s, i) => (
+            <div key={i} style={i < shortcuts.length - 1 ? S.row : S.rowLast}>
+              <span style={{ fontSize: 13, color: 'var(--text1)' }}>{s.label}</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {s.keys.map((k, ki) => (
+                  <kbd key={ki} style={{
+                    background: 'var(--bg4)', border: '1px solid var(--border2)',
+                    borderRadius: 6, padding: '3px 9px',
+                    fontSize: 12, fontFamily: 'JetBrains Mono,monospace',
+                    color: 'var(--text2)',
+                  }}>{k}</kbd>
                 ))}
               </div>
-            </>
-          )}
-          {tab === 'about' && (
-            <>
-              <div className="settings-section-title">About Vortis</div>
-              <div className="settings-section-sub">Version and system status</div>
-              <div className="settings-card">
-                <div style={{ padding: 15, display: 'flex', alignItems: 'center', gap: 13, borderBottom: '1px solid var(--border)' }}>
-                  <VortisLogoMark size={44}/>
-                  <div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', letterSpacing: '.06em' }}>VORTIS AI</div><div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono', marginTop: 2 }}>Version 3.0.0 · 2026</div></div>
-                </div>
-                {[
-                  { label: 'Web search', status: 'Active', color: 'var(--green)' },
-                  { label: 'Image generation', status: 'Active', color: 'var(--green)' },
-                  { label: 'Vision (image analysis)', status: 'Active', color: 'var(--green)' },
-                  { label: 'Document analysis', status: 'Active', color: 'var(--green)' },
-                  { label: 'Memories', status: 'Active', color: 'var(--green)' },
-                  { label: 'Video generation', status: 'Coming soon', color: 'var(--amber)' },
-                  { label: 'Voice input', status: (window.SpeechRecognition||window.webkitSpeechRecognition) ? 'Supported' : 'Not supported', color: (window.SpeechRecognition||window.webkitSpeechRecognition) ? 'var(--green)' : 'var(--red)' },
-                ].map((item, i, arr) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 15px', borderBottom: i < arr.length-1 ? '1px solid var(--border)' : 'none' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text1)' }}>{item.label}</span>
-                    <span style={{ fontSize: 11.5, color: item.color, fontFamily: 'JetBrains Mono', fontWeight: 600 }}>● {item.status}</span>
-                  </div>
-                ))}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  // ── ABOUT TAB ──
+  const AboutTab = () => {
+    const hasVoice = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const features = [
+      { label: 'Web search',           status: 'Active',          color: 'var(--green)' },
+      { label: 'Image generation',     status: 'Active',          color: 'var(--green)' },
+      { label: 'Vision (image analysis)', status: 'Active',       color: 'var(--green)' },
+      { label: 'Document analysis',    status: 'Active',          color: 'var(--green)' },
+      { label: 'Memories',             status: 'Active',          color: 'var(--green)' },
+      { label: 'Video generation',     status: 'Coming soon',     color: 'var(--amber)' },
+      { label: 'Voice input',          status: hasVoice ? 'Supported' : 'Not supported', color: hasVoice ? 'var(--green)' : 'var(--red)' },
+    ];
+    return (
+      <>
+        <div style={S.sTitle}>About Vortis</div>
+        <div style={S.sSub}>Version info and feature status</div>
+        <div style={S.card}>
+          {/* Logo row */}
+          <div style={{ padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--border)' }}>
+            <VortisLogoMark size={44}/>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', letterSpacing: '.05em' }}>VORTIS AI</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono,monospace', marginTop: 2 }}>Version 3.0.0 · 2026</div>
+            </div>
+          </div>
+          {/* Feature rows */}
+          {features.map((f, i) => (
+            <div key={i} style={i < features.length - 1 ? S.row : S.rowLast}>
+              <span style={{ fontSize: 13, color: 'var(--text1)' }}>{f.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <div style={S.dot(f.color)}/>
+                <span style={{ fontSize: 12, color: f.color, fontFamily: 'JetBrains Mono,monospace', fontWeight: 600 }}>
+                  {f.status}
+                </span>
               </div>
-            </>
-          )}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  const TAB_CONTENT = {
+    account:   <AccountTab/>,
+    memories:  <MemoriesTab/>,
+    billing:   <BillingTab/>,
+    usage:     <UsageTab/>,
+    display:   <DisplayTab/>,
+    shortcuts: <ShortcutsTab/>,
+    about:     <AboutTab/>,
+  };
+
+  return (
+    <div
+      style={S.overlay}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+
+        {/* Close button */}
+        <button
+          style={S.close}
+          onClick={onClose}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg3)'; e.currentTarget.style.color = 'var(--text3)'; e.currentTarget.style.borderColor = 'var(--border2)'; }}
+        >
+          <X size={13}/>
+        </button>
+
+        {/* Left nav */}
+        <nav style={S.nav}>
+          <div style={S.navTitle}>Settings</div>
+          {NAV.map(item => (
+            <button
+              key={item.id}
+              style={S.navItem(tab === item.id)}
+              onClick={() => setTab(item.id)}
+              onMouseEnter={e => { if (tab !== item.id) { e.currentTarget.style.background = 'rgba(99,102,241,.06)'; e.currentTarget.style.color = 'var(--text2)'; } }}
+              onMouseLeave={e => { if (tab !== item.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text3)'; } }}
+            >
+              <div style={S.navDot(item.color, tab === item.id)}/>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ opacity: tab === item.id ? 1 : 0.6 }}>{item.icon}</span>
+                {item.label}
+              </span>
+            </button>
+          ))}
+
+          {/* Sign out at bottom of nav */}
+          <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <button
+              style={{ ...S.navItem(false), color: '#ef4444', width: '100%' }}
+              onClick={handleLogout}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.08)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <div style={{ ...S.navDot('#ef4444', false), background: '#ef4444' }}/>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <LogOut size={13} style={{ opacity: .7 }}/>
+                Sign out
+              </span>
+            </button>
+          </div>
+        </nav>
+
+        {/* Right content */}
+        <div
+          style={S.content}
+          className="scr"
+        >
+          {TAB_CONTENT[tab]}
         </div>
       </div>
     </div>
