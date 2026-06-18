@@ -1819,12 +1819,12 @@ const SettingsModal = ({
   // ── SHORTCUTS TAB ──
   const ShortcutsTab = () => {
     const shortcuts = [
-      { label: 'New chat',       keys: ['⌘', 'K'] },
-      { label: 'Toggle sidebar', keys: ['⌘', '/'] },
-      { label: 'Send message',   keys: ['Enter'] },
-      { label: 'New line',       keys: ['Shift', 'Enter'] },
-      { label: 'Settings',       keys: ['⌘', ','] },
-    ];
+    { label: 'New chat',        keys: ['⌘', 'K'] },
+    { label: 'Toggle sidebar',  keys: ['⌘', '/'] },
+    { label: 'Incognito mode',  keys: ['⌘', 'F12'] },
+    { label: 'New line',        keys: ['Shift', 'Enter'] },
+    { label: 'Settings',        keys: ['⌘', ','] },
+  ];
     return (
       <>
         <div style={S.sTitle}>Keyboard shortcuts</div>
