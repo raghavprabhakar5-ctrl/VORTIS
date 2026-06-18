@@ -1937,22 +1937,7 @@ const SettingsModal = ({
               </span>
             </button>
           ))}
-
-          {/* Sign out at bottom of nav */}
-          <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-            <button
-              style={{ ...S.navItem(false), color: '#ef4444', width: '100%' }}
-              onClick={handleLogout}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.08)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-            >
-              <div style={{ ...S.navDot('#ef4444', false), background: '#ef4444' }}/>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <LogOut size={13} style={{ opacity: .7 }}/>
-                Sign out
-              </span>
-            </button>
-          </div>
+          
         </nav>
 
         {/* Right content */}
