@@ -273,6 +273,14 @@ function Nav({ onLogin }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, animation: "slideInRight 0.7s ease both" }}>
+        <button style={{
+          padding: "8px 18px", borderRadius: 99, fontSize: 13, fontWeight: 600,
+          background: "transparent", color: "rgba(255,255,255,0.65)",
+          border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer", transition: "all 0.2s",
+        }}
+        onMouseEnter={e => { e.target.style.borderColor = "rgba(139,92,246,0.5)"; e.target.style.color = "#fff"; }}
+        onMouseLeave={e => { e.target.style.borderColor = "rgba(255,255,255,0.12)"; e.target.style.color = "rgba(255,255,255,0.65)"; }}
+        >Sign In</button>
         <button onClick={() => onLogin('google')} style={{
           padding: "8px 22px", borderRadius: 99, fontSize: 13, fontWeight: 700,
           background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
@@ -495,7 +503,7 @@ export function Hero({ onLogin, authLoading, authError }) {
 
         {/* Stats */}
         <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.7s 0.8s ease both" }}>
-          {[["50K+", "Users"], ["99.9%", "Uptime"], ["4.9★", "Rating"]].map(([n, l]) => (
+          {[["50K+", "Users"], ["10B+", "Tokens/mo"], ["4.9★", "Rating"]].map(([n, l]) => (
             <div key={l}>
               <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 24, background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{n}</div>
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{l}</div>
@@ -676,11 +684,8 @@ function Logos() {
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 140, zIndex: 2, background: "linear-gradient(to right,#03030a,transparent)", pointerEvents: "none" }} />
       <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 140, zIndex: 2, background: "linear-gradient(to left,#03030a,transparent)", pointerEvents: "none" }} />
       <p style={{ textAlign: "center", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.28)", marginBottom: 28, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", opacity: inView ? 1 : 0, transition: "opacity 0.8s ease" }}>
-        <span style={{ fontSize: "18px", marginRight: "8px" }}>
-           ♥
-           </span>
-           LOVED BY LEADING TEAMS
-       </p>
+        Trusted by professionals at
+      </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, opacity: inView ? 1 : 0, transition: "opacity 1s 0.2s ease" }}>
         <MarqueeRow items={ROW1} reverse={false} />
         <MarqueeRow items={ROW2} reverse={true} />
@@ -869,12 +874,12 @@ const DEMO_CONTENT = {
       { source: "reuters.com", title: "Three private fusion startups reach profitability", time: "1d ago", snippet: "Helion Energy, TAE Technologies and Zap Energy all reported positive..." },
     ]
   },
- image: {
-  prompt: "Futuristic city at golden hour, cinematic, 8K",
-  style: "Photorealistic",
-  steps: ["Initializing…", "Generating image…", "Processing…", "Refining…", "Complete ✓"],
-  colors: ["#FF6B35", "#F7C59F", "#EFEFD0", "#004E89", "#1A936F"],
-},
+  image: {
+    prompt: "Futuristic city at golden hour, cinematic, 8K",
+    style: "Photorealistic",
+    steps: ["Analyzing prompt…", "Applying style transfer…", "Rendering details…", "Upscaling 4×…", "✓ Complete"],
+    colors: ["#FF6B35", "#F7C59F", "#EFEFD0", "#004E89", "#1A936F"],
+  },
   research: {
     topic: "Impact of AI on software engineering jobs 2025–2030",
     sources: 47,
@@ -1018,41 +1023,35 @@ function DemoPanel({ tabId, color }) {
     </div>
   );
 
-  // IMAGE GEN - matches real Vortis UI
-if (tabId === "image") return (
-  <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
-    <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.7)" }}>
-      <span style={{ color: `rgb(${rgb})` }}>Prompt: </span>{data.prompt}
-    </div>
-    {/* Pixel grid exactly like your real UI */}
-    <div style={{ flex: 1, borderRadius: 14, overflow: "hidden", position: "relative", minHeight: 200, background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr)", gridTemplateRows: "repeat(8,1fr)", gap: 3, padding: 8, height: "100%" }}>
-        {Array.from({length: 96}).map((_, i) => {
-          const purples = ["#4c1d95","#5b21b6","#6d28d9","#7c3aed","#8b5cf6","#a78bfa","#3730a3","#4338ca","#312e81","#1e1b4b","#2e1065","#3b0764"];
-          const c = purples[Math.floor(Math.random() * purples.length)];
-          return (
-            <div key={i} style={{ borderRadius: 4, background: c, opacity: imgStep > 0 ? (0.4 + Math.random() * 0.6) : 0.15, transition: `opacity ${0.3 + Math.random() * 0.5}s ease`, animation: `pulse ${1.5 + Math.random()}s ease-in-out infinite` }} />
-          );
-        })}
+  // IMAGE GEN
+  if (tabId === "image") return (
+    <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.7)" }}>
+        <span style={{ color: `rgb(${rgb})` }}>Prompt: </span>{data.prompt}
       </div>
-      {imgStep < data.steps.length - 1 && (
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(109,40,217,0.15), rgba(139,92,246,0.1))", pointerEvents: "none" }} />
-      )}
-    </div>
-    {/* Bottom bar matching your real UI */}
-    <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, color: `rgb(${rgb})` }}>★</span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>VORTIS Image AI</span>
+      <div style={{ flex: 1, borderRadius: 12, overflow: "hidden", position: "relative", minHeight: 180, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(135deg, rgba(${rgb},0.3) 0%, rgba(6,182,212,0.2) 50%, rgba(251,191,36,0.15) 100%)`, filter: "blur(20px)", transform: "scale(1.1)" }} />
+        <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "repeat(8,1fr)", gridTemplateRows: "repeat(6,1fr)", gap: 1, opacity: imgStep > 1 ? 0.6 : 0.2, transition: "opacity 0.8s" }}>
+          {Array.from({length: 48}).map((_, i) => (
+            <div key={i} style={{ background: `rgba(${rgb},${Math.random()*0.4+0.1})`, borderRadius: 2, animation: `pulse ${1+Math.random()}s ease-in-out infinite` }} />
+          ))}
+        </div>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            {data.colors.map((c, i) => (
+              <div key={i} style={{ width: 32, height: 32, borderRadius: 8, background: c, opacity: imgStep > i * 0.8 ? 1 : 0.2, transition: "opacity 0.4s", boxShadow: `0 0 12px ${c}60` }} />
+            ))}
+          </div>
+          <div style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: `rgb(${rgb})` }}>{data.steps[imgStep]}</div>
+        </div>
       </div>
-      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono',monospace" }}>{data.steps[imgStep]}</span>
+      <div style={{ display: "flex", gap: 8 }}>
+        {data.steps.map((s, i) => (
+          <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= imgStep ? `rgb(${rgb})` : "rgba(255,255,255,0.1)", transition: "background 0.4s" }} />
+        ))}
+      </div>
     </div>
-    {/* Progress bar */}
-    <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-      <div style={{ height: "100%", borderRadius: 2, background: `linear-gradient(90deg,rgb(${rgb}),#a855f7)`, width: `${(imgStep / (data.steps.length - 1)) * 100}%`, transition: "width 0.7s ease" }} />
-    </div>
-  </div>
-);
+  );
 
   // DEEP RESEARCH
   if (tabId === "research") return (
@@ -1264,10 +1263,7 @@ function DashboardPreview() {
                 <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>app.vortis.ai/dashboard</span>
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-               <div style={{ padding: "3px 10px", borderRadius: 6, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", fontSize: 10, color: "#a855f7", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-                       <Diamond size={10} color="#a855f7" />
-                      PLATINUM
-                   </div>
+                <div style={{ padding: "3px 10px", borderRadius: 6, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", fontSize: 10, color: "#a855f7", fontWeight: 700 }}>PLATINUM</div>
               </div>
             </div>
 
@@ -1527,6 +1523,7 @@ const PLANS = [
 ];
 const BILLING_NAMES = { monthly: "Monthly", q: "3 Months", h: "6 Months", y: "Annual" };
 const BILLING_LABELS = { monthly: "/mo", q: "/3 mo", h: "/6 mo", y: "/yr" };
+const BILLING_SAVINGS = { monthly: null, q: "Save 11%", h: "Save 20%", y: "Save 25%" };
  
 function Pricing() {
   const [billing, setBilling] = useState("monthly");
@@ -1546,6 +1543,7 @@ function Pricing() {
             {Object.keys(BILLING_NAMES).map(b => (
               <button key={b} onClick={() => setBilling(b)} style={{ padding: "8px 18px", borderRadius: 99, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: billing === b ? "linear-gradient(135deg,#7C3AED,#a855f7)" : "transparent", color: billing === b ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.2s", boxShadow: billing === b ? "0 0 16px rgba(124,58,237,0.4)" : "none" }}>
                 {BILLING_NAMES[b]}
+                {BILLING_SAVINGS[b] && billing === b && <span style={{ marginLeft: 6, fontSize: 10, background: "rgba(16,185,129,0.2)", color: "#10b981", padding: "1px 5px", borderRadius: 99 }}>{BILLING_SAVINGS[b]}</span>}
               </button>
             ))}
           </div>
@@ -1614,6 +1612,7 @@ const FAQS = [
   { q: "How does billing work?", a: "Choose monthly, quarterly, semi-annual, or annual billing. Longer commitments unlock big discounts — annual saves 25%. Cancel any time, no questions asked." },
   { q: "What is Deep Research mode?", a: "Autonomous agents browse the web, read documents, cross-reference sources, and synthesize comprehensive reports in minutes. Like having a research team on demand." },
   { q: "Is my data private and secure?", a: "Absolutely. Your conversations, documents, and outputs are never used to train models or shared with third parties. Enterprise-grade AES-256 encryption at rest and in transit." },
+  { q: "Can I use Vortis via API?", a: "Yes — Vortis offers a clean REST API with streaming support. Build your own products on top of Vortis intelligence. Docs available for all paid plans." },
 ];
 
 function FaqItem({ faq, index, inView }) {
