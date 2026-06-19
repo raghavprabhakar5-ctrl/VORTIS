@@ -2,6 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { initializeApp } from 'firebase/app';
 import App from "./App.jsx";
+import Privacy from "./Privacy.jsx";
+import Terms from "./Terms.jsx";
 import "./index.css";
 
 // Firebase configuration - MUST BE BEFORE ReactDOM.render
@@ -17,9 +19,19 @@ const firebaseConfig = {
 // Initialize Firebase - MUST BE BEFORE ReactDOM.render
 initializeApp(firebaseConfig);
 
+// Simple path-based routing (no react-router needed)
+function Root() {
+  const path = window.location.pathname;
+
+  if (path === "/privacy") return <Privacy />;
+  if (path === "/terms") return <Terms />;
+
+  return <App />;
+}
+
 // THEN render the app
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <App />
+    <Root />
   </React.StrictMode>
 );
