@@ -1,11 +1,4 @@
 {
-"version": 2,
-
-"functions": {
-"api/bytez.js": {
-"maxDuration": 60
-}
-},
 
 "rewrites": [
 {
