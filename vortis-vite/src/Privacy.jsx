@@ -69,7 +69,7 @@ return (
 
   <ul style={{ marginLeft: 24, marginTop: 8 }}>
     <li><strong>Raghav Prabhakar</strong></li>
-    <li><strong>raghavprabhakar5@gmail.com</strong></li>
+    <li><strong>contact.vortis@gmail.com</strong></li>
   </ul>
 </div>
 
