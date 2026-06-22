@@ -68,9 +68,10 @@ return (
   </p>
 
   <ul style={{ marginLeft: 24, marginTop: 8 }}>
-    <li><strong>Raghav Prabhakar</strong></li>
-    <li><strong>contact.vortis@gmail.com</strong></li>
-  </ul>
+  <li><strong>Raghav Prabhakar</strong></li>
+  <li><strong>Founder, VORTIS AI</strong></li>
+  <li><strong>contact.vortis@gmail.com</strong></li>
+</ul>
 </div>
 
 );

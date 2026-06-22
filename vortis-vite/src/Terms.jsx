@@ -89,6 +89,25 @@ Last updated: June 19, 2026 </p>
   </p>
 
   <h2 style={{ marginTop: 32, marginBottom: 12 }}>
+  8. AI-Generated Content
+</h2>
+<p>
+  The Service uses artificial intelligence to generate responses, images,
+  and other content. AI-generated content may be inaccurate, incomplete,
+  misleading, or outdated. Users are responsible for evaluating and
+  verifying any information provided by the Service before relying on it.
+</p>
+
+<h2 style={{ marginTop: 32, marginBottom: 12 }}>
+  9. Age Requirement
+</h2>
+<p>
+  You must be at least 13 years old to use the Service. By using the
+  Service, you represent that you meet the applicable minimum age
+  requirement in your jurisdiction.
+</p>
+
+  <h2 style={{ marginTop: 32, marginBottom: 12 }}>
     8. Contact Us
   </h2>
 
@@ -98,9 +117,10 @@ Last updated: June 19, 2026 </p>
   </p>
 
   <ul style={{ marginLeft: 24, marginTop: 8 }}>
-    <li><strong>Raghav Prabhakar</strong></li>
-    <li><strong>contact.vortis@gmail.com</strong></li>
-  </ul>
+  <li><strong>Raghav Prabhakar</strong></li>
+  <li><strong>Founder, VORTIS AI</strong></li>
+  <li><strong>contact.vortis@gmail.com</strong></li>
+</ul>
 </div>
 
 );
