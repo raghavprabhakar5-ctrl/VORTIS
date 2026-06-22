@@ -108,7 +108,7 @@ Last updated: June 19, 2026 </p>
 </p>
 
   <h2 style={{ marginTop: 32, marginBottom: 12 }}>
-    8. Contact Us
+    10. Contact Us
   </h2>
 
   <p>
