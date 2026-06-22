@@ -1018,36 +1018,59 @@ function DemoPanel({ tabId, color }) {
     </div>
   );
 
-  // IMAGE GEN - matches real Vortis UI
+  // IMAGE GEN — clean single-image reveal
 if (tabId === "image") return (
   <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
     <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.7)" }}>
       <span style={{ color: `rgb(${rgb})` }}>Prompt: </span>{data.prompt}
     </div>
-    {/* Pixel grid exactly like your real UI */}
-    <div style={{ flex: 1, borderRadius: 14, overflow: "hidden", position: "relative", minHeight: 200, background: "#0d0d1a", border: "1px solid rgba(255,255,255,0.08)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(12,1fr)", gridTemplateRows: "repeat(8,1fr)", gap: 3, padding: 8, height: "100%" }}>
-        {Array.from({length: 96}).map((_, i) => {
-          const purples = ["#4c1d95","#5b21b6","#6d28d9","#7c3aed","#8b5cf6","#a78bfa","#3730a3","#4338ca","#312e81","#1e1b4b","#2e1065","#3b0764"];
-          const c = purples[Math.floor(Math.random() * purples.length)];
-          return (
-            <div key={i} style={{ borderRadius: 4, background: c, opacity: imgStep > 0 ? (0.4 + Math.random() * 0.6) : 0.15, transition: `opacity ${0.3 + Math.random() * 0.5}s ease`, animation: `pulse ${1.5 + Math.random()}s ease-in-out infinite` }} />
-          );
-        })}
+
+    <div style={{
+      flex: 1, borderRadius: 14, overflow: "hidden", position: "relative", minHeight: 220,
+      background: "linear-gradient(135deg, #1a0b3d 0%, #0d0d1a 50%, #1e1145 100%)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      {/* Soft glow blobs to suggest "image content" forming, no grid noise */}
+      <div style={{
+        position: "absolute", width: "60%", height: "60%", borderRadius: "50%",
+        background: `radial-gradient(circle, rgba(${rgb},0.35), transparent 70%)`,
+        filter: "blur(30px)", opacity: imgStep > 0 ? 1 : 0.3,
+        transition: "opacity 0.8s ease",
+      }} />
+      <div style={{
+        position: "absolute", width: "40%", height: "40%", borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(6,182,212,0.25), transparent 70%)",
+        filter: "blur(25px)", top: "15%", right: "15%",
+        opacity: imgStep > 1 ? 1 : 0.2, transition: "opacity 0.8s ease 0.2s",
+      }} />
+
+      {/* Center icon + status, clean and centered */}
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <div style={{
+          width: 56, height: 56, borderRadius: 16,
+          background: `rgba(${rgb},0.15)`, border: `1px solid rgba(${rgb},0.35)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          animation: imgStep < data.steps.length - 1 ? "pulse 1.6s ease-in-out infinite" : "none",
+        }}>
+          <ImageIcon size={24} style={{ color: `rgb(${rgb})` }} />
+        </div>
+        <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: `rgb(${rgb})` }}>
+          {data.steps[imgStep]}
+        </span>
       </div>
-      {imgStep < data.steps.length - 1 && (
-        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(109,40,217,0.15), rgba(139,92,246,0.1))", pointerEvents: "none" }} />
-      )}
     </div>
-    {/* Bottom bar matching your real UI */}
+
     <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, color: `rgb(${rgb})` }}>★</span>
+        <Star size={12} style={{ color: `rgb(${rgb})` }} />
         <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>VORTIS Image AI</span>
       </div>
-      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono',monospace" }}>{data.steps[imgStep]}</span>
+      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
+        Step {imgStep + 1} / {data.steps.length}
+      </span>
     </div>
-    {/* Progress bar */}
+
     <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
       <div style={{ height: "100%", borderRadius: 2, background: `linear-gradient(90deg,rgb(${rgb}),#a855f7)`, width: `${(imgStep / (data.steps.length - 1)) * 100}%`, transition: "width 0.7s ease" }} />
     </div>
