@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
   return (
@@ -9,8 +9,13 @@ export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
     </svg>
   );
 }
-
 export default function NotFound() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const goHome = () => {
     window.location.href = '/';
   };
@@ -29,77 +34,188 @@ export default function NotFound() {
         fontFamily: "'Geist', sans-serif",
         textAlign: 'center',
         padding: 24,
+        overflow: 'hidden',
       }}
     >
+      <style>{`
+        @keyframes nfFadeUp {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes nfGlowPulse {
+          0%, 100% { opacity: 0.5; transform: scale(1); }
+          50% { opacity: 0.9; transform: scale(1.08); }
+        }
+        @keyframes nfFloat {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes nfDrift {
+          0% { transform: translate(0, 0); }
+          33% { transform: translate(20px, -15px); }
+          66% { transform: translate(-15px, 10px); }
+          100% { transform: translate(0, 0); }
+        }
+        .nf-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 30px rgba(139, 92, 246, 0.35);
+          background: #ffffff !important;
+        }
+        .nf-btn:active {
+          transform: translateY(0px) scale(0.98);
+        }
+      `}</style>
+
+      {/* Ambient background glows */}
       <div
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          marginBottom: 36,
+          position: 'absolute',
+          top: '20%',
+          left: '15%',
+          width: 360,
+          height: 360,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(139,92,246,0.18), transparent 70%)',
+          filter: 'blur(40px)',
+          animation: 'nfDrift 14s ease-in-out infinite',
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '15%',
+          right: '12%',
+          width: 300,
+          height: 300,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(99,102,241,0.15), transparent 70%)',
+          filter: 'blur(40px)',
+          animation: 'nfDrift 18s ease-in-out infinite reverse',
+          pointerEvents: 'none',
+        }}
+      />
+
+      {/* 404 watermark */}
+      <div
+        style={{
+          position: 'absolute',
+          fontSize: 'clamp(180px, 32vw, 360px)',
+          fontWeight: 800,
+          letterSpacing: '-0.04em',
+          color: 'rgba(139,92,246,0.04)',
+          userSelect: 'none',
+          pointerEvents: 'none',
+          lineHeight: 1,
         }}
       >
-        <VortisLogo size={28} />
-        <span
+        404
+      </div>
+
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          opacity: mounted ? 1 : 0,
+          animation: mounted ? 'nfFadeUp 0.5s ease both' : 'none',
+        }}
+      >
+        <div
           style={{
-            fontSize: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
+            marginBottom: 40,
+            animation: 'nfFloat 4s ease-in-out infinite',
+          }}
+        >
+          <div style={{ position: 'relative', display: 'flex' }}>
+            <div
+              style={{
+                position: 'absolute',
+                inset: -6,
+                borderRadius: '50%',
+                background: 'rgba(139,92,246,0.35)',
+                filter: 'blur(10px)',
+                animation: 'nfGlowPulse 2.4s ease-in-out infinite',
+              }}
+            />
+            <VortisLogo size={30} />
+          </div>
+          <span
+            style={{
+              fontSize: 20,
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+            }}
+          >
+            VORTIS
+          </span>
+        </div>
+
+        <h1
+          style={{
+            fontSize: 'clamp(32px, 6vw, 52px)',
+            fontWeight: 800,
+            letterSpacing: '-0.03em',
+            marginBottom: 14,
+            background: 'linear-gradient(135deg, #f0f0f8 0%, #b8a8f0 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          Page not found
+        </h1>
+
+        <p
+          style={{
+            fontSize: 15,
+            color: '#9090b0',
+            maxWidth: 440,
+            lineHeight: 1.65,
+            marginBottom: 36,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+          }}
+        >
+          VORTIS can help with many things, but finding this page isn't one of them.
+        </p>
+
+        <button
+          className="nf-btn"
+          onClick={goHome}
+          style={{
+            padding: '12px 26px',
+            borderRadius: 12,
+            background: '#e8e8f8',
+            color: '#0f0f1a',
+            border: 'none',
+            fontSize: 14.5,
             fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: "'Geist', sans-serif",
+            transition: 'all 0.2s ease',
+            boxShadow: '0 4px 16px rgba(139,92,246,0.15)',
+            letterSpacing: '0.01em',
+          }}
+        >
+          Go back home
+        </button>
+
+        <p
+          style={{
+            marginTop: 22,
+            fontSize: 11.5,
+            color: '#45455a',
+            fontFamily: "'JetBrains Mono', monospace",
             letterSpacing: '0.04em',
           }}
         >
-          VORTIS
-        </span>
+          ERROR 404 · {typeof window !== 'undefined' ? window.location.pathname : ''}
+        </p>
       </div>
-
-      <h1
-        style={{
-          fontSize: 'clamp(28px, 5vw, 42px)',
-          fontWeight: 700,
-          letterSpacing: '-0.02em',
-          marginBottom: 12,
-          color: '#f0f0f8',
-        }}
-      >
-        Page not found
-      </h1>
-
-      <p
-        style={{
-          fontSize: 14.5,
-          color: '#9090b0',
-          maxWidth: 420,
-          lineHeight: 1.6,
-          marginBottom: 32,
-        }}
-      >
-        VORTIS can help with many things, but finding this page isn't one of them.
-      </p>
-
-      <button
-        onClick={goHome}
-        style={{
-          padding: '10px 22px',
-          borderRadius: 10,
-          background: '#e8e8f8',
-          color: '#0f0f1a',
-          border: 'none',
-          fontSize: 14,
-          fontWeight: 600,
-          cursor: 'pointer',
-          fontFamily: "'Geist', sans-serif",
-          transition: 'transform 0.15s, box-shadow 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-1px)';
-          e.currentTarget.style.boxShadow = '0 6px 20px rgba(255,255,255,0.15)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'none';
-          e.currentTarget.style.boxShadow = 'none';
-        }}
-      >
-        Go back home
-      </button>
     </div>
   );
 }
