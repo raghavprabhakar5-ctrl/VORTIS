@@ -195,37 +195,143 @@ function FloatingParticles() {
 // ══════════════════════════════════════════════════════════════════
 //  COSMIC BACKGROUND
 // ══════════════════════════════════════════════════════════════════
-function CosmicBg() {
+
+function CursorOrb() {
+  const dotRef = useRef(null);
+  const ringRef = useRef(null);
+  const glowRef = useRef(null);
+
+  // Raw target position (updates instantly on mousemove)
+  const target = useRef({ x: -300, y: -300 });
+  // Current rendered position (eased toward target every frame)
+  const current = useRef({ x: -300, y: -300 });
+  // Separate, slower-trailing position for the big glow
+  const glowCurrent = useRef({ x: -300, y: -300 });
+
+  const visible = useRef(false);
+  const clicking = useRef(false);
+  const rafId = useRef(null);
+
+  useEffect(() => {
+    const move = (e) => {
+      target.current.x = e.clientX;
+      target.current.y = e.clientY;
+      if (!visible.current) {
+        visible.current = true;
+        if (dotRef.current) dotRef.current.style.opacity = "1";
+        if (ringRef.current) ringRef.current.style.opacity = "1";
+        if (glowRef.current) glowRef.current.style.opacity = "1";
+        // snap instantly on first move so it doesn't glide in from corner
+        current.current.x = e.clientX;
+        current.current.y = e.clientY;
+        glowCurrent.current.x = e.clientX;
+        glowCurrent.current.y = e.clientY;
+      }
+    };
+    const leave = () => {
+      visible.current = false;
+      if (dotRef.current) dotRef.current.style.opacity = "0";
+      if (ringRef.current) ringRef.current.style.opacity = "0";
+      if (glowRef.current) glowRef.current.style.opacity = "0";
+    };
+    const down = () => {
+      clicking.current = true;
+      if (ringRef.current) ringRef.current.style.transform =
+        `translate3d(${current.current.x - 14}px, ${current.current.y - 14}px, 0) scale(0.75)`;
+    };
+    const up = () => { clicking.current = false; };
+
+    window.addEventListener("mousemove", move, { passive: true });
+    window.addEventListener("mouseleave", leave);
+    window.addEventListener("mousedown", down);
+    window.addEventListener("mouseup", up);
+
+    // Animation loop: lerp current -> target every frame (GPU transforms only)
+    const DOT_EASE = 0.35;   // dot follows fast/tight
+    const RING_EASE = 0.18;  // ring trails a bit behind, gives nice "pull" feel
+    const GLOW_EASE = 0.08;  // glow trails slowest, soft ambient feel
+
+    const tick = () => {
+      // dot (tight follow)
+      current.current.x += (target.current.x - current.current.x) * DOT_EASE;
+      current.current.y += (target.current.y - current.current.y) * DOT_EASE;
+
+      // glow (loose follow)
+      glowCurrent.current.x += (target.current.x - glowCurrent.current.x) * GLOW_EASE;
+      glowCurrent.current.y += (target.current.y - glowCurrent.current.y) * GLOW_EASE;
+
+      if (dotRef.current) {
+        const s = clicking.current ? 0.7 : 1;
+        dotRef.current.style.transform =
+          `translate3d(${current.current.x - 7}px, ${current.current.y - 7}px, 0) scale(${s})`;
+      }
+      if (ringRef.current && !clicking.current) {
+        // ring eases toward target a touch slower than the dot
+        const rx = current.current.x + (target.current.x - current.current.x) * RING_EASE;
+        const ry = current.current.y + (target.current.y - current.current.y) * RING_EASE;
+        ringRef.current.style.transform =
+          `translate3d(${rx - 16}px, ${ry - 16}px, 0) scale(1)`;
+      }
+      if (glowRef.current) {
+        glowRef.current.style.transform =
+          `translate3d(${glowCurrent.current.x - 220}px, ${glowCurrent.current.y - 220}px, 0)`;
+      }
+
+      rafId.current = requestAnimationFrame(tick);
+    };
+    rafId.current = requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseleave", leave);
+      window.removeEventListener("mousedown", down);
+      window.removeEventListener("mouseup", up);
+      if (rafId.current) cancelAnimationFrame(rafId.current);
+    };
+  }, []);
+
   return (
-    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-      {[
-        { a: "orb1 28s ease-in-out infinite", t: "5%", l: "10%", w: 700, c: "rgba(124,58,237,0.06)", b: 120 },
-        { a: "orb2 35s ease-in-out infinite 5s", t: "40%", r: "5%", w: 600, c: "rgba(168,85,247,0.05)", b: 140 },
-        { a: "orb3 40s ease-in-out infinite 12s", bt: "10%", l: "30%", w: 520, c: "rgba(6,182,212,0.035)", b: 110 },
-        { a: "orb4 32s ease-in-out infinite 8s", t: "60%", l: "5%", w: 450, c: "rgba(99,102,241,0.04)", b: 130 },
-        { a: "orb1 45s ease-in-out infinite 20s", t: "20%", r: "20%", w: 380, c: "rgba(6,182,212,0.03)", b: 100 },
-      ].map((o, i) => (
-        <div key={i} style={{
-          position: "absolute", borderRadius: "50%", width: o.w, height: o.w,
-          top: o.t, left: o.l, right: o.r, bottom: o.bt,
-          background: o.c, filter: `blur(${o.b}px)`,
-          animation: o.a, willChange: "transform",
-        }} />
-      ))}
-      <div style={{
-        position: "absolute", inset: 0, opacity: 0.018,
-        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
-        backgroundSize: "55px 55px", animation: "gridFade 8s ease-in-out infinite",
-      }} />
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(180deg, transparent 0%, rgba(3,3,10,0.3) 100%)",
-        pointerEvents: "none",
-      }} />
-    </div>
+    <>
+      {/* Soft ambient glow — trails slowest */}
+      <div
+        ref={glowRef}
+        style={{
+          position: "fixed", pointerEvents: "none", zIndex: 9998,
+          left: 0, top: 0, width: 440, height: 440,
+          borderRadius: "50%", opacity: 0,
+          background: "radial-gradient(circle, rgba(124,58,237,0.10) 0%, rgba(168,85,247,0.04) 45%, transparent 72%)",
+          transition: "opacity 0.4s ease",
+          willChange: "transform",
+        }}
+      />
+      {/* Outer ring — trails slightly behind dot, gives depth */}
+      <div
+        ref={ringRef}
+        style={{
+          position: "fixed", pointerEvents: "none", zIndex: 9999,
+          left: 0, top: 0, width: 32, height: 32,
+          borderRadius: "50%", opacity: 0,
+          border: "1.5px solid rgba(168,85,247,0.55)",
+          transition: "opacity 0.3s ease, transform 0.18s ease",
+          willChange: "transform",
+        }}
+      />
+      {/* Core dot — tight, immediate follow */}
+      <div
+        ref={dotRef}
+        style={{
+          position: "fixed", pointerEvents: "none", zIndex: 10000,
+          left: 0, top: 0, width: 14, height: 14,
+          borderRadius: "50%", opacity: 0,
+          background: "#a855f7",
+          boxShadow: "0 0 10px rgba(168,85,247,0.8), 0 0 22px rgba(124,58,237,0.45)",
+          transition: "opacity 0.3s ease, transform 0.08s ease-out",
+          willChange: "transform",
+        }}
+      />
+    </>
   );
 }
-
 // ══════════════════════════════════════════════════════════════════
 //  NAV
 // ══════════════════════════════════════════════════════════════════
