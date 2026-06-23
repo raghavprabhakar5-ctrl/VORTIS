@@ -45,6 +45,7 @@ body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 @keyframes ripple{0%{transform:scale(0);opacity:.6}100%{transform:scale(3);opacity:0}}
 @keyframes glitchX{0%,100%{transform:translateX(0)}20%{transform:translateX(-2px)}40%{transform:translateX(2px)}60%{transform:translateX(-1px)}80%{transform:translateX(1px)}}
+@keyframes radarPing{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.3);opacity:0}}
 @keyframes neonPulse{0%,100%{text-shadow:0 0 7px rgba(139,92,246,.5),0 0 20px rgba(139,92,246,.3)}50%{text-shadow:0 0 14px rgba(139,92,246,.8),0 0 40px rgba(139,92,246,.5),0 0 60px rgba(139,92,246,.3)}}
 @keyframes waveFloat{0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-8px) rotate(1deg)}75%{transform:translateY(8px) rotate(-1deg)}}
 @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
@@ -470,25 +471,40 @@ export function Hero({ onLogin, authLoading, authError }) {
 
         {/* CTA */}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-         <button onClick={() => onLogin('google')} disabled={authLoading} style={{
-  padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
-  background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-  border: "none", cursor: authLoading ? "not-allowed" : "pointer",
-  display: "flex", alignItems: "center", gap: 8,
-  boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
-  transition: "all 0.25s", opacity: authLoading ? 0.85 : 1,
-}}
-onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
-onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
+         <button
+  onClick={() => onLogin('google')}
+  disabled={authLoading}
+  style={{
+    padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
+    background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+    border: "none", cursor: authLoading ? "not-allowed" : "pointer",
+    display: "flex", alignItems: "center", gap: 8, position: "relative",
+    boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
+    transition: "all 0.25s", opacity: authLoading ? 0.85 : 1,
+  }}
+  onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
+  onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
 >
+  {/* Radar ping ring — only visible while idle, not while loading */}
+  {!authLoading && (
+    <span style={{
+      position: "absolute", inset: 0, borderRadius: 99,
+      border: "2px solid rgba(168,85,247,0.6)",
+      animation: "radarPing 2s ease-out infinite",
+      pointerEvents: "none",
+    }} />
+  )}
+ 
   {authLoading ? (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", position: "relative", zIndex: 1 }}>
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
   ) : (
-    <Zap size={16} />
+    <Zap size={16} style={{ position: "relative", zIndex: 1 }} />
   )}
-  {authLoading ? "Signing in…" : "Start Free"}
+  <span style={{ position: "relative", zIndex: 1 }}>
+    {authLoading ? "Signing in…" : "Start Free"}
+  </span>
 </button>
           <a href="#capabilities" style={{
             padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
