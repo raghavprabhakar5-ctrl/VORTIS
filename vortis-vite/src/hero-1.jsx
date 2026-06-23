@@ -44,8 +44,8 @@ body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 @keyframes typewriter{from{width:0}to{width:100%}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
 @keyframes ripple{0%{transform:scale(0);opacity:.6}100%{transform:scale(3);opacity:0}}
+@keyframes radarPing{0%{transform:scale(1);opacity:1}100%{transform:scale(1.5);opacity:0}}
 @keyframes glitchX{0%,100%{transform:translateX(0)}20%{transform:translateX(-2px)}40%{transform:translateX(2px)}60%{transform:translateX(-1px)}80%{transform:translateX(1px)}}
-@keyframes radarPing{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.3);opacity:0}}
 @keyframes neonPulse{0%,100%{text-shadow:0 0 7px rgba(139,92,246,.5),0 0 20px rgba(139,92,246,.3)}50%{text-shadow:0 0 14px rgba(139,92,246,.8),0 0 40px rgba(139,92,246,.5),0 0 60px rgba(139,92,246,.3)}}
 @keyframes waveFloat{0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-8px) rotate(1deg)}75%{transform:translateY(8px) rotate(-1deg)}}
 @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
@@ -485,12 +485,12 @@ export function Hero({ onLogin, authLoading, authError }) {
   onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
   onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
 >
-  {/* Radar ping ring — only visible while idle, not while loading */}
+  {/* Radar ping ring — bigger + brighter version, only visible while idle */}
   {!authLoading && (
     <span style={{
-      position: "absolute", inset: 0, borderRadius: 99,
-      border: "2px solid rgba(168,85,247,0.6)",
-      animation: "radarPing 2s ease-out infinite",
+      position: "absolute", inset: -3, borderRadius: 99,
+      border: "3px solid #c4b5fd",
+      animation: "radarPing 1.6s ease-out infinite",
       pointerEvents: "none",
     }} />
   )}
@@ -506,6 +506,7 @@ export function Hero({ onLogin, authLoading, authError }) {
     {authLoading ? "Signing in…" : "Start Free"}
   </span>
 </button>
+ 
           <a href="#capabilities" style={{
             padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
             border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
