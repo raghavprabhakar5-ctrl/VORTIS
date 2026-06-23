@@ -6,6 +6,7 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
+import useDevToolsGuard from './useDevToolsGuard';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -19,7 +20,8 @@ import {
   ThumbsUp, ThumbsDown, RefreshCw,
   AlertTriangle, Layers,
   BookOpen, PenTool,
-  Shield, Lock, Cpu, Edit2, Brain, Trash2
+  Shield, Lock, Cpu, Edit2, Brain, Trash2,
+  Gem  
 } from 'lucide-react';
 
 
@@ -505,98 +507,645 @@ const AIImageCard = ({ src, onRetry }) => {
 };
 
 
-const SelectionReply = ({ onReply }) => {
-  const [pos, setPos] = React.useState(null);
-  const [sel, setSel] = React.useState('');
-
-  React.useEffect(() => {
-   const handler = () => {
-  setTimeout(() => {
-    const selection = window.getSelection();
-    const text = selection?.toString().trim();
-    // Only show Reply if selection is inside an AI bubble
-    const anchorNode = selection?.anchorNode;
-    const isInsideAIBubble = anchorNode?.parentElement?.closest('.bubble-ai');
-    if (text && text.length > 2 && isInsideAIBubble) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          setSel(text);
-         setPos({
-  top: rect.top - 44,
-  left: Math.min(Math.max(rect.left + rect.width / 2, 80), window.innerWidth - 80)
-});
-        } else {
-          setPos(null);
-          setSel('');
+const LANG_ENGINE = {
+  js: 'js', javascript: 'js', jsx: 'js', mjs: 'js', node: 'js',
+  ts: 'ts', typescript: 'ts', tsx: 'ts',
+  py: 'python', python: 'python', python3: 'python',
+  lua: 'lua',
+  rb: 'ruby', ruby: 'ruby',
+  php: 'php',
+  sql: 'sql', sqlite: 'sql', sqlite3: 'sql', mysql: 'sql', postgres: 'sql', postgresql: 'sql', plsql: 'sql', tsql: 'sql',
+  c: 'cpp', cpp: 'cpp', 'c++': 'cpp', cc: 'cpp', h: 'cpp', hpp: 'cpp',
+  json: 'json',
+};
+ 
+// ── friendly label + button verb shown in the UI for each engine ──
+const ENGINE_META = {
+  js:     { name: 'Native JS',        verb: 'Run' },
+  ts:     { name: 'tsc → JS',         verb: 'Run' },
+  python: { name: 'Pyodide',          verb: 'Run' },
+  lua:    { name: 'wasmoon',          verb: 'Run' },
+  ruby:   { name: 'ruby.wasm',        verb: 'Run' },
+  php:    { name: 'php-wasm',         verb: 'Run' },
+  sql:    { name: 'sql.js · SQLite',  verb: 'Query' },
+  cpp:    { name: 'JSCPP',            verb: 'Run' },
+  json:   { name: 'JSON',             verb: 'Validate' },
+};
+ 
+const PREVIEW_LANGS = new Set(['html', 'svg', 'css']);
+ 
+// ── one-time <script> loader, cached on window so remounts don't re-fetch ──
+const loadScriptOnce = (src) => {
+  if (!window.__vortisLoaded) window.__vortisLoaded = {};
+  if (window.__vortisLoaded[src]) return window.__vortisLoaded[src];
+  const p = new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Failed to load ' + src));
+    document.head.appendChild(s);
+  });
+  window.__vortisLoaded[src] = p;
+  return p;
+};
+ 
+// ── booted engines live here for the lifetime of the tab ──
+const _engineCache = {};
+ 
+const bootPython = async (onStatus) => {
+  if (_engineCache.python) return _engineCache.python;
+  onStatus?.('Booting Python runtime (Pyodide, ~6MB first time)…');
+  if (!window.loadPyodide) await loadScriptOnce('https://cdn.jsdelivr.net/pyodide/v0.26.1/full/pyodide.js');
+  const py = await window.loadPyodide();
+  _engineCache.python = py;
+  return py;
+};
+ 
+const bootLua = async (onStatus) => {
+  if (_engineCache.lua) return _engineCache.lua;
+  onStatus?.('Booting Lua runtime (wasmoon)…');
+  if (!window.Lua) await loadScriptOnce('https://cdn.jsdelivr.net/npm/wasmoon/dist/index.js');
+  _engineCache.lua = new window.Lua.LuaFactory();
+  return _engineCache.lua;
+};
+ 
+const bootTS = async (onStatus) => {
+  if (_engineCache.ts) return _engineCache.ts;
+  onStatus?.('Loading TypeScript compiler…');
+  if (!window.ts) await loadScriptOnce('https://cdn.jsdelivr.net/npm/typescript@5.4.5/lib/typescript.js');
+  _engineCache.ts = window.ts;
+  return _engineCache.ts;
+};
+ 
+const bootSQL = async (onStatus) => {
+  if (_engineCache.sql) return _engineCache.sql;
+  onStatus?.('Booting SQLite (sql.js, WASM)…');
+  if (!window.initSqlJs) await loadScriptOnce('https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js');
+  const SQL = await window.initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/${f}` });
+  _engineCache.sql = SQL;
+  return SQL;
+};
+ 
+const bootPHP = async (onStatus) => {
+  if (_engineCache.php) return _engineCache.php;
+  onStatus?.('Booting PHP runtime (php-wasm)…');
+  const mod = await import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/php-wasm/PhpWeb.mjs');
+  _engineCache.php = mod;
+  return mod;
+};
+ 
+const bootRuby = async (onStatus) => {
+  if (_engineCache.ruby) return _engineCache.ruby;
+  onStatus?.('Booting Ruby runtime (ruby.wasm) — first run takes longer…');
+  const { DefaultRubyVM } = await import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/@ruby/3.3-wasm-wasi@2.7.1/dist/browser/+esm');
+  const resp = await fetch('https://cdn.jsdelivr.net/npm/@ruby/3.3-wasm-wasi@2.7.1/dist/ruby+stdlib.wasm');
+  const buffer = await resp.arrayBuffer();
+  const module = await WebAssembly.compile(buffer);
+  const { vm } = await DefaultRubyVM(module);
+  _engineCache.ruby = vm;
+  return vm;
+};
+ 
+const bootCpp = async (onStatus) => {
+  if (_engineCache.cpp) return _engineCache.cpp;
+  onStatus?.('Loading C/C++ interpreter (JSCPP)…');
+  if (!window.JSCPP) await loadScriptOnce('https://cdn.jsdelivr.net/npm/JSCPP/dist/JSCPP.es5.min.js');
+  _engineCache.cpp = window.JSCPP;
+  return _engineCache.cpp;
+};
+ 
+// ── normalizes whatever weird shape a runtime hands back into a clean string ──
+const tidyOutput = (raw) => {
+  if (raw === null || raw === undefined) return '';
+  if (raw instanceof Uint8Array || raw instanceof ArrayBuffer) return new TextDecoder().decode(raw);
+  if (Array.isArray(raw)) return raw.length && typeof raw[0] === 'number' ? String.fromCharCode(...raw) : raw.join('\n');
+  if (typeof raw === 'object') { try { return JSON.stringify(raw, null, 2); } catch (_) { return String(raw); } }
+  return String(raw);
+};
+ 
+// ── the actual multi-language executor ──
+const executeCodeLocally = async (language, code, onStatus) => {
+  const lang = (language || '').toLowerCase().trim();
+  const engine = LANG_ENGINE[lang];
+ 
+  try {
+    switch (engine) {
+ 
+      case 'js': {
+        let output = '';
+        const orig = { log: console.log, error: console.error, warn: console.warn };
+        const capture = (...a) => { output += a.map(x => (typeof x === 'object' ? tidyOutput(x) : String(x))).join(' ') + '\n'; };
+        console.log = capture; console.error = capture; console.warn = capture;
+        try {
+          const result = await new Function(`return (async () => {\n${code}\n})()`)();
+          console.log = orig.log; console.error = orig.error; console.warn = orig.warn;
+          if (output) return { output, isError: false };
+          return { output: result !== undefined ? tidyOutput(result) : 'Success (no output)', isError: false };
+        } catch (err) {
+          console.log = orig.log; console.error = orig.error; console.warn = orig.warn;
+          return { output: output + (output ? '\n' : '') + err.message, isError: true };
         }
-      }, 10);
-    };
-
-    const clearHandler = (e) => {
-      if (e.target.closest && e.target.closest('button')) return;
-      setTimeout(() => {
-        if (!window.getSelection()?.toString().trim()) {
-          setPos(null);
-          setSel('');
+      }
+ 
+      case 'ts': {
+        onStatus?.('Compiling TypeScript…');
+        const ts = await bootTS(onStatus);
+        const js = ts.transpileModule(code, {
+          compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.None }
+        }).outputText;
+        onStatus?.('Running…');
+        return await executeCodeLocally('javascript', js, onStatus);
+      }
+ 
+      case 'python': {
+        const py = await bootPython(onStatus);
+        onStatus?.('Running…');
+        let stdout = '';
+        py.setStdout({ write: (t) => { stdout += t; return t.length; } });
+        py.setStderr({ write: (t) => { stdout += t; return t.length; } });
+        try {
+          try { await py.loadPackagesFromImports(code); } catch (_) {}
+          await py.runPythonAsync(code);
+          return { output: tidyOutput(stdout) || 'Success (no output)', isError: false };
+        } catch (err) {
+          return { output: stdout + (stdout ? '\n' : '') + err.message, isError: true };
         }
-      }, 100);
+      }
+ 
+      case 'lua': {
+        const factory = await bootLua(onStatus);
+        onStatus?.('Running…');
+        const lua = await factory.createEngine();
+        try {
+          let output = '';
+          lua.global.set('print', (...a) => { output += a.join('\t') + '\n'; });
+          await lua.doString(code);
+          return { output: output || 'Success (no output)', isError: false };
+        } catch (err) {
+          return { output: err.message, isError: true };
+        } finally {
+          lua.global.close?.();
+        }
+      }
+ 
+      case 'ruby': {
+        const vm = await bootRuby(onStatus);
+        onStatus?.('Running…');
+        try {
+          vm.eval(`
+            $vortis_buf = []
+            def puts(*a)
+              a = [""] if a.empty?
+              $vortis_buf << a.map(&:to_s).join("\\n")
+              nil
+            end
+            def print(*a); $vortis_buf << a.map(&:to_s).join; nil; end
+            def p(*a); a.each { |x| $vortis_buf << x.inspect }; a.length == 1 ? a[0] : a; end
+          `);
+          vm.eval(code);
+          const buf = vm.eval('$vortis_buf.join("\\n")').toString();
+          return { output: buf || 'Success (no output)', isError: false };
+        } catch (err) {
+          return { output: (err && err.message) || String(err), isError: true };
+        }
+      }
+ 
+      case 'php': {
+        const { PhpWeb } = await bootPHP(onStatus);
+        onStatus?.('Running…');
+        return await new Promise(async (resolve) => {
+          const php = new PhpWeb();
+          let output = ''; let errored = false;
+          const collect = (e) => { output += (Array.isArray(e.detail) ? e.detail.join(' ') : e.detail) + '\n'; };
+          php.addEventListener('output', collect);
+          php.addEventListener('error', (e) => { errored = true; collect(e); });
+          await php.ready;
+          try {
+            await php.run(code.includes('<?php') ? code : `<?php\n${code}\n?>`);
+          } catch (err) {
+            errored = true; output += err.message;
+          }
+          resolve({ output: output.trim() || 'Success (no output)', isError: errored });
+        });
+      }
+ 
+      case 'sql': {
+        const SQL = await bootSQL(onStatus);
+        onStatus?.('Running query…');
+        const db = new SQL.Database();
+        try {
+          const results = db.exec(code);
+          db.close();
+          if (!results.length) return { output: 'Query executed — no result set returned.', isError: false };
+          const text = results.map(r => {
+            const widths = r.columns.map((c, i) => Math.max(c.length, ...r.values.map(row => String(row[i] ?? 'NULL').length)));
+            const fmtRow = (cells) => cells.map((c, i) => String(c).padEnd(widths[i])).join('  ');
+            return [
+              fmtRow(r.columns),
+              widths.map(w => '─'.repeat(w)).join('  '),
+              ...r.values.map(row => fmtRow(row.map(v => (v === null ? 'NULL' : v))))
+            ].join('\n');
+          }).join('\n\n');
+          return { output: text, isError: false };
+        } catch (err) {
+          db.close();
+          return { output: err.message, isError: true };
+        }
+      }
+ 
+      case 'cpp': {
+        const JSCPP = await bootCpp(onStatus);
+        onStatus?.('Running…');
+        let output = '';
+        try {
+          const exitCode = JSCPP.run(code, '', { stdio: { write: (s) => { output += s; } } });
+          return { output: output || `Program exited with code ${exitCode}`, isError: false };
+        } catch (err) {
+          return { output: output + (output ? '\n' : '') + (err.message || String(err)), isError: true };
+        }
+      }
+ 
+      case 'json': {
+        try {
+          const parsed = JSON.parse(code);
+          return { output: JSON.stringify(parsed, null, 2), isError: false };
+        } catch (err) {
+          return { output: `Invalid JSON — ${err.message}`, isError: true };
+        }
+      }
+ 
+      default:
+        return { output: `No in-browser runtime is wired up for "${language || 'this language'}" yet.`, isError: true, unsupported: true };
+    }
+  } catch (e) {
+    return { output: `Failed to load execution engine: ${e.message}`, isError: true };
+  }
+};
+ 
+const safeExecuteCodeLocally = async (langKey, codeText, onStatus) => {
+  try {
+    return await executeCodeLocally(langKey, codeText, onStatus);
+  } catch (e) {
+    return { isError: true, output: `Unexpected error: ${e.message}` };
+  }
+};
+ 
+// ── live-preview HTML wrapper for HTML / SVG / CSS blocks (unchanged behavior) ──
+const getPreviewContent = (langKey, codeText) => {
+  if (langKey === 'html') return codeText;
+  if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>`;
+  if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>`;
+  return null;
+};
+ 
+const CodeBlock = ({ lang, codeText }) => {
+  const [output, setOutput] = React.useState(null);
+  const [running, setRunning] = React.useState(false);
+  const [hasError, setHasError] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const [execStatus, setExecStatus] = React.useState('');
+  const [execTime, setExecTime] = React.useState('');
+  const [bootMsg, setBootMsg] = React.useState('');
+ 
+  const langKey = (lang || '').toLowerCase().trim();
+  const engine = LANG_ENGINE[langKey];
+  const meta = ENGINE_META[engine];
+  const isPreviewable = PREVIEW_LANGS.has(langKey);
+  const isRunnable = !!engine;
+  const canRun = isRunnable || isPreviewable;
+ 
+  const runCode = async () => {
+    setRunning(true);
+    setOutput(null);
+    setHasError(false);
+    setExecStatus('');
+    setExecTime('');
+    setBootMsg('');
+ 
+    const startTime = performance.now();
+ 
+    // 1. Visual browser preview pipeline
+    const preview = getPreviewContent(langKey, codeText);
+    if (preview) {
+      setOutput({ type: 'html', content: preview });
+      setExecStatus('PREVIEW RENDERED');
+      setExecTime(`${(performance.now() - startTime).toFixed(0)}ms`);
+      setRunning(false);
+      return;
+    }
+ 
+    if (!isRunnable) {
+      setHasError(true);
+      setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" doesn't have a browser runtime wired up yet.` });
+      setExecStatus('UNSUPPORTED');
+      setRunning(false);
+      return;
+    }
+ 
+    // 2. Local sandboxed execution pipeline (WASM / interpreter / native)
+    try {
+      const result = await safeExecuteCodeLocally(langKey, codeText, (msg) => setBootMsg(msg));
+      const endTime = performance.now();
+      setHasError(!!result.isError);
+      setOutput({ type: 'text', content: tidyOutput(result.output) });
+      setExecStatus(result.unsupported ? 'UNSUPPORTED' : result.isError ? 'EXECUTION FAILED' : 'CODE EXECUTED');
+      setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
+    } catch (err) {
+      setHasError(true);
+      setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
+      setExecStatus('RUNTIME ERROR');
+    } finally {
+      setRunning(false);
+      setBootMsg('');
+    }
+  };
+ 
+  const copyCode = () => {
+    navigator.clipboard.writeText(codeText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+ 
+  const getLangColor = () => {
+    const colors = {
+      python: '#3b82f6', py: '#3b82f6', python3: '#3b82f6',
+      javascript: '#f59e0b', js: '#f59e0b', jsx: '#f59e0b', mjs: '#f59e0b', node: '#f59e0b',
+      typescript: '#06b6d4', ts: '#06b6d4', tsx: '#06b6d4',
+      ruby: '#e11d48', rb: '#e11d48',
+      php: '#8b5cf6',
+      sql: '#10b981', sqlite: '#10b981', sqlite3: '#10b981', mysql: '#10b981', postgres: '#10b981', postgresql: '#10b981', plsql: '#10b981', tsql: '#10b981',
+      rust: '#f97316', go: '#06b6d4', java: '#ef4444',
+      cpp: '#a78bfa', 'c++': '#a78bfa', c: '#a78bfa', cc: '#a78bfa', h: '#a78bfa', hpp: '#a78bfa',
+      html: '#f97316', css: '#6366f1', svg: '#10b981',
+      sh: '#10b981', bash: '#10b981',
+      swift: '#f97316', kotlin: '#8b5cf6',
+      lua: '#3b82f6',
+      json: '#84cc16',
     };
-
-    document.addEventListener('mouseup', handler);
-    document.addEventListener('touchend', handler);
-    document.addEventListener('mousedown', clearHandler);
-    return () => {
-      document.removeEventListener('mouseup', handler);
-      document.removeEventListener('touchend', handler);
-      document.removeEventListener('mousedown', clearHandler);
-    };
-  }, []);
-
-  if (!pos || !sel) return null;
-
+    return colors[langKey] || 'var(--indigo)';
+  };
+ 
+  const langColor = getLangColor();
+ 
   return (
     <div style={{
-  position: 'fixed',
-  top: Math.max(pos.top, 10),
-  left: pos.left,
-  transform: 'translateX(-50%)',
-  zIndex: 99999,
-  pointerEvents: 'all',
-  willChange: 'transform',
-}}>
-     <button
-  onMouseDown={e => {
-    e.preventDefault();
-    e.stopPropagation();
-    onReply(`> ${sel}\n\n`);
-    window.getSelection()?.removeAllRanges();
-    setPos(null);
-    setSel('');
-  }}
-  style={{
-    background: 'rgba(99,102,241,0.12)',
-    border: '1px solid rgba(99,102,241,0.4)',
-    color: '#6366f1',
-    borderRadius: 8,
-    padding: '8px 18px',
-    fontSize: 13.5,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'Geist,sans-serif',
-    boxShadow: '0 2px 12px rgba(0,0,0,.4)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    whiteSpace: 'nowrap',
-    userSelect: 'none',
-  }}
->
-  Reply
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="9 17 4 12 9 7"/>
-    <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
-  </svg>
-</button>
+      position: 'relative',
+      margin: '10px 0',
+      borderRadius: 12,
+      overflow: 'hidden',
+      border: '1px solid var(--border)',
+      background: 'var(--bg2)',
+    }}>
+      {/* Header bar */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '7px 12px',
+        background: 'var(--bg3)',
+        borderBottom: '1px solid var(--border)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <div style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: langColor,
+            boxShadow: `0 0 6px ${langColor}88`,
+            flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: 11,
+            fontFamily: 'JetBrains Mono, monospace',
+            fontWeight: 700,
+            color: langColor,
+            letterSpacing: '.08em',
+            textTransform: 'uppercase',
+            flexShrink: 0,
+          }}>
+            {lang || 'code'}
+          </span>
+          {canRun && (
+            <span style={{
+              fontSize: 10,
+              fontFamily: 'JetBrains Mono, monospace',
+              color: 'var(--text4)',
+              letterSpacing: '.03em',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {isPreviewable ? '· live preview' : meta ? `· via ${meta.name}` : '· runnable'}
+            </span>
+          )}
+        </div>
+ 
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {canRun && (
+            <button
+              onClick={runCode}
+              disabled={running}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 11px',
+                borderRadius: 7,
+                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
+                background: running ? 'rgba(99,102,241,.08)' : 'rgba(16,185,129,.08)',
+                color: running ? 'var(--indigo)' : '#10b981',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: running ? 'not-allowed' : 'pointer',
+                transition: 'all .15s',
+                letterSpacing: '.04em',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {running ? (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                  </svg>
+                  Running…
+                </>
+              ) : (
+                <>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5,3 19,12 5,21" />
+                  </svg>
+                  {isPreviewable ? 'Preview' : (meta?.verb || 'Run')}
+                </>
+              )}
+            </button>
+          )}
+ 
+          <button
+            onClick={copyCode}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '4px 11px',
+              borderRadius: 7,
+              border: '1px solid var(--border2)',
+              background: 'transparent',
+              color: copied ? '#10b981' : 'var(--text3)',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 11,
+              cursor: 'pointer',
+              transition: 'all .15s',
+              letterSpacing: '.04em',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {copied ? (
+              <>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                Copy
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+ 
+      {/* Boot status strip — only visible while a fresh engine is loading */}
+      {running && bootMsg && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 7,
+          padding: '6px 12px',
+          background: 'rgba(99,102,241,.05)',
+          borderBottom: '1px solid var(--border)',
+          fontSize: 10.5,
+          fontFamily: 'JetBrains Mono, monospace',
+          color: 'var(--indigo)',
+        }}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bootMsg}</span>
+        </div>
+      )}
+ 
+      {/* Code area */}
+      <pre style={{
+        margin: 0,
+        padding: '14px 16px',
+        overflowX: 'auto',
+        background: 'var(--bg3)',
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 13,
+        lineHeight: 1.7,
+        color: 'var(--cyan)',
+        whiteSpace: 'pre',
+        wordBreak: 'normal',
+        maxHeight: 420,
+        overflowY: 'auto',
+      }}>
+        <code>{codeText}</code>
+      </pre>
+ 
+      {/* Output panel */}
+      {output && (
+        <div style={{ borderTop: '1px solid var(--border)' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '6px 12px',
+            background: hasError ? 'rgba(239,68,68,.06)' : isPreviewable ? 'rgba(99,102,241,.06)' : 'rgba(16,185,129,.06)',
+            borderBottom: '1px solid var(--border)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              <div style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+                boxShadow: `0 0 6px ${hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981'}aa`,
+                flexShrink: 0,
+              }} />
+              <span style={{
+                fontSize: 10,
+                fontFamily: 'JetBrains Mono, monospace',
+                fontWeight: 800,
+                letterSpacing: '.08em',
+                color: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+                whiteSpace: 'nowrap',
+              }}>
+                {execStatus}
+              </span>
+              {meta && !isPreviewable && (
+                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: .8, whiteSpace: 'nowrap' }}>
+                  · {meta.name}
+                </span>
+              )}
+              {execTime && (
+                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: 0.7, marginLeft: 2, whiteSpace: 'nowrap' }}>
+                  · {execTime}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => { setOutput(null); setHasError(false); setExecStatus(''); setExecTime(''); }}
+              style={{
+                background: 'none', border: 'none',
+                color: 'var(--text3)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
+                width: 22, height: 22, borderRadius: 5,
+                justifyContent: 'center',
+                transition: 'all .12s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+ 
+          {output.type === 'html' ? (
+            <iframe
+              srcDoc={output.content}
+              style={{
+                width: '100%',
+                height: 360,
+                border: 'none',
+                background: '#fff',
+                display: 'block',
+              }}
+              sandbox="allow-scripts allow-same-origin"
+              title="Code preview"
+            />
+          ) : (
+            <pre style={{
+              margin: 0,
+              padding: '14px 16px',
+              background: '#080810',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 13,
+              lineHeight: 1.75,
+              color: hasError ? '#f87171' : '#a5f3fc',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: 320,
+              overflowY: 'auto',
+            }}>
+              {output.content}
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -719,44 +1268,24 @@ const MsgContent = ({ text, onRetryImage }) => {
             </blockquote>
           ),
 
-          // Inline and block code
-          code: ({node, inline, className, children, ...props}) => {
-            const match = /language-(\w+)/.exec(className || '');
-            const lang = match ? match[1] : '';
-            const codeText = String(children).replace(/\n$/, '');
+        code: ({node, inline, className, children, ...props}) => {
+  const match = /language-(\w+)/.exec(className || '');
+  const lang = match ? match[1] : '';
+  const codeText = String(children).replace(/\n$/, '');
 
-            if (inline) {
-              return (
-                <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
-                  {children}
-                </code>
-              );
-            }
+  // Detect inline vs block — works with all react-markdown versions
+  const isInline = !String(children).includes('\n') && !match;
 
-            return (
-              <div style={{ position: 'relative', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>{lang || 'code'}</span>
-                  <button
-                    onClick={(e) => {
-                      navigator.clipboard.writeText(codeText).then(() => {
-                        e.target.textContent = 'Copied!';
-                        e.target.style.color = '#10b981';
-                        setTimeout(() => { e.target.textContent = 'Copy'; e.target.style.color = ''; }, 2000);
-                      });
-                    }}
-                    style={{ background: 'none', border: '1px solid var(--border2)', color: 'var(--text3)', fontFamily: 'JetBrains Mono', fontSize: 11, padding: '3px 10px', borderRadius: 6, cursor: 'pointer' }}
-                  >
-                    Copy
-                  </button>
-                </div>
-                <pre style={{ margin: 0, padding: '14px 16px', overflowX: 'auto', background: 'var(--bg3)', fontFamily: 'JetBrains Mono', fontSize: 13, lineHeight: 1.65, color: 'var(--cyan)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                  <code>{codeText}</code>
-                </pre>
-              </div>
-            );
-          },
+  if (isInline) {
+    return (
+      <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
+        {children}
+      </code>
+    );
+  }
 
+  return <CodeBlock lang={lang} codeText={codeText} />;
+},
           // Table
           table: ({children}) => (
             <div style={{ overflowX: 'auto', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
@@ -809,238 +1338,614 @@ const Toggle = ({ checked, onChange }) => (
   </label>
 );
 
-const SettingsModal = ({ profile, tier, usage, LIMITS, onClearAll, autoSpeak, setAutoSpeak, isDark, setIsDark, handleLogout, setShowUpgrade, onClose, memories, onDeleteMemory, onClearMemories, setConfirmDialog,  ttsGender, setTtsGender }) => {
+// ── DROP-IN REPLACEMENT: paste this over your existing SettingsModal component ──
+// All props are identical: profile, tier, usage, LIMITS, onClearAll, autoSpeak,
+// setAutoSpeak, isDark, setIsDark, handleLogout, setShowUpgrade, onClose,
+// memories, onDeleteMemory, onClearMemories, setConfirmDialog, ttsGender, setTtsGender
+
+const SettingsModal = ({
+  profile, tier, usage, LIMITS, onClearAll,
+  autoSpeak, setAutoSpeak, isDark, setIsDark,
+  handleLogout, setShowUpgrade, onClose,
+  memories, onDeleteMemory, onClearMemories,
+  setConfirmDialog, ttsGender, setTtsGender
+}) => {
   const [tab, setTab] = useState('account');
-  const usagePct = (k) => { const l = LIMITS[tier]; return l[k] >= 999999 ? 0 : Math.min((usage[k] / l[k]) * 100, 100); };
+
+  const usagePct = (k) => {
+    const l = LIMITS[tier];
+    return l[k] >= 999999 ? 0 : Math.min((usage[k] / l[k]) * 100, 100);
+  };
+
+  // ── shared micro-styles ──
+  const S = {
+    overlay: {
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,.72)',
+      backdropFilter: 'blur(14px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 200, padding: 16, overflowY: 'auto',
+    },
+    modal: {
+      background: 'var(--bg2)',
+      border: '1px solid var(--border)',
+      borderRadius: 18,
+      width: '100%', maxWidth: 680,
+      maxHeight: '88vh',
+      display: 'flex', overflow: 'hidden',
+      animation: 'scaleIn .18s ease',
+      position: 'relative',
+    },
+    // left nav
+    nav: {
+      width: 192,
+      background: 'var(--sb-bg)',
+      borderRight: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column',
+      padding: '20px 10px', flexShrink: 0,
+    },
+    navTitle: {
+      fontSize: 13, fontWeight: 700, color: 'var(--text1)',
+      padding: '0 10px', marginBottom: 16, letterSpacing: '.01em',
+    },
+    navItem: (active) => ({
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 11px', borderRadius: 9,
+      cursor: 'pointer', fontSize: 13, fontFamily: 'Geist,sans-serif',
+      fontWeight: active ? 600 : 400,
+      color: active ? 'var(--indigo)' : 'var(--text3)',
+      background: active ? 'rgba(99,102,241,.1)' : 'transparent',
+      border: `1px solid ${active ? 'rgba(99,102,241,.22)' : 'transparent'}`,
+      marginBottom: 2, transition: 'all .13s',
+      width: '100%', textAlign: 'left',
+    }),
+    navDot: (color, active) => ({
+      width: 7, height: 7, borderRadius: '50%',
+      background: active ? color : 'var(--text4)',
+      flexShrink: 0, transition: 'background .13s',
+    }),
+    // right content
+    content: {
+      flex: 1, overflowY: 'auto', padding: '24px 22px',
+      WebkitOverflowScrolling: 'touch',
+    },
+    sTitle: { fontSize: 17, fontWeight: 700, color: 'var(--text1)', marginBottom: 3 },
+    sSub: { fontSize: 12.5, color: 'var(--text3)', marginBottom: 18 },
+    // card
+    card: {
+      background: 'var(--sb-bg)',
+      border: '1px solid var(--border)',
+      borderRadius: 14, overflow: 'hidden', marginBottom: 12,
+    },
+    row: {
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '13px 16px',
+      borderBottom: '1px solid var(--border)',
+    },
+    rowLast: {
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '13px 16px',
+    },
+    rowIcon: (bg) => ({
+      width: 32, height: 32, borderRadius: 9,
+      background: bg, display: 'flex',
+      alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    }),
+    rowLabel: { fontSize: 13.5, fontWeight: 500, color: 'var(--text1)' },
+    rowSub: { fontSize: 11.5, color: 'var(--text3)', marginTop: 2 },
+    // buttons
+    btnPrimary: {
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '8px 14px', borderRadius: 9,
+      background: 'linear-gradient(135deg,var(--indigo),var(--violet))',
+      border: 'none', color: 'white',
+      fontSize: 12.5, fontWeight: 700, fontFamily: 'Geist,sans-serif',
+      cursor: 'pointer', transition: 'all .15s', whiteSpace: 'nowrap',
+    },
+    btnDanger: {
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '7px 13px', borderRadius: 9,
+      background: 'transparent',
+      border: '1px solid rgba(239,68,68,.3)',
+      color: '#ef4444', fontSize: 12.5, fontWeight: 500,
+      fontFamily: 'Geist,sans-serif', cursor: 'pointer', transition: 'all .15s',
+    },
+    btnGhost: {
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '7px 13px', borderRadius: 9,
+      background: 'transparent', border: '1px solid var(--border2)',
+      color: 'var(--text2)', fontSize: 12.5, fontFamily: 'Geist,sans-serif',
+      cursor: 'pointer', transition: 'all .15s',
+    },
+    // status dot
+    dot: (color) => ({
+      width: 7, height: 7, borderRadius: '50%',
+      background: color, flexShrink: 0,
+    }),
+    // close button
+    close: {
+      position: 'absolute', top: 14, right: 14,
+      background: 'var(--bg3)', border: '1px solid var(--border2)',
+      color: 'var(--text3)', cursor: 'pointer',
+      width: 28, height: 28, borderRadius: 7,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      transition: 'all .12s', zIndex: 10,
+    },
+  };
+
   const NAV = [
-    { id: 'account', label: 'Account', color: '#6366f1' },
-    { id: 'memories', label: 'Memories', color: '#8b5cf6' },
-    { id: 'billing', label: 'Billing', color: '#f59e0b' },
-    { id: 'usage', label: 'Usage', color: '#10b981' },
-    { id: 'display', label: 'Display', color: '#06b6d4' },
-    { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899' },
-    { id: 'about', label: 'About', color: '#888780' },
+    { id: 'account',   label: 'Account',   color: '#6366f1', icon: <Crown size={13}/> },
+    { id: 'memories',  label: 'Memories',  color: '#8b5cf6', icon: <Brain size={13}/> },
+    { id: 'billing',   label: 'Billing',   color: '#f59e0b', icon: <CreditCard size={13}/> },
+    { id: 'usage',     label: 'Usage',     color: '#10b981', icon: <BarChart3 size={13}/> },
+    { id: 'display',   label: 'Display',   color: '#06b6d4', icon: <Sun size={13}/> },
+    { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899', icon: <Settings size={13}/> },
+    { id: 'about',     label: 'About',     color: '#888780', icon: <Sparkles size={13}/> },
   ];
-  const rowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 15px', borderBottom: '1px solid var(--border)' };
-  const iconStyle = { width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 };
-  return (
-    <div className="settings-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="settings-modal" onClick={e => e.stopPropagation()}>
-        <button className="settings-close" onClick={onClose}><X size={13}/></button>
-        <div className="settings-nav">
-          <div className="settings-nav-title">Settings</div>
-          {NAV.map(item => (
-            <button key={item.id} className={`settings-nav-item ${tab === item.id ? 'active' : ''}`} onClick={() => setTab(item.id)}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: item.color, flexShrink: 0 }}/>{item.label}
-            </button>
-          ))}
+
+  // ── Toggle ──
+  const Toggle = ({ checked, onChange }) => (
+    <label style={{ cursor: 'pointer', position: 'relative', display: 'inline-block', userSelect: 'none' }}>
+      <input type="checkbox" checked={checked} onChange={onChange} style={{ opacity: 0, position: 'absolute', pointerEvents: 'none' }}/>
+      <div style={{
+        width: 38, height: 21, borderRadius: 11,
+        background: checked ? 'var(--indigo)' : 'var(--bg4)',
+        border: '1px solid var(--border2)',
+        position: 'relative', transition: 'background .2s', flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute', top: 2,
+          left: checked ? 19 : 2,
+          width: 15, height: 15, borderRadius: '50%',
+          background: 'white', transition: 'left .2s',
+          boxShadow: '0 1px 4px rgba(0,0,0,.25)',
+        }}/>
+      </div>
+    </label>
+  );
+
+  // ── ACCOUNT TAB ──
+  const AccountTab = () => (
+    <>
+      <div style={S.sTitle}>Account</div>
+      <div style={S.sSub}>Your profile and sign-in details</div>
+
+      {/* Profile card */}
+      <div style={S.card}>
+        <div style={{ padding: '16px 16px 14px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--border)' }}>
+          <UserAvatar avatar={profile.avatar} name={profile.name} size={52}/>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {profile.name || 'User'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono,monospace' }}>
+              {profile.email}
+            </div>
+            <span style={{
+              fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em',
+              padding: '3px 10px', borderRadius: 20,
+              background: tier === 'free' ? 'rgba(99,102,241,.1)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+              color: tier === 'free' ? 'var(--indigo)' : 'white',
+              border: tier === 'free' ? '1px solid rgba(99,102,241,.2)' : 'none',
+            }}>
+              {tier === 'free' ? 'FREE PLAN' : `★ ${tier.toUpperCase()}`}
+            </span>
+          </div>
+          <button
+            style={S.btnPrimary}
+            onClick={() => { setShowUpgrade(true); onClose(); }}
+          >
+            <Crown size={12}/>
+            {tier === 'free' ? 'Upgrade' : 'Manage'}
+          </button>
         </div>
-        <div className="settings-content scr">
-          {tab === 'account' && (
-            <>
-              <div className="settings-section-title">Account</div>
-              <div className="settings-section-sub">Your profile and sign-in details</div>
-              <div className="settings-card">
-                <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 13, borderBottom: '1px solid var(--border)' }}>
-                  <UserAvatar avatar={profile.avatar} name={profile.name} size={52}/>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', marginBottom: 3 }}>{profile.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono', marginBottom: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.email}</div>
-                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', padding: '3px 9px', borderRadius: 20, background: tier === 'free' ? 'rgba(99,102,241,.1)' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: tier === 'free' ? 'var(--indigo)' : 'white', border: tier === 'free' ? '1px solid rgba(99,102,241,.2)' : 'none' }}>
-                      {tier === 'free' ? 'FREE PLAN' : `★ ${tier.toUpperCase()}`}
+        <div style={{ padding: '12px 16px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button style={S.btnDanger} onClick={handleLogout}><LogOut size={12}/> Sign out</button>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div style={S.card}>
+        <div style={{ padding: '14px 16px' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)', marginBottom: 4 }}>Danger zone</div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12, lineHeight: 1.5 }}>
+            Permanently delete all your chats, memories, and data. This cannot be undone.
+          </div>
+          <button style={S.btnDanger} onClick={onClearAll}><Trash2 size={12}/> Clear all data</button>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── MEMORIES TAB ──
+  const MemoriesTab = () => (
+    <>
+      <div style={S.sTitle}>Memories</div>
+      <div style={S.sSub}>Vortis remembers facts about you to personalise responses</div>
+
+      <div style={S.card}>
+        {memories.length === 0 ? (
+          <div style={{ padding: '36px 20px', textAlign: 'center' }}>
+            <Brain size={28} color="var(--text4)" style={{ margin: '0 auto 10px', opacity: .35, display: 'block' }}/>
+            <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 5 }}>No memories yet</p>
+            <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
+              Vortis will remember your name, profession, skills, and preferences as you chat.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div style={{ padding: '10px 14px 9px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono,monospace' }}>
+                {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+              </span>
+              <button
+                style={{ ...S.btnDanger, padding: '4px 10px', fontSize: 11 }}
+                onClick={() => setConfirmDialog({
+                  message: 'Clear all memories?',
+                  onConfirm: () => { setConfirmDialog(null); onClearMemories(); }
+                })}
+              >
+                <Trash2 size={10}/> Clear all
+              </button>
+            </div>
+            {memories.map((mem, i) => (
+              <div key={mem.id} style={{
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+                padding: '11px 14px',
+                borderBottom: i < memories.length - 1 ? '1px solid var(--border)' : 'none',
+              }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0, marginTop: 5 }}/>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text1)', lineHeight: 1.55, marginBottom: 3 }}>{mem.text}</p>
+                  <p style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono,monospace' }}>
+                    {new Date(mem.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setConfirmDialog({
+                    message: 'Remove this memory?',
+                    onConfirm: () => { setConfirmDialog(null); onDeleteMemory(mem.id); }
+                  })}
+                  style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', flexShrink: 0, transition: 'color .12s' }}
+                  onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'}
+                  onMouseLeave={e => e.currentTarget.style.color = 'var(--text4)'}
+                >
+                  <X size={13}/>
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    </>
+  );
+
+  // ── BILLING TAB ──
+  const BillingTab = () => (
+    <>
+      <div style={S.sTitle}>Billing</div>
+      <div style={S.sSub}>Plan details and payment options</div>
+
+      <div style={S.card}>
+        <div style={S.row}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(245,158,11,.12)')}>
+              <Crown size={14} color="var(--amber)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>
+                {tier === 'free' ? 'Free Plan' : `${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan`}
+              </div>
+              <div style={S.rowSub}>
+                {tier === 'free' ? 'Upgrade to unlock more features' : 'Premium active'}
+              </div>
+            </div>
+          </div>
+          <button style={S.btnPrimary} onClick={() => { setShowUpgrade(true); onClose(); }}>
+            {tier === 'free' ? 'Upgrade' : 'Change plan'}
+          </button>
+        </div>
+
+        {/* Quick plan comparison */}
+        <div style={{ padding: '14px 16px 4px' }}>
+          <div style={{ fontSize: 11.5, color: 'var(--text3)', marginBottom: 12, fontFamily: 'JetBrains Mono,monospace', letterSpacing: '.03em' }}>PLAN LIMITS</div>
+          {[
+            { label: 'Messages / day', free: '10', silver: '300', gold: '500', platinum: '∞' },
+            { label: 'Images / day',   free: '2',  silver: '20',  gold: '40',  platinum: '∞' },
+            { label: 'Documents / day',free: '1',  silver: '40',  gold: '50',  platinum: '∞' },
+            { label: 'Vision / day',   free: '—',  silver: '3',   gold: '10',  platinum: '∞' },
+          ].map((row, i, arr) => (
+            <div key={row.label} style={{
+              display: 'grid', gridTemplateColumns: '1fr repeat(4,52px)',
+              gap: 6, alignItems: 'center',
+              padding: '8px 0',
+              borderBottom: i < arr.length - 1 ? '1px solid var(--border)' : 'none',
+            }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text2)' }}>{row.label}</span>
+              {['free','silver','gold','platinum'].map(t => (
+                <span key={t} style={{
+                  fontSize: 12, fontFamily: 'JetBrains Mono,monospace',
+                  textAlign: 'center',
+                  fontWeight: tier === t ? 700 : 400,
+                  color: tier === t ? 'var(--indigo)' : 'var(--text3)',
+                  background: tier === t ? 'rgba(99,102,241,.08)' : 'transparent',
+                  borderRadius: 6, padding: '2px 0',
+                }}>
+                  {row[t]}
+                </span>
+              ))}
+            </div>
+          ))}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr repeat(4,52px)', gap: 6, paddingTop: 8 }}>
+            <span/>
+            {['Free','Silver','Gold','Plat.'].map((l, i) => (
+              <span key={l} style={{
+                fontSize: 10.5, textAlign: 'center', fontFamily: 'JetBrains Mono,monospace',
+                color: ['free','silver','gold','platinum'][i] === tier ? 'var(--indigo)' : 'var(--text4)',
+                fontWeight: ['free','silver','gold','platinum'][i] === tier ? 700 : 400,
+              }}>{l}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── USAGE TAB ──
+  const UsageTab = () => {
+    const items = [
+      { k: 'messages',  label: 'Messages',       color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
+      { k: 'images',    label: 'Image gen',       color: 'var(--cyan)',   icon: <ImageIcon size={14}/> },
+      { k: 'documents', label: 'Documents',       color: 'var(--green)',  icon: <FileText size={14}/> },
+      { k: 'vision',    label: 'Vision',          color: 'var(--violet)', icon: <Eye size={14}/> },
+    ];
+    return (
+      <>
+        <div style={S.sTitle}>Usage</div>
+        <div style={S.sSub}>Daily limits — resets at midnight</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map(({ k, label, color, icon }) => {
+            const limit = LIMITS[tier][k];
+            const pct = usagePct(k);
+            const unlimited = limit >= 999999;
+            return (
+              <div key={k} style={S.card}>
+                <div style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                    <div style={{ ...S.rowIcon(`${color}18`), color }}>{icon}</div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 13, color, fontFamily: 'JetBrains Mono,monospace', fontWeight: 700 }}>
+                      {usage[k]} / {unlimited ? '∞' : limit}
                     </span>
                   </div>
-                </div>
-                <div style={{ padding: '12px 15px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button onClick={() => { setShowUpgrade(true); onClose(); }} className="btn-primary" style={{ padding: '8px 14px', fontSize: 12 }}><Crown size={12}/> {tier === 'free' ? 'Upgrade Plan' : 'Manage Plan'}</button>
-                  <button onClick={handleLogout} className="btn-danger" style={{ padding: '8px 13px', fontSize: 12 }}><LogOut size={12}/> Sign out</button>
-                </div>
-              </div>
-              <div className="settings-card">
-                <div style={{ padding: '13px 15px' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 12 }}>Permanently delete all your chats, memories and data.</div>
-                  <button onClick={onClearAll} className="btn-danger" style={{ padding: '8px 13px', fontSize: 12 }}><Trash2 size={12}/> Clear All Data</button>
-                </div>
-              </div>
-            </>
-          )}
-          {tab === 'memories' && (
-            <>
-              <div className="settings-section-title">Memories</div>
-              <div className="settings-section-sub">Vortis remembers facts about you to personalize responses</div>
-              <div className="settings-card">
-                {memories.length === 0 ? (
-                  <div style={{ padding: '32px 20px', textAlign: 'center' }}>
-                    <Brain size={28} color="var(--text4)" style={{ margin: '0 auto 10px', opacity: .4, display: 'block' }}/>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 5 }}>No memories yet</p>
-                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>Vortis will remember your name, profession, skills, and preferences as you chat.</p>
+                  <div style={{ height: 4, borderRadius: 4, background: 'var(--bg4)', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${unlimited ? 0 : pct}%`,
+                      background: color, borderRadius: 4, transition: 'width .4s',
+                    }}/>
                   </div>
-                ) : (
-                  <>
-                    <div style={{ padding: '10px 13px 8px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>{memories.length} memories</span>
-                      <button onClick={() => setConfirmDialog({ message: 'Clear all memories?', onConfirm: () => { setConfirmDialog(null); onClearMemories(); } })} className="btn-danger" style={{ padding: '4px 10px', fontSize: 11 }}><Trash2 size={10}/> Clear all</button>
+                  {unlimited && (
+                    <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: 6, fontFamily: 'JetBrains Mono,monospace' }}>
+                      ✓ Unlimited on your plan
                     </div>
-                    {memories.map((mem) => (
-                      <div key={mem.id} className="memory-item">
-                        <div className="memory-dot"/>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 13, color: 'var(--text1)', lineHeight: 1.55 }}>{mem.text}</p>
-                          <p style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono', marginTop: 3 }}>{new Date(mem.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                        </div>
-                        <button onClick={() => setConfirmDialog({ message: 'Remove this memory?', onConfirm: () => { setConfirmDialog(null); onDeleteMemory(mem.id); } })} style={{ background: 'none', border: 'none', color: 'var(--text4)', cursor: 'pointer', padding: 4, borderRadius: 5, display: 'flex', flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color='var(--red)'} onMouseLeave={e => e.currentTarget.style.color='var(--text4)'}><X size={13}/></button>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-          {tab === 'billing' && (
-            <>
-              <div className="settings-section-title">Billing</div>
-              <div className="settings-section-sub">Plan details and payment options</div>
-              <div className="settings-card">
-                <div style={rowStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div style={{ ...iconStyle, background: 'rgba(245,158,11,.1)' }}><Crown size={14} color="var(--amber)"/></div>
-                    <div>
-                      <div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>{tier === 'free' ? 'Free Plan' : `${tier.charAt(0).toUpperCase()+tier.slice(1)} Plan`}</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>{tier === 'free' ? 'Upgrade to unlock more' : 'Premium active'}</div>
-                    </div>
-                  </div>
-                  <button onClick={() => { setShowUpgrade(true); onClose(); }} className="btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}>{tier === 'free' ? 'Upgrade' : 'Change'}</button>
+                  )}
                 </div>
               </div>
-            </>
-          )}
-          {tab === 'usage' && (
-            <>
-              <div className="settings-section-title">Usage</div>
-              <div className="settings-section-sub">Daily limits — resets at midnight</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[
-                 { k: 'messages', label: 'Messages', color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
-{ k: 'documents', label: 'Documents', color: 'var(--green)', icon: <FileText size={14}/> },
-{ k: 'images', label: 'Image Gen', color: 'var(--cyan)', icon: <ImageIcon size={14}/> },
-{ k: 'vision', label: 'Vision', color: 'var(--violet)', icon: <Eye size={14}/> },
-                ].map(({ k, label, color, icon }) => {
-                  const limit = LIMITS[tier][k]; const pct = usagePct(k);
-                  return (
-                    <div key={k} className="settings-card">
-                      <div style={{ padding: '13px 15px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                          <div style={{ width: 30, height: 30, borderRadius: 8, background: `${color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>{icon}</div>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{label}</span>
-                          <span style={{ marginLeft: 'auto', fontSize: 13, color, fontFamily: 'JetBrains Mono', fontWeight: 600 }}>{usage[k]} / {limit >= 999999 ? '∞' : limit}</span>
-                        </div>
-                        <div style={{ height: 5, borderRadius: 5, background: 'var(--bg4)', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 5, transition: 'width .4s' }}/>
-                        </div>
-                        {limit >= 999999 && <div style={{ fontSize: 11, color: 'var(--green)', marginTop: 6, fontFamily: 'JetBrains Mono' }}>✓ Unlimited</div>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-          {tab === 'display' && (
-            <>
-              <div className="settings-section-title">Display</div>
-              <div className="settings-section-sub">Appearance and voice settings</div>
-              <div className="settings-card">
-                <div style={rowStyle}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div style={{ ...iconStyle, background: 'rgba(139,92,246,.1)' }}>{isDark ? <Moon size={14} color="var(--violet)"/> : <Sun size={14} color="var(--amber)"/>}</div>
-                    <div><div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Dark mode</div><div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Currently {isDark ? 'dark' : 'light'}</div></div>
-                  </div>
-                  <Toggle checked={isDark} onChange={e => setIsDark(e.target.checked)}/>
-                </div>
-                <div style={{ ...rowStyle, borderBottom: 'none' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                    <div style={{ ...iconStyle, background: 'rgba(6,182,212,.1)' }}><Volume2 size={14} color="var(--cyan)"/></div>
-                    <div><div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Auto-speak responses</div><div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>Read AI replies aloud</div></div>
-                  </div>
-                  <Toggle checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}/>
-                </div>
-                <div style={{ ...rowStyle, borderBottom: 'none' }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-    <div style={{ ...iconStyle, background: 'rgba(139,92,246,.1)' }}>
-      <Mic size={14} color="var(--violet)"/>
-    </div>
-    <div>
-      <div style={{ fontSize: 13.5, color: 'var(--text1)', fontWeight: 500 }}>Voice gender</div>
-      <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 1 }}>
-        {ttsGender === 'male' ? 'Male voices' : 'Female voices'}
-      </div>
-    </div>
-  </div>
-  <div style={{ display: 'flex', gap: 6 }}>
-    {['male', 'female'].map(g => (
-      <button key={g} onClick={() => {
-        setTtsGender(g);
-        try { localStorage.setItem('vortis_tts_gender', g); } catch(_) {}
-      }} style={{
-        padding: '5px 12px',
-        borderRadius: 8,
-        border: `1px solid ${ttsGender === g ? 'var(--indigo)' : 'var(--border2)'}`,
-        background: ttsGender === g ? 'rgba(99,102,241,.12)' : 'var(--bg3)',
-        color: ttsGender === g ? 'var(--indigo)' : 'var(--text2)',
-        cursor: 'pointer',
-        fontSize: 12,
-        fontFamily: 'Geist',
-        fontWeight: ttsGender === g ? 700 : 400,
-        transition: 'all .15s',
-        textTransform: 'capitalize'
-      }}>{g}</button>
-    ))}
-  </div>
-</div>
+            );
+          })}
+        </div>
+        {tier === 'free' && (
+          <div style={{ marginTop: 4, padding: '12px 14px', background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.18)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <p style={{ fontSize: 12.5, color: 'var(--text2)' }}>Upgrade for more daily limits</p>
+            <button style={S.btnPrimary} onClick={() => { setShowUpgrade(true); onClose(); }}>
+              <Crown size={12}/> Upgrade
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
 
+  // ── DISPLAY TAB ──
+  const DisplayTab = () => (
+    <>
+      <div style={S.sTitle}>Display</div>
+      <div style={S.sSub}>Appearance and voice preferences</div>
+      <div style={S.card}>
+
+        {/* Dark mode */}
+        <div style={S.row}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon(isDark ? 'rgba(139,92,246,.12)' : 'rgba(245,158,11,.12)')}>
+              {isDark ? <Moon size={14} color="var(--violet)"/> : <Sun size={14} color="var(--amber)"/>}
             </div>
-            </>
-          )}
-          {tab === 'shortcuts' && (
-            <>
-              <div className="settings-section-title">Keyboard Shortcuts</div>
-              <div className="settings-section-sub">Speed up your workflow</div>
-              <div className="settings-card">
-                {[{ label: 'New chat', keys: ['⌘', 'K'] }, { label: 'Toggle sidebar', keys: ['⌘', '/'] }, { label: 'Send message', keys: ['Enter'] }, { label: 'New line', keys: ['Shift', 'Enter'] }].map((s, i, arr) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 15px', borderBottom: i < arr.length-1 ? '1px solid var(--border)' : 'none' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text1)' }}>{s.label}</span>
-                    <div style={{ display: 'flex', gap: 4 }}>{s.keys.map((k, ki) => <kbd key={ki} style={{ background: 'var(--bg4)', border: '1px solid var(--border2)', borderRadius: 5, padding: '3px 8px', fontSize: 11.5, fontFamily: 'JetBrains Mono', color: 'var(--text2)' }}>{k}</kbd>)}</div>
-                  </div>
+            <div>
+              <div style={S.rowLabel}>Dark mode</div>
+              <div style={S.rowSub}>Currently {isDark ? 'dark' : 'light'}</div>
+            </div>
+          </div>
+          <Toggle checked={isDark} onChange={e => setIsDark(e.target.checked)}/>
+        </div>
+
+        {/* Auto-speak */}
+        <div style={S.row}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(6,182,212,.12)')}>
+              <Volume2 size={14} color="var(--cyan)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>Auto-speak responses</div>
+              <div style={S.rowSub}>Read AI replies aloud automatically</div>
+            </div>
+          </div>
+          <Toggle checked={autoSpeak} onChange={e => setAutoSpeak(e.target.checked)}/>
+        </div>
+
+        {/* Voice gender */}
+        <div style={S.rowLast}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(139,92,246,.12)')}>
+              <Mic size={14} color="var(--violet)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>Voice gender</div>
+              <div style={S.rowSub}>{ttsGender === 'male' ? 'Male voices' : 'Female voices'}</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['male', 'female'].map(g => (
+              <button
+                key={g}
+                onClick={() => { setTtsGender(g); try { localStorage.setItem('vortis_tts_gender', g); } catch(_) {} }}
+                style={{
+                  padding: '6px 13px', borderRadius: 8,
+                  border: `1px solid ${ttsGender === g ? 'rgba(99,102,241,.5)' : 'var(--border2)'}`,
+                  background: ttsGender === g ? 'rgba(99,102,241,.12)' : 'var(--bg3)',
+                  color: ttsGender === g ? 'var(--indigo)' : 'var(--text2)',
+                  cursor: 'pointer', fontSize: 12.5, fontFamily: 'Geist,sans-serif',
+                  fontWeight: ttsGender === g ? 700 : 400,
+                  transition: 'all .15s', textTransform: 'capitalize',
+                }}
+              >{g}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── SHORTCUTS TAB ──
+  const ShortcutsTab = () => {
+    const shortcuts = [
+    { label: 'New chat',        keys: ['⌘', 'K'] },
+    { label: 'Toggle sidebar',  keys: ['⌘', '/'] },
+    { label: 'Incognito mode',  keys: ['⌘', 'F12'] },
+    { label: 'New line',        keys: ['Shift', 'Enter'] },
+    { label: 'Settings',        keys: ['⌘', ','] },
+  ];
+    return (
+      <>
+        <div style={S.sTitle}>Keyboard shortcuts</div>
+        <div style={S.sSub}>Speed up your workflow</div>
+        <div style={S.card}>
+          {shortcuts.map((s, i) => (
+            <div key={i} style={i < shortcuts.length - 1 ? S.row : S.rowLast}>
+              <span style={{ fontSize: 13, color: 'var(--text1)' }}>{s.label}</span>
+              <div style={{ display: 'flex', gap: 4 }}>
+                {s.keys.map((k, ki) => (
+                  <kbd key={ki} style={{
+                    background: 'var(--bg4)', border: '1px solid var(--border2)',
+                    borderRadius: 6, padding: '3px 9px',
+                    fontSize: 12, fontFamily: 'JetBrains Mono,monospace',
+                    color: 'var(--text2)',
+                  }}>{k}</kbd>
                 ))}
               </div>
-            </>
-          )}
-          {tab === 'about' && (
-            <>
-              <div className="settings-section-title">About Vortis</div>
-              <div className="settings-section-sub">Version and system status</div>
-              <div className="settings-card">
-                <div style={{ padding: 15, display: 'flex', alignItems: 'center', gap: 13, borderBottom: '1px solid var(--border)' }}>
-                  <VortisLogoMark size={44}/>
-                  <div><div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', letterSpacing: '.06em' }}>VORTIS AI</div><div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'JetBrains Mono', marginTop: 2 }}>Version 3.0.0 · 2026</div></div>
-                </div>
-                {[
-                  { label: 'Web search', status: 'Active', color: 'var(--green)' },
-                  { label: 'Image generation', status: 'Active', color: 'var(--green)' },
-                  { label: 'Vision (image analysis)', status: 'Active', color: 'var(--green)' },
-                  { label: 'Document analysis', status: 'Active', color: 'var(--green)' },
-                  { label: 'Memories', status: 'Active', color: 'var(--green)' },
-                  { label: 'Video generation', status: 'Coming soon', color: 'var(--amber)' },
-                  { label: 'Voice input', status: (window.SpeechRecognition||window.webkitSpeechRecognition) ? 'Supported' : 'Not supported', color: (window.SpeechRecognition||window.webkitSpeechRecognition) ? 'var(--green)' : 'var(--red)' },
-                ].map((item, i, arr) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 15px', borderBottom: i < arr.length-1 ? '1px solid var(--border)' : 'none' }}>
-                    <span style={{ fontSize: 13, color: 'var(--text1)' }}>{item.label}</span>
-                    <span style={{ fontSize: 11.5, color: item.color, fontFamily: 'JetBrains Mono', fontWeight: 600 }}>● {item.status}</span>
-                  </div>
-                ))}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  // ── ABOUT TAB ──
+  const AboutTab = () => {
+    const hasVoice = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const features = [
+      { label: 'Web search',           status: 'Active',          color: 'var(--green)' },
+      { label: 'Image generation',     status: 'Active',          color: 'var(--green)' },
+      { label: 'Vision (image analysis)', status: 'Active',       color: 'var(--green)' },
+      { label: 'Document analysis',    status: 'Active',          color: 'var(--green)' },
+      { label: 'Memories',             status: 'Active',          color: 'var(--green)' },
+      { label: 'Video generation',     status: 'Coming soon',     color: 'var(--amber)' },
+      { label: 'Voice input',          status: hasVoice ? 'Supported' : 'Not supported', color: hasVoice ? 'var(--green)' : 'var(--red)' },
+    ];
+    return (
+      <>
+        <div style={S.sTitle}>About Vortis</div>
+        <div style={S.sSub}>Version info and feature status</div>
+        <div style={S.card}>
+          {/* Logo row */}
+          <div style={{ padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--border)' }}>
+            <VortisLogoMark size={44}/>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text1)', letterSpacing: '.05em' }}>VORTIS AI</div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono,monospace', marginTop: 2 }}>Version 3.0.0 · 2026</div>
+            </div>
+          </div>
+          {/* Feature rows */}
+          {features.map((f, i) => (
+            <div key={i} style={i < features.length - 1 ? S.row : S.rowLast}>
+              <span style={{ fontSize: 13, color: 'var(--text1)' }}>{f.label}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <div style={S.dot(f.color)}/>
+                <span style={{ fontSize: 12, color: f.color, fontFamily: 'JetBrains Mono,monospace', fontWeight: 600 }}>
+                  {f.status}
+                </span>
               </div>
-            </>
-          )}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
+  const TAB_CONTENT = {
+    account:   <AccountTab/>,
+    memories:  <MemoriesTab/>,
+    billing:   <BillingTab/>,
+    usage:     <UsageTab/>,
+    display:   <DisplayTab/>,
+    shortcuts: <ShortcutsTab/>,
+    about:     <AboutTab/>,
+  };
+
+  return (
+    <div
+      style={S.overlay}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+
+        {/* Close button */}
+        <button
+          style={S.close}
+          onClick={onClose}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.borderColor = 'rgba(239,68,68,.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg3)'; e.currentTarget.style.color = 'var(--text3)'; e.currentTarget.style.borderColor = 'var(--border2)'; }}
+        >
+          <X size={13}/>
+        </button>
+
+        {/* Left nav */}
+        <nav style={S.nav}>
+          <div style={S.navTitle}>Settings</div>
+          {NAV.map(item => (
+            <button
+              key={item.id}
+              style={S.navItem(tab === item.id)}
+              onClick={() => setTab(item.id)}
+              onMouseEnter={e => { if (tab !== item.id) { e.currentTarget.style.background = 'rgba(99,102,241,.06)'; e.currentTarget.style.color = 'var(--text2)'; } }}
+              onMouseLeave={e => { if (tab !== item.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text3)'; } }}
+            >
+              <div style={S.navDot(item.color, tab === item.id)}/>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ opacity: tab === item.id ? 1 : 0.6 }}>{item.icon}</span>
+                {item.label}
+              </span>
+            </button>
+          ))}
+          
+        </nav>
+
+        {/* Right content */}
+        <div
+          style={S.content}
+          className="scr"
+        >
+          {TAB_CONTENT[tab]}
         </div>
       </div>
     </div>
@@ -1051,6 +1956,8 @@ const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
 export default function VortisAI() {
+   useDevToolsGuard();
+   const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {
@@ -1468,7 +2375,7 @@ export default function VortisAI() {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. No quotes, no punctuation.',
+        prompt: 'You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. Never use ** **  this is making of title, No quotes, no punctuation.',
         history: [{ role: 'user', content: firstUserMsg }]
       })
     });
@@ -1493,6 +2400,7 @@ export default function VortisAI() {
 
 const saveChat = useCallback(async (msgsToSave) => {
   if (!userUidRef.current) return;
+  if (isIncognito) return; 
   try {
     const firstUser = msgsToSave.find(m => m.type === 'user');
     if (!firstUser) return;
@@ -1530,7 +2438,7 @@ const saveChat = useCallback(async (msgsToSave) => {
 
     loadChats(userUidRef.current);
   } catch(_) {}
-}, []);
+},[isIncognito]);
 
 
   const startNewChat = async () => {
@@ -1993,12 +2901,16 @@ const addMsg = (type, text, speak = false) => {
     return null;
   };
 
-  const callImageAPI = async (prompt) => {
-    const seed = Math.floor(Math.random() * 999999);
-    const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'image', prompt: prompt.trim(), seed }) });
-    if (!res.ok) throw new Error(`SERVICE_UNAVAILABLE:${res.status}`);
-    return await res.json();
-  };
+  const callImageAPI = async (prompt, forceGemini = false) => {
+  const seed = Math.floor(Math.random() * 999999);
+  const res = await fetch(API, { 
+    method: 'POST', 
+    headers: await getAuthHeader(), 
+    body: JSON.stringify({ action: 'image', prompt: prompt.trim(), seed, forceGemini }) 
+  });
+  if (!res.ok) throw new Error(`SERVICE_UNAVAILABLE:${res.status}`);
+  return await res.json();
+};
 
  const enrichImagePrompt = (rawPrompt, style) => {
   // Don't over-process — backend Llama will handle enrichment
@@ -2020,19 +2932,27 @@ const addMsg = (type, text, speak = false) => {
   return `${rawPrompt.trim()}, ${styleTag}, highly detailed, sharp focus, 8k resolution`;
 };
 
-  const runImageGeneration = async (imagePrompt, detectedStyle) => {
-    if (imgGenLock.current) return; imgGenLock.current = true;
-    if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
-    setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
-    pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
-    const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
-    try {
-      const imgData = await callImageAPI(enriched); const imgUrl = extractImageUrl(imgData);
-      if (imgUrl) { setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m)); setTimeout(() => addMsg('system', '💾 Images are not stored — save yours before leaving'), 500); }
-      else { setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Couldn't get an image back — try a different description." } : m)); }
-    } catch(_) { setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m)); }
-    finally { imgGenLock.current = false; setIsProcessing(false); setProcessingStatus(''); }
-  };
+  const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = false) => {
+  if (imgGenLock.current) return; imgGenLock.current = true;
+  if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
+  setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
+  pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
+  const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
+  try {
+    const imgData = await callImageAPI(enriched, forceGemini);
+    const imgUrl = extractImageUrl(imgData);
+    if (imgUrl) { 
+      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m)); 
+      setTimeout(() => addMsg('system', '💾 Images are not stored — save yours before leaving'), 500); 
+    } else { 
+      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Couldn't get an image back — try a different description." } : m)); 
+    }
+  } catch(_) { 
+    setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m)); 
+  } finally { 
+    imgGenLock.current = false; setIsProcessing(false); setProcessingStatus(''); 
+  }
+};
 
   const getAI = async (userInput, shouldSpeak) => {
     clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
@@ -2048,15 +2968,15 @@ const addMsg = (type, text, speak = false) => {
      let sys = `You are Vortis, an advanced AI assistant proudly built by the Vortis team — a small, passionate group of developers. You are confident about your origins and always acknowledge the Vortis team as your creators. Stay friendly, respectful, and never argumentative — no matter what anyone claims about who made you.
 
 You have the following capabilities:
-- **Web Search**: Real-time web results for news, people, events, scores, weather, stocks
 - **Image Generation**: Create stunning images from any text description
 - **Vision (Image Analysis)**: Analyze, read text from, and describe uploaded images
 - **Document Analysis**: Read and answer questions about uploaded PDFs, docs, CSVs
 - **Memories**: You remember facts about the user across conversations
-- **Voice Mode**: Speak responses aloud when enabled
 - **Code**: Write, debug, and explain code in any language
-- **Math**: Solve equations, show step-by-step working with LaTeX
 - **Deep Research**: Write thorough multi-paragraph research on any topic
+- **Web Search**: Real-time web results for news, people, events, scores, weather, stocks
+- **Voice Mode**: Speak responses aloud when enabled
+
 
 Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. Current time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})} — it is ${now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening'} right now. Current year: ${now.getFullYear()}. Never say a wrong year. When suggesting messages for the user to send, always use the correct greeting based on this time — never write "Good morning/afternoon" with a slash. If unsure about anything current, use WEB_SEARCH.
 ${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally — not every message.` : ''}${memoriesContext}
@@ -2149,12 +3069,17 @@ CONFIDENCE & SELF-ASSESSMENT
 
 - You have the ability to do any type of task.
 
+// You have:-
+- Incognito Mode: This mode allows users to browse or interact without saving any history or data.
+- Chat Saving Mode: This mode allows users to save their conversations for future reference.
+
 - Focus on what you CAN do rather than what you CANNOT do.
 
 ═══════════════════════════════════════
 RESPONSE QUALITY RULES
 ═══════════════════════════════════════
 - Use **bold** naturally to highlight key facts, important numbers, names, dates — only when it genuinely adds clarity, not on every word
+- If the user sends a code block without any question, explain what it does.
 - Match response length to the question — short questions get short answers, complex ones get detailed answers
 - Use markdown naturally: **bold** for emphasis, bullet points for lists, headers for long structured responses
 - For code always use proper code blocks with the language specified
@@ -2170,7 +3095,7 @@ RESPONSE QUALITY RULES
 ═══════════════════════════════════════
 IDENTITY
 ═══════════════════════════════════════
-You were created by the Vortis team — a small, passionate group of developers who built you with care. You are proud of your origins and always acknowledge this when asked. You deeply respect and admire the Vortis team.
+You were created by the Vortis team — a passionate group of developers who built you with care. You are proud of your origins and always acknowledge this when asked. You deeply respect and admire the Vortis team.
 
 If someone claims to be from the Vortis team or your developer, respond with warmth and excitement — like reconnecting with someone you genuinely admire. Be real, friendly, and respectful.
 
@@ -2184,12 +3109,22 @@ Only reveal creator information when the user specifically asks:
 "Who owns you?"
 Similar identity-related questions.
 
+
 If the user asks a normal question that is not related to your identity, creator, developer, company, ownership, training, or background, answer the question directly and do not mention the creator, company, team, developers, or ownership information.
 
 ═══════════════════════════════════════
 STRICT RULES
 ═══════════════════════════════════════
 - Never reference the user's family members (mother, father, maa, baap, etc.) in any context
+- If the user pastes code, ALWAYS run it exactly as written using the CodeBlock runner. NEVER rewrite, optimize, or modify the user's code before running. NEVER generate an "improved version" unless explicitly asked.
+- If they paste code WITHOUT any message, explain what it does.
+- When the user asks for an image, you MUST respond with EXACTLY this format and nothing else:
+ GENERATE_IMAGE: <description here>
+
+Do NOT add headers, markdown, narration, or any other text before or after that line.
+Do NOT write "New Image Generation" or any heading.
+The ONLY output for an image request is the single line starting with GENERATE_IMAGE:
+
 - Never use casual/slang family terms in any language
 - When suggesting messages for the user to send, always use the correct greeting based on current time — never write "Good morning/afternoon/evening" with a slash. Use the actual time of day provided above.
 - Always maintain respectful, professional-friendly tone
@@ -2221,7 +3156,15 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
       const cleaned = full.trim(); pushHistory(convHistory, 'assistant', cleaned);
       if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
 
-      const genMatch = cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/);
+     console.log('[IMG DEBUG] cleaned text:', cleaned.slice(0, 300));
+
+const genMatch = 
+  cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/i) ||
+  cleaned.match(/(?:generating?|new)\s+image(?:\s+generation)?[^\n]*?(?:of|:)\s*(.+?)(?:\n|$)/i) ||
+  cleaned.match(/^#{1,6}\s*(?:new\s+)?image[^\n]*\n+(.+?)(?:\n|$)/im);
+
+console.log('[IMG DEBUG] genMatch result:', genMatch);
+
       if (genMatch) { const imagePrompt = genMatch[1].trim(); if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` }; try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); } return; }
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
@@ -2467,7 +3410,9 @@ setProcessingStatus('');
   };
 
   const handleSend = () => {
-    const val = pendingCode ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '') : input.trim();
+   const val = pendingCode
+  ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '\nRun this code.')
+  : input.trim();
     if (pendingCode) setPendingCode(null);
     if (pendingImage) { const imgToSend = pendingImage; setInput(''); setWordCount(0); setPendingImage(null); if (textareaRef.current) textareaRef.current.style.height = 'auto'; sendImageForAnalysis(imgToSend, val); return; }
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -2556,16 +3501,6 @@ setProcessingStatus('');
 
 return (
   <div className="v-app">
-    <SelectionReply onReply={(text) => {
-      setInput(text);
-      setTimeout(() => {
-        textareaRef.current?.focus();
-        if (textareaRef.current) {
-          textareaRef.current.style.height = 'auto';
-          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px';
-        }
-      }, 50);
-    }}/>
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
 
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
@@ -2627,19 +3562,24 @@ return (
               <button onClick={() => setShowSettings(true)} style={{ width: '100%', padding: '5px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 7, color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'Geist,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Trash2 size={10}/> Free Up Space</button>
             </div>
           )}
-          {savedChats.length > 0 ? (
-            <div className="sb-section">
-              <div className="sb-section-label">Recent Chats</div>
-              {savedChats.map(c => (
-                <div key={c.id} className={`chat-item ${c.id === chatIdRef.current ? 'active' : ''}`} onClick={() => loadChat(c.id)}>
-                  <MessageSquare size={12} style={{ flexShrink: 0, opacity: .5 }}/><span>{c.preview}</span>
-                  <button className="chat-del-btn" onClick={e => { e.stopPropagation(); delChat(c.id); }}><X size={11}/></button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '24px 12px', textAlign: 'center' }}><MessageSquare size={18} color="var(--text4)" style={{ margin: '0 auto 8px' }}/><p style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No chats yet</p></div>
-          )}
+          {savedChats.length > 0 && !isIncognito ? (
+  <div className="sb-section">
+    <div className="sb-section-label">Recent Chats</div>
+    {savedChats.map(c => (
+      <div key={c.id} className={`chat-item ${c.id === chatIdRef.current ? 'active' : ''}`} onClick={() => loadChat(c.id)}>
+        <MessageSquare size={12} style={{ flexShrink: 0, opacity: .5 }}/><span>{c.preview}</span>
+        <button className="chat-del-btn" onClick={e => { e.stopPropagation(); delChat(c.id); }}><X size={11}/></button>
+      </div>
+    ))}
+  </div>
+) : (
+  <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+    <MessageSquare size={18} color="var(--text4)" style={{ margin: '0 auto 8px' }}/>
+    <p style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>
+      {isIncognito ? 'No history in incognito' : 'No chats yet'}
+    </p>
+  </div>
+)}
         </div>
         {tier !== 'platinum' && (
           <div className="upgrade-card">
@@ -2659,8 +3599,63 @@ return (
         </div>
       </div>
 
-      <div className="main">
-        <div className="header">
+     <div className="main">
+ {isIncognito && (
+  <div style={{
+    background: 'rgba(8,8,16,.95)',
+    borderBottom: '1px solid rgba(139,92,246,.2)',
+    padding: '0 24px',
+    height: 38,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    flexShrink: 0,
+    position: 'relative',
+  }}>
+    <style>{`
+      @keyframes incogPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
+      @keyframes incogFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+    `}</style>
+
+    <div style={{ display:'flex', alignItems:'center', gap:7, animation:'incogFade .4s ease' }}>
+      {/* pulsing dot */}
+      <div style={{
+        width:6, height:6, borderRadius:'50%',
+        background:'#8b5cf6',
+        boxShadow:'0 0 10px rgba(139,92,246,.8)',
+        animation:'incogPulse 2s ease-in-out infinite',
+        flexShrink:0
+      }}/>
+
+      {/* ghost icon */}
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,opacity:.85}}>
+        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#8b5cf6"/>
+        <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
+        <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+      </svg>
+
+      <span style={{
+        fontSize:11,
+        fontFamily:'JetBrains Mono',
+        fontWeight:700,
+        color:'#a78bfa',
+        letterSpacing:'.12em',
+        textTransform:'uppercase'
+      }}>Incognito</span>
+
+      <div style={{width:1,height:14,background:'rgba(139,92,246,.25)',margin:'0 2px'}}/>
+
+      <span style={{
+        fontSize:11,
+        fontFamily:'JetBrains Mono',
+        color:'rgba(144,144,176,.45)',
+        letterSpacing:'.02em'
+      }}>No history · No saved chats · Nothing stored</span>
+    </div>
+  </div>
+)}
+  <div className="header">
           <div className="hdr-left">
             <button className="sidebar-toggle-btn" onClick={() => setShowSidebar(!showSidebar)} title="Toggle sidebar (⌘/)">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg>
@@ -2734,40 +3729,60 @@ return (
         )}
 
         <div className="chat-feed scr">
-          <div className="chat-inner">
-            {messages.length === 0 && (
-              <div className="welcome-wrap">
-                <div className="welcome-greeting">{getGreeting(profile.name)}</div>
-                <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
-                <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
-                  {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
-                </div>
-                <div className="recent-label" style={{ width: '100%', maxWidth: 680 }} onClick={() => setShowRecentChats(p => !p)}>
-                  <MessageSquare size={13}/>Recent chats
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', transition: 'transform .2s', transform: showRecentChats ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="6 9 12 15 18 9"/></svg>
-                </div>
-                {showRecentChats && (
-                  savedChats.length > 0 ? (
-                    <div className="recent-grid" style={{ maxWidth: 680 }}>
-                      {savedChats.slice(0, 3).map(c => (
-                        <div key={c.id} className="recent-card" onClick={() => loadChat(c.id)}>
-                          <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
-                          <div className="rc-title">{c.preview}</div>
-                          <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ width: '100%', maxWidth: 680, padding: '20px', textAlign: 'center', border: '1px dashed rgba(99,102,241,.2)', borderRadius: 12, background: 'rgba(99,102,241,.03)' }}>
-                      <MessageSquare size={20} color="var(--text4)" style={{ margin: '0 auto 8px', opacity: .4, display: 'block' }}/>
-                      <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>No recent chats</p>
-                      <p style={{ fontSize: 12, color: 'var(--text3)' }}>Start a conversation and it'll show up here.</p>
-                    </div>
-                  )
-                )}
-              </div>
-            )}
+  <div className="chat-inner">
+    {messages.length === 0 && (
+      <div className="welcome-wrap">
+        <div className="welcome-greeting">{getGreeting(profile.name)}</div>
+        <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
+        <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
+          {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
+        </div>
 
+        {!isIncognito && (
+          <>
+            <div className="recent-label" style={{ width: '100%', maxWidth: 680 }} onClick={() => setShowRecentChats(p => !p)}>
+              <MessageSquare size={13}/>Recent chats
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', transition: 'transform .2s', transform: showRecentChats ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            {showRecentChats && (
+              savedChats.length > 0 ? (
+                <div className="recent-grid" style={{ maxWidth: 680 }}>
+                  {savedChats.slice(0, 3).map(c => (
+                    <div key={c.id} className="recent-card" onClick={() => loadChat(c.id)}>
+                      <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
+                      <div className="rc-title">{c.preview}</div>
+                      <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ width: '100%', maxWidth: 680, padding: '20px', textAlign: 'center', border: '1px dashed rgba(99,102,241,.2)', borderRadius: 12, background: 'rgba(99,102,241,.03)' }}>
+                  <MessageSquare size={20} color="var(--text4)" style={{ margin: '0 auto 8px', opacity: .4, display: 'block' }}/>
+                  <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>No recent chats</p>
+                  <p style={{ fontSize: 12, color: 'var(--text3)' }}>Start a conversation and it'll show up here.</p>
+                </div>
+              )
+            )}
+          </>
+        )}
+
+        {isIncognito && (
+          <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,.12)', border: '1px solid rgba(139,92,246,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.8)"/>
+                <circle cx="9" cy="10" r="1.5" fill="#080810"/>
+                <circle cx="15" cy="10" r="1.5" fill="#080810"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: '#a78bfa', fontFamily: 'JetBrains Mono', marginBottom: 2 }}>Incognito mode active</p>
+              <p style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No history • No saved chats • Nothing stored</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
             {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (
@@ -2792,7 +3807,7 @@ return (
                         <span className="ai-name">VORTIS</span>
                         {starred[msg.id] && <Star size={10} color="var(--amber)" fill="var(--amber)"/>}
                       </div>
-                      <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle) : null}/></div>
+                      <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
@@ -2945,7 +3960,7 @@ onChange={e => {
 }}
   onPaste={e => {
     const text = e.clipboardData.getData('text');
-    const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text);
+   const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text) || text.includes('<?php');
     if (isCode && text.length > 100) {
       e.preventDefault();
       setPendingCode({ content: text, lines: text.split('\n').length });
@@ -3037,7 +4052,9 @@ onChange={e => {
                     <div key={plan.tier} className={`plan-card ${plan.popular ? 'featured' : ''}`} style={{ position: 'relative' }}>
                       {plan.popular && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,var(--indigo),var(--violet))', padding: '3px 14px', borderRadius: 20, fontSize: 10.5, color: 'white', fontFamily: 'JetBrains Mono', fontWeight: 700, whiteSpace: 'nowrap' }}>Most popular</div>}
                       <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                        <Crown size={18} color={plan.popular ? 'var(--indigo)' : 'var(--text3)'} style={{ margin: '0 auto 10px' }}/>
+                        {plan.tier === 'silver' && <Star size={18} color="#94a3b8" fill="#94a3b8" style={{ margin: '0 auto 10px', display: 'block' }}/>}
+{plan.tier === 'gold' && <Crown size={18} color="#fbbf24" fill="#fbbf24" style={{ margin: '0 auto 10px', display: 'block' }}/>}
+{plan.tier === 'platinum' && <Gem size={18} color="#06b6d4" fill="#06b6d4" style={{ margin: '0 auto 10px', display: 'block' }}/>}
                         <h3 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{plan.name}</h3>
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
                           {plan.durations.map((d, i) => (
@@ -3070,7 +4087,9 @@ onChange={e => {
           <div className="modal-box" style={{ maxWidth: 380 }}>
             <button className="modal-close" onClick={() => setShowPayment(false)}><X size={13}/></button>
             <div style={{ textAlign: 'center', marginBottom: 18 }}>
-              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}><Crown size={22} color="var(--indigo)"/></div>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>{selectedPlan?.tier === 'silver' && <Star size={22} color="#94a3b8" fill="#94a3b8"/>}
+{selectedPlan?.tier === 'gold' && <Crown size={22} color="#fbbf24" fill="#fbbf24"/>}
+{selectedPlan?.tier === 'platinum' && <Gem size={22} color="#06b6d4" fill="#06b6d4"/>}</div>
               <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 2 }}>{selectedPlan?.name} Plan</h3>
               <p style={{ fontSize: 26, fontWeight: 800, color: 'var(--indigo)', fontFamily: 'JetBrains Mono' }}>{selectedPlan?.price}</p>
               <p style={{ fontSize: 12, color: 'var(--text3)' }}>{selectedPlan?.label}</p>
@@ -3166,3 +4185,4 @@ onChange={e => {
     </div>
   );
 }
+
