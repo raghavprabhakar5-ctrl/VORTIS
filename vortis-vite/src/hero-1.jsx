@@ -470,18 +470,26 @@ export function Hero({ onLogin, authLoading, authError }) {
 
         {/* CTA */}
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-          <button onClick={() => onLogin('google')} disabled={authLoading} style={{
-            padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
-            background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-            border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-            boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
-            transition: "all 0.25s",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; }}
-          onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
-          >
-            <Zap size={16} /> {authLoading ? "Signing in…" : "Start Free"}
-          </button>
+         <button onClick={() => onLogin('google')} disabled={authLoading} style={{
+  padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
+  background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+  border: "none", cursor: authLoading ? "not-allowed" : "pointer",
+  display: "flex", alignItems: "center", gap: 8,
+  boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
+  transition: "all 0.25s", opacity: authLoading ? 0.85 : 1,
+}}
+onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
+onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
+>
+  {authLoading ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  ) : (
+    <Zap size={16} />
+  )}
+  {authLoading ? "Signing in…" : "Start Free"}
+</button>
           <a href="#capabilities" style={{
             padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
             border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
