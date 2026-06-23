@@ -4,6 +4,7 @@ import { initializeApp } from 'firebase/app';
 import App from "./App.jsx";
 import Privacy from "./Privacy.jsx";
 import Terms from "./Terms.jsx";
+import NotFound from "./NotFound.jsx";
 import "./index.css";
 
 // Firebase configuration - MUST BE BEFORE ReactDOM.render
@@ -23,10 +24,11 @@ initializeApp(firebaseConfig);
 function Root() {
   const path = window.location.pathname;
 
+  if (path === "/" ) return <App />;
   if (path === "/privacy") return <Privacy />;
   if (path === "/terms") return <Terms />;
 
-  return <App />;
+  return <NotFound />;
 }
 
 // THEN render the app
