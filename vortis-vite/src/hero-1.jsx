@@ -275,15 +275,24 @@ function Nav({ onLogin }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, animation: "slideInRight 0.7s ease both" }}>
         <button onClick={() => onLogin('google')} style={{
-          padding: "8px 22px", borderRadius: 99, fontSize: 13, fontWeight: 700,
-          background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-          border: "none", cursor: "pointer",
-          boxShadow: "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)",
-          transition: "all 0.2s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05) translateY(-1px)"; e.currentTarget.style.boxShadow = "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.25)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)"; }}
-        >Start Free →</button>
+  padding: "8px 22px", borderRadius: 99, fontSize: 13, fontWeight: 700,
+  background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+  border: "none", cursor: "pointer", position: "relative",
+  boxShadow: "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)",
+  transition: "all 0.2s",
+}}
+onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05) translateY(-1px)"; e.currentTarget.style.boxShadow = "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.25)"; }}
+onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)"; }}
+>
+  <span style={{
+    position: "absolute", inset: -3, borderRadius: 99,
+    border: "3px solid #c4b5fd",
+    animation: "radarPing 1.6s ease-out infinite",
+    pointerEvents: "none",
+  }} />
+  <span style={{ position: "relative", zIndex: 1 }}>Start Free →</span>
+</button>
+ 
       </div>
     </nav>
   );
@@ -1736,17 +1745,26 @@ function CTA({ onLogin }) {
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
             <button onClick={() => onLogin('google')} style={{
-              padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-              background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-              boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
-              transition: "all 0.25s",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
-            >
-              <Zap size={18} /> Get Started Free
-            </button>
+  padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
+  background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+  border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+  position: "relative",
+  boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
+  transition: "all 0.25s",
+}}
+onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
+onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
+>
+  <span style={{
+    position: "absolute", inset: -3, borderRadius: 99,
+    border: "3px solid #c4b5fd",
+    animation: "radarPing 1.6s ease-out infinite",
+    pointerEvents: "none",
+  }} />
+  <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
+  <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
+</button>
+ 
           </div>
         </div>
       </div>
