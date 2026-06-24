@@ -1634,7 +1634,7 @@ function Testimonials() {
             </div>
             <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, margin: "0 0 18px" }}>"{t.text}"</p>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `2px solid rgba(${t.color},0.4)` }} />
+              <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block", border: `2px solid rgba(${t.color},0.4)` }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t.name}</div>
                 <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.35)" }}>{t.role}</div>
