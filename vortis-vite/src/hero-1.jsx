@@ -1759,7 +1759,7 @@ function Pricing() {
 //  FAQ
 // ══════════════════════════════════════════════════════════════════
 const FAQS = [
-  { q: "What is Vortis AI?", a: "Vortis AI is a unified platform combining Chat, Image Generation, Web Search, Coding, Vision, Documents, Memory, Voice, and Deep Research — all in one beautiful interface." },
+  { q: "What is Vortis AI?", a:  "Vortis is an AI assistant. It chats, searches the web, writes code, reads documents, generates images, and does deep research — all in one place." },
   { q: "What models power Vortis?", a: "Vortis routes intelligently between proprietary ultra-low-latency models and frontier models to give you the best result for each specific task type." },
   { q: "Is there a free trial?", a: "Yes — explore core capabilities completely free with no credit card required. Premium features like Deep Research and unlimited usage require a paid plan." },
   { q: "How does billing work?", a: "Choose monthly, quarterly, semi-annual, or annual billing. Longer commitments unlock big discounts — annual saves 25%. Cancel any time, no questions asked." },
