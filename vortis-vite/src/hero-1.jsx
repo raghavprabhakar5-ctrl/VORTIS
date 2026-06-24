@@ -1628,12 +1628,15 @@ function Testimonials() {
             background: "rgba(255,255,255,0.025)",
             border: "1px solid rgba(255,255,255,0.07)",
             transition: "all 0.25s",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 240,
           }}>
             <div style={{ display: "flex", gap: 5, marginBottom: 14 }}>
               {[1,2,3,4,5].map(s => <span key={s} style={{ fontSize: 13, color: "#f59e0b" }}>★</span>)}
             </div>
             <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, margin: "0 0 18px" }}>"{t.text}"</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto" }}>
               <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block", border: `2px solid rgba(${t.color},0.4)` }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t.name}</div>
