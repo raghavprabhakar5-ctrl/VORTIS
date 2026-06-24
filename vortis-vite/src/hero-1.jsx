@@ -1594,12 +1594,12 @@ function DashboardPreview() {
 //  TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════
 const TESTIMONIALS = [
-  { name: "Sarah Chen", role: "Lead Engineer @ Stripe", avatar: "SC", text: "Vortis replaced 4 different AI tools for our team. The deep research feature alone saves us hours every week.", color: "124,58,237" },
-  { name: "Marcus Johnson", role: "Product Designer @ Figma", avatar: "MJ", text: "The image generation quality is insane. Combined with vision AI for feedback loops — it's like having a design partner 24/7.", color: "168,85,247" },
-  { name: "Priya Patel", role: "Data Scientist @ Anthropic", avatar: "PP", text: "Memory + web search together is a game changer. It actually knows my projects and finds current information simultaneously.", color: "6,182,212" },
-  { name: "Alex Rivera", role: "CTO @ YC Startup", avatar: "AR", text: "We built our entire internal tooling assistant on top of Vortis. The API is clean, the quality is top-tier.", color: "99,102,241" },
-  { name: "Yuki Tanaka", role: "Research Lead @ DeepMind", avatar: "YT", text: "Deep Research mode synthesized our literature review in 8 minutes. What used to take weeks now takes coffee breaks.", color: "124,58,237" },
-  { name: "Emma Williams", role: "Founder @ AI Startup", avatar: "EW", text: "Switched from ChatGPT and never looked back. The UI is gorgeous and the responses are noticeably sharper.", color: "168,85,247" },
+  { name: "Sarah Chen", role: "Lead Engineer @ Stripe", avatar: "SC", photo: "https://i.pravatar.cc/150?img=47", text: "Vortis replaced 4 different AI tools for our team. The deep research feature alone saves us hours every week.", color: "124,58,237" },
+  { name: "Marcus Johnson", role: "Product Designer @ Figma", avatar: "MJ", photo: "https://i.pravatar.cc/150?img=12", text: "The image generation quality is insane. Combined with vision AI for feedback loops — it's like having a design partner 24/7.", color: "168,85,247" },
+  { name: "Priya Patel", role: "Data Scientist @ Anthropic", avatar: "PP", photo: "https://i.pravatar.cc/150?img=44", text: "Memory + web search together is a game changer. It actually knows my projects and finds current information simultaneously.", color: "6,182,212" },
+  { name: "Alex Rivera", role: "CTO @ YC Startup", avatar: "AR", photo: "https://i.pravatar.cc/150?img=33", text: "We built our entire internal tooling assistant on top of Vortis. The API is clean, the quality is top-tier.", color: "99,102,241" },
+  { name: "Yuki Tanaka", role: "Research Lead @ DeepMind", avatar: "YT", photo: "https://i.pravatar.cc/150?img=68", text: "Deep Research mode synthesized our literature review in 8 minutes. What used to take weeks now takes coffee breaks.", color: "124,58,237" },
+  { name: "Emma Williams", role: "Founder @ AI Startup", avatar: "EW", photo: "https://i.pravatar.cc/150?img=29", text: "Switched from ChatGPT and never looked back. The UI is gorgeous and the responses are noticeably sharper.", color: "168,85,247" },
 ];
 
 function Testimonials() {
@@ -1634,7 +1634,7 @@ function Testimonials() {
             </div>
             <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, margin: "0 0 18px" }}>"{t.text}"</p>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ width: 36, height: 36, borderRadius: "50%", background: `linear-gradient(135deg,rgb(${t.color}),rgba(${t.color},0.6))`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 }}>{t.avatar}</div>
+              <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `2px solid rgba(${t.color},0.4)` }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t.name}</div>
                 <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.35)" }}>{t.role}</div>
