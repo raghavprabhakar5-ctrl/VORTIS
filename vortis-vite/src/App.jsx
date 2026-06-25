@@ -2010,6 +2010,7 @@ export default function VortisAI() {
   const [cardExp, setCardExp] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [upiId, setUpiId] = useState('');
+  const [showVoiceMode, setShowVoiceMode] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [tier, setTier] = useState('free');
   const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0, vision: 0 });
@@ -2892,6 +2893,136 @@ const addMsg = (type, text, speak = false) => {
       return { success: true, results: data.results, aiSummary: data.aiSummary || null };
   } catch(_) {} finally { setProcessingStatus(''); }
   return { success: false, results: [], aiSummary: null };
+};
+
+ const VoiceModeOverlay = ({ isOpen, onClose, isListening, onToggleListen, transcript }) => {
+  if (!isOpen) return null;
+ 
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 300,
+      background: 'rgba(8,8,16,.92)',
+      backdropFilter: 'blur(20px)',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 28,
+      animation: 'overlayIn .2s ease',
+    }}>
+      <style>{`
+        @keyframes vmBreathe{
+          0%,100%{ transform:scale(1); }
+          50%{ transform:scale(1.05); }
+        }
+        @keyframes vmListenPulse{
+          0%,100%{ transform:scale(1); }
+          50%{ transform:scale(1.1); }
+        }
+        @keyframes vmRing{
+          0%{ opacity:.6; transform:scale(.8); }
+          70%{ opacity:0; transform:scale(1.4); }
+          100%{ opacity:0; transform:scale(1.4); }
+        }
+        @keyframes vmBar{
+          0%,100%{ height:10px; opacity:.6; }
+          50%{ height:34px; opacity:1; }
+        }
+      `}</style>
+ 
+      <div style={{ position: 'relative', width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {isListening && [0, 1, 2].map(i => (
+          <div key={i} style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            background: 'radial-gradient(circle at 35% 30%, rgba(139,92,246,.5), rgba(99,102,241,.05) 70%)',
+            filter: 'blur(2px)',
+            animation: `vmRing 1.8s ease-out infinite`,
+            animationDelay: `${i * 0.6}s`,
+          }} />
+        ))}
+ 
+        <div
+          onClick={onToggleListen}
+          style={{
+            position: 'relative',
+            width: '60%', height: '60%',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            background: 'radial-gradient(circle at 32% 28%, #c4b5fd 0%, #8b5cf6 35%, #6366f1 65%, #4338ca 100%)',
+            boxShadow: isListening
+              ? '0 0 50px rgba(139,92,246,.7), 0 0 110px rgba(99,102,241,.4), inset 0 -10px 30px rgba(0,0,0,.25), inset 0 8px 24px rgba(255,255,255,.2)'
+              : '0 0 30px rgba(99,102,241,.4), inset 0 -10px 30px rgba(0,0,0,.25), inset 0 8px 24px rgba(255,255,255,.18)',
+            animation: isListening ? 'vmListenPulse 1.1s ease-in-out infinite' : 'vmBreathe 4.2s ease-in-out infinite',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          {isListening && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <span key={i} style={{
+                  display: 'block', width: 4, borderRadius: 3,
+                  background: 'rgba(255,255,255,.9)',
+                  height: 14,
+                  animation: 'vmBar 1s ease-in-out infinite',
+                  animationDelay: `${i * 0.15}s`,
+                }} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+ 
+      <div style={{
+        fontFamily: 'Geist, sans-serif',
+        fontSize: 16, fontWeight: 500,
+        color: isListening ? 'var(--text1, #e8e8f8)' : 'var(--text3, #9090b0)',
+        textAlign: 'center', maxWidth: 360, lineHeight: 1.5,
+        minHeight: 24, padding: '0 20px',
+      }}>
+        {isListening ? (transcript || "I'm listening...") : 'Tap the orb to speak'}
+      </div>
+ 
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          onClick={onClose}
+          style={{
+            width: 44, height: 44, borderRadius: '50%',
+            background: 'var(--bg3, #16162a)',
+            border: '1px solid var(--border2, #2a2a4a)',
+            color: 'var(--text2, #9090b0)',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          aria-label="Close voice mode"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <button
+          onClick={onToggleListen}
+          style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: isListening
+              ? 'linear-gradient(135deg,#ef4444,#f97316)'
+              : 'linear-gradient(135deg,var(--indigo, #6366f1),var(--violet, #8b5cf6))',
+            border: 'none', color: 'white', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 20px rgba(99,102,241,.4)',
+          }}
+          aria-label={isListening ? 'Stop' : 'Speak'}
+        >
+          {isListening ? (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
+  );
 };
 
   const extractImageUrl = (data) => {
