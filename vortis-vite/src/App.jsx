@@ -2913,6 +2913,7 @@ const addMsg = (type, text, speak = false) => {
 // ═══════════════════════════════════════════════════
 
 const startVoiceCall = () => {
+   alert('VOICE CALL CLICKED'); 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
 
