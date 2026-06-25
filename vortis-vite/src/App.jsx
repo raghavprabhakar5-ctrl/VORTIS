@@ -1475,6 +1475,10 @@ const SettingsModal = ({
     },
   };
 
+  <button className="hdr-btn" onClick={startVoiceCall} title="Voice call">
+  <Mic size={15}/>
+</button>
+
   const NAV = [
     { id: 'account',   label: 'Account',   color: '#6366f1', icon: <Crown size={13}/> },
     { id: 'memories',  label: 'Memories',  color: '#8b5cf6', icon: <Brain size={13}/> },
@@ -2025,6 +2029,10 @@ export default function VortisAI() {
   const [showStarredPanel, setShowStarredPanel] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [wordCount, setWordCount] = useState(0);
+  const [showVoiceCall, setShowVoiceCall] = useState(false);
+  const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
+  const callRecogRef = useRef(null);
+  const callActiveRef = useRef(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -2898,6 +2906,88 @@ const addMsg = (type, text, speak = false) => {
   if (speak && autoSpeak && type === 'vortis') speakText(text);
   return msg;
 };
+
+const startVoiceCall = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
+  setShowVoiceCall(true);
+  callActiveRef.current = true;
+  runCallListenLoop();
+};
+
+const endVoiceCall = () => {
+  callActiveRef.current = false;
+  callRecogRef.current?.stop();
+  stopSpeaking();
+  setCallState('idle');
+  setShowVoiceCall(false);
+};
+
+const runCallListenLoop = () => {
+  if (!callActiveRef.current) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const recog = new SR();
+  recog.continuous = false;
+  recog.interimResults = false;
+  recog.lang = 'en-IN';
+  callRecogRef.current = recog;
+
+  setCallState('listening');
+
+  recog.onresult = async (e) => {
+    const transcript = e.results[0][0].transcript;
+    if (!callActiveRef.current) return;
+    if (!transcript.trim()) { runCallListenLoop(); return; }
+
+    setCallState('thinking');
+    if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+    incrUsage('messages');
+
+    try {
+      // reuse existing getAI plumbing but capture the reply for speech
+      pushHistory(convHistory, 'user', transcript);
+      const now = new Date();
+      const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers — this is being read aloud. Be conversational and warm.`;
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
+      });
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let full = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of dec.decode(value).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]' || !raw) continue;
+          try { const p = JSON.parse(raw); if (p.content) full += p.content; } catch(_) {}
+        }
+      }
+      const reply = full.trim() || "Sorry, I didn't catch that.";
+      pushHistory(convHistory, 'assistant', reply);
+
+      // log to normal chat history too (optional but nice)
+      addMsg('user', transcript);
+      addMsg('vortis', reply, false);
+
+      if (!callActiveRef.current) return;
+      setCallState('speaking');
+      await speakText(reply);
+    } catch(_) {
+      // ignore, just loop again
+    }
+    if (callActiveRef.current) runCallListenLoop();
+  };
+
+  recog.onerror = () => { if (callActiveRef.current) setTimeout(runCallListenLoop, 600); };
+  recog.onend = () => {}; // handled by onresult/onerror chaining
+
+  recog.start();
+};
+
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
@@ -3788,6 +3878,60 @@ return (
             )}
           </>
         )}
+
+        {showVoiceCall && (
+  <div style={{
+    position: 'fixed', inset: 0, zIndex: 999,
+    background: 'radial-gradient(circle at 50% 35%, #1a1030 0%, #07050f 70%)',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    animation: 'overlayIn .25s ease'
+  }}>
+    <style>{`
+      @keyframes orbPulse{0%,100%{transform:scale(1);box-shadow:0 0 60px rgba(139,92,246,.4)}50%{transform:scale(1.08);box-shadow:0 0 100px rgba(139,92,246,.7)}}
+      @keyframes orbSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+      @keyframes orbListen{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+    `}</style>
+
+    <div style={{
+      width: 180, height: 180, borderRadius: '50%',
+      background: 'linear-gradient(135deg,#6366f1,#8b5cf6,#a78bfa)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      animation: callState === 'speaking'
+        ? 'orbPulse 1.1s ease-in-out infinite'
+        : callState === 'listening'
+        ? 'orbListen 1.4s ease-in-out infinite'
+        : 'none',
+      filter: callState === 'thinking' ? 'saturate(0.6)' : 'none',
+      transition: 'filter .3s'
+    }}>
+      {callState === 'thinking'
+        ? <Loader size={36} color="white" style={{ animation: 'spin 1s linear infinite' }}/>
+        : <VortisLogo size={70} color="white"/>}
+    </div>
+
+    <p style={{
+      marginTop: 28, color: 'rgba(255,255,255,.85)', fontFamily: "'JetBrains Mono',monospace",
+      fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase'
+    }}>
+      {callState === 'listening' && 'Listening…'}
+      {callState === 'thinking'  && 'Thinking…'}
+      {callState === 'speaking'  && 'Speaking…'}
+      {callState === 'idle'      && 'Connecting…'}
+    </p>
+
+    <button
+      onClick={endVoiceCall}
+      style={{
+        marginTop: 50, width: 60, height: 60, borderRadius: '50%',
+        background: '#ef4444', border: 'none', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 8px 30px rgba(239,68,68,.45)'
+      }}
+    >
+      <X size={26} color="white"/>
+    </button>
+  </div>
+)}
 
         {isIncognito && (
           <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
