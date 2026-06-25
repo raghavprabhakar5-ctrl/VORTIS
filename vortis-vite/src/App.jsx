@@ -2764,6 +2764,27 @@ const stopSpeaking = useCallback(() => {
 const speakText = useCallback(async (t) => {
   if (isSpeakingRef.current) { stopSpeaking(); return; }
   isSpeakingRef.current = true;
+  
+  // Helper to safely convert base64 data URIs to CSP-compliant Blob URLs on the fly
+  const toBlobUrl = (dataUrl) => {
+    if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+    try {
+      const parts = dataUrl.split(',');
+      const base64 = parts[1];
+      const binaryStr = window.atob(base64);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+      const blob = new Blob([bytes], { type: 'audio/mp3' });
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.error("CSP Bypass - Blob conversion failed:", e);
+      return dataUrl; // Fallback to original if conversion fails
+    }
+  };
+
   try {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
@@ -2774,7 +2795,7 @@ const speakText = useCallback(async (t) => {
 
     const cached = ttsCache.current.get(cacheKey);
     if (cached) {
-      const audio = new Audio(cached);
+      const audio = new Audio(toBlobUrl(cached));
       currentAudiosRef.current = [audio];
       await new Promise((resolve) => {
         audio.onended = resolve;
@@ -2789,9 +2810,10 @@ const speakText = useCallback(async (t) => {
       const src = await pending;
       if (!isSpeakingRef.current) return;
       if (src) {
-        const audio = new Audio(src);
+        const audio = new Audio(toBlobUrl(src));
         currentAudiosRef.current = [audio];
         await new Promise((resolve) => {
+          document.body.appendChild(audio); // Helps with some browser lifecycle bugs
           audio.onended = resolve;
           audio.onerror = resolve;
           audio.play().catch(resolve);
@@ -2818,7 +2840,7 @@ const speakText = useCallback(async (t) => {
       const src = await fetchChunk(clean);
       if (!isSpeakingRef.current || !src) return;
       ttsCache.current.set(cacheKey, src);
-      const audio = new Audio(src);
+      const audio = new Audio(toBlobUrl(src));
       currentAudiosRef.current = [audio];
       await new Promise((resolve) => {
         audio.onended = resolve;
@@ -2846,20 +2868,20 @@ const speakText = useCallback(async (t) => {
       const src = await srcPromise;
       if (!isSpeakingRef.current || !src) continue;
       await new Promise((resolve) => {
-        const audio = new Audio(src);
+        const audio = new Audio(toBlobUrl(src));
         currentAudiosRef.current = [audio];
         audio.onended = resolve;
         audio.onerror = resolve;
         audio.play().catch(resolve);
       });
     }
-  } catch(_) {}
-  finally {
+  } catch(_) {
+    console.error("TTS Stream Interrupted:", _);
+  } finally {
     isSpeakingRef.current = false;
     currentAudiosRef.current = [];
   }
 }, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
-
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
   const msg = { id: Date.now() + Math.random(), type, text };
