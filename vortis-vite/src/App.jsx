@@ -2882,6 +2882,7 @@ const speakText = useCallback(async (t) => {
     currentAudiosRef.current = [];
   }
 }, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
+
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
   const msg = { id: Date.now() + Math.random(), type, text };
