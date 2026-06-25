@@ -3440,7 +3440,7 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
       if (genMatch) { const imagePrompt = genMatch[1].trim(); if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` }; try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); } return; }
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
-      if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
+      if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim());setIsProcessing(false); return; }
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
    
@@ -3495,10 +3495,12 @@ const finalDisplay = displayText.length > 1
     : "Something went wrong — please try again.";
 
 addMsg('vortis', finalDisplay, shouldSpeak);
+      setIsProcessing(false);   // ← ADD THIS
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
       addMsg('vortis', !navigator.onLine ? "You appear to be offline — check your connection and try again." : "Something went wrong — please try again.", false);
+      setIsProcessing(false);   // ← ADD THIS
     }
   };
 
