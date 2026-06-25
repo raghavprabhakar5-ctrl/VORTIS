@@ -2912,23 +2912,11 @@ const addMsg = (type, text, speak = false) => {
 // VOICE CALL — replace lines 2911 through 3083
 // ═══════════════════════════════════════════════════
 
+// ═══════ VOICE CALL (only declare ONCE) ═══════
+
 const startVoiceCall = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
-
-  // ✅ KILL any ongoing speech/TTS from chat before starting voice call
-  stopSpeaking();
-  isSpeakingRef.current = false;
-  currentAudiosRef.current = [];
-  ttsPending.current.clear();
-  setIsProcessing(false);        // ← ADD THIS
-  setIsStreaming(false);          // ← ADD THIS
-  setStreamText('');              // ← ADD THIS
-  setProcessingStatus('');        // ← ADD THIS
-  clearTimeout(aiTimeoutRef.current);  // ← ADD THIS
-  // ✅ Also stop any pending TTS preloads
-  ttsPending.current.clear();
-
   setShowVoiceCall(true);
   setCallState('idle');
   setCallPaused(false);
@@ -2953,18 +2941,10 @@ const runCallListenLoop = () => {
   if (!callActiveRef.current) return;
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    console.error('SpeechRecognition not supported');
-    setCallState('idle');
-    return;
-  }
+  if (!SR) { console.error('SR not supported'); setCallState('idle'); return; }
 
   let recog;
-  try { recog = new SR(); } catch (e) {
-    console.error('Failed to create SR:', e);
-    setCallState('idle');
-    return;
-  }
+  try { recog = new SR(); } catch (e) { console.error('SR create failed:', e); setCallState('idle'); return; }
 
   recog.continuous = false;
   recog.interimResults = false;
@@ -2976,11 +2956,7 @@ const runCallListenLoop = () => {
     if (restarted) return;
     restarted = true;
     if (callActiveRef.current) {
-      setTimeout(() => {
-        try { runCallListenLoop(); } catch(e) {
-          console.error('Restart failed:', e);
-        }
-      }, 500);
+      setTimeout(() => { try { runCallListenLoop(); } catch(e) {} }, 500);
     }
   };
 
@@ -2999,7 +2975,7 @@ const runCallListenLoop = () => {
 
       pushHistory(convHistory, 'user', transcript);
 
-      const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers — this is being read aloud. Be conversational and warm.`;
+      const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers. Be conversational and warm.`;
 
       const res = await fetch(API, {
         method: 'POST',
@@ -3024,18 +3000,13 @@ const runCallListenLoop = () => {
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
 
-      // ❌ REMOVED: addMsg('user', transcript);
-      // ❌ REMOVED: addMsg('vortis', reply, false);
-      // ✅ Voice call is talk-only — NO messages in the chat
-
       if (!callActiveRef.current) return;
       setCallState('speaking');
 
-      // ✅ Force speak — stop anything else first, then speak
+      // Inline TTS for voice call (bypasses speakText to avoid conflicts)
       try {
         stopSpeaking();
         isSpeakingRef.current = false;
-        // Small delay to let stopSpeaking fully clear
         await new Promise(r => setTimeout(r, 100));
         isSpeakingRef.current = true;
 
@@ -3044,75 +3015,56 @@ const runCallListenLoop = () => {
         const voice = detectLangVoice(clean, gender);
         const headers = await getCachedAuthHeader();
 
-        const MAX = 800;
-        const fetchChunk = (chunkText) =>
-          fetch(API, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ action: 'tts', text: chunkText, voice })
-          })
+        const toBlobUrl = (dataUrl) => {
+          if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+          try {
+            const base64 = dataUrl.split(',')[1];
+            const bin = window.atob(base64);
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+            return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
+          } catch(e) { return dataUrl; }
+        };
+
+        const fetchChunk = (txt) =>
+          fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text: txt, voice }) })
             .then(r => r.ok ? r.json() : null)
             .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
             .catch(() => null);
 
-        const toBlobUrl = (dataUrl) => {
-          if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
-          try {
-            const parts = dataUrl.split(',');
-            const base64 = parts[1];
-            const binaryStr = window.atob(base64);
-            const len = binaryStr.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
-            const blob = new Blob([bytes], { type: 'audio/mp3' });
-            return URL.createObjectURL(blob);
-          } catch(e) { return dataUrl; }
-        };
-
-        if (clean.length <= MAX) {
+        if (clean.length <= 800) {
           const src = await fetchChunk(clean);
-          if (!callActiveRef.current || !src) { isSpeakingRef.current = false; safeRestart(); return; }
-          const audio = new Audio(toBlobUrl(src));
-          currentAudiosRef.current = [audio];
-          await new Promise((resolve) => {
-            audio.onended = resolve;
-            audio.onerror = resolve;
-            audio.play().catch(resolve);
-          });
+          if (callActiveRef.current && src) {
+            const audio = new Audio(toBlobUrl(src));
+            currentAudiosRef.current = [audio];
+            await new Promise(r => { audio.onended = r; audio.onerror = r; audio.play().catch(r); });
+          }
         } else {
           const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
-          const chunks = [];
-          let cur = '';
+          const chunks = []; let cur = '';
           for (const s of sentences) {
-            if ((cur + s).length > MAX && cur.length > 0) { chunks.push(cur.trim()); cur = s; }
-            else cur += s;
+            if ((cur + s).length > 800 && cur) { chunks.push(cur.trim()); cur = s; } else cur += s;
           }
           if (cur.trim()) chunks.push(cur.trim());
-
           let nextFetch = fetchChunk(chunks[0]);
           for (let i = 0; i < chunks.length; i++) {
             if (!callActiveRef.current) break;
-            const srcPromise = nextFetch;
+            const src = await nextFetch;
             if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
-            const src = await srcPromise;
             if (!callActiveRef.current || !src) continue;
-            await new Promise((resolve) => {
-              const audio = new Audio(toBlobUrl(src));
-              currentAudiosRef.current = [audio];
-              audio.onended = resolve;
-              audio.onerror = resolve;
-              audio.play().catch(resolve);
-            });
+            const audio = new Audio(toBlobUrl(src));
+            currentAudiosRef.current = [audio];
+            await new Promise(r => { audio.onended = r; audio.onerror = r; audio.play().catch(r); });
           }
         }
-      } catch (speakErr) {
+      } catch(speakErr) {
         console.error('Voice speak error:', speakErr);
       } finally {
         isSpeakingRef.current = false;
         currentAudiosRef.current = [];
       }
 
-    } catch (err) {
+    } catch(err) {
       console.error('onresult error:', err);
     }
 
@@ -3120,14 +3072,9 @@ const runCallListenLoop = () => {
   };
 
   recog.onerror = (e) => {
-    console.warn('SR error:', e?.error);
     if (!callActiveRef.current) return;
     if (e?.error === 'aborted') return;
-    if (e?.error === 'not-allowed') {
-      console.error('Mic denied');
-      setCallState('idle');
-      return;
-    }
+    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
     safeRestart();
   };
 
@@ -3136,15 +3083,8 @@ const runCallListenLoop = () => {
     safeRestart();
   };
 
-  // Kill any leftover audio from chat
-  stopSpeaking();
-  isSpeakingRef.current = false;
-
   try { recog.start(); } catch(e) {
-    console.error('recog.start() threw:', e);
-    if (callActiveRef.current) {
-      setTimeout(() => { try { runCallListenLoop(); } catch(err) {} }, 800);
-    }
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch(err) {} }, 800);
   }
 };
  const doSearch = async (query) => {
@@ -3495,12 +3435,10 @@ const finalDisplay = displayText.length > 1
     : "Something went wrong — please try again.";
 
 addMsg('vortis', finalDisplay, shouldSpeak);
-      setIsProcessing(false);   // ← ADD THIS
     } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
       addMsg('vortis', !navigator.onLine ? "You appear to be offline — check your connection and try again." : "Something went wrong — please try again.", false);
-      setIsProcessing(false);   // ← ADD THIS
     }
   };
 
@@ -4497,7 +4435,7 @@ onChange={e => {
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
 
   {/* NEW — Voice call (soundwave) button */}
-  <button className="mic-btn" onClick={startVoiceCall} title="Voice call">
+  <button className="mic-btn" onClick={startVoiceCall} title="Voice call" disabled={isProcessing}>
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <line x1="3"  y1="12" x2="3"  y2="12"/>
       <line x1="7"  y1="9"  x2="7"  y2="15"/>
@@ -4511,7 +4449,7 @@ onChange={e => {
   <button
     className={`mic-btn ${isListening ? 'listening' : ''}`}
     onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else if (recogRef.current) { setIsListening(true); recogRef.current.start(); } }}
-    disabled={false}
+    disabled={isProcessing && !isListening}
   >
     {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
   </button>
