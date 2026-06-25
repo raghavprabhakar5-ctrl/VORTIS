@@ -2032,6 +2032,7 @@ export default function VortisAI() {
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
+  const callActiveRef = useRef(false);
   const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
