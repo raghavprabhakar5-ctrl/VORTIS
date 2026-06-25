@@ -7,6 +7,7 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
+import { createPortal } from 'react-dom';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -4041,7 +4042,7 @@ return (
           </>
         )}
 
-      {showVoiceCall && (
+     {showVoiceCall && createPortal(
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
     background: 'radial-gradient(ellipse at 50% 30%, #1a1040 0%, #0c0820 40%, #050510 100%)',
@@ -4276,6 +4277,7 @@ return (
       {callPaused ? 'Tap play to resume' : 'Pause  ·  End call'}
     </p>
   </div>
+   document.body
 )}
         {isIncognito && (
           <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
