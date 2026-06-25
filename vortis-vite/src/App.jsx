@@ -2665,9 +2665,8 @@ const saveChat = useCallback(async (msgsToSave) => {
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
 
-  useEffect(() => {
+ useEffect(() => {
   if (!showVoiceMode) return;
-  // Small delay to let the overlay render first
   const timer = setTimeout(() => {
     if (voiceModeActiveRef.current && recogRef.current && !isListening) {
       try {
@@ -2675,13 +2674,12 @@ const saveChat = useCallback(async (msgsToSave) => {
         recogRef.current.start();
         startMicVisualizer();
       } catch(e) {
-        // Recognition already started or not available
         setIsListening(false);
       }
     }
   }, 600);
   return () => clearTimeout(timer);
-}, [showVoiceMode]); // Only depends on showVoiceMode
+}, [showVoiceMode]);
 
  // ── TTS REFS ──
 const ttsCache = useRef(new Map());
@@ -4307,7 +4305,11 @@ onChange={e => {
                   </button>
                   <button
                     className="mic-btn"
-                    onClick={() => { voiceModeActiveRef.current = true; setShowVoiceMode(true); }}
+                    onClick={() => {
+  stopSpeaking();
+  voiceModeActiveRef.current = true;
+  setShowVoiceMode(true);
+}}
                     aria-label="Voice mode"
                     style={{ width: 38, height: 38 }}
                   >
