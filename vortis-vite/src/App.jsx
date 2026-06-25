@@ -2468,7 +2468,7 @@ export default function VortisAI() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SR) {
         recogRef.current = new SR(); recogRef.current.continuous = false; recogRef.current.interimResults = false; recogRef.current.lang = 'en-IN';
-       recogRef.current.onresult = e => {
+  recogRef.current.onresult = (e) => {
   const text = e.results[0][0].transcript;
   setIsListening(false);
   stopMicVisualizer();
@@ -2479,10 +2479,20 @@ export default function VortisAI() {
     handleCmdRef.current?.(text);
   }
 };
-       recogRef.current.onerror = (e) => {
+
+recogRef.current.onerror = (e) => {
+  console.log('Speech error:', e.error);
   setIsListening(false);
   stopMicVisualizer();
+  // Restart on recoverable errors
+  if (voiceModeActiveRef.current && e.error !== 'not-allowed' && e.error !== 'service-not-allowed') {
+    setTimeout(() => {
+      if (!voiceModeActiveRef.current) return;
+      try { setIsListening(true); recogRef.current.start(); startMicVisualizer(); } catch(_) {}
+    }, 1000);
+  }
 };
+
 recogRef.current.onend = () => {
   setIsListening(false);
   stopMicVisualizer();
@@ -2666,23 +2676,25 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
  useEffect(() => {
-  if (!showVoiceMode) {
-    voiceModeActiveRef.current = false;
-    return;
-  }
+  if (!showVoiceMode) return;
   voiceModeActiveRef.current = true;
-  const timer = setTimeout(() => {
+  
+  const tryStart = () => {
     if (!recogRef.current) return;
+    if (isListening) return;
     try {
       setIsListening(true);
       recogRef.current.start();
       startMicVisualizer();
     } catch(e) {
+      console.log('mic start error:', e.message);
       setIsListening(false);
     }
-  }, 300); // reduced from 600
-  return () => clearTimeout(timer);
-}, [showVoiceMode]);
+  };
+  
+  const t = setTimeout(tryStart, 500);
+  return () => clearTimeout(t);
+}, [showVoiceMode]); // eslint-disable-line
 
  // ── TTS REFS ──
 const ttsCache = useRef(new Map());
@@ -3485,12 +3497,15 @@ addMsg('vortis', finalDisplay, shouldSpeak);
   };
 
  const runVoiceTurn = async (userText) => {
-  if (!userText.trim()) return;
+  if (!userText?.trim()) return;
+  
   setVoiceTranscript(userText);
   setVoiceAIText('Thinking…');
   setIsVoiceSpeaking(true);
+  setIsListening(false);
+  
   pushHistory(convHistory, 'user', userText);
-
+  
   let full = '';
   try {
     const res = await fetch(API, {
@@ -3498,12 +3513,14 @@ addMsg('vortis', finalDisplay, shouldSpeak);
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'Respond conversationally and briefly, like speech — 1-3 sentences unless asked for detail.',
+        prompt: 'Respond conversationally and briefly — 1-3 sentences max.',
         history: convHistory.current
       })
     });
+    
     const reader = res.body.getReader();
     const dec = new TextDecoder();
+    
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -3513,34 +3530,76 @@ addMsg('vortis', finalDisplay, shouldSpeak);
         if (raw === '[DONE]' || !raw) continue;
         try {
           const p = JSON.parse(raw);
-          if (p.content) {
-            full += p.content;
-            setVoiceAIText(full);
-          }
+          if (p.content) { full += p.content; setVoiceAIText(full); }
         } catch(_) {}
       }
     }
+    
     pushHistory(convHistory, 'assistant', full.trim());
-    setVoiceAIText(full.trim() || 'Done.');
-
-    // Speak the full response and WAIT for it to finish
-    if (full.trim()) {
-  isSpeakingRef.current = false; // reset before speaking
-  await speakText(full.trim());
-}
+    
+    if (full.trim() && voiceModeActiveRef.current) {
+      // Force reset speaking state before TTS
+      isSpeakingRef.current = false;
+      currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
+      currentAudiosRef.current = [];
+      
+      // Fetch and play TTS directly
+      try {
+        const gender = ttsGenderRef.current;
+        const clean = cleanForTTS(full.trim());
+        const voice = detectLangVoice(clean, gender);
+        
+        const headers = await getCachedAuthHeader();
+        const ttsRes = await fetch(API, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'tts', text: clean.slice(0, 500), voice })
+        });
+        
+        if (ttsRes.ok) {
+          const { audio } = await ttsRes.json();
+          if (audio && voiceModeActiveRef.current) {
+            await new Promise((resolve) => {
+              const a = new Audio(`data:audio/mp3;base64,${audio}`);
+              currentAudiosRef.current = [a];
+              a.onended = resolve;
+              a.onerror = resolve;
+              a.play().catch(resolve);
+            });
+          }
+        }
+      } catch(e) {
+        console.log('TTS error:', e.message);
+      }
+    }
+    
   } catch(e) {
-    setVoiceAIText('Sorry, something went wrong.');
-    await speakText('Sorry, something went wrong.');
+    console.log('Voice turn error:', e.message);
+    setVoiceAIText('Something went wrong.');
   } finally {
-    setIsVoiceSpeaking(false);
-    setVoiceAIText('');
-    // Auto-restart mic if still in voice mode
+     recogRef.current?.stop();
+  stopSpeaking();
+  stopVoiceQueue();
+  stopMicVisualizer();
+  setIsListening(false);
+  setIsVoiceSpeaking(false);
+  setVoiceTranscript('');
+  setVoiceAIText('');
+  voiceModeActiveRef.current = true;
+  setShowVoiceMode(true);
+    
+    // Restart mic if still in voice mode
     if (voiceModeActiveRef.current && recogRef.current) {
       setTimeout(() => {
-        setIsListening(true);
-        recogRef.current.start();
-        startMicVisualizer();
-      }, 400);
+        if (!voiceModeActiveRef.current) return;
+        try {
+          setIsListening(true);
+          recogRef.current.start();
+          startMicVisualizer();
+        } catch(e) {
+          setIsListening(false);
+        }
+      }, 500);
     }
   }
 };
