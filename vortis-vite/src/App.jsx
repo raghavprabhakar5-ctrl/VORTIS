@@ -1977,135 +1977,6 @@ export default function VortisAI() {
   return () => window.removeEventListener('beforeunload', handleBeforeUnload);
 }, [messages]);
 
- const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleListen, transcript, aiText, audioLevels }) => {
-  if (!isOpen) return null;
-  const bars = Array.from({ length: 28 }, (_, i) => i);
-
-  return (
-    <div style={{ /* unchanged */ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(8,8,16,.96)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, animation: 'overlayIn .2s ease', padding: '0 24px' }}>
-      <style>{`
-        @keyframes vmBarIdle{0%,100%{ transform:scaleY(0.25); opacity:.35; }50%{ transform:scaleY(0.45); opacity:.55; }}
-        @keyframes vmBarAI{0%,100%{ transform:scaleY(0.3); }50%{ transform:scaleY(1); }}
-        @keyframes vmFadeUp{from{ opacity:0; transform:translateY(6px); }to{ opacity:1; transform:translateY(0); }}
-      `}</style>
-
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, height: 140, width: '100%', maxWidth: 420 }}>
-        {bars.map(i => {
-          const level = audioLevels?.[i] ?? 0.15;
-          const idleHeight = 14 + (Math.sin(i * 0.7) + 1) * 30;
-          const height = isListening ? 14 + level * 110 : isSpeaking ? idleHeight * 1.4 : idleHeight;
-          const animName = isSpeaking ? 'vmBarAI' : (!isListening ? 'vmBarIdle' : null);
-          const duration = isSpeaking ? `${0.6 + (i % 6) * 0.09}s` : '2.2s';
-          const delay = `${(i % 7) * 0.06}s`;
-          const color = isListening
-            ? 'linear-gradient(180deg,#e040fb,#7c4dff)'
-            : isSpeaking
-              ? 'linear-gradient(180deg,#29b6f6,#7c4dff)'
-              : 'linear-gradient(180deg,#6366f1,#4338ca)';
-          return (
-            <div key={i} style={{
-              width: 5, height, borderRadius: 4, background: color,
-              transformOrigin: 'center',
-              animation: animName ? `${animName} ${duration} ease-in-out infinite` : 'none',
-              animationDelay: delay,
-              transition: isListening ? 'height .08s linear' : 'height .3s ease',
-              boxShadow: (isListening || isSpeaking) ? '0 0 10px rgba(139,92,246,.5)' : 'none',
-            }}/>
-          );
-        })}
-      </div>
-
-
-      {/* Live transcript / AI response text */}
-      <div style={{
-        fontFamily: 'Geist, sans-serif',
-        fontSize: 17,
-        fontWeight: 500,
-        color: 'var(--text1, #e8e8f8)',
-        textAlign: 'center',
-        maxWidth: 480,
-        lineHeight: 1.6,
-        minHeight: 56,
-        animation: 'vmFadeUp .2s ease',
-      }}>
-        {isListening && (
-          <span style={{ color: '#c4b5fd' }}>
-            {transcript || 'Listening…'}
-          </span>
-        )}
-        {!isListening && isSpeaking && (
-          <span style={{ color: 'var(--text2, #9090b0)' }}>
-            {aiText || 'Thinking…'}
-          </span>
-        )}
-        {!isListening && !isSpeaking && (
-          <span style={{ color: 'var(--text3, #5a5a7a)', fontSize: 15 }}>
-            Tap the mic to speak
-          </span>
-        )}
-      </div>
-
-      {/* Status label */}
-      <div style={{
-        fontSize: 11,
-        fontFamily: 'JetBrains Mono, monospace',
-        letterSpacing: '.1em',
-        textTransform: 'uppercase',
-        color: isListening ? '#e040fb' : isSpeaking ? '#29b6f6' : 'var(--text4,#555575)',
-      }}>
-        {isListening ? '● Listening' : isSpeaking ? '● Speaking' : 'Idle'}
-      </div>
-
-      {/* Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <button
-  onClick={onClose}
-  style={{
-    width: 46, height: 46, borderRadius: '50%',
-    background: 'var(--bg3, #16162a)',
-    border: '1px solid var(--border2, #2a2a4a)',
-    color: 'var(--text2, #9090b0)',
-    cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  }}
-  aria-label="Close voice mode"
->
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-        <button
-          onClick={onToggleListen}
-          disabled={isSpeaking}
-          style={{
-            width: 60, height: 60, borderRadius: '50%',
-            background: isListening
-              ? 'linear-gradient(135deg,#ef4444,#f97316)'
-              : 'linear-gradient(135deg,#7c4dff,#29b6f6)',
-            border: 'none', color: 'white',
-            cursor: isSpeaking ? 'not-allowed' : 'pointer',
-            opacity: isSpeaking ? 0.4 : 1,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 24px rgba(124,77,255,.4)',
-            transition: 'all .15s',
-          }}
-          aria-label={isListening ? 'Stop' : 'Speak'}
-        >
-          {isListening ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-              <path d="M19 10v2a7 7 0 01-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-            </svg>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-};
-
   const [input, setInput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -2125,13 +1996,6 @@ export default function VortisAI() {
   const [savedChats, setSavedChats] = useState([]);
   const [chatId, setChatId] = useState(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
-  const [audioLevels, setAudioLevels] = useState(new Array(28).fill(0.15));
-  const audioCtxRef = useRef(null);
-  const analyserRef = useRef(null);
-  const micStreamRef = useRef(null);
-  const rafRef = useRef(null);
-  const speakQueueRef = useRef([]);
-  const isQueuePlayingRef = useRef(false);
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [copiedUserIdx, setCopiedUserIdx] = useState(null);
   const [toast, setToast] = useState(null);
@@ -2146,11 +2010,6 @@ export default function VortisAI() {
   const [cardExp, setCardExp] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [upiId, setUpiId] = useState('');
-  const [voiceTranscript, setVoiceTranscript] = useState('');
-  const [voiceAIText, setVoiceAIText] = useState('');
-  const [isVoiceSpeaking, setIsVoiceSpeaking] = useState(false);
-  const voiceModeActiveRef = useRef(false);
-  const [showVoiceMode, setShowVoiceMode] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [tier, setTier] = useState('free');
   const [usage, setUsage] = useState({ messages: 0, documents: 0, images: 0, vision: 0 });
@@ -2468,35 +2327,8 @@ export default function VortisAI() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SR) {
         recogRef.current = new SR(); recogRef.current.continuous = false; recogRef.current.interimResults = false; recogRef.current.lang = 'en-IN';
-  recogRef.current.onresult = (e) => {
-  const text = e.results[0][0].transcript;
-  setIsListening(false);
-  stopMicVisualizer();
-  if (voiceModeActiveRef.current) {
-    runVoiceTurn(text);
-  } else {
-    setLastMethod('voice');
-    handleCmdRef.current?.(text);
-  }
-};
-
-recogRef.current.onerror = (e) => {
-  console.log('Speech error:', e.error);
-  setIsListening(false);
-  stopMicVisualizer();
-  // Restart on recoverable errors
-  if (voiceModeActiveRef.current && e.error !== 'not-allowed' && e.error !== 'service-not-allowed') {
-    setTimeout(() => {
-      if (!voiceModeActiveRef.current) return;
-      try { setIsListening(true); recogRef.current.start(); startMicVisualizer(); } catch(_) {}
-    }, 1000);
-  }
-};
-
-recogRef.current.onend = () => {
-  setIsListening(false);
-  stopMicVisualizer();
-};
+        recogRef.current.onresult = e => { setLastMethod('voice'); handleCmdRef.current?.(e.results[0][0].transcript); setIsListening(false); };
+        recogRef.current.onerror = () => setIsListening(false); recogRef.current.onend = () => setIsListening(false);
       }
     };
     init();
@@ -2674,27 +2506,6 @@ const saveChat = useCallback(async (msgsToSave) => {
     saveTimerRef.current = setTimeout(() => { const hasLoading = messages.some(m => m.text === '__IMG_LOADING__'); if (hasLoading) { saveTimerRef.current = setTimeout(() => saveChat(messages), 4000); return; } saveChat(messages); }, 1500);
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
-
- useEffect(() => {
-  if (!showVoiceMode) return;
-  voiceModeActiveRef.current = true;
-  
-  const tryStart = () => {
-    if (!recogRef.current) return;
-    if (isListening) return;
-    try {
-      setIsListening(true);
-      recogRef.current.start();
-      startMicVisualizer();
-    } catch(e) {
-      console.log('mic start error:', e.message);
-      setIsListening(false);
-    }
-  };
-  
-  const t = setTimeout(tryStart, 500);
-  return () => clearTimeout(t);
-}, [showVoiceMode]); // eslint-disable-line
 
  // ── TTS REFS ──
 const ttsCache = useRef(new Map());
@@ -2949,83 +2760,6 @@ const stopSpeaking = useCallback(() => {
   currentAudiosRef.current = [];
   isSpeakingRef.current = false;
 }, []);
-
-const startMicVisualizer = async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    micStreamRef.current = stream;
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    audioCtxRef.current = ctx;
-    const source = ctx.createMediaStreamSource(stream);
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 64;
-    source.connect(analyser);
-    analyserRef.current = analyser;
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    const tick = () => {
-      analyser.getByteFrequencyData(data);
-      const levels = Array.from({ length: 28 }, (_, i) => {
-        const v = data[Math.floor((i / 28) * data.length)] / 255;
-        return Math.max(0.15, v);
-      });
-      setAudioLevels(levels);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    tick();
-  } catch (e) { console.error('Mic visualizer failed:', e); }
-};
-
-const stopMicVisualizer = () => {
-  if (rafRef.current) cancelAnimationFrame(rafRef.current);
-  micStreamRef.current?.getTracks().forEach(t => t.stop());
-  audioCtxRef.current?.close();
-  audioCtxRef.current = null;
-  micStreamRef.current = null;
-  setAudioLevels(new Array(28).fill(0.15));
-};
-
-const stopVoiceQueue = () => {
-  speakQueueRef.current = [];
-  isQueuePlayingRef.current = false;
-  currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
-  currentAudiosRef.current = [];
-};
-
-const enqueueSpeak = (text) => {
-  speakQueueRef.current.push(text);
-  playVoiceQueue();
-};
-
-const playVoiceQueue = async () => {
-  if (isQueuePlayingRef.current) return;
-  isQueuePlayingRef.current = true;
-  while (speakQueueRef.current.length > 0) {
-    const text = speakQueueRef.current.shift();
-    const clean = cleanForTTS(text);
-    if (!clean || clean.length < 2) continue;
-    try {
-      const gender = ttsGenderRef.current;
-      const voice = detectLangVoice(clean, gender);
-      const headers = await getCachedAuthHeader();
-      const res = await fetch(API, {
-        method: 'POST', headers,
-        body: JSON.stringify({ action: 'tts', text: clean, voice })
-      });
-      if (!res.ok) continue;
-      const { audio } = await res.json();
-      if (!audio) continue;
-      const src = `data:audio/mp3;base64,${audio}`;
-      await new Promise((resolve) => {
-        const a = new Audio(src);
-        currentAudiosRef.current = [a];
-        a.onended = resolve;
-        a.onerror = resolve;
-        a.play().catch(resolve);
-      });
-    } catch(_) {}
-  }
-  isQueuePlayingRef.current = false;
-};
 
 const speakText = useCallback(async (t) => {
   if (isSpeakingRef.current) { stopSpeaking(); return; }
@@ -3496,113 +3230,6 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     }
   };
 
- const runVoiceTurn = async (userText) => {
-  if (!userText?.trim()) return;
-  
-  setVoiceTranscript(userText);
-  setVoiceAIText('Thinking…');
-  setIsVoiceSpeaking(true);
-  setIsListening(false);
-  
-  pushHistory(convHistory, 'user', userText);
-  
-  let full = '';
-  try {
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({
-        action: 'chat',
-        prompt: 'Respond conversationally and briefly — 1-3 sentences max.',
-        history: convHistory.current
-      })
-    });
-    
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of dec.decode(value).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try {
-          const p = JSON.parse(raw);
-          if (p.content) { full += p.content; setVoiceAIText(full); }
-        } catch(_) {}
-      }
-    }
-    
-    pushHistory(convHistory, 'assistant', full.trim());
-    
-    if (full.trim() && voiceModeActiveRef.current) {
-      // Force reset speaking state before TTS
-      isSpeakingRef.current = false;
-      currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
-      currentAudiosRef.current = [];
-      
-      // Fetch and play TTS directly
-      try {
-        const gender = ttsGenderRef.current;
-        const clean = cleanForTTS(full.trim());
-        const voice = detectLangVoice(clean, gender);
-        
-        const headers = await getCachedAuthHeader();
-        const ttsRes = await fetch(API, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ action: 'tts', text: clean.slice(0, 500), voice })
-        });
-        
-        if (ttsRes.ok) {
-          const { audio } = await ttsRes.json();
-          if (audio && voiceModeActiveRef.current) {
-            await new Promise((resolve) => {
-              const a = new Audio(`data:audio/mp3;base64,${audio}`);
-              currentAudiosRef.current = [a];
-              a.onended = resolve;
-              a.onerror = resolve;
-              a.play().catch(resolve);
-            });
-          }
-        }
-      } catch(e) {
-        console.log('TTS error:', e.message);
-      }
-    }
-    
-  } catch(e) {
-    console.log('Voice turn error:', e.message);
-    setVoiceAIText('Something went wrong.');
-  } finally {
-     recogRef.current?.stop();
-  stopSpeaking();
-  stopVoiceQueue();
-  stopMicVisualizer();
-  setIsListening(false);
-  setIsVoiceSpeaking(false);
-  setVoiceTranscript('');
-  setVoiceAIText('');
-  voiceModeActiveRef.current = true;
-  setShowVoiceMode(true);
-    
-    // Restart mic if still in voice mode
-    if (voiceModeActiveRef.current && recogRef.current) {
-      setTimeout(() => {
-        if (!voiceModeActiveRef.current) return;
-        try {
-          setIsListening(true);
-          recogRef.current.start();
-          startMicVisualizer();
-        } catch(e) {
-          setIsListening(false);
-        }
-      }, 500);
-    }
-  }
-};
   // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
@@ -4362,35 +3989,8 @@ onChange={e => {
                     className={`mic-btn ${isListening ? 'listening' : ''}`}
                     onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else if (recogRef.current) { setIsListening(true); recogRef.current.start(); } }}
                     disabled={isProcessing && !isListening}
-                    style={{ width: 38, height: 38 }}
                   >
-                    {isListening ? <MicOff size={18}/> : <Mic size={18}/>}
-                  </button>
-                  <button
-                    className="mic-btn"
-                    onClick={() => {
-  stopSpeaking();
-  voiceModeActiveRef.current = true;
-  setShowVoiceMode(true);
-}}
-                    aria-label="Voice mode"
-                    style={{ width: 38, height: 38 }}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 60 60">
-                      <defs>
-                        <linearGradient id="swGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                          <stop offset="0%" stopColor="#e040fb" />
-                          <stop offset="55%" stopColor="#7c4dff" />
-                          <stop offset="100%" stopColor="#29b6f6" />
-                        </linearGradient>
-                      </defs>
-                      <rect x="4" y="20" width="5" height="20" rx="2.5" fill="url(#swGrad)" />
-                      <rect x="14" y="12" width="5" height="36" rx="2.5" fill="url(#swGrad)" />
-                      <rect x="24" y="2" width="5" height="56" rx="2.5" fill="url(#swGrad)" />
-                      <rect x="34" y="14" width="5" height="32" rx="2.5" fill="url(#swGrad)" />
-                      <rect x="44" y="6" width="5" height="48" rx="2.5" fill="url(#swGrad)" />
-                      <rect x="54" y="18" width="5" height="24" rx="2.5" fill="url(#swGrad)" />
-                    </svg>
+                    {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
                   </button>
                   <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
                     {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
@@ -4401,6 +4001,7 @@ onChange={e => {
           </div>
         </div>
       </div>
+
       {showSettings && (
   <SettingsModal
     profile={profile} tier={tier} usage={usage} LIMITS={LIMITS}
@@ -4581,20 +4182,6 @@ onChange={e => {
         </div>
       )}
        <Analytics />
-       <VoiceModeOverlay
-  isOpen={showVoiceMode}
-  onClose={() => { voiceModeActiveRef.current = false; setShowVoiceMode(false); recogRef.current?.stop(); setIsListening(false); stopVoiceQueue(); stopMicVisualizer(); }}
-  isListening={isListening}
-  isSpeaking={isVoiceSpeaking}
-  onToggleListen={() => {
-    if (isListening) { recogRef.current?.stop(); setIsListening(false); stopMicVisualizer(); }
-    else if (recogRef.current) { setIsListening(true); recogRef.current.start(); startMicVisualizer(); }
-  }}
-  transcript={voiceTranscript}
-  aiText={voiceAIText}
-  audioLevels={audioLevels}
-/>
     </div>
   );
 }
-
