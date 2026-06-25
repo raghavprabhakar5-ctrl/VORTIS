@@ -7,7 +7,6 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
-import { createPortal } from 'react-dom';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -2914,28 +2913,27 @@ const addMsg = (type, text, speak = false) => {
 // ═══════════════════════════════════════════════════
 
 const startVoiceCall = () => {
-  console.log('1. startVoiceCall called, showVoiceCall was:', showVoiceCall);
-  
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
 
+  // ✅ KILL any ongoing speech/TTS from chat before starting voice call
   stopSpeaking();
   isSpeakingRef.current = false;
   currentAudiosRef.current = [];
   ttsPending.current.clear();
-  setIsProcessing(false);
-  setIsStreaming(false);
-  setStreamText('');
-  setProcessingStatus('');
-  clearTimeout(aiTimeoutRef.current);
+  setIsProcessing(false);        // ← ADD THIS
+  setIsStreaming(false);          // ← ADD THIS
+  setStreamText('');              // ← ADD THIS
+  setProcessingStatus('');        // ← ADD THIS
+  clearTimeout(aiTimeoutRef.current);  // ← ADD THIS
+  // ✅ Also stop any pending TTS preloads
+  ttsPending.current.clear();
 
   setShowVoiceCall(true);
-  console.log('2. setShowVoiceCall(true) called');
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
   setTimeout(() => {
-    console.log('3. setTimeout fired, running runCallListenLoop');
     try { runCallListenLoop(); } catch (e) {
       console.error('Initial start failed:', e);
     }
@@ -3442,7 +3440,7 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
       if (genMatch) { const imagePrompt = genMatch[1].trim(); if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Generating image: ${imagePrompt}]` }; try { await runImageGeneration(imagePrompt, imgGenStyle); } catch(_) { imgGenLock.current = false; } finally { setIsProcessing(false); } return; }
 
       const searchMatch = cleaned.match(/WEB_SEARCH:\s*(.+?)(?:\n|$)/);
-      if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim());setIsProcessing(false); return; }
+      if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
    
@@ -4042,7 +4040,7 @@ return (
           </>
         )}
 
-     {showVoiceCall && createPortal(
+      {showVoiceCall && (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
     background: 'radial-gradient(ellipse at 50% 30%, #1a1040 0%, #0c0820 40%, #050510 100%)',
@@ -4276,8 +4274,7 @@ return (
     }}>
       {callPaused ? 'Tap play to resume' : 'Pause  ·  End call'}
     </p>
-  </div>,
-   document.body
+  </div>
 )}
         {isIncognito && (
           <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
