@@ -4126,7 +4126,7 @@ onChange={e => {
                   </button>
                   <button
                     className="mic-btn"
-                    onClick={() => { /* hook this up to your voice-mode action */ }}
+                    onClick={() => setShowVoiceMode(true)}
                     aria-label="Voice mode"
                     style={{ width: 38, height: 38 }}
                   >
@@ -4335,6 +4335,16 @@ onChange={e => {
         </div>
       )}
        <Analytics />
+       <VoiceModeOverlay
+  isOpen={showVoiceMode}
+  onClose={() => { setShowVoiceMode(false); recogRef.current?.stop(); setIsListening(false); }}
+  isListening={isListening}
+  onToggleListen={() => {
+    if (isListening) { recogRef.current?.stop(); setIsListening(false); }
+    else if (recogRef.current) { setIsListening(true); recogRef.current.start(); }
+  }}
+  transcript={input}
+/>
     </div>
   );
 }
