@@ -2666,18 +2666,21 @@ const saveChat = useCallback(async (msgsToSave) => {
   }, [messages, profile.email, saveChat]);
 
  useEffect(() => {
-  if (!showVoiceMode) return;
+  if (!showVoiceMode) {
+    voiceModeActiveRef.current = false;
+    return;
+  }
+  voiceModeActiveRef.current = true;
   const timer = setTimeout(() => {
-    if (voiceModeActiveRef.current && recogRef.current && !isListening) {
-      try {
-        setIsListening(true);
-        recogRef.current.start();
-        startMicVisualizer();
-      } catch(e) {
-        setIsListening(false);
-      }
+    if (!recogRef.current) return;
+    try {
+      setIsListening(true);
+      recogRef.current.start();
+      startMicVisualizer();
+    } catch(e) {
+      setIsListening(false);
     }
-  }, 600);
+  }, 300); // reduced from 600
   return () => clearTimeout(timer);
 }, [showVoiceMode]);
 
@@ -3522,8 +3525,9 @@ addMsg('vortis', finalDisplay, shouldSpeak);
 
     // Speak the full response and WAIT for it to finish
     if (full.trim()) {
-      await speakText(full.trim());
-    }
+  isSpeakingRef.current = false; // reset before speaking
+  await speakText(full.trim());
+}
   } catch(e) {
     setVoiceAIText('Sorry, something went wrong.');
     await speakText('Sorry, something went wrong.');
