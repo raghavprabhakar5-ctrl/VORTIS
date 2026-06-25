@@ -3989,41 +3989,41 @@ onChange={e => {
                     className={`mic-btn ${isListening ? 'listening' : ''}`}
                     onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else if (recogRef.current) { setIsListening(true); recogRef.current.start(); } }}
                     disabled={isProcessing && !isListening}
+                    style={{ width: 38, height: 38 }}
                   >
-                    {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
+                    {isListening ? <MicOff size={18}/> : <Mic size={18}/>}
                   </button>
                   <button
-  className="mic-btn"
-  onClick={() => { /* hook this up to whatever voice-mode action you want */ }}
-  aria-label="Voice mode"
->
-  <svg width="14" height="14" viewBox="0 0 60 60">
-    <defs>
-      <linearGradient id="swGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="#e040fb" />
-        <stop offset="55%" stopColor="#7c4dff" />
-        <stop offset="100%" stopColor="#29b6f6" />
-      </linearGradient>
-    </defs>
-    <rect x="4" y="20" width="5" height="20" rx="2.5" fill="url(#swGrad)" />
-    <rect x="14" y="12" width="5" height="36" rx="2.5" fill="url(#swGrad)" />
-    <rect x="24" y="2" width="5" height="56" rx="2.5" fill="url(#swGrad)" />
-    <rect x="34" y="14" width="5" height="32" rx="2.5" fill="url(#swGrad)" />
-    <rect x="44" y="6" width="5" height="48" rx="2.5" fill="url(#swGrad)" />
-    <rect x="54" y="18" width="5" height="24" rx="2.5" fill="url(#swGrad)" />
-  </svg>
-</button>
-
-<button className="send-btn" onClick={handleSend} disabled={isProcessing}>
-  {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
-</button>
+                    className="mic-btn"
+                    onClick={() => { /* hook this up to your voice-mode action */ }}
+                    aria-label="Voice mode"
+                    style={{ width: 38, height: 38 }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 60 60">
+                      <defs>
+                        <linearGradient id="swGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                          <stop offset="0%" stopColor="#e040fb" />
+                          <stop offset="55%" stopColor="#7c4dff" />
+                          <stop offset="100%" stopColor="#29b6f6" />
+                        </linearGradient>
+                      </defs>
+                      <rect x="4" y="20" width="5" height="20" rx="2.5" fill="url(#swGrad)" />
+                      <rect x="14" y="12" width="5" height="36" rx="2.5" fill="url(#swGrad)" />
+                      <rect x="24" y="2" width="5" height="56" rx="2.5" fill="url(#swGrad)" />
+                      <rect x="34" y="14" width="5" height="32" rx="2.5" fill="url(#swGrad)" />
+                      <rect x="44" y="6" width="5" height="48" rx="2.5" fill="url(#swGrad)" />
+                      <rect x="54" y="18" width="5" height="24" rx="2.5" fill="url(#swGrad)" />
+                    </svg>
+                  </button>
+                  <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
+                    {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-
       {showSettings && (
   <SettingsModal
     profile={profile} tier={tier} usage={usage} LIMITS={LIMITS}
