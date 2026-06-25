@@ -3903,23 +3903,16 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
 
-    {/* Ambient glow orbs - background decoration */}
+    {/* Ambient glow */}
     <div style={{
       position: 'absolute', top: '18%', left: '50%', transform: 'translateX(-50%)',
       width: 500, height: 500, borderRadius: '50%',
       background: 'radial-gradient(circle, rgba(99,102,241,.12) 0%, transparent 70%)',
       pointerEvents: 'none',
-      animation: callState !== 'idle' ? 'glowBreath 3s ease-in-out infinite' : 'none',
-      transition: 'opacity .5s'
-    }}/>
-    <div style={{
-      position: 'absolute', top: '22%', left: '50%', transform: 'translateX(-50%)',
-      width: 350, height: 350, borderRadius: '50%',
-      background: 'radial-gradient(circle, rgba(139,92,246,.1) 0%, transparent 70%)',
-      pointerEvents: 'none'
+      animation: callState !== 'idle' ? 'glowBreath 3s ease-in-out infinite' : 'none'
     }}/>
 
-    {/* Outer glow ring 1 */}
+    {/* Glow rings */}
     <div style={{
       position: 'absolute', width: 280, height: 280, borderRadius: '50%',
       border: '1.5px solid rgba(139,92,246,.15)',
@@ -3930,18 +3923,14 @@ return (
         : 'ringPulse 3.5s ease-in-out infinite',
       pointerEvents: 'none'
     }}/>
-    {/* Outer glow ring 2 */}
     <div style={{
       position: 'absolute', width: 340, height: 340, borderRadius: '50%',
       border: '1px solid rgba(99,102,241,.08)',
       animation: callState === 'speaking'
         ? 'ringPulse2 2s ease-in-out infinite'
-        : callState === 'listening'
-        ? 'ringPulse2 2.8s ease-in-out infinite'
-        : 'ringPulse2 4s ease-in-out infinite',
+        : 'ringPulse2 2.8s ease-in-out infinite',
       pointerEvents: 'none'
     }}/>
-    {/* Outer glow ring 3 */}
     <div style={{
       position: 'absolute', width: 400, height: 400, borderRadius: '50%',
       border: '0.5px solid rgba(99,102,241,.04)',
@@ -3951,7 +3940,7 @@ return (
       pointerEvents: 'none'
     }}/>
 
-    {/* Central orb container */}
+    {/* Central orb */}
     <div style={{
       width: 200, height: 200, borderRadius: '50%',
       background: callState === 'thinking'
@@ -3977,9 +3966,8 @@ return (
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         gap: 3, height: 80, overflow: 'hidden'
       }}>
-        {[...Array(28)].map((_, i) => {
+        {Array.from({ length: 28 }, (_, i) => {
           const centerDist = Math.abs(i - 13.5) / 13.5;
-          const baseH = (1 - centerDist * 0.6);
           const delay = (i * 0.04).toFixed(2);
           const animName = callState === 'speaking'
             ? 'barSpeak'
@@ -3996,12 +3984,14 @@ return (
             ? '1.2'
             : '2.5';
           const barOpacity = callState === 'thinking' ? 0.5 : callState === 'idle' ? 0.35 : 0.9;
+          const bright = (0.5 + (1 - centerDist * 0.6) * 0.5).toFixed(2);
+          const dim = (0.2 + (1 - centerDist * 0.6) * 0.3).toFixed(2);
 
           return (
             <div key={i} style={{
               width: 3, height: '100%',
               borderRadius: 2,
-              background: `linear-gradient(to top, rgba(255,255,255,${(0.5 + baseH * 0.5).toFixed(2)}), rgba(255,255,255,${(0.2 + baseH * 0.3).toFixed(2)}))`,
+              background: `linear-gradient(to top, rgba(255,255,255,${bright}), rgba(255,255,255,${dim}))`,
               transformOrigin: 'center',
               transform: 'scaleY(0.25)',
               animation: `${animName} ${duration}s ease-in-out infinite`,
@@ -4013,7 +4003,7 @@ return (
         })}
       </div>
 
-      {/* Thinking spinner overlay */}
+      {/* Thinking spinner */}
       {callState === 'thinking' && (
         <div style={{
           position: 'absolute', inset: 0, borderRadius: '50%',
@@ -4021,8 +4011,8 @@ return (
           background: 'rgba(67,56,160,.4)',
           animation: 'overlayIn .2s ease'
         }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)"
-            strokeWidth="2.5" strokeLinecap="round"
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+            stroke="rgba(255,255,255,.8)" strokeWidth="2.5" strokeLinecap="round"
             style={{ animation: 'spin 1s linear infinite' }}>
             <path d="M12 2a10 10 0 0 1 10 10"/>
           </svg>
@@ -4030,7 +4020,7 @@ return (
       )}
     </div>
 
-    {/* State label */}
+    {/* State label + dots */}
     <div style={{
       marginTop: 32, display: 'flex', alignItems: 'center', gap: 8,
       animation: 'fadeUp .4s ease'
@@ -4052,7 +4042,7 @@ return (
             <span key={d} style={{
               width: 4, height: 4, borderRadius: '50%',
               background: 'rgba(196,181,253,.6)',
-              animation: `dotPulse 1.4s ease-in-out infinite`,
+              animation: 'dotPulse 1.4s ease-in-out infinite',
               animationDelay: `${d * 0.2}s`
             }}/>
           ))}
@@ -4060,26 +4050,12 @@ return (
       )}
     </div>
 
-    {/* Call timer */}
-    {callState !== 'idle' && (
-      <p style={{
-        marginTop: 8, color: 'rgba(255,255,255,.3)',
-        fontFamily: "'JetBrains Mono','SF Mono',monospace",
-        fontSize: 12, letterSpacing: '.1em', margin: 0,
-        animation: 'fadeUp .5s ease .1s both'
-      }}>
-        {/* Replace with real timer: `${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}` */}
-        {callTimer ?? '0:00'}
-      </p>
-    )}
-
-    {/* Controls row */}
+    {/* Controls */}
     <div style={{
       display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
       animation: 'fadeUp .5s ease .2s both'
     }}>
-
-      {/* Pause / Resume button */}
+      {/* Pause / Resume */}
       <button
         onClick={() => {
           if (callPaused) {
@@ -4096,23 +4072,11 @@ return (
         style={{
           width: 58, height: 58, borderRadius: '50%',
           background: 'rgba(255,255,255,.08)',
-          backdropFilter: 'blur(10px)',
           border: '1.5px solid rgba(255,255,255,.18)',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 4px 24px rgba(0,0,0,.25)',
-          transition: 'all .25s cubic-bezier(.4,0,.2,1)',
-          outline: 'none'
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.background = 'rgba(255,255,255,.14)';
-          e.currentTarget.style.transform = 'scale(1.08)';
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,.3)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = 'rgba(255,255,255,.08)';
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,.18)';
+          transition: 'all .25s cubic-bezier(.4,0,.2,1)'
         }}
         title={callPaused ? 'Resume' : 'Pause'}
       >
@@ -4122,7 +4086,7 @@ return (
         }
       </button>
 
-      {/* End call button */}
+      {/* End call */}
       <button
         onClick={endVoiceCall}
         style={{
@@ -4132,27 +4096,18 @@ return (
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 8px 30px rgba(239,68,68,.45)',
           transition: 'all .25s cubic-bezier(.4,0,.2,1)',
-          animation: callState === 'speaking' ? 'endBtnPulse 2s ease-in-out infinite' : 'none',
-          outline: 'none'
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'scale(1.08)';
-          e.currentTarget.style.boxShadow = '0 8px 40px rgba(239,68,68,.65)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.boxShadow = '0 8px 30px rgba(239,68,68,.45)';
+          animation: callState === 'speaking' ? 'endBtnPulse 2s ease-in-out infinite' : 'none'
         }}
         title="End call"
       >
-        <X size={28} color="white" strokeWidth={2.5}/>
+        <X size={28} color="white"/>
       </button>
 
-      {/* Mute placeholder (visual balance) */}
+      {/* Spacer for balance */}
       <div style={{ width: 58, height: 58 }}/>
     </div>
 
-    {/* Hint text */}
+    {/* Hint */}
     <p style={{
       marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
       fontFamily: "'Inter',system-ui,sans-serif", letterSpacing: '.04em',
