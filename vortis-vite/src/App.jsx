@@ -2033,6 +2033,7 @@ export default function VortisAI() {
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
   const callActiveRef = useRef(false);
+  const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -2920,6 +2921,7 @@ const endVoiceCall = () => {
   callRecogRef.current?.stop();
   stopSpeaking();
   setCallState('idle');
+  setCallPaused(false);
   setShowVoiceCall(false);
 };
 
@@ -3879,7 +3881,7 @@ return (
           </>
         )}
 
-        {showVoiceCall && (
+       {showVoiceCall && (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
     background: 'radial-gradient(circle at 50% 35%, #1a1030 0%, #07050f 70%)',
@@ -3888,7 +3890,6 @@ return (
   }}>
     <style>{`
       @keyframes orbPulse{0%,100%{transform:scale(1);box-shadow:0 0 60px rgba(139,92,246,.4)}50%{transform:scale(1.08);box-shadow:0 0 100px rgba(139,92,246,.7)}}
-      @keyframes orbSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
       @keyframes orbListen{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
     `}</style>
 
@@ -3916,23 +3917,70 @@ return (
       {callState === 'listening' && 'Listening…'}
       {callState === 'thinking'  && 'Thinking…'}
       {callState === 'speaking'  && 'Speaking…'}
-      {callState === 'idle'      && 'Connecting…'}
+      {callState === 'idle'      && (callPaused ? 'Paused' : 'Connecting…')}
     </p>
 
-    <button
-      onClick={endVoiceCall}
-      style={{
-        marginTop: 50, width: 60, height: 60, borderRadius: '50%',
-        background: '#ef4444', border: 'none', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 8px 30px rgba(239,68,68,.45)'
-      }}
-    >
-      <X size={26} color="white"/>
-    </button>
+    {/* Stop + Resume/Pause row */}
+    <div style={{ display: 'flex', gap: 20, marginTop: 50, alignItems: 'center' }}>
+
+      {/* Pause / Resume button */}
+      <button
+        onClick={() => {
+          if (callPaused) {
+            // Resume
+            setCallPaused(false);
+            callActiveRef.current = true;
+            runCallListenLoop();
+          } else {
+            // Pause
+            setCallPaused(true);
+            callRecogRef.current?.stop();
+            stopSpeaking();
+            setCallState('idle');
+          }
+        }}
+        style={{
+          width: 56, height: 56, borderRadius: '50%',
+          background: 'rgba(255,255,255,.12)',
+          border: '2px solid rgba(255,255,255,.25)',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 20px rgba(0,0,0,.3)',
+          transition: 'all .2s'
+        }}
+        title={callPaused ? 'Resume' : 'Pause'}
+      >
+        {callPaused
+          ? /* Play icon */
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
+          : /* Pause icon */
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        }
+      </button>
+
+      {/* End call (red X) */}
+      <button
+        onClick={endVoiceCall}
+        style={{
+          width: 64, height: 64, borderRadius: '50%',
+          background: '#ef4444', border: 'none', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 8px 30px rgba(239,68,68,.45)'
+        }}
+        title="End call"
+      >
+        <X size={28} color="white"/>
+      </button>
+    </div>
+
+    <p style={{
+      marginTop: 16, fontSize: 11, color: 'rgba(255,255,255,.3)',
+      fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em'
+    }}>
+      {callPaused ? 'TAP ▶ TO RESUME' : 'TAP ⏸ TO PAUSE  ·  TAP ✕ TO END'}
+    </p>
   </div>
 )}
-
         {isIncognito && (
           <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,.12)', border: '1px solid rgba(139,92,246,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
