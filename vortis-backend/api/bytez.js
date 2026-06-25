@@ -478,7 +478,7 @@ export default async function handler(req, res) {
         throw new Error('Empty buffer');
       } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
 
-      return res.status(200).json({ audio: '' });
+      return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
     }
 
     // ╔══════════════════════════════════════╗

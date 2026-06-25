@@ -2764,39 +2764,39 @@ const stopSpeaking = useCallback(() => {
 const speakText = useCallback(async (t) => {
   if (isSpeakingRef.current) { stopSpeaking(); return; }
   isSpeakingRef.current = true;
+
+  // Create + unlock audio element SYNCHRONOUSLY inside the click gesture,
+  // before any await — required for mobile autoplay policies.
+  const audioEl = new Audio();
+  audioEl.muted = true;
+  audioEl.play().catch(() => {});
+  currentAudiosRef.current = [audioEl];
+
+  const playSrc = (src) => new Promise((resolve) => {
+    audioEl.muted = false;
+    audioEl.src = src;
+    audioEl.onended = resolve;
+    audioEl.onerror = resolve;
+    audioEl.play().catch((e) => { console.warn('TTS play blocked:', e); resolve(); });
+  });
+
   try {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
-    if (!clean || clean.length < 3) { isSpeakingRef.current = false; return; }
+    if (!clean || clean.length < 3) return;
 
     const voice = detectLangVoice(clean, gender);
     const cacheKey = `${gender}_${clean}`;
 
     const cached = ttsCache.current.get(cacheKey);
-    if (cached) {
-      const audio = new Audio(cached);
-      currentAudiosRef.current = [audio];
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
-      return;
-    }
+    if (cached) { await playSrc(cached); return; }
 
     const pending = ttsPending.current.get(cacheKey);
     if (pending) {
       const src = await pending;
       if (!isSpeakingRef.current) return;
-      if (src) {
-        const audio = new Audio(src);
-        currentAudiosRef.current = [audio];
-        await new Promise((resolve) => {
-          audio.onended = resolve;
-          audio.onerror = resolve;
-          audio.play().catch(resolve);
-        });
-      }
+      if (src) await playSrc(src);
+      else showToast("Couldn't generate speech — try again", 'var(--red)');
       return;
     }
 
@@ -2816,19 +2816,13 @@ const speakText = useCallback(async (t) => {
 
     if (clean.length <= MAX) {
       const src = await fetchChunk(clean);
-      if (!isSpeakingRef.current || !src) return;
+      if (!isSpeakingRef.current) return;
+      if (!src) { showToast("Couldn't generate speech — try again", 'var(--red)'); return; }
       ttsCache.current.set(cacheKey, src);
-      const audio = new Audio(src);
-      currentAudiosRef.current = [audio];
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
+      await playSrc(src);
       return;
     }
 
-    // ── Long text: chunk by sentences and pipeline ──
     const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
     let cur = '';
@@ -2839,27 +2833,24 @@ const speakText = useCallback(async (t) => {
     if (cur.trim()) chunks.push(cur.trim());
 
     let nextFetch = fetchChunk(chunks[0]);
+    let anyPlayed = false;
     for (let i = 0; i < chunks.length; i++) {
       if (!isSpeakingRef.current) return;
       const srcPromise = nextFetch;
       if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
       const src = await srcPromise;
-      if (!isSpeakingRef.current || !src) continue;
-      await new Promise((resolve) => {
-        const audio = new Audio(src);
-        currentAudiosRef.current = [audio];
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
+      if (!isSpeakingRef.current) return;
+      if (src) { anyPlayed = true; await playSrc(src); }
     }
-  } catch(_) {}
-  finally {
+    if (!anyPlayed) showToast("Couldn't generate speech — try again", 'var(--red)');
+  } catch (e) {
+    console.error('speakText error:', e);
+    showToast("Couldn't generate speech — try again", 'var(--red)');
+  } finally {
     isSpeakingRef.current = false;
     currentAudiosRef.current = [];
   }
 }, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
-
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
   const msg = { id: Date.now() + Math.random(), type, text };
