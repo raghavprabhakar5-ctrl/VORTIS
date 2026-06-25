@@ -2909,11 +2909,12 @@ const addMsg = (type, text, speak = false) => {
 };
 
 const startVoiceCall = () => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
   setShowVoiceCall(true);
+  setCallState('idle');
+  setCallPaused(false);
   callActiveRef.current = true;
-  runCallListenLoop();
+  // Small delay so overlay renders first, THEN start recognition
+  setTimeout(() => runCallListenLoop(), 100);
 };
 
 const endVoiceCall = () => {
