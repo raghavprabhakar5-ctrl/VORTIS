@@ -9,6 +9,7 @@ export const config = {
 
 import admin from 'firebase-admin';
 import Groq from 'groq-sdk';
+import { MsEdgeTTS } from 'edge-tts-universal';
 
 if (!admin.apps.length) {
   admin.initializeApp({
