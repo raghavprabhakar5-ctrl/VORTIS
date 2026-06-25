@@ -1977,63 +1977,25 @@ export default function VortisAI() {
   return () => window.removeEventListener('beforeunload', handleBeforeUnload);
 }, [messages]);
 
-const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleListen, transcript, aiText }) => {
+ const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleListen, transcript, aiText, audioLevels }) => {
   if (!isOpen) return null;
-
-  // 24 bars, each gets a random-ish but smooth animation delay/duration
   const bars = Array.from({ length: 28 }, (_, i) => i);
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 300,
-      background: 'rgba(8,8,16,.96)',
-      backdropFilter: 'blur(20px)',
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      gap: 32,
-      animation: 'overlayIn .2s ease',
-      padding: '0 24px',
-    }}>
+    <div style={{ /* unchanged */ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(8,8,16,.96)', backdropFilter: 'blur(20px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, animation: 'overlayIn .2s ease', padding: '0 24px' }}>
       <style>{`
-        @keyframes vmBarIdle{
-          0%,100%{ transform:scaleY(0.25); opacity:.35; }
-          50%{ transform:scaleY(0.45); opacity:.55; }
-        }
-        @keyframes vmBarTalk{
-          0%{ transform:scaleY(0.2); }
-          25%{ transform:scaleY(1); }
-          50%{ transform:scaleY(0.35); }
-          75%{ transform:scaleY(0.85); }
-          100%{ transform:scaleY(0.2); }
-        }
-        @keyframes vmBarAI{
-          0%,100%{ transform:scaleY(0.3); }
-          50%{ transform:scaleY(1); }
-        }
-        @keyframes vmFadeUp{
-          from{ opacity:0; transform:translateY(6px); }
-          to{ opacity:1; transform:translateY(0); }
-        }
+        @keyframes vmBarIdle{0%,100%{ transform:scaleY(0.25); opacity:.35; }50%{ transform:scaleY(0.45); opacity:.55; }}
+        @keyframes vmBarAI{0%,100%{ transform:scaleY(0.3); }50%{ transform:scaleY(1); }}
+        @keyframes vmFadeUp{from{ opacity:0; transform:translateY(6px); }to{ opacity:1; transform:translateY(0); }}
       `}</style>
 
-      {/* Sound wave visualizer */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 4,
-        height: 140,
-        width: '100%',
-        maxWidth: 420,
-      }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, height: 140, width: '100%', maxWidth: 420 }}>
         {bars.map(i => {
-          const baseHeight = 14 + (Math.sin(i * 0.7) + 1) * 30; // varied bar heights
-          const animName = isListening ? 'vmBarTalk' : isSpeaking ? 'vmBarAI' : 'vmBarIdle';
-          const duration = isListening
-            ? `${0.5 + (i % 5) * 0.08}s`
-            : isSpeaking
-              ? `${0.6 + (i % 6) * 0.09}s`
-              : `${2.2 + (i % 4) * 0.3}s`;
+          const level = audioLevels?.[i] ?? 0.15;
+          const idleHeight = 14 + (Math.sin(i * 0.7) + 1) * 30;
+          const height = isListening ? 14 + level * 110 : isSpeaking ? idleHeight * 1.4 : idleHeight;
+          const animName = isSpeaking ? 'vmBarAI' : (!isListening ? 'vmBarIdle' : null);
+          const duration = isSpeaking ? `${0.6 + (i % 6) * 0.09}s` : '2.2s';
           const delay = `${(i % 7) * 0.06}s`;
           const color = isListening
             ? 'linear-gradient(180deg,#e040fb,#7c4dff)'
@@ -2041,23 +2003,18 @@ const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleLi
               ? 'linear-gradient(180deg,#29b6f6,#7c4dff)'
               : 'linear-gradient(180deg,#6366f1,#4338ca)';
           return (
-            <div
-              key={i}
-              style={{
-                width: 5,
-                height: baseHeight,
-                borderRadius: 4,
-                background: color,
-                transformOrigin: 'center',
-                animation: `${animName} ${duration} ease-in-out infinite`,
-                animationDelay: delay,
-                boxShadow: (isListening || isSpeaking) ? '0 0 10px rgba(139,92,246,.5)' : 'none',
-                transition: 'background .3s',
-              }}
-            />
+            <div key={i} style={{
+              width: 5, height, borderRadius: 4, background: color,
+              transformOrigin: 'center',
+              animation: animName ? `${animName} ${duration} ease-in-out infinite` : 'none',
+              animationDelay: delay,
+              transition: isListening ? 'height .08s linear' : 'height .3s ease',
+              boxShadow: (isListening || isSpeaking) ? '0 0 10px rgba(139,92,246,.5)' : 'none',
+            }}/>
           );
         })}
       </div>
+
 
       {/* Live transcript / AI response text */}
       <div style={{
@@ -2102,7 +2059,7 @@ const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleLi
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button
-  onClick={onClose}
+  onClick={onToggleListen}
   style={{
     width: 46, height: 46, borderRadius: '50%',
     background: 'var(--bg3, #16162a)',
@@ -2168,6 +2125,13 @@ const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleLi
   const [savedChats, setSavedChats] = useState([]);
   const [chatId, setChatId] = useState(null);
   const [autoSpeak, setAutoSpeak] = useState(false);
+  const [audioLevels, setAudioLevels] = useState(new Array(28).fill(0.15));
+  const audioCtxRef = useRef(null);
+  const analyserRef = useRef(null);
+  const micStreamRef = useRef(null);
+  const rafRef = useRef(null);
+  const speakQueueRef = useRef([]);
+  const isQueuePlayingRef = useRef(false);
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [copiedUserIdx, setCopiedUserIdx] = useState(null);
   const [toast, setToast] = useState(null);
@@ -2504,9 +2468,10 @@ const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleLi
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SR) {
         recogRef.current = new SR(); recogRef.current.continuous = false; recogRef.current.interimResults = false; recogRef.current.lang = 'en-IN';
-        recogRef.current.onresult = e => {
+       recogRef.current.onresult = e => {
   const text = e.results[0][0].transcript;
   setIsListening(false);
+  stopMicVisualizer();
   if (voiceModeActiveRef.current) {
     runVoiceTurn(text);
   } else {
@@ -2946,6 +2911,83 @@ const stopSpeaking = useCallback(() => {
   currentAudiosRef.current = [];
   isSpeakingRef.current = false;
 }, []);
+
+const startMicVisualizer = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStreamRef.current = stream;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    audioCtxRef.current = ctx;
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 64;
+    source.connect(analyser);
+    analyserRef.current = analyser;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const tick = () => {
+      analyser.getByteFrequencyData(data);
+      const levels = Array.from({ length: 28 }, (_, i) => {
+        const v = data[Math.floor((i / 28) * data.length)] / 255;
+        return Math.max(0.15, v);
+      });
+      setAudioLevels(levels);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e) { console.error('Mic visualizer failed:', e); }
+};
+
+const stopMicVisualizer = () => {
+  if (rafRef.current) cancelAnimationFrame(rafRef.current);
+  micStreamRef.current?.getTracks().forEach(t => t.stop());
+  audioCtxRef.current?.close();
+  audioCtxRef.current = null;
+  micStreamRef.current = null;
+  setAudioLevels(new Array(28).fill(0.15));
+};
+
+const stopVoiceQueue = () => {
+  speakQueueRef.current = [];
+  isQueuePlayingRef.current = false;
+  currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
+  currentAudiosRef.current = [];
+};
+
+const enqueueSpeak = (text) => {
+  speakQueueRef.current.push(text);
+  playVoiceQueue();
+};
+
+const playVoiceQueue = async () => {
+  if (isQueuePlayingRef.current) return;
+  isQueuePlayingRef.current = true;
+  while (speakQueueRef.current.length > 0) {
+    const text = speakQueueRef.current.shift();
+    const clean = cleanForTTS(text);
+    if (!clean || clean.length < 2) continue;
+    try {
+      const gender = ttsGenderRef.current;
+      const voice = detectLangVoice(clean, gender);
+      const headers = await getCachedAuthHeader();
+      const res = await fetch(API, {
+        method: 'POST', headers,
+        body: JSON.stringify({ action: 'tts', text: clean, voice })
+      });
+      if (!res.ok) continue;
+      const { audio } = await res.json();
+      if (!audio) continue;
+      const src = `data:audio/mp3;base64,${audio}`;
+      await new Promise((resolve) => {
+        const a = new Audio(src);
+        currentAudiosRef.current = [a];
+        a.onended = resolve;
+        a.onerror = resolve;
+        a.play().catch(resolve);
+      });
+    } catch(_) {}
+  }
+  isQueuePlayingRef.current = false;
+};
 
 const speakText = useCallback(async (t) => {
   if (isSpeakingRef.current) { stopSpeaking(); return; }
@@ -3416,12 +3458,27 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     }
   };
 
-  const runVoiceTurn = async (userText) => {
+ const runVoiceTurn = async (userText) => {
   if (!userText.trim()) return;
   setVoiceTranscript(userText);
   setIsVoiceSpeaking(true);
   setVoiceAIText('');
   pushHistory(convHistory, 'user', userText);
+
+  let spokenUpTo = 0;
+  const speakNewSentences = (fullSoFar) => {
+    const rest = fullSoFar.slice(spokenUpTo);
+    const matches = rest.match(/[^.!?]+[.!?]+/g);
+    if (!matches) return;
+    let consumed = 0;
+    matches.forEach(s => { consumed += s.length; });
+    if (consumed > 0) {
+      const toSpeak = rest.slice(0, consumed).trim();
+      spokenUpTo += consumed;
+      if (toSpeak) enqueueSpeak(toSpeak);
+    }
+  };
+
   try {
     const res = await fetch(API, {
       method: 'POST',
@@ -3442,18 +3499,34 @@ addMsg('vortis', finalDisplay, shouldSpeak);
         if (!line.startsWith('data: ')) continue;
         const raw = line.slice(6).trim();
         if (raw === '[DONE]' || !raw) continue;
-        try { const p = JSON.parse(raw); if (p.content) { full += p.content; setVoiceAIText(t => t + p.content); } } catch(_) {}
+        try {
+          const p = JSON.parse(raw);
+          if (p.content) {
+            full += p.content;
+            setVoiceAIText(full);
+            speakNewSentences(full);
+          }
+        } catch(_) {}
       }
     }
+    const leftover = full.slice(spokenUpTo).trim();
+    if (leftover) enqueueSpeak(leftover);
     pushHistory(convHistory, 'assistant', full.trim());
-    await speakText(full.trim());
   } catch(_) {
     setVoiceAIText("Sorry, something went wrong.");
   } finally {
+    const waitForQueue = () => new Promise(resolve => {
+      const check = () => {
+        if (!isQueuePlayingRef.current && speakQueueRef.current.length === 0) resolve();
+        else setTimeout(check, 200);
+      };
+      check();
+    });
+    await waitForQueue();
     setIsVoiceSpeaking(false);
     setVoiceAIText('');
     if (voiceModeActiveRef.current && recogRef.current) {
-      setTimeout(() => { setIsListening(true); recogRef.current.start(); }, 300);
+      setTimeout(() => { setIsListening(true); recogRef.current.start(); startMicVisualizer(); }, 300);
     }
   }
 };
@@ -4434,15 +4507,16 @@ onChange={e => {
        <Analytics />
        <VoiceModeOverlay
   isOpen={showVoiceMode}
-  onClose={() => { voiceModeActiveRef.current = false; setShowVoiceMode(false); recogRef.current?.stop(); setIsListening(false); stopSpeaking(); }}
+  onClose={() => { voiceModeActiveRef.current = false; setShowVoiceMode(false); recogRef.current?.stop(); setIsListening(false); stopVoiceQueue(); stopMicVisualizer(); }}
   isListening={isListening}
   isSpeaking={isVoiceSpeaking}
   onToggleListen={() => {
-    if (isListening) { recogRef.current?.stop(); setIsListening(false); }
-    else if (recogRef.current) { setIsListening(true); recogRef.current.start(); }
+    if (isListening) { recogRef.current?.stop(); setIsListening(false); stopMicVisualizer(); }
+    else if (recogRef.current) { setIsListening(true); recogRef.current.start(); startMicVisualizer(); }
   }}
   transcript={voiceTranscript}
   aiText={voiceAIText}
+  audioLevels={audioLevels}
 />
     </div>
   );
