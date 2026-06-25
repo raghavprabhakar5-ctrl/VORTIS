@@ -3881,58 +3881,212 @@ return (
           </>
         )}
 
-       {showVoiceCall && (
+      {showVoiceCall && (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
-    background: 'radial-gradient(circle at 50% 35%, #1a1030 0%, #07050f 70%)',
+    background: 'radial-gradient(ellipse at 50% 30%, #1a1040 0%, #0c0820 40%, #050510 100%)',
     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    animation: 'overlayIn .25s ease'
+    animation: 'overlayIn .3s cubic-bezier(.4,0,.2,1)'
   }}>
     <style>{`
-      @keyframes orbPulse{0%,100%{transform:scale(1);box-shadow:0 0 60px rgba(139,92,246,.4)}50%{transform:scale(1.08);box-shadow:0 0 100px rgba(139,92,246,.7)}}
-      @keyframes orbListen{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+      @keyframes overlayIn{from{opacity:0}to{opacity:1}}
+      @keyframes ringPulse{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(1.15);opacity:.08}}
+      @keyframes ringPulse2{0%,100%{transform:scale(1);opacity:.2}50%{transform:scale(1.22);opacity:.04}}
+      @keyframes barBreathe{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(.4)}}
+      @keyframes barListen{0%,100%{transform:scaleY(.3)}25%{transform:scaleY(.8)}50%{transform:scaleY(.45)}75%{transform:scaleY(.95)}}
+      @keyframes barSpeak{0%,100%{transform:scaleY(.5)}15%{transform:scaleY(1)}30%{transform:scaleY(.6)}45%{transform:scaleY(1)}60%{transform:scaleY(.7)}75%{transform:scaleY(.95)}90%{transform:scaleY(.55)}}
+      @keyframes barThink{0%,100%{transform:scaleY(.2)}50%{transform:scaleY(.35)}}
+      @keyframes dotPulse{0%,80%,100%{opacity:.3}40%{opacity:1}}
+      @keyframes glowBreath{0%,100%{opacity:.5}50%{opacity:.9}}
+      @keyframes endBtnPulse{0%,100%{box-shadow:0 8px 30px rgba(239,68,68,.45)}50%{box-shadow:0 8px 45px rgba(239,68,68,.7)}}
+      @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+      @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
 
+    {/* Ambient glow orbs - background decoration */}
     <div style={{
-      width: 180, height: 180, borderRadius: '50%',
-      background: 'linear-gradient(135deg,#6366f1,#8b5cf6,#a78bfa)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'absolute', top: '18%', left: '50%', transform: 'translateX(-50%)',
+      width: 500, height: 500, borderRadius: '50%',
+      background: 'radial-gradient(circle, rgba(99,102,241,.12) 0%, transparent 70%)',
+      pointerEvents: 'none',
+      animation: callState !== 'idle' ? 'glowBreath 3s ease-in-out infinite' : 'none',
+      transition: 'opacity .5s'
+    }}/>
+    <div style={{
+      position: 'absolute', top: '22%', left: '50%', transform: 'translateX(-50%)',
+      width: 350, height: 350, borderRadius: '50%',
+      background: 'radial-gradient(circle, rgba(139,92,246,.1) 0%, transparent 70%)',
+      pointerEvents: 'none'
+    }}/>
+
+    {/* Outer glow ring 1 */}
+    <div style={{
+      position: 'absolute', width: 280, height: 280, borderRadius: '50%',
+      border: '1.5px solid rgba(139,92,246,.15)',
       animation: callState === 'speaking'
-        ? 'orbPulse 1.1s ease-in-out infinite'
+        ? 'ringPulse 1.6s ease-in-out infinite'
         : callState === 'listening'
-        ? 'orbListen 1.4s ease-in-out infinite'
-        : 'none',
-      filter: callState === 'thinking' ? 'saturate(0.6)' : 'none',
-      transition: 'filter .3s'
+        ? 'ringPulse 2.2s ease-in-out infinite'
+        : 'ringPulse 3.5s ease-in-out infinite',
+      pointerEvents: 'none'
+    }}/>
+    {/* Outer glow ring 2 */}
+    <div style={{
+      position: 'absolute', width: 340, height: 340, borderRadius: '50%',
+      border: '1px solid rgba(99,102,241,.08)',
+      animation: callState === 'speaking'
+        ? 'ringPulse2 2s ease-in-out infinite'
+        : callState === 'listening'
+        ? 'ringPulse2 2.8s ease-in-out infinite'
+        : 'ringPulse2 4s ease-in-out infinite',
+      pointerEvents: 'none'
+    }}/>
+    {/* Outer glow ring 3 */}
+    <div style={{
+      position: 'absolute', width: 400, height: 400, borderRadius: '50%',
+      border: '0.5px solid rgba(99,102,241,.04)',
+      animation: callState === 'speaking'
+        ? 'ringPulse2 2.6s ease-in-out infinite .3s'
+        : 'ringPulse2 3.5s ease-in-out infinite .3s',
+      pointerEvents: 'none'
+    }}/>
+
+    {/* Central orb container */}
+    <div style={{
+      width: 200, height: 200, borderRadius: '50%',
+      background: callState === 'thinking'
+        ? 'linear-gradient(135deg, #4338a0, #5b4fc7)'
+        : callState === 'speaking'
+        ? 'linear-gradient(135deg, #6366f1, #8b5cf6, #c084fc)'
+        : callState === 'listening'
+        ? 'linear-gradient(135deg, #4f46e5, #7c3aed, #a78bfa)'
+        : 'linear-gradient(135deg, #3730a3, #5b21b6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: callState === 'speaking'
+        ? '0 0 80px rgba(139,92,246,.5), 0 0 160px rgba(99,102,241,.2), inset 0 0 40px rgba(255,255,255,.05)'
+        : callState === 'listening'
+        ? '0 0 60px rgba(139,92,246,.35), 0 0 120px rgba(99,102,241,.15), inset 0 0 30px rgba(255,255,255,.03)'
+        : callState === 'thinking'
+        ? '0 0 40px rgba(99,102,241,.2), inset 0 0 20px rgba(255,255,255,.02)'
+        : '0 0 30px rgba(99,102,241,.15)',
+      transition: 'all .5s cubic-bezier(.4,0,.2,1)',
+      position: 'relative'
     }}>
-      {callState === 'thinking'
-        ? <Loader size={36} color="white" style={{ animation: 'spin 1s linear infinite' }}/>
-        : <VortisLogo size={70} color="white"/>}
+      {/* Sound wave bars */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 3, height: 80, overflow: 'hidden'
+      }}>
+        {[...Array(28)].map((_, i) => {
+          const centerDist = Math.abs(i - 13.5) / 13.5;
+          const baseH = (1 - centerDist * 0.6);
+          const delay = (i * 0.04).toFixed(2);
+          const animName = callState === 'speaking'
+            ? 'barSpeak'
+            : callState === 'listening'
+            ? 'barListen'
+            : callState === 'thinking'
+            ? 'barThink'
+            : 'barBreathe';
+          const duration = callState === 'speaking'
+            ? (0.5 + centerDist * 0.4).toFixed(2)
+            : callState === 'listening'
+            ? (0.6 + centerDist * 0.5).toFixed(2)
+            : callState === 'thinking'
+            ? '1.2'
+            : '2.5';
+          const barOpacity = callState === 'thinking' ? 0.5 : callState === 'idle' ? 0.35 : 0.9;
+
+          return (
+            <div key={i} style={{
+              width: 3, height: '100%',
+              borderRadius: 2,
+              background: `linear-gradient(to top, rgba(255,255,255,${(0.5 + baseH * 0.5).toFixed(2)}), rgba(255,255,255,${(0.2 + baseH * 0.3).toFixed(2)}))`,
+              transformOrigin: 'center',
+              transform: 'scaleY(0.25)',
+              animation: `${animName} ${duration}s ease-in-out infinite`,
+              animationDelay: `${delay}s`,
+              opacity: barOpacity,
+              transition: 'opacity .4s'
+            }}/>
+          );
+        })}
+      </div>
+
+      {/* Thinking spinner overlay */}
+      {callState === 'thinking' && (
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(67,56,160,.4)',
+          animation: 'overlayIn .2s ease'
+        }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)"
+            strokeWidth="2.5" strokeLinecap="round"
+            style={{ animation: 'spin 1s linear infinite' }}>
+            <path d="M12 2a10 10 0 0 1 10 10"/>
+          </svg>
+        </div>
+      )}
     </div>
 
-    <p style={{
-      marginTop: 28, color: 'rgba(255,255,255,.85)', fontFamily: "'JetBrains Mono',monospace",
-      fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase'
+    {/* State label */}
+    <div style={{
+      marginTop: 32, display: 'flex', alignItems: 'center', gap: 8,
+      animation: 'fadeUp .4s ease'
     }}>
-      {callState === 'listening' && 'Listening…'}
-      {callState === 'thinking'  && 'Thinking…'}
-      {callState === 'speaking'  && 'Speaking…'}
-      {callState === 'idle'      && (callPaused ? 'Paused' : 'Connecting…')}
-    </p>
+      <p style={{
+        color: callState === 'thinking' ? 'rgba(196,181,253,.7)' : 'rgba(255,255,255,.85)',
+        fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif",
+        fontSize: 14, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase',
+        margin: 0, transition: 'color .3s'
+      }}>
+        {callState === 'listening' && 'Listening'}
+        {callState === 'thinking' && 'Thinking'}
+        {callState === 'speaking' && 'Speaking'}
+        {callState === 'idle' && (callPaused ? 'Paused' : 'Connecting')}
+      </p>
+      {callState !== 'idle' && (
+        <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+          {[0,1,2].map(d => (
+            <span key={d} style={{
+              width: 4, height: 4, borderRadius: '50%',
+              background: 'rgba(196,181,253,.6)',
+              animation: `dotPulse 1.4s ease-in-out infinite`,
+              animationDelay: `${d * 0.2}s`
+            }}/>
+          ))}
+        </span>
+      )}
+    </div>
 
-    {/* Stop + Resume/Pause row */}
-    <div style={{ display: 'flex', gap: 20, marginTop: 50, alignItems: 'center' }}>
+    {/* Call timer */}
+    {callState !== 'idle' && (
+      <p style={{
+        marginTop: 8, color: 'rgba(255,255,255,.3)',
+        fontFamily: "'JetBrains Mono','SF Mono',monospace",
+        fontSize: 12, letterSpacing: '.1em', margin: 0,
+        animation: 'fadeUp .5s ease .1s both'
+      }}>
+        {/* Replace with real timer: `${Math.floor(elapsed/60)}:${String(elapsed%60).padStart(2,'0')}` */}
+        {callTimer ?? '0:00'}
+      </p>
+    )}
+
+    {/* Controls row */}
+    <div style={{
+      display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
+      animation: 'fadeUp .5s ease .2s both'
+    }}>
 
       {/* Pause / Resume button */}
       <button
         onClick={() => {
           if (callPaused) {
-            // Resume
             setCallPaused(false);
             callActiveRef.current = true;
             runCallListenLoop();
           } else {
-            // Pause
             setCallPaused(true);
             callRecogRef.current?.stop();
             stopSpeaking();
@@ -3940,44 +4094,71 @@ return (
           }
         }}
         style={{
-          width: 56, height: 56, borderRadius: '50%',
-          background: 'rgba(255,255,255,.12)',
-          border: '2px solid rgba(255,255,255,.25)',
+          width: 58, height: 58, borderRadius: '50%',
+          background: 'rgba(255,255,255,.08)',
+          backdropFilter: 'blur(10px)',
+          border: '1.5px solid rgba(255,255,255,.18)',
           cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 20px rgba(0,0,0,.3)',
-          transition: 'all .2s'
+          boxShadow: '0 4px 24px rgba(0,0,0,.25)',
+          transition: 'all .25s cubic-bezier(.4,0,.2,1)',
+          outline: 'none'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = 'rgba(255,255,255,.14)';
+          e.currentTarget.style.transform = 'scale(1.08)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,.3)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'rgba(255,255,255,.08)';
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,.18)';
         }}
         title={callPaused ? 'Resume' : 'Pause'}
       >
         {callPaused
-          ? /* Play icon */
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><polygon points="5,3 19,12 5,21"/></svg>
-          : /* Pause icon */
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+          ? <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
+          : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
         }
       </button>
 
-      {/* End call (red X) */}
+      {/* End call button */}
       <button
         onClick={endVoiceCall}
         style={{
-          width: 64, height: 64, borderRadius: '50%',
-          background: '#ef4444', border: 'none', cursor: 'pointer',
+          width: 68, height: 68, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+          border: 'none', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 8px 30px rgba(239,68,68,.45)'
+          boxShadow: '0 8px 30px rgba(239,68,68,.45)',
+          transition: 'all .25s cubic-bezier(.4,0,.2,1)',
+          animation: callState === 'speaking' ? 'endBtnPulse 2s ease-in-out infinite' : 'none',
+          outline: 'none'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.08)';
+          e.currentTarget.style.boxShadow = '0 8px 40px rgba(239,68,68,.65)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.boxShadow = '0 8px 30px rgba(239,68,68,.45)';
         }}
         title="End call"
       >
-        <X size={28} color="white"/>
+        <X size={28} color="white" strokeWidth={2.5}/>
       </button>
+
+      {/* Mute placeholder (visual balance) */}
+      <div style={{ width: 58, height: 58 }}/>
     </div>
 
+    {/* Hint text */}
     <p style={{
-      marginTop: 16, fontSize: 11, color: 'rgba(255,255,255,.3)',
-      fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.06em'
+      marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
+      fontFamily: "'Inter',system-ui,sans-serif", letterSpacing: '.04em',
+      animation: 'fadeUp .5s ease .3s both'
     }}>
-      {callPaused ? 'TAP ▶ TO RESUME' : 'TAP ⏸ TO PAUSE  ·  TAP ✕ TO END'}
+      {callPaused ? 'Tap play to resume' : 'Pause  ·  End call'}
     </p>
   </div>
 )}
