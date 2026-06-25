@@ -3130,6 +3130,25 @@ const runCallListenLoop = () => {
     }
   }
 };
+ const doSearch = async (query) => {
+  setProcessingStatus('searching');
+  try {
+    const userLang = navigator.language || 'en-US';
+    const gl = userLang.includes('-') ? userLang.split('-')[1].toLowerCase() : 'us';
+    const hl = userLang.split('-')[0];
+
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'search', query, gl, hl, timestamp: Date.now() })
+    });
+    const data = await res.json();
+    if (data.success && data.results?.length > 0)
+      return { success: true, results: data.results, aiSummary: data.aiSummary || null };
+  } catch(_) {} finally { setProcessingStatus(''); }
+  return { success: false, results: [], aiSummary: null };
+};
+
   const extractImageUrl = (data) => {
     if (!data) return null;
     const unwrap = (url) => { if (!url || typeof url !== 'string') return url; if (url.startsWith('data:image/') || url.startsWith('data:application/json;base64,')) { try { const b64 = url.slice(url.indexOf(',')+1).replace(/\s/g,''); const dec = atob(b64); if (dec.trim().startsWith('{')) return extractImageUrl(JSON.parse(dec)); } catch(_) {} } return url; };
