@@ -6,15 +6,12 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@andresaya/edge-tts": "^1.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "edge-tts": "^1.0.1",
     "edge-tts-universal": "^1.4.0",
     "express": "^5.2.1",
     "firebase-admin": "^12.7.0",
     "groq-sdk": "^0.9.0",
-    "msedge-tts": "^2.0.5",
     "undici": "^7.18.0"
   },
   "devDependencies": {

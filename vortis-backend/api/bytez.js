@@ -427,61 +427,46 @@ export default async function handler(req, res) {
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
     if (action === 'tts') {
-      const text  = sanitizeString(body.text  || '', 1000);
-      const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
-      if (!text) return res.status(400).json({ error: 'Missing text' });
+  const text  = sanitizeString(body.text  || '', 1000);
+  const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
+  
+  if (!text) return res.status(400).json({ error: 'Missing text' });
 
-      const cleanText = text
-        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-        .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
-        .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
-        .replace(/[\u2600-\u27BF]/g, '')
-        .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 900)
+  const cleanText = text
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 900);
 
-      if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
+  if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
 
-      try {
-        const { EdgeTTS } = await import('@andresaya/edge-tts');
-        const tts = new EdgeTTS();
-        await tts.synthesize(cleanText, voice, { 
-  outputFormat: 'audio-24khz-48kbitrate-mono-mp3', 
-  rate: '-12%' 
-});
-        const base64 = await tts.toBase64();
-        if (base64 && base64.length > 100) {
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          return res.status(200).json({ audio: base64 });
-        }
-        throw new Error('Empty audio');
-      } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
+  try {
+    // Using the static import is 100x more reliable than dynamic import
+    const tts = new MsEdgeTTS();
+    
+    // Set metadata: voice and output format
+    await tts.setMetadata(voice, 'audio-24khz-48kbitrate-mono-mp3');
+    
+    // Use toBuffer instead of stream for Vercel compatibility
+    const audioBuffer = await tts.toBuffer(cleanText);
 
-      try {
-        const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
-        const tts = new MsEdgeTTS();
-        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-        const readable = tts.toStream(cleanText);
-        const chunks = [];
-        await new Promise((resolve, reject) => {
-          readable.on('data', chunk => chunks.push(chunk));
-          readable.on('end', resolve);
-          readable.on('error', reject);
-          setTimeout(() => reject(new Error('stream timeout')), 10000);
-        });
-        const buf = Buffer.concat(chunks);
-        if (buf.length > 100) {
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          return res.status(200).json({ audio: buf.toString('base64') });
-        }
-        throw new Error('Empty buffer');
-      } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
-
-      return res.status(200).json({ audio: '' });
+    if (audioBuffer && audioBuffer.length > 100) {
+      const base64 = audioBuffer.toString('base64');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).json({ audio: base64 });
     }
-
+    
+    throw new Error('Empty audio buffer');
+  } catch(e) {
+    console.error('TTS Backend Error:', e.message);
+    return res.status(200).json({ audio: '' });
+  }
+}
     // ╔══════════════════════════════════════╗
     // ║  CHAT  — true token streaming        ║
     // ╚══════════════════════════════════════╝
