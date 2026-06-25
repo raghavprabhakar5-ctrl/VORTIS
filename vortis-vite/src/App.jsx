@@ -2927,6 +2927,7 @@ const endVoiceCall = () => {
 
 const runCallListenLoop = () => {
   if (!callActiveRef.current) return;
+
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const recog = new SR();
   recog.continuous = false;
@@ -2934,21 +2935,28 @@ const runCallListenLoop = () => {
   recog.lang = 'en-IN';
   callRecogRef.current = recog;
 
+  let restarted = false; // ✅ prevents double-restart
+  const safeRestart = () => {
+    if (restarted) return;
+    restarted = true;
+    if (callActiveRef.current) {
+      setTimeout(runCallListenLoop, 400);
+    }
+  };
+
   setCallState('listening');
 
   recog.onresult = async (e) => {
     const transcript = e.results[0][0].transcript;
     if (!callActiveRef.current) return;
-    if (!transcript.trim()) { runCallListenLoop(); return; }
+    if (!transcript.trim()) { safeRestart(); return; }
 
     setCallState('thinking');
     if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
     incrUsage('messages');
 
     try {
-      // reuse existing getAI plumbing but capture the reply for speech
       pushHistory(convHistory, 'user', transcript);
-      const now = new Date();
       const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers — this is being read aloud. Be conversational and warm.`;
       const res = await fetch(API, {
         method: 'POST',
@@ -2970,22 +2978,27 @@ const runCallListenLoop = () => {
       }
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
-
-      // log to normal chat history too (optional but nice)
       addMsg('user', transcript);
       addMsg('vortis', reply, false);
 
       if (!callActiveRef.current) return;
       setCallState('speaking');
       await speakText(reply);
-    } catch(_) {
-      // ignore, just loop again
+    } catch (err) {
+      console.error('Voice call error:', err);
     }
-    if (callActiveRef.current) runCallListenLoop();
+
+    safeRestart(); // ✅ always loops back
   };
 
-  recog.onerror = () => { if (callActiveRef.current) setTimeout(runCallListenLoop, 600); };
-  recog.onend = () => {}; // handled by onresult/onerror chaining
+  recog.onerror = (e) => {
+    if (e.error === 'aborted') return;
+    safeRestart();
+  };
+
+  recog.onend = () => {
+    safeRestart(); // ✅ was empty — this was killing your loop!
+  };
 
   recog.start();
 };
