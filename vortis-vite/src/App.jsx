@@ -2907,22 +2907,22 @@ const addMsg = (type, text, speak = false) => {
   return msg;
 };
 
-// ✅ ADD THIS at the top of your component
-const callActiveRef = useRef(false);
+// ═══════════════════════════════════════════════════
+// VOICE CALL — replace lines 2911 through 3083
+// ═══════════════════════════════════════════════════
 
 const startVoiceCall = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
   setShowVoiceCall(true);
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
-  // Start AFTER overlay is mounted
   setTimeout(() => {
-    try {
-      runCallListenLoop();
-    } catch (e) {
+    try { runCallListenLoop(); } catch (e) {
       console.error('Initial start failed:', e);
     }
-  }, 150);
+  }, 200);
 };
 
 const endVoiceCall = () => {
@@ -2939,16 +2939,14 @@ const runCallListenLoop = () => {
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    console.error('SpeechRecognition not supported in this browser');
+    console.error('SpeechRecognition not supported');
     setCallState('idle');
     return;
   }
 
   let recog;
-  try {
-    recog = new SR();
-  } catch (e) {
-    console.error('Failed to create SpeechRecognition:', e);
+  try { recog = new SR(); } catch (e) {
+    console.error('Failed to create SR:', e);
     setCallState('idle');
     return;
   }
@@ -3010,79 +3008,128 @@ const runCallListenLoop = () => {
 
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
-      addMsg('user', transcript);
-      addMsg('vortis', reply, false);
+
+      // ❌ REMOVED: addMsg('user', transcript);
+      // ❌ REMOVED: addMsg('vortis', reply, false);
+      // ✅ Voice call is talk-only — NO messages in the chat
 
       if (!callActiveRef.current) return;
       setCallState('speaking');
 
-      // ✅ Wrap speakText — if it throws, don't die
+      // ✅ Force speak — stop anything else first, then speak
       try {
-        await speakText(reply);
+        stopSpeaking();
+        isSpeakingRef.current = false;
+        // Small delay to let stopSpeaking fully clear
+        await new Promise(r => setTimeout(r, 100));
+        isSpeakingRef.current = true;
+
+        const gender = ttsGenderRef.current;
+        const clean = cleanForTTS(reply);
+        const voice = detectLangVoice(clean, gender);
+        const headers = await getCachedAuthHeader();
+
+        const MAX = 800;
+        const fetchChunk = (chunkText) =>
+          fetch(API, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ action: 'tts', text: chunkText, voice })
+          })
+            .then(r => r.ok ? r.json() : null)
+            .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
+            .catch(() => null);
+
+        const toBlobUrl = (dataUrl) => {
+          if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+          try {
+            const parts = dataUrl.split(',');
+            const base64 = parts[1];
+            const binaryStr = window.atob(base64);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+            const blob = new Blob([bytes], { type: 'audio/mp3' });
+            return URL.createObjectURL(blob);
+          } catch(e) { return dataUrl; }
+        };
+
+        if (clean.length <= MAX) {
+          const src = await fetchChunk(clean);
+          if (!callActiveRef.current || !src) { isSpeakingRef.current = false; safeRestart(); return; }
+          const audio = new Audio(toBlobUrl(src));
+          currentAudiosRef.current = [audio];
+          await new Promise((resolve) => {
+            audio.onended = resolve;
+            audio.onerror = resolve;
+            audio.play().catch(resolve);
+          });
+        } else {
+          const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
+          const chunks = [];
+          let cur = '';
+          for (const s of sentences) {
+            if ((cur + s).length > MAX && cur.length > 0) { chunks.push(cur.trim()); cur = s; }
+            else cur += s;
+          }
+          if (cur.trim()) chunks.push(cur.trim());
+
+          let nextFetch = fetchChunk(chunks[0]);
+          for (let i = 0; i < chunks.length; i++) {
+            if (!callActiveRef.current) break;
+            const srcPromise = nextFetch;
+            if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
+            const src = await srcPromise;
+            if (!callActiveRef.current || !src) continue;
+            await new Promise((resolve) => {
+              const audio = new Audio(toBlobUrl(src));
+              currentAudiosRef.current = [audio];
+              audio.onended = resolve;
+              audio.onerror = resolve;
+              audio.play().catch(resolve);
+            });
+          }
+        }
       } catch (speakErr) {
-        console.error('speakText error:', speakErr);
+        console.error('Voice speak error:', speakErr);
+      } finally {
+        isSpeakingRef.current = false;
+        currentAudiosRef.current = [];
       }
 
     } catch (err) {
       console.error('onresult error:', err);
     }
 
-    // ✅ ALWAYS try to restart — even if something failed
     safeRestart();
   };
 
   recog.onerror = (e) => {
-    console.warn('SpeechRecognition error:', e?.error);
+    console.warn('SR error:', e?.error);
     if (!callActiveRef.current) return;
     if (e?.error === 'aborted') return;
     if (e?.error === 'not-allowed') {
-      console.error('Microphone denied');
+      console.error('Mic denied');
       setCallState('idle');
       return;
     }
     safeRestart();
   };
 
-  // ✅ CRITICAL — onend must restart the loop on silence timeout
   recog.onend = () => {
     if (!callActiveRef.current) return;
     safeRestart();
   };
 
-  // ✅ CRITICAL — start() must be wrapped in try-catch
   try {
     recog.start();
   } catch (e) {
     console.error('recog.start() threw:', e);
     if (callActiveRef.current) {
-      setTimeout(() => {
-        try { runCallListenLoop(); } catch(err) {
-          console.error('Retry start failed:', err);
-        }
-      }, 800);
+      setTimeout(() => { try { runCallListenLoop(); } catch(err) {} }, 800);
     }
   }
 };
-
- const doSearch = async (query) => {
-  setProcessingStatus('searching');
-  try {
-    const userLang = navigator.language || 'en-US';
-    const gl = userLang.includes('-') ? userLang.split('-')[1].toLowerCase() : 'us';
-    const hl = userLang.split('-')[0];
-
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'search', query, gl, hl, timestamp: Date.now() })
-    });
-    const data = await res.json();
-    if (data.success && data.results?.length > 0)
-      return { success: true, results: data.results, aiSummary: data.aiSummary || null };
-  } catch(_) {} finally { setProcessingStatus(''); }
-  return { success: false, results: [], aiSummary: null };
-};
-
   const extractImageUrl = (data) => {
     if (!data) return null;
     const unwrap = (url) => { if (!url || typeof url !== 'string') return url; if (url.startsWith('data:image/') || url.startsWith('data:application/json;base64,')) { try { const b64 = url.slice(url.indexOf(',')+1).replace(/\s/g,''); const dec = atob(b64); if (dec.trim().startsWith('{')) return extractImageUrl(JSON.parse(dec)); } catch(_) {} } return url; };
