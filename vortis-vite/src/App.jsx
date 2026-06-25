@@ -2915,6 +2915,15 @@ const addMsg = (type, text, speak = false) => {
 const startVoiceCall = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
+
+  // ✅ KILL any ongoing speech/TTS from chat before starting voice call
+  stopSpeaking();
+  isSpeakingRef.current = false;
+  currentAudiosRef.current = [];
+
+  // ✅ Also stop any pending TTS preloads
+  ttsPending.current.clear();
+
   setShowVoiceCall(true);
   setCallState('idle');
   setCallPaused(false);
@@ -2923,7 +2932,7 @@ const startVoiceCall = () => {
     try { runCallListenLoop(); } catch (e) {
       console.error('Initial start failed:', e);
     }
-  }, 200);
+  }, 300);
 };
 
 const endVoiceCall = () => {
@@ -3122,9 +3131,11 @@ const runCallListenLoop = () => {
     safeRestart();
   };
 
-  try {
-    recog.start();
-  } catch (e) {
+  // Kill any leftover audio from chat
+  stopSpeaking();
+  isSpeakingRef.current = false;
+
+  try { recog.start(); } catch(e) {
     console.error('recog.start() threw:', e);
     if (callActiveRef.current) {
       setTimeout(() => { try { runCallListenLoop(); } catch(err) {} }, 800);
