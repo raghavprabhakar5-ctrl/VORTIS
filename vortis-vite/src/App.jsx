@@ -8,7 +8,7 @@ import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
 import LandingPage from './hero-1';
-import { EdgeTTS } from 'edge-tts-universal/browser';
+import { EdgeTTS } from '@andresaya/edge-tts';
 import remarkGfm from "remark-gfm";
 import './index.css';
 import {
