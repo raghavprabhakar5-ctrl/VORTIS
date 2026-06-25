@@ -4276,7 +4276,7 @@ return (
     }}>
       {callPaused ? 'Tap play to resume' : 'Pause  ·  End call'}
     </p>
-  </div>
+  </div>,
    document.body
 )}
         {isIncognito && (
