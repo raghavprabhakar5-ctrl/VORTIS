@@ -2,6 +2,15 @@ import { useEffect } from 'react';
 
 export default function useDevToolsGuard() {
   useEffect(() => {
+    // TEMPORARY BYPASS: If URL has ?debug=true OR you are on localhost, skip the guard entirely
+    const isDebugMode = new URLSearchParams(window.location.search).get('debug') === 'true';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isDebugMode || isLocalhost) {
+      console.log('🛡️ DevTools Guard: Bypassed for debugging');
+      return; // Exits the hook early, disabling all blocking logic
+    }
+
     const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
 
     const blockKeys = (e) => {
@@ -19,10 +28,8 @@ export default function useDevToolsGuard() {
         e.stopPropagation();
 
         if (isIncognito) {
-          // In incognito tab → go back to normal, same tab
           window.location.href = window.location.origin + '/';
         } else {
-          // Normal → go incognito, same tab
           window.location.href = window.location.origin + '/?incognito=true';
         }
 
