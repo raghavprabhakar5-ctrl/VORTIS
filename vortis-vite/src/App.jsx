@@ -6,6 +6,7 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
+import useDevToolsGuard from './useDevToolsGuard';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -2763,39 +2764,39 @@ const stopSpeaking = useCallback(() => {
 const speakText = useCallback(async (t) => {
   if (isSpeakingRef.current) { stopSpeaking(); return; }
   isSpeakingRef.current = true;
-
-  // Create + unlock audio element SYNCHRONOUSLY inside the click gesture,
-  // before any await — required for mobile autoplay policies.
-  const audioEl = new Audio();
-  audioEl.muted = true;
-  audioEl.play().catch(() => {});
-  currentAudiosRef.current = [audioEl];
-
-  const playSrc = (src) => new Promise((resolve) => {
-    audioEl.muted = false;
-    audioEl.src = src;
-    audioEl.onended = resolve;
-    audioEl.onerror = resolve;
-    audioEl.play().catch((e) => { console.warn('TTS play blocked:', e); resolve(); });
-  });
-
   try {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
-    if (!clean || clean.length < 3) return;
+    if (!clean || clean.length < 3) { isSpeakingRef.current = false; return; }
 
     const voice = detectLangVoice(clean, gender);
     const cacheKey = `${gender}_${clean}`;
 
     const cached = ttsCache.current.get(cacheKey);
-    if (cached) { await playSrc(cached); return; }
+    if (cached) {
+      const audio = new Audio(cached);
+      currentAudiosRef.current = [audio];
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
+      return;
+    }
 
     const pending = ttsPending.current.get(cacheKey);
     if (pending) {
       const src = await pending;
       if (!isSpeakingRef.current) return;
-      if (src) await playSrc(src);
-      else showToast("Couldn't generate speech — try again", 'var(--red)');
+      if (src) {
+        const audio = new Audio(src);
+        currentAudiosRef.current = [audio];
+        await new Promise((resolve) => {
+          audio.onended = resolve;
+          audio.onerror = resolve;
+          audio.play().catch(resolve);
+        });
+      }
       return;
     }
 
@@ -2815,13 +2816,19 @@ const speakText = useCallback(async (t) => {
 
     if (clean.length <= MAX) {
       const src = await fetchChunk(clean);
-      if (!isSpeakingRef.current) return;
-      if (!src) { showToast("Couldn't generate speech — try again", 'var(--red)'); return; }
+      if (!isSpeakingRef.current || !src) return;
       ttsCache.current.set(cacheKey, src);
-      await playSrc(src);
+      const audio = new Audio(src);
+      currentAudiosRef.current = [audio];
+      await new Promise((resolve) => {
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
       return;
     }
 
+    // ── Long text: chunk by sentences and pipeline ──
     const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
     let cur = '';
@@ -2832,24 +2839,27 @@ const speakText = useCallback(async (t) => {
     if (cur.trim()) chunks.push(cur.trim());
 
     let nextFetch = fetchChunk(chunks[0]);
-    let anyPlayed = false;
     for (let i = 0; i < chunks.length; i++) {
       if (!isSpeakingRef.current) return;
       const srcPromise = nextFetch;
       if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
       const src = await srcPromise;
-      if (!isSpeakingRef.current) return;
-      if (src) { anyPlayed = true; await playSrc(src); }
+      if (!isSpeakingRef.current || !src) continue;
+      await new Promise((resolve) => {
+        const audio = new Audio(src);
+        currentAudiosRef.current = [audio];
+        audio.onended = resolve;
+        audio.onerror = resolve;
+        audio.play().catch(resolve);
+      });
     }
-    if (!anyPlayed) showToast("Couldn't generate speech — try again", 'var(--red)');
-  } catch (e) {
-    console.error('speakText error:', e);
-    showToast("Couldn't generate speech — try again", 'var(--red)');
-  } finally {
+  } catch(_) {}
+  finally {
     isSpeakingRef.current = false;
     currentAudiosRef.current = [];
   }
 }, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
+
 // ── ADD MESSAGE ──
 const addMsg = (type, text, speak = false) => {
   const msg = { id: Date.now() + Math.random(), type, text };
@@ -3790,69 +3800,57 @@ return (
                     <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
                   </div>
                 ) : (
-                 <div data-msgid={msg.id} style={{ display: 'flex', gap: 12 }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
-  <VortisAvatar size={28}/>
-  <div style={{ flex: 1, minWidth: 0 }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-      <span className="ai-name">VORTIS</span>
-      {starred[msg.id] && <Star size={10} color="var(--amber)" fill="var(--amber)"/>}
-    </div>
-    <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
-      {[
-        { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
-        { ic: <Volume2 size={11}/>, fn: (e) => {
-          // Fix: Traverse up to the msgid container instead of querying the global DOM
-          const container = e.currentTarget.closest('[data-msgid]');
-          const bubble = container?.querySelector('.md-content');
-          if (bubble) {
-            const rawText = bubble.innerText || bubble.textContent || '';
-            speakText(rawText);
-          } else {
-            speakText(msg.text);
-          }
-        }, tip: 'Read aloud' },
-        { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
-        { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
-      ].map((b, bi) => (
-        <button 
-          key={bi} 
-          onClick={(e) => {
-            e.stopPropagation(); // Prevent conflicts
-            b.fn(e);             // Pass the event to the function
-          }} 
-          title={b.tip} 
-          className="action-btn"
-        >
-          {b.ic}
-        </button>
-      ))}
-      <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
-      <button onClick={() => setReaction(msg.id,'up')} className={`action-btn ${reactions[msg.id]==='up'?'active-up':''}`}><ThumbsUp size={11}/></button>
-      <button onClick={() => setReaction(msg.id,'down')} className={`action-btn ${reactions[msg.id]==='down'?'active-down':''}`}><ThumbsDown size={11}/></button>
-      <button onClick={() => toggleStar(msg)} className={`star-btn ${starred[msg.id]?'starred':''}`}><Star size={11} fill={starred[msg.id]?'currentColor':'none'}/></button>
-    </div>
-  </div>
-</div>
-)}
-</div>
-))}
+                  <div data-msgid={msg.id} style={{ display: 'flex', gap: 12 }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
+                    <VortisAvatar size={28}/>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                        <span className="ai-name">VORTIS</span>
+                        {starred[msg.id] && <Star size={10} color="var(--amber)" fill="var(--amber)"/>}
+                      </div>
+                      <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
+                        {[
+                          { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
+                          { ic: <Volume2 size={11}/>, fn: () => {
+  // Get the actual rendered text from the DOM — not raw markdown
+  const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
+  if (bubble) {
+    const rawText = bubble.innerText || bubble.textContent || '';
+    speakText(rawText);
+  } else {
+    speakText(msg.text);
+  }
+}, tip: 'Read aloud' },
+                          { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
+                          { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
+                        ].map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>)}
+                        <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
+                        <button onClick={() => setReaction(msg.id,'up')} className={`action-btn ${reactions[msg.id]==='up'?'active-up':''}`}><ThumbsUp size={11}/></button>
+                        <button onClick={() => setReaction(msg.id,'down')} className={`action-btn ${reactions[msg.id]==='down'?'active-down':''}`}><ThumbsDown size={11}/></button>
+                        <button onClick={() => toggleStar(msg)} className={`star-btn ${starred[msg.id]?'starred':''}`}><Star size={11} fill={starred[msg.id]?'currentColor':'none'}/></button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
 
-{isProcessing && !isStreaming && !messages.some(m => m.text === '__IMG_LOADING__') && (
-  <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-    <VortisAvatar size={28} animating/>
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}><span className="ai-name">VORTIS</span></div>
-      <div className="dot-typing"><span/><span/><span/></div>
-      {showAITimeout && (
-        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>Taking longer than usual…</span>
-          <button onClick={() => { setIsProcessing(false); setIsStreaming(false); setProcessingStatus(''); setShowAITimeout(false); clearTimeout(aiTimeoutRef.current); }} style={{ fontSize: 11, color: 'var(--red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>Cancel</button>
-        </div>
-      )}
-    </div>
-  </div>
-)}
+            {isProcessing && !isStreaming && !messages.some(m => m.text === '__IMG_LOADING__') && (
+              <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
+                <VortisAvatar size={28} animating/>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}><span className="ai-name">VORTIS</span></div>
+                  <div className="dot-typing"><span/><span/><span/></div>
+                  {showAITimeout && (
+                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>Taking longer than usual…</span>
+                      <button onClick={() => { setIsProcessing(false); setIsStreaming(false); setProcessingStatus(''); setShowAITimeout(false); clearTimeout(aiTimeoutRef.current); }} style={{ fontSize: 11, color: 'var(--red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {isStreaming && streamText && (
               <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
                 <VortisAvatar size={28} animating/>
