@@ -2059,7 +2059,7 @@ export default function VortisAI() {
       {/* Controls */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button
-  onClick={onToggleListen}
+  onClick={onClose}
   style={{
     width: 46, height: 46, borderRadius: '50%',
     background: 'var(--bg3, #16162a)',
