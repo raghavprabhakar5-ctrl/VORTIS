@@ -4163,6 +4163,33 @@ onChange={e => {
                     {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
                   </button>
                 </div>
+                <div className="ia-right">
+  {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
+  {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
+
+  {/* NEW — Voice call (soundwave) button */}
+  <button className="mic-btn" onClick={startVoiceCall} title="Voice call" disabled={isProcessing}>
+    <svg width="16" height="16" viewBox="0 0 26 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+  <line x1="2"  y1="12" x2="2"  y2="12"/>
+  <line x1="6"  y1="9"  x2="6"  y2="15"/>
+  <line x1="10" y1="6"  x2="10" y2="18"/>
+  <line x1="14" y1="3"  x2="14" y2="21"/>
+  <line x1="18" y1="8"  x2="18" y2="16"/>
+  <line x1="22" y1="11" x2="22" y2="13"/>
+</svg>
+  </button>
+
+  <button
+    className={`mic-btn ${isListening ? 'listening' : ''}`}
+    onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else if (recogRef.current) { setIsListening(true); recogRef.current.start(); } }}
+    disabled={isProcessing && !isListening}
+  >
+    {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
+  </button>
+  <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
+    {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
+  </button>
+</div>
               </div>
             </div>
           </div>
