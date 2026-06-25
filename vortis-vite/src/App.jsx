@@ -2928,19 +2928,37 @@ const endVoiceCall = () => {
 const runCallListenLoop = () => {
   if (!callActiveRef.current) return;
 
+  // ✅ FIX 1: Check if SpeechRecognition even exists
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const recog = new SR();
+  if (!SR) {
+    console.error('SpeechRecognition not supported');
+    setCallState('idle');
+    // Don't close the overlay — just show idle state
+    // User can still press X to close
+    return;
+  }
+
+  let recog;
+  try {
+    recog = new SR();
+  } catch (e) {
+    console.error('Failed to create SpeechRecognition:', e);
+    setCallState('idle');
+    return;
+  }
+
   recog.continuous = false;
   recog.interimResults = false;
   recog.lang = 'en-IN';
   callRecogRef.current = recog;
 
-  let restarted = false; // ✅ prevents double-restart
+  // ✅ FIX 2: Prevent double-restart
+  let restarted = false;
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
     if (callActiveRef.current) {
-      setTimeout(runCallListenLoop, 400);
+      setTimeout(runCallListenLoop, 500);
     }
   };
 
@@ -2985,22 +3003,46 @@ const runCallListenLoop = () => {
       setCallState('speaking');
       await speakText(reply);
     } catch (err) {
-      console.error('Voice call error:', err);
+      console.error('Voice call AI error:', err);
     }
 
-    safeRestart(); // ✅ always loops back
-  };
-
-  recog.onerror = (e) => {
-    if (e.error === 'aborted') return;
     safeRestart();
   };
 
-  recog.onend = () => {
-    safeRestart(); // ✅ was empty — this was killing your loop!
+  // ✅ FIX 3: Handle ALL error types properly
+  recog.onerror = (e) => {
+    console.warn('SpeechRecognition error:', e.error);
+    if (!callActiveRef.current) return;
+    // "aborted" = we called .stop() ourselves, don't restart
+    if (e.error === 'aborted') return;
+    // "not-allowed" = permission denied — don't keep retrying
+    if (e.error === 'not-allowed') {
+      console.error('Microphone permission denied');
+      setCallState('idle');
+      return;
+    }
+    // All other errors (no-speech, network, etc) — retry
+    safeRestart();
   };
 
-  recog.start();
+  // ✅ FIX 4: THIS WAS THE KILLER — onend was empty {}
+  // When recognition times out from silence, onend fires.
+  // Your old code did nothing → loop died → overlay eventually closed
+  recog.onend = () => {
+    if (!callActiveRef.current) return;
+    safeRestart();
+  };
+
+  // ✅ FIX 5: Wrap start() in try-catch — this is likely what's crashing you
+  try {
+    recog.start();
+  } catch (e) {
+    console.error('recog.start() threw:', e);
+    // Don't crash — just retry after a delay
+    if (callActiveRef.current) {
+      setTimeout(runCallListenLoop, 800);
+    }
+  }
 };
 
  const doSearch = async (query) => {
