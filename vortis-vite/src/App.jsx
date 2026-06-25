@@ -2913,28 +2913,28 @@ const addMsg = (type, text, speak = false) => {
 // ═══════════════════════════════════════════════════
 
 const startVoiceCall = () => {
-   alert('VOICE CALL CLICKED'); 
+  console.log('1. startVoiceCall called, showVoiceCall was:', showVoiceCall);
+  
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
 
-  // ✅ KILL any ongoing speech/TTS from chat before starting voice call
   stopSpeaking();
   isSpeakingRef.current = false;
   currentAudiosRef.current = [];
   ttsPending.current.clear();
-  setIsProcessing(false);        // ← ADD THIS
-  setIsStreaming(false);          // ← ADD THIS
-  setStreamText('');              // ← ADD THIS
-  setProcessingStatus('');        // ← ADD THIS
-  clearTimeout(aiTimeoutRef.current);  // ← ADD THIS
-  // ✅ Also stop any pending TTS preloads
-  ttsPending.current.clear();
+  setIsProcessing(false);
+  setIsStreaming(false);
+  setStreamText('');
+  setProcessingStatus('');
+  clearTimeout(aiTimeoutRef.current);
 
   setShowVoiceCall(true);
+  console.log('2. setShowVoiceCall(true) called');
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
   setTimeout(() => {
+    console.log('3. setTimeout fired, running runCallListenLoop');
     try { runCallListenLoop(); } catch (e) {
       console.error('Initial start failed:', e);
     }
