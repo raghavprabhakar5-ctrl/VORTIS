@@ -2479,7 +2479,14 @@ export default function VortisAI() {
     handleCmdRef.current?.(text);
   }
 };
-        recogRef.current.onerror = () => setIsListening(false); recogRef.current.onend = () => setIsListening(false);
+       recogRef.current.onerror = (e) => {
+  setIsListening(false);
+  stopMicVisualizer();
+};
+recogRef.current.onend = () => {
+  setIsListening(false);
+  stopMicVisualizer();
+};
       }
     };
     init();
@@ -2657,6 +2664,24 @@ const saveChat = useCallback(async (msgsToSave) => {
     saveTimerRef.current = setTimeout(() => { const hasLoading = messages.some(m => m.text === '__IMG_LOADING__'); if (hasLoading) { saveTimerRef.current = setTimeout(() => saveChat(messages), 4000); return; } saveChat(messages); }, 1500);
     return () => clearTimeout(saveTimerRef.current);
   }, [messages, profile.email, saveChat]);
+
+  useEffect(() => {
+  if (!showVoiceMode) return;
+  // Small delay to let the overlay render first
+  const timer = setTimeout(() => {
+    if (voiceModeActiveRef.current && recogRef.current && !isListening) {
+      try {
+        setIsListening(true);
+        recogRef.current.start();
+        startMicVisualizer();
+      } catch(e) {
+        // Recognition already started or not available
+        setIsListening(false);
+      }
+    }
+  }, 600);
+  return () => clearTimeout(timer);
+}, [showVoiceMode]); // Only depends on showVoiceMode
 
  // ── TTS REFS ──
 const ttsCache = useRef(new Map());
@@ -3461,24 +3486,11 @@ addMsg('vortis', finalDisplay, shouldSpeak);
  const runVoiceTurn = async (userText) => {
   if (!userText.trim()) return;
   setVoiceTranscript(userText);
+  setVoiceAIText('Thinking…');
   setIsVoiceSpeaking(true);
-  setVoiceAIText('');
   pushHistory(convHistory, 'user', userText);
 
-  let spokenUpTo = 0;
-  const speakNewSentences = (fullSoFar) => {
-    const rest = fullSoFar.slice(spokenUpTo);
-    const matches = rest.match(/[^.!?]+[.!?]+/g);
-    if (!matches) return;
-    let consumed = 0;
-    matches.forEach(s => { consumed += s.length; });
-    if (consumed > 0) {
-      const toSpeak = rest.slice(0, consumed).trim();
-      spokenUpTo += consumed;
-      if (toSpeak) enqueueSpeak(toSpeak);
-    }
-  };
-
+  let full = '';
   try {
     const res = await fetch(API, {
       method: 'POST',
@@ -3491,7 +3503,6 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     });
     const reader = res.body.getReader();
     const dec = new TextDecoder();
-    let full = '';
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -3504,33 +3515,33 @@ addMsg('vortis', finalDisplay, shouldSpeak);
           if (p.content) {
             full += p.content;
             setVoiceAIText(full);
-            speakNewSentences(full);
           }
         } catch(_) {}
       }
     }
-    const leftover = full.slice(spokenUpTo).trim();
-    if (leftover) enqueueSpeak(leftover);
     pushHistory(convHistory, 'assistant', full.trim());
-  } catch(_) {
-    setVoiceAIText("Sorry, something went wrong.");
+    setVoiceAIText(full.trim() || 'Done.');
+
+    // Speak the full response and WAIT for it to finish
+    if (full.trim()) {
+      await speakText(full.trim());
+    }
+  } catch(e) {
+    setVoiceAIText('Sorry, something went wrong.');
+    await speakText('Sorry, something went wrong.');
   } finally {
-    const waitForQueue = () => new Promise(resolve => {
-      const check = () => {
-        if (!isQueuePlayingRef.current && speakQueueRef.current.length === 0) resolve();
-        else setTimeout(check, 200);
-      };
-      check();
-    });
-    await waitForQueue();
     setIsVoiceSpeaking(false);
     setVoiceAIText('');
+    // Auto-restart mic if still in voice mode
     if (voiceModeActiveRef.current && recogRef.current) {
-      setTimeout(() => { setIsListening(true); recogRef.current.start(); startMicVisualizer(); }, 300);
+      setTimeout(() => {
+        setIsListening(true);
+        recogRef.current.start();
+        startMicVisualizer();
+      }, 400);
     }
   }
 };
-
   // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
