@@ -2032,7 +2032,6 @@ export default function VortisAI() {
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
-  const callActiveRef = useRef(false);
   const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -2908,19 +2907,28 @@ const addMsg = (type, text, speak = false) => {
   return msg;
 };
 
+// ✅ ADD THIS at the top of your component
+const callActiveRef = useRef(false);
+
 const startVoiceCall = () => {
   setShowVoiceCall(true);
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
-  // Small delay so overlay renders first, THEN start recognition
-  setTimeout(() => runCallListenLoop(), 100);
+  // Start AFTER overlay is mounted
+  setTimeout(() => {
+    try {
+      runCallListenLoop();
+    } catch (e) {
+      console.error('Initial start failed:', e);
+    }
+  }, 150);
 };
 
 const endVoiceCall = () => {
   callActiveRef.current = false;
-  callRecogRef.current?.stop();
-  stopSpeaking();
+  try { callRecogRef.current?.stop(); } catch(_) {}
+  try { stopSpeaking(); } catch(_) {}
   setCallState('idle');
   setCallPaused(false);
   setShowVoiceCall(false);
@@ -2929,13 +2937,10 @@ const endVoiceCall = () => {
 const runCallListenLoop = () => {
   if (!callActiveRef.current) return;
 
-  // ✅ FIX 1: Check if SpeechRecognition even exists
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
-    console.error('SpeechRecognition not supported');
+    console.error('SpeechRecognition not supported in this browser');
     setCallState('idle');
-    // Don't close the overlay — just show idle state
-    // User can still press X to close
     return;
   }
 
@@ -2953,35 +2958,42 @@ const runCallListenLoop = () => {
   recog.lang = 'en-IN';
   callRecogRef.current = recog;
 
-  // ✅ FIX 2: Prevent double-restart
   let restarted = false;
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
     if (callActiveRef.current) {
-      setTimeout(runCallListenLoop, 500);
+      setTimeout(() => {
+        try { runCallListenLoop(); } catch(e) {
+          console.error('Restart failed:', e);
+        }
+      }, 500);
     }
   };
 
   setCallState('listening');
 
   recog.onresult = async (e) => {
-    const transcript = e.results[0][0].transcript;
-    if (!callActiveRef.current) return;
-    if (!transcript.trim()) { safeRestart(); return; }
-
-    setCallState('thinking');
-    if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
-    incrUsage('messages');
-
     try {
+      const transcript = e.results?.[0]?.[0]?.transcript;
+      if (!callActiveRef.current) return;
+      if (!transcript?.trim()) { safeRestart(); return; }
+
+      setCallState('thinking');
+
+      if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+      incrUsage('messages');
+
       pushHistory(convHistory, 'user', transcript);
+
       const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers — this is being read aloud. Be conversational and warm.`;
+
       const res = await fetch(API, {
         method: 'POST',
         headers: await getAuthHeader(),
         body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
       });
+
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let full = '';
@@ -2995,6 +3007,7 @@ const runCallListenLoop = () => {
           try { const p = JSON.parse(raw); if (p.content) full += p.content; } catch(_) {}
         }
       }
+
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
       addMsg('user', transcript);
@@ -3002,46 +3015,51 @@ const runCallListenLoop = () => {
 
       if (!callActiveRef.current) return;
       setCallState('speaking');
-      await speakText(reply);
+
+      // ✅ Wrap speakText — if it throws, don't die
+      try {
+        await speakText(reply);
+      } catch (speakErr) {
+        console.error('speakText error:', speakErr);
+      }
+
     } catch (err) {
-      console.error('Voice call AI error:', err);
+      console.error('onresult error:', err);
     }
 
+    // ✅ ALWAYS try to restart — even if something failed
     safeRestart();
   };
 
-  // ✅ FIX 3: Handle ALL error types properly
   recog.onerror = (e) => {
-    console.warn('SpeechRecognition error:', e.error);
+    console.warn('SpeechRecognition error:', e?.error);
     if (!callActiveRef.current) return;
-    // "aborted" = we called .stop() ourselves, don't restart
-    if (e.error === 'aborted') return;
-    // "not-allowed" = permission denied — don't keep retrying
-    if (e.error === 'not-allowed') {
-      console.error('Microphone permission denied');
+    if (e?.error === 'aborted') return;
+    if (e?.error === 'not-allowed') {
+      console.error('Microphone denied');
       setCallState('idle');
       return;
     }
-    // All other errors (no-speech, network, etc) — retry
     safeRestart();
   };
 
-  // ✅ FIX 4: THIS WAS THE KILLER — onend was empty {}
-  // When recognition times out from silence, onend fires.
-  // Your old code did nothing → loop died → overlay eventually closed
+  // ✅ CRITICAL — onend must restart the loop on silence timeout
   recog.onend = () => {
     if (!callActiveRef.current) return;
     safeRestart();
   };
 
-  // ✅ FIX 5: Wrap start() in try-catch — this is likely what's crashing you
+  // ✅ CRITICAL — start() must be wrapped in try-catch
   try {
     recog.start();
   } catch (e) {
     console.error('recog.start() threw:', e);
-    // Don't crash — just retry after a delay
     if (callActiveRef.current) {
-      setTimeout(runCallListenLoop, 800);
+      setTimeout(() => {
+        try { runCallListenLoop(); } catch(err) {
+          console.error('Retry start failed:', err);
+        }
+      }, 800);
     }
   }
 };
