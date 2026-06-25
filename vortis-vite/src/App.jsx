@@ -4509,7 +4509,7 @@ onChange={e => {
   <button
     className={`mic-btn ${isListening ? 'listening' : ''}`}
     onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else if (recogRef.current) { setIsListening(true); recogRef.current.start(); } }}
-    disabled={isProcessing && !isListening}
+    disabled={false}
   >
     {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
   </button>
