@@ -1977,125 +1977,167 @@ export default function VortisAI() {
   return () => window.removeEventListener('beforeunload', handleBeforeUnload);
 }, [messages]);
 
-const VoiceModeOverlay = ({ isOpen, onClose, isListening, onToggleListen, transcript }) => {
+const VoiceModeOverlay = ({ isOpen, onClose, isListening, isSpeaking, onToggleListen, transcript, aiText }) => {
   if (!isOpen) return null;
+
+  // 24 bars, each gets a random-ish but smooth animation delay/duration
+  const bars = Array.from({ length: 28 }, (_, i) => i);
 
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 300,
-      background: 'rgba(8,8,16,.92)',
+      background: 'rgba(8,8,16,.96)',
       backdropFilter: 'blur(20px)',
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      gap: 28,
+      gap: 32,
       animation: 'overlayIn .2s ease',
+      padding: '0 24px',
     }}>
       <style>{`
-        @keyframes vmBreathe{
-          0%,100%{ transform:scale(1); }
-          50%{ transform:scale(1.05); }
+        @keyframes vmBarIdle{
+          0%,100%{ transform:scaleY(0.25); opacity:.35; }
+          50%{ transform:scaleY(0.45); opacity:.55; }
         }
-        @keyframes vmListenPulse{
-          0%,100%{ transform:scale(1); }
-          50%{ transform:scale(1.1); }
+        @keyframes vmBarTalk{
+          0%{ transform:scaleY(0.2); }
+          25%{ transform:scaleY(1); }
+          50%{ transform:scaleY(0.35); }
+          75%{ transform:scaleY(0.85); }
+          100%{ transform:scaleY(0.2); }
         }
-        @keyframes vmRing{
-          0%{ opacity:.6; transform:scale(.8); }
-          70%{ opacity:0; transform:scale(1.4); }
-          100%{ opacity:0; transform:scale(1.4); }
+        @keyframes vmBarAI{
+          0%,100%{ transform:scaleY(0.3); }
+          50%{ transform:scaleY(1); }
         }
-        @keyframes vmBar{
-          0%,100%{ height:10px; opacity:.6; }
-          50%{ height:34px; opacity:1; }
+        @keyframes vmFadeUp{
+          from{ opacity:0; transform:translateY(6px); }
+          to{ opacity:1; transform:translateY(0); }
         }
       `}</style>
 
-      <div style={{ position: 'relative', width: 240, height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {isListening && [0, 1, 2].map(i => (
-          <div key={i} style={{
-            position: 'absolute', inset: 0, borderRadius: '50%',
-            background: 'radial-gradient(circle at 35% 30%, rgba(139,92,246,.5), rgba(99,102,241,.05) 70%)',
-            filter: 'blur(2px)',
-            animation: `vmRing 1.8s ease-out infinite`,
-            animationDelay: `${i * 0.6}s`,
-          }} />
-        ))}
-
-        <div
-          onClick={onToggleListen}
-          style={{
-            position: 'relative',
-            width: '60%', height: '60%',
-            borderRadius: '50%',
-            cursor: 'pointer',
-            background: 'radial-gradient(circle at 32% 28%, #c4b5fd 0%, #8b5cf6 35%, #6366f1 65%, #4338ca 100%)',
-            boxShadow: isListening
-              ? '0 0 50px rgba(139,92,246,.7), 0 0 110px rgba(99,102,241,.4), inset 0 -10px 30px rgba(0,0,0,.25), inset 0 8px 24px rgba(255,255,255,.2)'
-              : '0 0 30px rgba(99,102,241,.4), inset 0 -10px 30px rgba(0,0,0,.25), inset 0 8px 24px rgba(255,255,255,.18)',
-            animation: isListening ? 'vmListenPulse 1.1s ease-in-out infinite' : 'vmBreathe 4.2s ease-in-out infinite',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          {isListening && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              {[0, 1, 2, 3, 4].map(i => (
-                <span key={i} style={{
-                  display: 'block', width: 4, borderRadius: 3,
-                  background: 'rgba(255,255,255,.9)',
-                  height: 14,
-                  animation: 'vmBar 1s ease-in-out infinite',
-                  animationDelay: `${i * 0.15}s`,
-                }} />
-              ))}
-            </div>
-          )}
-        </div>
+      {/* Sound wave visualizer */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        height: 140,
+        width: '100%',
+        maxWidth: 420,
+      }}>
+        {bars.map(i => {
+          const baseHeight = 14 + (Math.sin(i * 0.7) + 1) * 30; // varied bar heights
+          const animName = isListening ? 'vmBarTalk' : isSpeaking ? 'vmBarAI' : 'vmBarIdle';
+          const duration = isListening
+            ? `${0.5 + (i % 5) * 0.08}s`
+            : isSpeaking
+              ? `${0.6 + (i % 6) * 0.09}s`
+              : `${2.2 + (i % 4) * 0.3}s`;
+          const delay = `${(i % 7) * 0.06}s`;
+          const color = isListening
+            ? 'linear-gradient(180deg,#e040fb,#7c4dff)'
+            : isSpeaking
+              ? 'linear-gradient(180deg,#29b6f6,#7c4dff)'
+              : 'linear-gradient(180deg,#6366f1,#4338ca)';
+          return (
+            <div
+              key={i}
+              style={{
+                width: 5,
+                height: baseHeight,
+                borderRadius: 4,
+                background: color,
+                transformOrigin: 'center',
+                animation: `${animName} ${duration} ease-in-out infinite`,
+                animationDelay: delay,
+                boxShadow: (isListening || isSpeaking) ? '0 0 10px rgba(139,92,246,.5)' : 'none',
+                transition: 'background .3s',
+              }}
+            />
+          );
+        })}
       </div>
 
+      {/* Live transcript / AI response text */}
       <div style={{
         fontFamily: 'Geist, sans-serif',
-        fontSize: 16, fontWeight: 500,
-        color: isListening ? 'var(--text1, #e8e8f8)' : 'var(--text3, #9090b0)',
-        textAlign: 'center', maxWidth: 360, lineHeight: 1.5,
-        minHeight: 24, padding: '0 20px',
+        fontSize: 17,
+        fontWeight: 500,
+        color: 'var(--text1, #e8e8f8)',
+        textAlign: 'center',
+        maxWidth: 480,
+        lineHeight: 1.6,
+        minHeight: 56,
+        animation: 'vmFadeUp .2s ease',
       }}>
-        {isListening ? (transcript || "I'm listening...") : 'Tap the orb to speak'}
+        {isListening && (
+          <span style={{ color: '#c4b5fd' }}>
+            {transcript || 'Listening…'}
+          </span>
+        )}
+        {!isListening && isSpeaking && (
+          <span style={{ color: 'var(--text2, #9090b0)' }}>
+            {aiText || 'Thinking…'}
+          </span>
+        )}
+        {!isListening && !isSpeaking && (
+          <span style={{ color: 'var(--text3, #5a5a7a)', fontSize: 15 }}>
+            Tap the mic to speak
+          </span>
+        )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Status label */}
+      <div style={{
+        fontSize: 11,
+        fontFamily: 'JetBrains Mono, monospace',
+        letterSpacing: '.1em',
+        textTransform: 'uppercase',
+        color: isListening ? '#e040fb' : isSpeaking ? '#29b6f6' : 'var(--text4,#555575)',
+      }}>
+        {isListening ? '● Listening' : isSpeaking ? '● Speaking' : 'Idle'}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <button
-          onClick={onClose}
-          style={{
-            width: 44, height: 44, borderRadius: '50%',
-            background: 'var(--bg3, #16162a)',
-            border: '1px solid var(--border2, #2a2a4a)',
-            color: 'var(--text2, #9090b0)',
-            cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-          aria-label="Close voice mode"
-        >
+  onClick={onClose}
+  style={{
+    width: 46, height: 46, borderRadius: '50%',
+    background: 'var(--bg3, #16162a)',
+    border: '1px solid var(--border2, #2a2a4a)',
+    color: 'var(--text2, #9090b0)',
+    cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }}
+  aria-label="Close voice mode"
+>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
         <button
           onClick={onToggleListen}
+          disabled={isSpeaking}
           style={{
-            width: 56, height: 56, borderRadius: '50%',
+            width: 60, height: 60, borderRadius: '50%',
             background: isListening
               ? 'linear-gradient(135deg,#ef4444,#f97316)'
-              : 'linear-gradient(135deg,var(--indigo, #6366f1),var(--violet, #8b5cf6))',
-            border: 'none', color: 'white', cursor: 'pointer',
+              : 'linear-gradient(135deg,#7c4dff,#29b6f6)',
+            border: 'none', color: 'white',
+            cursor: isSpeaking ? 'not-allowed' : 'pointer',
+            opacity: isSpeaking ? 0.4 : 1,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 20px rgba(99,102,241,.4)',
+            boxShadow: '0 4px 24px rgba(124,77,255,.4)',
+            transition: 'all .15s',
           }}
           aria-label={isListening ? 'Stop' : 'Speak'}
         >
           {isListening ? (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
           ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
               <path d="M19 10v2a7 7 0 01-14 0v-2" />
               <line x1="12" y1="19" x2="12" y2="23" />
@@ -2140,6 +2182,10 @@ const VoiceModeOverlay = ({ isOpen, onClose, isListening, onToggleListen, transc
   const [cardExp, setCardExp] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [upiId, setUpiId] = useState('');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [voiceAIText, setVoiceAIText] = useState('');
+  const [isVoiceSpeaking, setIsVoiceSpeaking] = useState(false);
+  const voiceModeActiveRef = useRef(false);
   const [showVoiceMode, setShowVoiceMode] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [tier, setTier] = useState('free');
@@ -2458,7 +2504,16 @@ const VoiceModeOverlay = ({ isOpen, onClose, isListening, onToggleListen, transc
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (SR) {
         recogRef.current = new SR(); recogRef.current.continuous = false; recogRef.current.interimResults = false; recogRef.current.lang = 'en-IN';
-        recogRef.current.onresult = e => { setLastMethod('voice'); handleCmdRef.current?.(e.results[0][0].transcript); setIsListening(false); };
+        recogRef.current.onresult = e => {
+  const text = e.results[0][0].transcript;
+  setIsListening(false);
+  if (voiceModeActiveRef.current) {
+    runVoiceTurn(text);
+  } else {
+    setLastMethod('voice');
+    handleCmdRef.current?.(text);
+  }
+};
         recogRef.current.onerror = () => setIsListening(false); recogRef.current.onend = () => setIsListening(false);
       }
     };
@@ -3361,6 +3416,48 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     }
   };
 
+  const runVoiceTurn = async (userText) => {
+  if (!userText.trim()) return;
+  setVoiceTranscript(userText);
+  setIsVoiceSpeaking(true);
+  setVoiceAIText('');
+  pushHistory(convHistory, 'user', userText);
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: 'Respond conversationally and briefly, like speech — 1-3 sentences unless asked for detail.',
+        history: convHistory.current
+      })
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try { const p = JSON.parse(raw); if (p.content) { full += p.content; setVoiceAIText(t => t + p.content); } } catch(_) {}
+      }
+    }
+    pushHistory(convHistory, 'assistant', full.trim());
+    await speakText(full.trim());
+  } catch(_) {
+    setVoiceAIText("Sorry, something went wrong.");
+  } finally {
+    setIsVoiceSpeaking(false);
+    setVoiceAIText('');
+    if (voiceModeActiveRef.current && recogRef.current) {
+      setTimeout(() => { setIsListening(true); recogRef.current.start(); }, 300);
+    }
+  }
+};
+
   // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
@@ -4126,7 +4223,7 @@ onChange={e => {
                   </button>
                   <button
                     className="mic-btn"
-                    onClick={() => setShowVoiceMode(true)}
+                    onClick={() => { voiceModeActiveRef.current = true; setShowVoiceMode(true); }}
                     aria-label="Voice mode"
                     style={{ width: 38, height: 38 }}
                   >
@@ -4337,13 +4434,15 @@ onChange={e => {
        <Analytics />
        <VoiceModeOverlay
   isOpen={showVoiceMode}
-  onClose={() => { setShowVoiceMode(false); recogRef.current?.stop(); setIsListening(false); }}
+  onClose={() => { voiceModeActiveRef.current = false; setShowVoiceMode(false); recogRef.current?.stop(); setIsListening(false); stopSpeaking(); }}
   isListening={isListening}
+  isSpeaking={isVoiceSpeaking}
   onToggleListen={() => {
     if (isListening) { recogRef.current?.stop(); setIsListening(false); }
     else if (recogRef.current) { setIsListening(true); recogRef.current.start(); }
   }}
-  transcript={input}
+  transcript={voiceTranscript}
+  aiText={voiceAIText}
 />
     </div>
   );
