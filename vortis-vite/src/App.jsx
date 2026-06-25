@@ -2920,7 +2920,12 @@ const startVoiceCall = () => {
   stopSpeaking();
   isSpeakingRef.current = false;
   currentAudiosRef.current = [];
-
+  ttsPending.current.clear();
+  setIsProcessing(false);        // ← ADD THIS
+  setIsStreaming(false);          // ← ADD THIS
+  setStreamText('');              // ← ADD THIS
+  setProcessingStatus('');        // ← ADD THIS
+  clearTimeout(aiTimeoutRef.current);  // ← ADD THIS
   // ✅ Also stop any pending TTS preloads
   ttsPending.current.clear();
 
