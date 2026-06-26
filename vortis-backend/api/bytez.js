@@ -17,13 +17,8 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-// Both deprecated Llama-4 models are gone from Groq — gpt-oss is the
-// current recommended family for both tiers.
-const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';   // medium tasks — fast, cheap
-const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';  // hard tasks — coding, deep reasoning
-
-// Tiny/instant model used ONLY for the classifier JSON call itself.
-// Keeping it on the cheap model so classification never becomes the bottleneck.
+const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
+const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const CF_CHAT_MODELS = [
@@ -34,11 +29,11 @@ const CF_CHAT_MODELS = [
 // ── RATE LIMITER ──────────────────────────────────────────────
 const rateLimiter = new Map();
 const RATE_LIMITS = {
-  chat:   { window: 60000, max: 30 },
-  image:  { window: 60000, max: 5  },
-  search: { window: 60000, max: 20 },
-  vision: { window: 60000, max: 5  },
-  tts:    { window: 60000, max: 20 },
+  chat:    { window: 60000, max: 30 },
+  image:   { window: 60000, max: 5  },
+  search:  { window: 60000, max: 20 },
+  vision:  { window: 60000, max: 5  },
+  tts:     { window: 60000, max: 20 },
   execute: { window: 60000, max: 15 },
 };
 
@@ -69,7 +64,7 @@ function sanitizeString(str, maxLen = 2000) {
   if (typeof str !== 'string') return '';
   return str.trim().slice(0, maxLen)
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/javascript:/gi, '')
+    .replace(/javascript:/gi, '');
 }
 
 function sanitizeHistory(history, maxMessages = 30) {
@@ -129,10 +124,7 @@ function stripInternalReasoning(text) {
     .trim();
 }
 
-// ── COMPLEXITY CHECK — instant regex heuristic, no API call ───
-// This is the fast-path / fallback used when:
-//   1) the message is obviously trivial (skip classifier entirely), or
-//   2) the AI classifier call fails or times out (safety net)
+// ── COMPLEXITY CHECK ───────────────────────────────────────────
 function isComplexMessage(text) {
   const low = text.toLowerCase().trim();
   if (low.length < 40) return false;
@@ -143,15 +135,12 @@ function isComplexMessage(text) {
   return false;
 }
 
-// Strong, unambiguous signal that something is a hard/coding task —
-// used to short-circuit straight to "hard" without even calling the classifier.
 function isObviouslyHard(text) {
   if (/```|def |function\s*\(|class\s+\w+|import\s|from\s+\w+\s+import|const\s|let\s|var\s|=>|public\s+class|<\?php|#include|console\.log|print\(/.test(text)) return true;
   if (/\b(debug|stack trace|error:|exception|algorithm|refactor|optimi[sz]e|complexity|recursion|architecture|design pattern)\b/i.test(text)) return true;
   return false;
 }
 
-// Trivial messages — never worth spending a classifier call on.
 function isObviouslyTrivial(text) {
   const low = text.toLowerCase().trim();
   if (low.length < 40) return true;
@@ -160,11 +149,7 @@ function isObviouslyTrivial(text) {
 }
 
 // ── AI-BASED TIER CLASSIFIER ───────────────────────────────────
-// Returns 'medium' or 'hard'. Calls Groq with a JSON-only response
-// requesting a tier decision. Falls back to the regex heuristic
-// (isComplexMessage) if the call fails, times out, or returns junk.
 async function classifyTier(groq, text) {
-  // Cheap, instant shortcuts — skip the network round-trip entirely.
   if (isObviouslyTrivial(text)) return 'medium';
   if (isObviouslyHard(text))    return 'hard';
 
@@ -194,9 +179,7 @@ Respond ONLY with raw JSON, no markdown, no commentary, no code fences:
 
     const raw = result.choices?.[0]?.message?.content || '';
     const parsed = JSON.parse(raw);
-    if (parsed?.tier === 'hard' || parsed?.tier === 'medium') {
-      return parsed.tier;
-    }
+    if (parsed?.tier === 'hard' || parsed?.tier === 'medium') return parsed.tier;
     throw new Error(`unexpected classifier output: ${raw.slice(0, 80)}`);
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
@@ -204,7 +187,7 @@ Respond ONLY with raw JSON, no markdown, no commentary, no code fences:
   }
 }
 
-// ── STREAMING callAI — sends tokens as they arrive ────────────
+// ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
@@ -215,7 +198,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   console.log(`Tier: ${tier} → model: ${model}`);
 
-  // ── Try Groq streaming — primary tier model, then the other tier as fallback ──
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
       const stream = await groq.chat.completions.create({
@@ -235,7 +217,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
       }
 
-      // ── if buffer is empty or just whitespace, try next model ──
       if (buffer.trim().length > 2) {
         res.write('data: [DONE]\n\n');
         res.end();
@@ -247,7 +228,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
     }
   }
 
-  // ── CF fallback ──
   for (const cfModel of CF_CHAT_MODELS) {
     try {
       const cfRes = await fetch(
@@ -258,31 +238,16 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
           body: JSON.stringify({ messages, stream: false, max_tokens: 1200 }),
         }
       );
-      if (!cfRes.ok) {
-        console.log(`CF model ${cfModel} HTTP ${cfRes.status}`);
-        continue;
-      }
+      if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
 
       const data = await cfRes.json();
-
-      // ── FIX: defensively extract text — CF response shape varies by model,
-      // and previously this crashed with "text.replace is not a function"
-      // whenever data.result.response wasn't a plain string. ──
       let rawText = data?.result?.response;
-
-      // Some CF models (notably Qwen3 variants) can nest output differently
-      // depending on whether "thinking" content is present. Try a couple of
-      // sane fallback paths before giving up on this model.
       if (typeof rawText !== 'string') {
-        rawText =
-          data?.result?.output_text ??
-          data?.result?.choices?.[0]?.message?.content ??
-          null;
+        rawText = data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
       }
-
       if (typeof rawText !== 'string') {
         console.log(`CF model ${cfModel} unexpected response shape:`, JSON.stringify(data).slice(0, 300));
-        continue; // skip to next fallback model instead of crashing
+        continue;
       }
 
       const text = stripInternalReasoning(rawText);
@@ -536,17 +501,17 @@ export default async function handler(req, res) {
         .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
         .replace(/\s+/g, ' ')
         .trim()
-        .slice(0, 900)
+        .slice(0, 900);
 
       if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
 
       try {
         const { EdgeTTS } = await import('@andresaya/edge-tts');
         const tts = new EdgeTTS();
-        await tts.synthesize(cleanText, voice, { 
-  outputFormat: 'audio-24khz-48kbitrate-mono-mp3', 
-  rate: '-12%' 
-});
+        await tts.synthesize(cleanText, voice, {
+          outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+          rate: '-12%',
+        });
         const base64 = await tts.toBase64();
         if (base64 && base64.length > 100) {
           res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -591,9 +556,7 @@ export default async function handler(req, res) {
       try {
         const lastUserMsg = history[history.length - 1]?.content || '';
 
-        // ── Auto-search and geo run in PARALLEL — not sequential ──
         const [searchContext, userLocation] = await Promise.all([
-          // Web search — only if needed
           (async () => {
             if (!needsWebSearch(lastUserMsg)) return '';
             try {
@@ -622,7 +585,6 @@ export default async function handler(req, res) {
             }
           })(),
 
-          // Geo — fire and forget, 3s max, never blocks chat
           (async () => {
             try {
               const geoRes = await fetchWithTimeout(
@@ -639,7 +601,7 @@ export default async function handler(req, res) {
           })(),
         ]);
 
-       const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.
+        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.
                                  Vortis is an AI assistant platform built by the Vortis team, offering chat, 
                                  image generation, vision, document analysis, web search, and voice mode 
                                  (describe whatever your product actually is here — version, mission, etc).
@@ -671,12 +633,12 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         if (sysContent) messages.push({ role: 'system', content: sysContent });
         messages.push(...history);
 
-       if (!messages.length || messages[messages.length - 1].role !== 'user') {
-  const userMsg = history.length > 0 
-  ? history[history.length - 1].content 
-  : prompt.replace(/^You are VORTIS[\s\S]{0,500}/, '').trim();
-messages.push({ role: 'user', content: userMsg });
-}
+        if (!messages.length || messages[messages.length - 1].role !== 'user') {
+          const userMsg = history.length > 0
+            ? history[history.length - 1].content
+            : prompt.replace(/^You are VORTIS[\s\S]{0,500}/, '').trim();
+          messages.push({ role: 'user', content: userMsg });
+        }
 
         const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
         if (!ok) {
@@ -822,7 +784,7 @@ messages.push({ role: 'user', content: userMsg });
       }
     }
 
- // ╔══════════════════════════════════════╗
+    // ╔══════════════════════════════════════╗
     // ║  IMAGE GENERATION                    ║
     // ╚══════════════════════════════════════╝
     if (action === 'image') {
@@ -831,7 +793,7 @@ messages.push({ role: 'user', content: userMsg });
 
       const forceGemini = body.forceGemini === true;
 
-      // ── Helper: Try Flux Worker ──
+      // ── Helper: Try Flux Worker (your existing worker) ──
       async function tryFlux(promptText) {
         try {
           const seed   = Math.floor(Math.random() * 999999);
@@ -857,60 +819,66 @@ messages.push({ role: 'user', content: userMsg });
             return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
           }
         } catch (e) {
-          console.error('Flux failed:', e.message);
+          console.error('Flux worker failed:', e.message);
           return null;
         }
       }
 
-      // ── Helper: Try Gemini 2.0 Flash Image Gen ──
-   async function tryGemini(promptText) {
-  try {
-    const geminiKey = process.env.GEMINI_IMAGE_KEY;
-    if (!geminiKey) return null;
+      // ── Helper: Try Pollinations Flux (free, no key required) ──
+      // NOTE: function kept as tryGemini so no frontend changes needed.
+      // Internally now calls Pollinations Flux — confirmed free & unlimited.
+      async function tryGemini(promptText) {
+        try {
+          const encodedPrompt = encodeURIComponent(promptText.trim());
+          const seed = Math.floor(Math.random() * 999999);
 
-    const gemRes = await fetchWithTimeout(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiKey}`,
-      {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText.trim() }] }],
-          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-        }),
-      },
-      30000
-    );
+          const polRes = await fetchWithTimeout(
+            `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true&enhance=false`,
+            {
+              method: 'GET',
+              headers: { 'User-Agent': BROWSER_UA },
+            },
+            30000
+          );
 
-    console.log('Gemini 2.5 status:', gemRes.status);
-    if (!gemRes.ok) {
-      const err = await gemRes.text();
-      console.log('Gemini 2.5 error:', err.slice(0, 300));
-      return null;
-    }
+          console.log('Pollinations Flux status:', polRes.status);
 
-    const data  = await gemRes.json();
-    const parts = data?.candidates?.[0]?.content?.parts || [];
-    const imagePart = parts.find(p => p.inlineData?.mimeType?.startsWith('image/'));
-    if (!imagePart?.inlineData?.data) return null;
+          if (!polRes.ok) {
+            console.log('Pollinations Flux error:', polRes.status);
+            return null;
+          }
 
-    const mime = imagePart.inlineData.mimeType || 'image/png';
-    console.log('Gemini 2.5 image received ✅');
-    return { success: true, imageUrl: `data:${mime};base64,${imagePart.inlineData.data}` };
-  } catch (e) {
-    console.error('Gemini image failed:', e.message);
-    return null;
-  }
-}
-      // ── Helper: AI + keyword decides if prompt needs Gemini ──
+          const contentType = polRes.headers.get('content-type') || '';
+          if (!contentType.startsWith('image/')) {
+            console.log('Pollinations returned non-image content-type:', contentType);
+            return null;
+          }
+
+          const arrayBuffer = await polRes.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+          if (!base64 || base64.length < 100) {
+            console.log('Pollinations returned empty image');
+            return null;
+          }
+
+          const mime = contentType.split(';')[0].trim() || 'image/jpeg';
+          console.log('Pollinations Flux image received ✅');
+          return { success: true, imageUrl: `data:${mime};base64,${base64}` };
+        } catch (e) {
+          console.error('Pollinations Flux failed:', e.message);
+          return null;
+        }
+      }
+
+      // ── Complexity check: still useful to decide ordering ──
       async function isComplexImagePrompt(promptText) {
-        // Keyword shortcut — always Gemini for these
-        const GEMINI_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
-        if (GEMINI_KEYWORDS.test(promptText)) return true;
-
-        // Short simple prompts → Flux
+        // These prompts get Pollinations first (it handles them fine)
+        // Simple prompts → Flux worker first (faster, your infra)
+        const DETAIL_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
+        if (DETAIL_KEYWORDS.test(promptText)) return true;
         if (promptText.trim().length <= 80) return false;
 
-        // AI judge for everything else
         try {
           const result = await Promise.race([
             groq.chat.completions.create({
@@ -918,10 +886,10 @@ messages.push({ role: 'user', content: userMsg });
               messages: [
                 {
                   role:    'system',
-                  content: `You decide if an image prompt needs HIGH-QUALITY AI (Gemini) or BASIC AI (Flux).
-Use Gemini for: religious figures, gods, goddesses, realistic humans/faces, cinematic scenes, mythology, intricate art, portraits, epic/dramatic scenes, cultural icons, detailed illustrations.
+                  content: `You decide if an image prompt needs HIGH-QUALITY AI (Pollinations) or BASIC AI (Flux worker).
+Use Pollinations for: religious figures, gods, goddesses, realistic humans/faces, cinematic scenes, mythology, intricate art, portraits, epic/dramatic scenes, cultural icons, detailed illustrations.
 Use Flux for: simple objects, logos, icons, cartoons, basic backgrounds, abstract patterns, simple illustrations.
-Reply ONLY one word: GEMINI or FLUX`,
+Reply ONLY one word: POLLINATIONS or FLUX`,
                 },
                 { role: 'user', content: promptText },
               ],
@@ -931,7 +899,7 @@ Reply ONLY one word: GEMINI or FLUX`,
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
           ]);
           const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'FLUX';
-          return answer.includes('GEMINI');
+          return answer.includes('POLLINATIONS');
         } catch (e) {
           console.error('Complexity check failed:', e.message);
           return promptText.length > 100;
@@ -939,14 +907,14 @@ Reply ONLY one word: GEMINI or FLUX`,
       }
 
       try {
-        // ── forceGemini: user clicked Redo — skip Flux entirely ──
+        // ── forceGemini flag: frontend "Redo" button → try Pollinations first ──
         if (forceGemini) {
-          console.log('Force Gemini requested');
-          const geminiResult = await tryGemini(prompt);
-          if (geminiResult?.imageUrl) {
-            return res.status(200).json({ ...geminiResult, provider: 'gemini' });
+          console.log('Force Pollinations requested');
+          const polResult = await tryGemini(prompt);
+          if (polResult?.imageUrl) {
+            return res.status(200).json({ ...polResult, provider: 'pollinations' });
           }
-          // Gemini failed — fallback to Flux
+          // Pollinations failed — fallback to Flux worker
           const fluxFallback = await tryFlux(prompt);
           if (fluxFallback?.imageUrl) {
             return res.status(200).json({ ...fluxFallback, provider: 'flux' });
@@ -954,33 +922,33 @@ Reply ONLY one word: GEMINI or FLUX`,
           return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
         }
 
-        // ── Normal flow: check complexity first ──
-        const needsGemini = await isComplexImagePrompt(prompt);
-        console.log(`Prompt complexity: ${needsGemini ? 'GEMINI' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
+        // ── Normal flow ──
+        const needsQuality = await isComplexImagePrompt(prompt);
+        console.log(`Prompt complexity: ${needsQuality ? 'POLLINATIONS' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
 
-        if (needsGemini) {
-          // Complex prompt → Gemini first
-          const geminiResult = await tryGemini(prompt);
-          if (geminiResult?.imageUrl) {
-            return res.status(200).json({ ...geminiResult, provider: 'gemini' });
+        if (needsQuality) {
+          // Detailed prompt → Pollinations Flux first
+          const polResult = await tryGemini(prompt);
+          if (polResult?.imageUrl) {
+            return res.status(200).json({ ...polResult, provider: 'pollinations' });
           }
-          // Gemini failed → fallback Flux
-          console.log('Gemini failed, falling back to Flux');
+          // Fallback to Flux worker
+          console.log('Pollinations failed, falling back to Flux worker');
           const fluxFallback = await tryFlux(prompt);
           if (fluxFallback?.imageUrl) {
             return res.status(200).json({ ...fluxFallback, provider: 'flux' });
           }
         } else {
-          // Simple prompt → Flux first
+          // Simple prompt → Flux worker first (faster)
           const fluxResult = await tryFlux(prompt);
           if (fluxResult?.imageUrl) {
             return res.status(200).json({ ...fluxResult, provider: 'flux' });
           }
-          // Flux failed → try Gemini anyway
-          console.log('Flux failed, trying Gemini as fallback');
-          const geminiResult = await tryGemini(prompt);
-          if (geminiResult?.imageUrl) {
-            return res.status(200).json({ ...geminiResult, provider: 'gemini' });
+          // Fallback to Pollinations
+          console.log('Flux worker failed, trying Pollinations');
+          const polResult = await tryGemini(prompt);
+          if (polResult?.imageUrl) {
+            return res.status(200).json({ ...polResult, provider: 'pollinations' });
           }
         }
 
@@ -991,7 +959,7 @@ Reply ONLY one word: GEMINI or FLUX`,
         return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
       }
     }
-    
+
     return res.status(400).json({ error: 'Invalid action' });
 
   } catch (error) {
