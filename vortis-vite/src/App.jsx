@@ -2033,6 +2033,14 @@ export default function VortisAI() {
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
   const callActiveRef = useRef(false);
+  const callAudioCtxRef   = useRef(null);
+  const callAnalyserRef   = useRef(null);
+  const callMicStreamRef  = useRef(null);
+  const callRafRef        = useRef(null);
+  const callSilenceTORef  = useRef(null);
+  const callSpeechHeard   = useRef(false);
+  const callAbortTTSRef   = useRef(null);
+  const callModeRef       = useRef('idle');
   const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -2909,184 +2917,306 @@ const addMsg = (type, text, speak = false) => {
 };
 
 // ═══════════════════════════════════════════════════
-// VOICE CALL — replace lines 2911 through 3083
+// VOICE CALL ENGINE v2 — real-time conversational voice
+// (continuous listening + real silence detection + barge-in)
 // ═══════════════════════════════════════════════════
-
-// ═══════ VOICE CALL (only declare ONCE) ═══════
-
-const startVoiceCall = () => {
+ 
+const VOICE_SILENCE_MS    = 700;
+const VOICE_TALK_RMS      = 0.045;
+const VOICE_BARGE_RMS     = 0.06;
+const VOICE_MIN_SPEECH_MS = 250;
+ 
+const startMicAnalyser = async () => {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  }});
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  const source = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  analyser.smoothingTimeConstant = 0.6;
+  source.connect(analyser);
+ 
+  callMicStreamRef.current = stream;
+  callAudioCtxRef.current = ctx;
+  callAnalyserRef.current = analyser;
+};
+ 
+const readMicRMS = () => {
+  const analyser = callAnalyserRef.current;
+  if (!analyser) return 0;
+  const buf = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(buf);
+  let sum = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const v = (buf[i] - 128) / 128;
+    sum += v * v;
+  }
+  return Math.sqrt(sum / buf.length);
+};
+ 
+const startVoiceCall = async () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
+ 
+  try {
+    await startMicAnalyser();
+  } catch (e) {
+    showToast('Microphone access denied', 'var(--red)');
+    return;
+  }
+ 
   setShowVoiceCall(true);
-  setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
-  setTimeout(() => {
-    try { runCallListenLoop(); } catch (e) {
-      console.error('Initial start failed:', e);
-    }
-  }, 300);
+  callModeRef.current = 'idle';
+  setCallState('idle');
+ 
+  setTimeout(() => { beginListening(); }, 250);
 };
-
+ 
 const endVoiceCall = () => {
   callActiveRef.current = false;
+  callModeRef.current = 'idle';
+ 
   try { callRecogRef.current?.stop(); } catch(_) {}
   try { stopSpeaking(); } catch(_) {}
+  try { callAbortTTSRef.current?.abort(); } catch(_) {}
+ 
+  if (callRafRef.current) { cancelAnimationFrame(callRafRef.current); callRafRef.current = null; }
+  if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+ 
+  if (callMicStreamRef.current) {
+    try { callMicStreamRef.current.getTracks().forEach(t => t.stop()); } catch(_) {}
+  }
+  if (callAudioCtxRef.current) {
+    try { callAudioCtxRef.current.close(); } catch(_) {}
+  }
+  callMicStreamRef.current = null;
+  callAudioCtxRef.current = null;
+  callAnalyserRef.current = null;
+ 
   setCallState('idle');
   setCallPaused(false);
   setShowVoiceCall(false);
 };
-
-const runCallListenLoop = () => {
-  if (!callActiveRef.current) return;
-
+ 
+const beginListening = () => {
+  if (!callActiveRef.current || callPaused) return;
+ 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { console.error('SR not supported'); setCallState('idle'); return; }
-
+  if (!SR) return;
+ 
   let recog;
-  try { recog = new SR(); } catch (e) { console.error('SR create failed:', e); setCallState('idle'); return; }
-
-  recog.continuous = false;
-  recog.interimResults = false;
+  try { recog = new SR(); } catch (e) { return; }
+  recog.continuous = true;
+  recog.interimResults = true;
   recog.lang = 'en-IN';
   callRecogRef.current = recog;
-
-  let restarted = false;
-  const safeRestart = () => {
-    if (restarted) return;
-    restarted = true;
-    if (callActiveRef.current) {
-      setTimeout(() => { try { runCallListenLoop(); } catch(e) {} }, 500);
-    }
-  };
-
+  callSpeechHeard.current = false;
+ 
+  let finalTranscript = '';
+  let speechStartedAt = 0;
+ 
+  callModeRef.current = 'listening';
   setCallState('listening');
-
-  recog.onresult = async (e) => {
-    try {
-      const transcript = e.results?.[0]?.[0]?.transcript;
-      if (!callActiveRef.current) return;
-      if (!transcript?.trim()) { safeRestart(); return; }
-
-      setCallState('thinking');
-
-      if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
-      incrUsage('messages');
-
-      pushHistory(convHistory, 'user', transcript);
-
-      const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers. Be conversational and warm.`;
-
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: await getAuthHeader(),
-        body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
-      });
-
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let full = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of dec.decode(value).split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]' || !raw) continue;
-          try { const p = JSON.parse(raw); if (p.content) full += p.content; } catch(_) {}
-        }
+ 
+  const watch = () => {
+    if (!callActiveRef.current || callModeRef.current !== 'listening') return;
+    const rms = readMicRMS();
+ 
+    if (rms > VOICE_TALK_RMS) {
+      if (!callSpeechHeard.current) {
+        callSpeechHeard.current = true;
+        speechStartedAt = Date.now();
       }
-
-      const reply = full.trim() || "Sorry, I didn't catch that.";
-      pushHistory(convHistory, 'assistant', reply);
-
-      if (!callActiveRef.current) return;
-      setCallState('speaking');
-
-      // Inline TTS for voice call (bypasses speakText to avoid conflicts)
-      try {
-        stopSpeaking();
-        isSpeakingRef.current = false;
-        await new Promise(r => setTimeout(r, 100));
-        isSpeakingRef.current = true;
-
-        const gender = ttsGenderRef.current;
-        const clean = cleanForTTS(reply);
-        const voice = detectLangVoice(clean, gender);
-        const headers = await getCachedAuthHeader();
-
-        const toBlobUrl = (dataUrl) => {
-          if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
-          try {
-            const base64 = dataUrl.split(',')[1];
-            const bin = window.atob(base64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
-          } catch(e) { return dataUrl; }
-        };
-
-        const fetchChunk = (txt) =>
-          fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text: txt, voice }) })
-            .then(r => r.ok ? r.json() : null)
-            .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
-            .catch(() => null);
-
-        if (clean.length <= 800) {
-          const src = await fetchChunk(clean);
-          if (callActiveRef.current && src) {
-            const audio = new Audio(toBlobUrl(src));
-            currentAudiosRef.current = [audio];
-            await new Promise(r => { audio.onended = r; audio.onerror = r; audio.play().catch(r); });
-          }
-        } else {
-          const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
-          const chunks = []; let cur = '';
-          for (const s of sentences) {
-            if ((cur + s).length > 800 && cur) { chunks.push(cur.trim()); cur = s; } else cur += s;
-          }
-          if (cur.trim()) chunks.push(cur.trim());
-          let nextFetch = fetchChunk(chunks[0]);
-          for (let i = 0; i < chunks.length; i++) {
-            if (!callActiveRef.current) break;
-            const src = await nextFetch;
-            if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
-            if (!callActiveRef.current || !src) continue;
-            const audio = new Audio(toBlobUrl(src));
-            currentAudiosRef.current = [audio];
-            await new Promise(r => { audio.onended = r; audio.onerror = r; audio.play().catch(r); });
-          }
-        }
-      } catch(speakErr) {
-        console.error('Voice speak error:', speakErr);
-      } finally {
-        isSpeakingRef.current = false;
-        currentAudiosRef.current = [];
+      if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+    } else if (callSpeechHeard.current && !callSilenceTORef.current) {
+      const spokeLongEnough = Date.now() - speechStartedAt >= VOICE_MIN_SPEECH_MS;
+      if (spokeLongEnough) {
+        callSilenceTORef.current = setTimeout(() => {
+          callSilenceTORef.current = null;
+          finishTurn(recog, finalTranscript);
+        }, VOICE_SILENCE_MS);
       }
-
-    } catch(err) {
-      console.error('onresult error:', err);
     }
-
-    safeRestart();
+ 
+    callRafRef.current = requestAnimationFrame(watch);
   };
-
+  callRafRef.current = requestAnimationFrame(watch);
+ 
+  recog.onresult = (e) => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalTranscript += r[0].transcript;
+    }
+  };
+ 
   recog.onerror = (e) => {
-    if (!callActiveRef.current) return;
-    if (e?.error === 'aborted') return;
-    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
-    safeRestart();
+    if (e?.error === 'not-allowed') { endVoiceCall(); return; }
+    if (e?.error === 'aborted' || e?.error === 'no-speech') return;
   };
-
+ 
   recog.onend = () => {
-    if (!callActiveRef.current) return;
-    safeRestart();
+    if (callActiveRef.current && callModeRef.current === 'listening' && !callPaused) {
+      finishTurn(recog, finalTranscript);
+    }
   };
-
-  try { recog.start(); } catch(e) {
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch(err) {} }, 800);
+ 
+  try { recog.start(); } catch(_) {}
+};
+ 
+const finishTurn = async (recog, transcript) => {
+  if (callModeRef.current !== 'listening') return;
+  callModeRef.current = 'thinking';
+ 
+  if (callRafRef.current) { cancelAnimationFrame(callRafRef.current); callRafRef.current = null; }
+  if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+  try { recog.stop(); } catch(_) {}
+ 
+  const text = (transcript || '').trim();
+  if (!text) {
+    if (callActiveRef.current && !callPaused) beginListening();
+    else { callModeRef.current = 'idle'; setCallState('idle'); }
+    return;
+  }
+ 
+  setCallState('thinking');
+ 
+  if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+  incrUsage('messages');
+ 
+  pushHistory(convHistory, 'user', text);
+ 
+  const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers. Be conversational and warm.`;
+ 
+  let reply = "Sorry, I didn't catch that.";
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try { const p = JSON.parse(raw); if (p.content) full += p.content; } catch(_) {}
+      }
+    }
+    reply = full.trim() || reply;
+  } catch(_) {}
+ 
+  pushHistory(convHistory, 'assistant', reply);
+ 
+  if (!callActiveRef.current || callPaused) { callModeRef.current = 'idle'; return; }
+  await speakReply(reply);
+};
+ 
+const speakReply = async (replyText) => {
+  callModeRef.current = 'speaking';
+  setCallState('speaking');
+ 
+  const gender = ttsGenderRef.current;
+  const clean = cleanForTTS(replyText);
+  const voice = detectLangVoice(clean, gender);
+ 
+  const abortCtrl = new AbortController();
+  callAbortTTSRef.current = abortCtrl;
+ 
+  const toBlobUrl = (dataUrl) => {
+    if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+    try {
+      const base64 = dataUrl.split(',')[1];
+      const bin = window.atob(base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
+    } catch(e) { return dataUrl; }
+  };
+ 
+  const fetchChunk = async (txt) => {
+    try {
+      const headers = await getCachedAuthHeader();
+      const r = await fetch(API, {
+        method: 'POST', headers,
+        body: JSON.stringify({ action: 'tts', text: txt, voice }),
+        signal: abortCtrl.signal,
+      });
+      if (!r.ok) return null;
+      const d = await r.json();
+      return d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null;
+    } catch(_) { return null; }
+  };
+ 
+  let bargedIn = false;
+  const watchForBargeIn = () => {
+    if (callModeRef.current !== 'speaking') return;
+    const rms = readMicRMS();
+    if (rms > VOICE_BARGE_RMS) {
+      bargedIn = true;
+      try { abortCtrl.abort(); } catch(_) {}
+      currentAudiosRef.current.forEach(a => { try { a.pause(); a.src = ''; } catch(_) {} });
+      currentAudiosRef.current = [];
+      callRafRef.current = null;
+      callModeRef.current = 'listening';
+      setCallState('listening');
+      beginListening();
+      return;
+    }
+    callRafRef.current = requestAnimationFrame(watchForBargeIn);
+  };
+  callRafRef.current = requestAnimationFrame(watchForBargeIn);
+ 
+  const playOne = (src) => new Promise((resolve) => {
+    if (bargedIn) return resolve();
+    const audio = new Audio(toBlobUrl(src));
+    currentAudiosRef.current = [audio];
+    audio.onended = resolve;
+    audio.onerror = resolve;
+    audio.play().catch(resolve);
+  });
+ 
+  try {
+    if (clean.length <= 800) {
+      const src = await fetchChunk(clean);
+      if (!bargedIn && src) await playOne(src);
+    } else {
+      const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
+      const chunks = []; let cur = '';
+      for (const s of sentences) {
+        if ((cur + s).length > 800 && cur) { chunks.push(cur.trim()); cur = s; } else cur += s;
+      }
+      if (cur.trim()) chunks.push(cur.trim());
+ 
+      let nextFetch = fetchChunk(chunks[0]);
+      for (let i = 0; i < chunks.length; i++) {
+        if (bargedIn || !callActiveRef.current) break;
+        const src = await nextFetch;
+        if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
+        if (!bargedIn && src) await playOne(src);
+      }
+    }
+  } catch(_) {}
+ 
+  if (callRafRef.current) { cancelAnimationFrame(callRafRef.current); callRafRef.current = null; }
+  callAbortTTSRef.current = null;
+ 
+  if (!bargedIn && callActiveRef.current && !callPaused) {
+    callModeRef.current = 'idle';
+    beginListening();
   }
 };
+ 
  const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
@@ -4175,17 +4305,20 @@ return (
       {/* Pause / Resume */}
       <button
         onClick={() => {
-          if (callPaused) {
-            setCallPaused(false);
-            callActiveRef.current = true;
-            runCallListenLoop();
-          } else {
-            setCallPaused(true);
-            callRecogRef.current?.stop();
-            stopSpeaking();
-            setCallState('idle');
-          }
-        }}
+     if (callPaused) {
+       setCallPaused(false);
+       callActiveRef.current = true;
+       beginListening();
+     } else {
+       setCallPaused(true);
+       callModeRef.current = 'idle';
+       try { callRecogRef.current?.stop(); } catch(_) {}
+       if (callRafRef.current) { cancelAnimationFrame(callRafRef.current); callRafRef.current = null; }
+       if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+       stopSpeaking();
+       setCallState('idle');
+     }
+   }}
         style={{
           width: 58, height: 58, borderRadius: '50%',
           background: 'rgba(255,255,255,.08)',
