@@ -18,7 +18,7 @@ if (!admin.apps.length) {
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
+const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 
