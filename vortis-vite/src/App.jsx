@@ -7,6 +7,7 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
+ import { franc } from 'franc-min';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -2039,6 +2040,7 @@ export default function VortisAI() {
   const callTtsQueueRef = useRef(Promise.resolve()); // serializes sentence playback order
   const callFinalTranscriptRef = useRef('');
   const callSilenceMsRef = useRef(1100);
+  const callSilenceTORef = useRef(null);
   const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -2913,56 +2915,252 @@ const addMsg = (type, text, speak = false) => {
   if (speak && autoSpeak && type === 'vortis') speakText(text);
   return msg;
 };
-const getRecogLang = () => {
-  try { return localStorage.getItem('vortis_recog_lang') || navigator.language || 'en-US'; }
-  catch (_) { return 'en-US'; }
-};
+const callDetectedLangRef = useRef('en-US');
 
-const base64ToArrayBuffer = (base64) => {
-  const bin = atob(base64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
-};
+const detectSpokenLang = (text) => {
+  if (!text || text.trim().length < 2) return 'en-US';
+  if (/[\u0900-\u097F]/.test(text)) return 'hi-IN';
+  if (/[\u0980-\u09FF]/.test(text)) return 'bn-IN';
+  if (/[\u0A80-\u0AFF]/.test(text)) return 'gu-IN';
+  if (/[\u0B80-\u0BFF]/.test(text)) return 'ta-IN';
+  if (/[\u0C00-\u0C7F]/.test(text)) return 'te-IN';
+  if (/[\u0C80-\u0CFF]/.test(text)) return 'kn-IN';
+  if (/[\u0D00-\u0D7F]/.test(text)) return 'ml-IN';
+  if (/[\u0600-\u06FF]/.test(text)) return 'ar-SA';
+  if (/[\u0590-\u05FF]/.test(text)) return 'he-IL';
+  if (/[\u0E00-\u0E7F]/.test(text)) return 'th-TH';
+  if (/[\u4E00-\u9FFF]/.test(text)) return 'zh-CN';
+  if (/[\u3040-\u30FF]/.test(text)) return 'ja-JP';
+  if (/[\uAC00-\uD7AF]/.test(text)) return 'ko-KR';
+  if (/[\u0400-\u04FF]/.test(text)) return 'ru-RU';
+  if (/[\u0370-\u03FF]/.test(text)) return 'el-GR';
 
-// Decode an mp3-base64 TTS response and schedule it to play immediately after
-// whatever's already queued — this is what makes multi-sentence replies sound
-// like one continuous voice instead of stutter-gap-stutter.
-const scheduleAudioBuffer = async (base64Audio) => {
-  if (!callAudioCtxOutRef.current) {
-    callAudioCtxOutRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    callNextPlayTimeRef.current = callAudioCtxOutRef.current.currentTime;
+  const lower = text.toLowerCase();
+  const words = lower.match(/\b[a-záàâäéèêëíìîïóòôöúùûüýñçœæ]+\b/g) || [];
+  const wordSet = new Set(words);
+
+  const SIGS = {
+    'hi-IN': ['kya','hai','hain','nahi','nhi','mein','tum','aap','yeh','woh','aur','lekin','bahut','bohot','bhai','yaar','accha','theek','matlab','kaun','kahan','kaise','kyun','abhi','gaya','hua','chahiye','sirf','bas'],
+    'fr-FR': ['je','tu','il','elle','nous','vous','les','des','une','est','que','qui','pas','plus','dans','sur','avec','pour','mais','par','bonjour','merci','oui','non'],
+    'de-DE': ['ich','du','er','sie','wir','die','der','das','ein','und','ist','nicht','den','von','mit','auf','auch','aber','wenn','dann','hallo','danke','bitte','ja','nein'],
+    'es-ES': ['yo','el','la','los','las','que','es','en','de','se','no','por','con','para','pero','como','más','hay','hola','gracias','sí','dónde','cómo'],
+    'pt-BR': ['que','não','uma','para','com','por','mas','como','mais','seu','está','são','foi','ser','ter','também','muito','obrigado','olá'],
+    'it-IT': ['il','la','le','gli','che','non','per','con','del','della','questo','questa','ma','come','più','già','anche','ciao','grazie'],
+    'ru-RU': ['и','в','не','на','что','это','по','но','как','да','нет','спасибо','привет'],
+    'tr-TR': ['bir','bu','ve','de','da','için','ile','değil','gibi','çok','evet','hayır','teşekkür','merhaba'],
+    'ar-SA': ['في','من','على','إلى','هذا','مع','نعم','لا','شكرا','مرحبا'],
+    'vi-VN': ['và','của','là','có','trong','không','được','cho','này','cảm','ơn'],
+    'id-ID': ['yang','dan','di','ini','itu','dengan','untuk','dari','tidak','ada','terima','kasih'],
+    'ms-MY': ['yang','dan','di','ini','itu','dengan','untuk','dari','tidak','ada','terima','kasih'],
+    'nl-NL': ['de','het','een','van','en','in','is','dat','op','zijn','met','niet','maar','dank','hallo'],
+    'pl-PL': ['że','jest','się','nie','to','jak','na','do','ale','już','dziękuję','cześć','tak'],
+    'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte','men','tack','hej'],
+  };
+
+  let bestLang = 'en-US';
+  let bestScore = 0;
+  for (const [lang, keywords] of Object.entries(SIGS)) {
+    const matches = keywords.filter(w => wordSet.has(w)).length;
+    const score = matches / Math.max(words.length, 1);
+    if (score > bestScore && matches >= 1) { bestScore = score; bestLang = lang; }
   }
-  const ctx = callAudioCtxOutRef.current;
-  if (ctx.state === 'suspended') await ctx.resume();
-
-  let audioBuffer;
-  try {
-    audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(base64Audio));
-  } catch (e) { console.error('TTS decode failed:', e); return; }
-
-  const src = ctx.createBufferSource();
-  src.buffer = audioBuffer;
-  src.connect(ctx.destination);
-  callActiveSourcesRef.current.push(src);
-
-  const startAt = Math.max(ctx.currentTime, callNextPlayTimeRef.current);
-  src.start(startAt);
-  callNextPlayTimeRef.current = startAt + audioBuffer.duration;
-
-  return new Promise((resolve) => {
-    src.onended = resolve;
-  });
+  return bestScore >= 0.05 ? bestLang : 'en-US';
 };
 
-// Stops everything currently playing/scheduled — used for barge-in.
-const stopCallPlayback = () => {
-  callActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch (_) {} });
-  callActiveSourcesRef.current = [];
-  if (callAudioCtxOutRef.current) callNextPlayTimeRef.current = callAudioCtxOutRef.current.currentTime;
-  isSpeakingRef.current = false;
+const CALL_VOICE_MAP = {
+  'hi-IN': ['hi-IN-MadhurNeural',   'hi-IN-SwaraNeural'],
+  'bn-IN': ['bn-IN-BashkarNeural',  'bn-IN-TanishaaNeural'],
+  'ta-IN': ['ta-IN-ValluvarNeural', 'ta-IN-PallaviNeural'],
+  'te-IN': ['te-IN-MohanNeural',    'te-IN-ShrutiNeural'],
+  'ml-IN': ['ml-IN-MidhunNeural',   'ml-IN-SobhanaNeural'],
+  'kn-IN': ['kn-IN-GaganNeural',    'kn-IN-SapnaNeural'],
+  'gu-IN': ['gu-IN-NiranjanNeural', 'gu-IN-DhwaniNeural'],
+  'ar-SA': ['ar-SA-HamedNeural',    'ar-SA-ZariyahNeural'],
+  'zh-CN': ['zh-CN-YunxiNeural',    'zh-CN-XiaoxiaoNeural'],
+  'ja-JP': ['ja-JP-KeitaNeural',    'ja-JP-NanamiNeural'],
+  'ko-KR': ['ko-KR-InJoonNeural',   'ko-KR-SunHiNeural'],
+  'fr-FR': ['fr-FR-HenriNeural',    'fr-FR-DeniseNeural'],
+  'de-DE': ['de-DE-ConradNeural',   'de-DE-KatjaNeural'],
+  'es-ES': ['es-ES-AlvaroNeural',   'es-ES-ElviraNeural'],
+  'pt-BR': ['pt-BR-AntonioNeural',  'pt-BR-FranciscaNeural'],
+  'it-IT': ['it-IT-DiegoNeural',    'it-IT-ElsaNeural'],
+  'ru-RU': ['ru-RU-DmitryNeural',   'ru-RU-SvetlanaNeural'],
+  'tr-TR': ['tr-TR-AhmetNeural',    'tr-TR-EmelNeural'],
+  'vi-VN': ['vi-VN-NamMinhNeural',  'vi-VN-HoaiMyNeural'],
+  'id-ID': ['id-ID-ArdiNeural',     'id-ID-GadisNeural'],
+  'ms-MY': ['ms-MY-OsmanNeural',    'ms-MY-YasminNeural'],
+  'th-TH': ['th-TH-NiwatNeural',    'th-TH-PremwadeeNeural'],
+  'nl-NL': ['nl-NL-MaartenNeural',  'nl-NL-ColetteNeural'],
+  'pl-PL': ['pl-PL-MarekNeural',    'pl-PL-ZofiaNeural'],
+  'sv-SE': ['sv-SE-MattiasNeural',  'sv-SE-SofieNeural'],
+  'el-GR': ['el-GR-NestorasNeural', 'el-GR-AthinaNeural'],
+  'he-IL': ['he-IL-AvriNeural',     'he-IL-HilaNeural'],
+  'en-US': ['en-US-GuyNeural',      'en-US-AriaNeural'],
 };
 
+const getCallVoice = (lang, gender) => {
+  const voices = CALL_VOICE_MAP[lang] || CALL_VOICE_MAP['en-US'];
+  return voices[gender === 'female' ? 1 : 0];
+};
+
+const runCallListenLoop = () => {
+  if (!callActiveRef.current) return;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { setCallState('idle'); return; }
+
+  let recog;
+  try { recog = new SR(); } catch (e) { setCallState('idle'); return; }
+
+  recog.continuous = true;
+  recog.interimResults = true;
+  // Use the last detected language so recognition matches what the user is speaking
+  recog.lang = callDetectedLangRef.current;
+  callRecogRef.current = recog;
+
+  let restarted = false;
+  const safeRestart = () => {
+    if (restarted) return;
+    restarted = true;
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 350);
+  };
+
+  const clearSilenceTimer = () => {
+    if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+  };
+
+  const armSilenceTimer = () => {
+    clearSilenceTimer();
+    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
+  };
+
+  setCallState('listening');
+
+  recog.onresult = (e) => {
+    if (isSpeakingRef.current) { stopCallPlayback(); setCallState('listening'); }
+
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) callFinalTranscriptRef.current += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+
+    // Auto-detect language from what we hear and update for next loop
+    const sample = callFinalTranscriptRef.current || interim;
+    if (sample.trim().length > 2) {
+      const detected = detectSpokenLang(sample);
+      if (detected !== callDetectedLangRef.current) {
+        callDetectedLangRef.current = detected;
+        try { localStorage.setItem('vortis_call_lang', detected); } catch(_) {}
+      }
+    }
+
+    if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
+  };
+
+  recog.onerror = (e) => {
+    if (!callActiveRef.current) return;
+    if (e?.error === 'aborted') return;
+    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
+    safeRestart();
+  };
+
+  recog.onend = async () => {
+    clearSilenceTimer();
+    if (!callActiveRef.current) return;
+
+    const transcript = callFinalTranscriptRef.current.trim();
+    callFinalTranscriptRef.current = '';
+    if (!transcript) { safeRestart(); return; }
+
+    // Final language detection on the complete transcript
+    const detectedLang = detectSpokenLang(transcript);
+    callDetectedLangRef.current = detectedLang;
+
+    setCallState('thinking');
+
+    try {
+      if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+      incrUsage('messages');
+      pushHistory(convHistory, 'user', transcript);
+
+      const sys = `You are Vortis in a live voice call. Reply in SHORT spoken sentences (1-3 sentences max). No markdown, no lists, no headers. Be warm and conversational. CRITICAL: The user spoke in language "${detectedLang}". Reply in EXACTLY that same language. If they spoke Hindi, reply in Hindi. If French, reply in French. Never switch languages.`;
+
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
+      });
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      let full = '';
+      let spokenAny = false;
+      callTtsQueueRef.current = Promise.resolve();
+
+      const gender = ttsGenderRef.current;
+      const headers = await getCachedAuthHeader();
+
+      const fetchTTS = (text, voice) =>
+        fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text, voice }) })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => (d?.audio?.length > 100 ? d.audio : null))
+          .catch(() => null);
+
+      const queueSentence = (sentence) => {
+        const clean = cleanForTTS(sentence);
+        if (!clean || clean.length < 2) return;
+        // Detect language of this specific sentence for correct voice
+        const sentLang = detectSpokenLang(clean);
+        const voice = getCallVoice(sentLang, gender);
+        callTtsQueueRef.current = callTtsQueueRef.current.then(async () => {
+          if (!callActiveRef.current) return;
+          if (!spokenAny) { setCallState('speaking'); spokenAny = true; isSpeakingRef.current = true; }
+          const audio = await fetchTTS(clean, voice);
+          if (!callActiveRef.current || !audio) return;
+          await scheduleAudioBuffer(audio);
+        });
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of dec.decode(value, { stream: true }).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]' || !raw) continue;
+          try {
+            const p = JSON.parse(raw);
+            if (p.content) {
+              full += p.content;
+              buf += p.content;
+              let m;
+              while ((m = buf.match(/^(.+?[.!?।\n])\s*/))) {
+                queueSentence(m[1]);
+                buf = buf.slice(m[0].length);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+      if (buf.trim()) queueSentence(buf.trim());
+
+      const reply = full.trim() || "Sorry, I didn't catch that.";
+      pushHistory(convHistory, 'assistant', reply);
+      await callTtsQueueRef.current;
+      isSpeakingRef.current = false;
+    } catch (err) {
+      console.error('Voice call error:', err);
+      isSpeakingRef.current = false;
+    }
+
+    if (callActiveRef.current) { setCallState('listening'); safeRestart(); }
+  };
+
+  try { recog.start(); } catch (e) {
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 700);
+  }
+};
 // ═══════ VOICE CALL — final merged version ═══════
 
 const getRecogLang = () => {

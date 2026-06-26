@@ -14,6 +14,7 @@
     "edge-tts-universal": "^1.4.0",
     "express": "^5.2.1",
     "firebase-admin": "^12.7.0",
+    "franc-min": "^6.2.0",
     "groq-sdk": "^0.9.1",
     "msedge-tts": "^2.0.6",
     "react-syntax-highlighter": "^16.1.1",
