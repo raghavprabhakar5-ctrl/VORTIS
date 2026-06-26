@@ -151,6 +151,12 @@ function isObviouslyTrivial(text) {
 
 // ── AI-BASED TIER CLASSIFIER ───────────────────────────────────
 async function classifyTier(groq, text) {
+  // Enhanced local check to capture structured tables instantly
+  const lowerText = text.toLowerCase();
+  if (lowerText.includes('table') || lowerText.includes('line-by-line') || lowerText.includes('line by line')) {
+    return 'hard';
+  }
+
   if (isObviouslyTrivial(text)) return 'medium';
   if (isObviouslyHard(text))    return 'hard';
 
@@ -162,15 +168,14 @@ async function classifyTier(groq, text) {
           {
             role: 'system',
             content: `Classify the user's message into exactly one difficulty tier.
-"medium" = casual conversation, simple Q&A, short explanations, opinions.
-"hard" = coding, debugging, math, multi-step reasoning, long-form writing.
+"medium" = casual conversation, simple greetings, simple Q&A, short explanations, opinions.
+"hard" = coding, debugging, formatting requests (like markdown tables), math, line-by-line breakdowns, multi-step reasoning, long-form writing.
 Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
           },
           { role: 'user', content: text.slice(0, 1000) },
         ],
         max_tokens: 10,
         temperature: 0,
-        // Removed response_format: { type: 'json_object' } to prevent validation crashes
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
     ]);
@@ -180,10 +185,11 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
     return 'medium'; // Default to medium if it's ambiguous
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
+    // Safe fallback check
+    if (lowerText.includes('table') || lowerText.includes('line-by-line')) return 'hard';
     return isComplexMessage(text) ? 'hard' : 'medium';
   }
 }
-
 // ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   // ── STEP 1: TOKEN OPTIMIZATION ──────────────────────────────────
