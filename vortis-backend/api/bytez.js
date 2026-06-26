@@ -151,15 +151,23 @@ function isObviouslyTrivial(text) {
 
 // ── AI-BASED TIER CLASSIFIER ───────────────────────────────────
 async function classifyTier(groq, text) {
-  // Enhanced local check to capture structured tables instantly
   const lowerText = text.toLowerCase();
-  if (lowerText.includes('table') || lowerText.includes('line-by-line') || lowerText.includes('line by line')) {
+  
+  // 1. Instant local heuristic overrides
+  if (
+    lowerText.includes('table') || 
+    lowerText.includes('line-by-line') || 
+    lowerText.includes('line by line') ||
+    isObviouslyHard(text)
+  ) {
     return 'hard';
   }
 
-  if (isObviouslyTrivial(text)) return 'medium';
-  if (isObviouslyHard(text))    return 'hard';
+  if (isObviouslyTrivial(text)) {
+    return 'medium';
+  }
 
+  // 2. LLM Classification with a strict race-timeout
   try {
     const result = await Promise.race([
       groq.chat.completions.create({
@@ -181,12 +189,12 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
     ]);
 
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
-    if (raw.includes('hard')) return 'hard';
-    return 'medium'; // Default to medium if it's ambiguous
+    return raw.includes('hard') ? 'hard' : 'medium';
+
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
-    // Safe fallback check
-    if (lowerText.includes('table') || lowerText.includes('line-by-line')) return 'hard';
+    
+    // 3. Clean fallback if LLM or timeout fails
     return isComplexMessage(text) ? 'hard' : 'medium';
   }
 }
