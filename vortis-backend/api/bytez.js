@@ -17,8 +17,14 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'meta-llama/llama-4-scout-17b-16e-instruct';
-const GROQ_CHAT_QUALITY = 'meta-llama/llama-4-maverick-17b-128e-instruct';
+// Both deprecated Llama-4 models are gone from Groq — gpt-oss is the
+// current recommended family for both tiers.
+const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';   // medium tasks — fast, cheap
+const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';  // hard tasks — coding, deep reasoning
+
+// Tiny/instant model used ONLY for the classifier JSON call itself.
+// Keeping it on the cheap model so classification never becomes the bottleneck.
+const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -123,35 +129,101 @@ function stripInternalReasoning(text) {
     .trim();
 }
 
-// ── COMPLEXITY CHECK — no API call, instant ───────────────────
-// Replaces the old classifyMessage() which wasted a full round-trip
+// ── COMPLEXITY CHECK — instant regex heuristic, no API call ───
+// This is the fast-path / fallback used when:
+//   1) the message is obviously trivial (skip classifier entirely), or
+//   2) the AI classifier call fails or times out (safety net)
 function isComplexMessage(text) {
   const low = text.toLowerCase().trim();
-  // Short greetings / simple questions → fast model
   if (low.length < 40) return false;
   if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|what time|what date|how are you|who are you|what is your name)\b/.test(low)) return false;
-  // Complex signals → quality model
   if (/\b(explain|compare|analyze|research|write|code|debug|essay|story|poem|translate|summarize|step by step|how does|why does|difference between|pros and cons|calculate|solve|math|equation|algorithm|implement|function|class|component)\b/.test(low)) return true;
   if (text.length > 200) return true;
   if (/```|def |function |class |import |const |let |var /.test(text)) return true;
   return false;
 }
 
+// Strong, unambiguous signal that something is a hard/coding task —
+// used to short-circuit straight to "hard" without even calling the classifier.
+function isObviouslyHard(text) {
+  if (/```|def |function\s*\(|class\s+\w+|import\s|from\s+\w+\s+import|const\s|let\s|var\s|=>|public\s+class|<\?php|#include|console\.log|print\(/.test(text)) return true;
+  if (/\b(debug|stack trace|error:|exception|algorithm|refactor|optimi[sz]e|complexity|recursion|architecture|design pattern)\b/i.test(text)) return true;
+  return false;
+}
+
+// Trivial messages — never worth spending a classifier call on.
+function isObviouslyTrivial(text) {
+  const low = text.toLowerCase().trim();
+  if (low.length < 40) return true;
+  if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|what time|what date|how are you|who are you|what is your name)\b/.test(low)) return true;
+  return false;
+}
+
+// ── AI-BASED TIER CLASSIFIER ───────────────────────────────────
+// Returns 'medium' or 'hard'. Calls Groq with a JSON-only response
+// requesting a tier decision. Falls back to the regex heuristic
+// (isComplexMessage) if the call fails, times out, or returns junk.
+async function classifyTier(groq, text) {
+  // Cheap, instant shortcuts — skip the network round-trip entirely.
+  if (isObviouslyTrivial(text)) return 'medium';
+  if (isObviouslyHard(text))    return 'hard';
+
+  try {
+    const result = await Promise.race([
+      groq.chat.completions.create({
+        model: GROQ_CLASSIFIER_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Classify the user's message into exactly one difficulty tier.
+
+"medium" = casual conversation, simple Q&A, short explanations, general knowledge, opinions, small talk.
+"hard" = coding, debugging, math/equations, multi-step reasoning, algorithms, technical architecture, long-form writing (essays/stories), detailed analysis, research synthesis, anything requiring careful step-by-step logic.
+
+Respond ONLY with raw JSON, no markdown, no commentary, no code fences:
+{"tier": "medium"} or {"tier": "hard"}`,
+          },
+          { role: 'user', content: text.slice(0, 1000) },
+        ],
+        max_tokens: 20,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
+    ]);
+
+    const raw = result.choices?.[0]?.message?.content || '';
+    const parsed = JSON.parse(raw);
+    if (parsed?.tier === 'hard' || parsed?.tier === 'medium') {
+      return parsed.tier;
+    }
+    throw new Error(`unexpected classifier output: ${raw.slice(0, 80)}`);
+  } catch (e) {
+    console.warn('Tier classifier failed, falling back to heuristic:', e.message);
+    return isComplexMessage(text) ? 'hard' : 'medium';
+  }
+}
+
 // ── STREAMING callAI — sends tokens as they arrive ────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
-  const isComplex = isComplexMessage(lastMsg);
-  const model = isComplex ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const maxTokens = isComplex ? 2000 : 800;
 
-  // ── Try Groq streaming ──
-  for (const modelToTry of [model, isComplex ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
+  const tier      = await classifyTier(groq, lastMsg);
+  const isHard    = tier === 'hard';
+  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const maxTokens = isHard ? 2000 : 800;
+
+  console.log(`Tier: ${tier} → model: ${model}`);
+
+  // ── Try Groq streaming — primary tier model, then the other tier as fallback ──
+  for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
       const stream = await groq.chat.completions.create({
         model: modelToTry,
         messages,
         max_tokens: maxTokens,
         temperature: 0.7,
+        reasoning_effort: isHard ? 'high' : 'low',
         stream: true,
       });
 
@@ -163,7 +235,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
       }
 
-      // ── KEY FIX: if buffer is empty or just whitespace, try next model ──
+      // ── if buffer is empty or just whitespace, try next model ──
       if (buffer.trim().length > 2) {
         res.write('data: [DONE]\n\n');
         res.end();
@@ -186,9 +258,34 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
           body: JSON.stringify({ messages, stream: false, max_tokens: 1200 }),
         }
       );
-      if (!cfRes.ok) continue;
+      if (!cfRes.ok) {
+        console.log(`CF model ${cfModel} HTTP ${cfRes.status}`);
+        continue;
+      }
+
       const data = await cfRes.json();
-      const text = stripInternalReasoning(data.result?.response || '');
+
+      // ── FIX: defensively extract text — CF response shape varies by model,
+      // and previously this crashed with "text.replace is not a function"
+      // whenever data.result.response wasn't a plain string. ──
+      let rawText = data?.result?.response;
+
+      // Some CF models (notably Qwen3 variants) can nest output differently
+      // depending on whether "thinking" content is present. Try a couple of
+      // sane fallback paths before giving up on this model.
+      if (typeof rawText !== 'string') {
+        rawText =
+          data?.result?.output_text ??
+          data?.result?.choices?.[0]?.message?.content ??
+          null;
+      }
+
+      if (typeof rawText !== 'string') {
+        console.log(`CF model ${cfModel} unexpected response shape:`, JSON.stringify(data).slice(0, 300));
+        continue; // skip to next fallback model instead of crashing
+      }
+
+      const text = stripInternalReasoning(rawText);
       if (isValidResponse(text)) {
         res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
         res.write('data: [DONE]\n\n');
