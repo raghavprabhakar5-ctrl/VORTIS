@@ -214,7 +214,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
   
   // Use a sensible token ceiling relative to intent
-  const maxTokens = isHard ? 2500 : 300;
+  const maxTokens = isHard ? 3000 : 500;
 
   console.log(`Tier: ${tier} → model: ${model}`);
 
