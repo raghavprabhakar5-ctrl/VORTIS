@@ -21,6 +21,7 @@ const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
 const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
+
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   '@cf/qwen/qwen3-30b-a3b-fp8',
@@ -161,26 +162,22 @@ async function classifyTier(groq, text) {
           {
             role: 'system',
             content: `Classify the user's message into exactly one difficulty tier.
-
-"medium" = casual conversation, simple Q&A, short explanations, general knowledge, opinions, small talk.
-"hard" = coding, debugging, math/equations, multi-step reasoning, algorithms, technical architecture, long-form writing (essays/stories), detailed analysis, research synthesis, anything requiring careful step-by-step logic.
-
-Respond ONLY with raw JSON, no markdown, no commentary, no code fences:
-{"tier": "medium"} or {"tier": "hard"}`,
+"medium" = casual conversation, simple Q&A, short explanations, opinions.
+"hard" = coding, debugging, math, multi-step reasoning, long-form writing.
+Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
           },
           { role: 'user', content: text.slice(0, 1000) },
         ],
-        max_tokens: 20,
+        max_tokens: 10,
         temperature: 0,
-        response_format: { type: 'json_object' },
+        // Removed response_format: { type: 'json_object' } to prevent validation crashes
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
     ]);
 
-    const raw = result.choices?.[0]?.message?.content || '';
-    const parsed = JSON.parse(raw);
-    if (parsed?.tier === 'hard' || parsed?.tier === 'medium') return parsed.tier;
-    throw new Error(`unexpected classifier output: ${raw.slice(0, 80)}`);
+    const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
+    if (raw.includes('hard')) return 'hard';
+    return 'medium'; // Default to medium if it's ambiguous
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
     return isComplexMessage(text) ? 'hard' : 'medium';
@@ -785,182 +782,179 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
     }
 
     // ╔══════════════════════════════════════╗
-    // ║  IMAGE GENERATION                    ║
-    // ╚══════════════════════════════════════╝
-    if (action === 'image') {
-      if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
-      if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
+// ║  IMAGE GENERATION                    ║
+// ╚══════════════════════════════════════╝
+if (action === 'image') {
+  if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
+  if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
 
-      const forceGemini = body.forceGemini === true;
+  const forceGemini = body.forceGemini === true;
 
-      // ── Helper: Try Flux Worker (your existing worker) ──
-      async function tryFlux(promptText) {
-        try {
-          const seed   = Math.floor(Math.random() * 999999);
-          const imgRes = await fetchWithTimeout(
-            `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
-            {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
-              body:    JSON.stringify({ prompt: promptText.trim(), model: 'flux', seed }),
-            },
-            25000
-          );
-          if (!imgRes.ok) return null;
-          const contentType = imgRes.headers.get('content-type') || '';
-          if (contentType.includes('json')) {
-            const json = await imgRes.json();
-            return json?.imageUrl ? json : null;
+  // ── Helper: Try Flux Worker (Cloudflare Worker Primary) ──
+  async function tryFlux(promptText) {
+    try {
+      const seed   = Math.floor(Math.random() * 999999);
+      const imgRes = await fetchWithTimeout(
+        `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
+          body:    JSON.stringify({ prompt: promptText.trim(), model: 'flux', seed }),
+        },
+        25000
+      );
+      if (!imgRes.ok) return null;
+      const contentType = imgRes.headers.get('content-type') || '';
+      if (contentType.includes('json')) {
+        const json = await imgRes.json();
+        return json?.imageUrl ? json : null;
           }
-          const responseText = await imgRes.text();
-          try {
-            return JSON.parse(responseText);
-          } catch {
-            return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
-          }
-        } catch (e) {
-          console.error('Flux worker failed:', e.message);
-          return null;
-        }
+      const responseText = await imgRes.text();
+      try {
+        return JSON.parse(responseText);
+      } catch {
+        return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
+      }
+    } catch (e) {
+      console.error('Flux worker failed:', e.message);
+      return null;
+    }
+  }
+
+  // ── Helper: Try Pollinations Flux (Fallback) ──
+  // Function name left untouched to support your frontend infrastructure
+  async function tryGemini(promptText) {
+    try {
+      const encodedPrompt = encodeURIComponent(promptText.trim());
+      const seed = Math.floor(Math.random() * 999999);
+
+      const polRes = await fetchWithTimeout(
+        `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true&enhance=false`,
+        {
+          method: 'GET',
+          headers: { 'User-Agent': BROWSER_UA },
+        },
+        30000
+      );
+
+      console.log('Pollinations Flux status:', polRes.status);
+
+      if (!polRes.ok) {
+        console.log('Pollinations Flux error:', polRes.status);
+        return null;
       }
 
-      // ── Helper: Try Pollinations Flux (free, no key required) ──
-      // NOTE: function kept as tryGemini so no frontend changes needed.
-      // Internally now calls Pollinations Flux — confirmed free & unlimited.
-      async function tryGemini(promptText) {
-        try {
-          const encodedPrompt = encodeURIComponent(promptText.trim());
-          const seed = Math.floor(Math.random() * 999999);
-
-          const polRes = await fetchWithTimeout(
-            `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true&enhance=false`,
-            {
-              method: 'GET',
-              headers: { 'User-Agent': BROWSER_UA },
-            },
-            30000
-          );
-
-          console.log('Pollinations Flux status:', polRes.status);
-
-          if (!polRes.ok) {
-            console.log('Pollinations Flux error:', polRes.status);
-            return null;
-          }
-
-          const contentType = polRes.headers.get('content-type') || '';
-          if (!contentType.startsWith('image/')) {
-            console.log('Pollinations returned non-image content-type:', contentType);
-            return null;
-          }
-
-          const arrayBuffer = await polRes.arrayBuffer();
-          const base64 = Buffer.from(arrayBuffer).toString('base64');
-
-          if (!base64 || base64.length < 100) {
-            console.log('Pollinations returned empty image');
-            return null;
-          }
-
-          const mime = contentType.split(';')[0].trim() || 'image/jpeg';
-          console.log('Pollinations Flux image received ✅');
-          return { success: true, imageUrl: `data:${mime};base64,${base64}` };
-        } catch (e) {
-          console.error('Pollinations Flux failed:', e.message);
-          return null;
-        }
+      const contentType = polRes.headers.get('content-type') || '';
+      if (!contentType.startsWith('image/')) {
+        console.log('Pollinations returned non-image content-type:', contentType);
+        return null;
       }
 
-      // ── Complexity check: still useful to decide ordering ──
-      async function isComplexImagePrompt(promptText) {
-        // These prompts get Pollinations first (it handles them fine)
-        // Simple prompts → Flux worker first (faster, your infra)
-        const DETAIL_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
-        if (DETAIL_KEYWORDS.test(promptText)) return true;
-        if (promptText.trim().length <= 80) return false;
+      const arrayBuffer = await polRes.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
 
-        try {
-          const result = await Promise.race([
-            groq.chat.completions.create({
-              model:    GROQ_CHAT_PRIMARY,
-              messages: [
-                {
-                  role:    'system',
-                  content: `You decide if an image prompt needs HIGH-QUALITY AI (Pollinations) or BASIC AI (Flux worker).
+      if (!base64 || base64.length < 100) {
+        console.log('Pollinations returned empty image');
+        return null;
+      }
+
+      const mime = contentType.split(';')[0].trim() || 'image/jpeg';
+      console.log('Pollinations Flux image received ✅');
+      return { success: true, imageUrl: `data:${mime};base64,${base64}` };
+    } catch (e) {
+      console.error('Pollinations Flux failed:', e.message);
+      return null;
+    }
+  }
+
+  // ── Complexity check ──
+  async function isComplexImagePrompt(promptText) {
+    const DETAIL_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
+    if (DETAIL_KEYWORDS.test(promptText)) return true;
+    if (promptText.trim().length <= 80) return false;
+
+    try {
+      const result = await Promise.race([
+        groq.chat.completions.create({
+          model:    GROQ_CHAT_PRIMARY,
+          messages: [
+            {
+              role:    'system',
+              content: `You decide if an image prompt needs HIGH-QUALITY AI (Pollinations) or BASIC AI (Flux worker).
 Use Pollinations for: religious figures, gods, goddesses, realistic humans/faces, cinematic scenes, mythology, intricate art, portraits, epic/dramatic scenes, cultural icons, detailed illustrations.
 Use Flux for: simple objects, logos, icons, cartoons, basic backgrounds, abstract patterns, simple illustrations.
 Reply ONLY one word: POLLINATIONS or FLUX`,
-                },
-                { role: 'user', content: promptText },
-              ],
-              max_tokens:  5,
-              temperature: 0,
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
-          ]);
-          const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'FLUX';
-          return answer.includes('POLLINATIONS');
-        } catch (e) {
-          console.error('Complexity check failed:', e.message);
-          return promptText.length > 100;
-        }
+            },
+            { role: 'user', content: promptText },
+          ],
+          max_tokens:  5,
+          temperature: 0,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      ]);
+      const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'FLUX';
+      return answer.includes('POLLINATIONS');
+    } catch (e) {
+      console.error('Complexity check failed:', e.message);
+      return promptText.length > 100;
+    }
+  }
+
+  try {
+    // ── forceGemini flag / Redo button execution logic ──
+    if (forceGemini) {
+      console.log('Force parameter active - Routing to Cloudflare primary first');
+      const fluxResult = await tryFlux(prompt);
+      if (fluxResult?.imageUrl) {
+        return res.status(200).json({ ...fluxResult, provider: 'flux' });
       }
+      console.log('Cloudflare failed under forced flow, shifting to Pollinations fallback');
+      const polFallback = await tryGemini(prompt);
+      if (polFallback?.imageUrl) {
+        return res.status(200).json({ ...polFallback, provider: 'pollinations' });
+      }
+      return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+    }
 
-      try {
-        // ── forceGemini flag: frontend "Redo" button → try Pollinations first ──
-        if (forceGemini) {
-          console.log('Force Pollinations requested');
-          const polResult = await tryGemini(prompt);
-          if (polResult?.imageUrl) {
-            return res.status(200).json({ ...polResult, provider: 'pollinations' });
-          }
-          // Pollinations failed — fallback to Flux worker
-          const fluxFallback = await tryFlux(prompt);
-          if (fluxFallback?.imageUrl) {
-            return res.status(200).json({ ...fluxFallback, provider: 'flux' });
-          }
-          return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
-        }
+    // ── Normal flow: Reordered to run Cloudflare Worker (tryFlux) as Primary ──
+    const needsQuality = await isComplexImagePrompt(prompt);
+    console.log(`Prompt preferred path evaluation: ${needsQuality ? 'POLLINATIONS' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
 
-        // ── Normal flow ──
-        const needsQuality = await isComplexImagePrompt(prompt);
-        console.log(`Prompt complexity: ${needsQuality ? 'POLLINATIONS' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
-
-        if (needsQuality) {
-          // Detailed prompt → Pollinations Flux first
-          const polResult = await tryGemini(prompt);
-          if (polResult?.imageUrl) {
-            return res.status(200).json({ ...polResult, provider: 'pollinations' });
-          }
-          // Fallback to Flux worker
-          console.log('Pollinations failed, falling back to Flux worker');
-          const fluxFallback = await tryFlux(prompt);
-          if (fluxFallback?.imageUrl) {
-            return res.status(200).json({ ...fluxFallback, provider: 'flux' });
-          }
-        } else {
-          // Simple prompt → Flux worker first (faster)
-          const fluxResult = await tryFlux(prompt);
-          if (fluxResult?.imageUrl) {
-            return res.status(200).json({ ...fluxResult, provider: 'flux' });
-          }
-          // Fallback to Pollinations
-          console.log('Flux worker failed, trying Pollinations');
-          const polResult = await tryGemini(prompt);
-          if (polResult?.imageUrl) {
-            return res.status(200).json({ ...polResult, provider: 'pollinations' });
-          }
-        }
-
-        return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
-
-      } catch (error) {
-        console.error('IMAGE GEN ERROR:', error.message);
-        return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+    if (needsQuality) {
+      // Complex prompt → Still try Cloudflare Flux first, fall back to Pollinations
+      console.log('Routing complex prompt to Cloudflare Flux worker first...');
+      const fluxResult = await tryFlux(prompt);
+      if (fluxResult?.imageUrl) {
+        return res.status(200).json({ ...fluxResult, provider: 'flux' });
+      }
+      console.log('Cloudflare failed for complex topic, falling back to Pollinations');
+      const polResult = await tryGemini(prompt);
+      if (polResult?.imageUrl) {
+        return res.status(200).json({ ...polResult, provider: 'pollinations' });
+      }
+    } else {
+      // Simple prompt → Cloudflare Flux worker first, fall back to Pollinations
+      console.log('Routing simple prompt to Cloudflare Flux worker first...');
+      const fluxResult = await tryFlux(prompt);
+      if (fluxResult?.imageUrl) {
+        return res.status(200).json({ ...fluxResult, provider: 'flux' });
+      }
+      console.log('Cloudflare failed for simple topic, falling back to Pollinations');
+      const polResult = await tryGemini(prompt);
+      if (polResult?.imageUrl) {
+        return res.status(200).json({ ...polResult, provider: 'pollinations' });
       }
     }
 
-    return res.status(400).json({ error: 'Invalid action' });
+    return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+
+  } catch (error) {
+    console.error('IMAGE GEN ERROR:', error.message);
+    return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+  }
+}
+
+return res.status(400).json({ error: 'Invalid action' });
 
   } catch (error) {
     console.error('GLOBAL ERROR:', error.message);
