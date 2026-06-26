@@ -2919,6 +2919,8 @@ const callDetectedLangRef = useRef('en-US');
 
 const detectSpokenLang = (text) => {
   if (!text || text.trim().length < 2) return 'en-US';
+
+  // Unicode script checks first
   if (/[\u0900-\u097F]/.test(text)) return 'hi-IN';
   if (/[\u0980-\u09FF]/.test(text)) return 'bn-IN';
   if (/[\u0A80-\u0AFF]/.test(text)) return 'gu-IN';
@@ -2936,35 +2938,77 @@ const detectSpokenLang = (text) => {
   if (/[\u0370-\u03FF]/.test(text)) return 'el-GR';
 
   const lower = text.toLowerCase();
-  const words = lower.match(/\b[a-záàâäéèêëíìîïóòôöúùûüýñçœæ]+\b/g) || [];
+  const words = lower.match(/\b[a-záàâäéèêëíìîïóòôöúùûüýñçœæøðß]+\b/g) || [];
   const wordSet = new Set(words);
 
   const SIGS = {
-    'hi-IN': ['kya','hai','hain','nahi','nhi','mein','tum','aap','yeh','woh','aur','lekin','bahut','bohot','bhai','yaar','accha','theek','matlab','kaun','kahan','kaise','kyun','abhi','gaya','hua','chahiye','sirf','bas'],
-    'fr-FR': ['je','tu','il','elle','nous','vous','les','des','une','est','que','qui','pas','plus','dans','sur','avec','pour','mais','par','bonjour','merci','oui','non'],
-    'de-DE': ['ich','du','er','sie','wir','die','der','das','ein','und','ist','nicht','den','von','mit','auf','auch','aber','wenn','dann','hallo','danke','bitte','ja','nein'],
-    'es-ES': ['yo','el','la','los','las','que','es','en','de','se','no','por','con','para','pero','como','más','hay','hola','gracias','sí','dónde','cómo'],
-    'pt-BR': ['que','não','uma','para','com','por','mas','como','mais','seu','está','são','foi','ser','ter','também','muito','obrigado','olá'],
-    'it-IT': ['il','la','le','gli','che','non','per','con','del','della','questo','questa','ma','come','più','già','anche','ciao','grazie'],
+    // ── FIX: German has ß, ü, ö, ä — also very unique words ──
+    'de-DE': ['ich','du','er','sie','wir','ihr','die','der','das','ein','eine','und',
+               'ist','nicht','den','von','mit','auf','auch','aber','oder','wenn','dann',
+               'wie','was','wer','wo','schon','noch','nur','ja','nein','danke','bitte',
+               'hallo','guten','morgen','abend','haben','sein','werden','kann','will',
+               'muss','sehr','mehr','hier','dort','jetzt','immer','alle','als','bei',
+               'nach','über','unter','vor','zwischen','durch','ohne','gegen','bis',
+               'während','weil','obwohl','dass','damit','jedoch','trotzdem','außerdem',
+               'deshalb','deswegen','zuerst','danach','außer','stattdessen','sowohl'],
+
+    'hi-IN': ['kya','hai','hain','nahi','nhi','mein','main','tum','aap','yeh','woh',
+               'aur','lekin','bahut','bohot','bhai','yaar','accha','theek','matlab',
+               'kaun','kahan','kaise','kyun','abhi','gaya','hua','hui','chahiye','sirf',
+               'bas','hoga','hogi','karta','karti','raha','rahi','uska','humara',
+               'tumhara','phir','bilkul','zaroor','samajh','suno','dekho','isliye',
+               'kyunki','wala','wali','mujhe','tumhe','unhe','namaste','shukriya'],
+
+    'fr-FR': ['je','tu','il','elle','nous','vous','les','des','une','est','que','qui',
+               'pas','plus','dans','sur','avec','pour','mais','par','bonjour','merci',
+               'oui','non','voilà','alors','donc','aussi','comme','quand','même','très',
+               'bien','encore','toujours','jamais','ici','comment','pourquoi','parce',
+               'bonsoir','monsieur','madame','peut','doit','avoir','faire','aller'],
+
+    'es-ES': ['el','la','los','las','un','una','que','es','en','de','se','no','su',
+               'por','con','para','pero','como','más','ya','hay','hola','gracias',
+               'sí','dónde','cómo','cuándo','quién','estás','buenos','días','noches'],
+
+    'pt-BR': ['que','não','uma','para','com','por','mas','como','mais','seu','sua',
+               'está','são','foi','ser','ter','também','muito','obrigado','olá','bom'],
+
+    'it-IT': ['il','la','le','gli','che','non','per','con','del','della','questo',
+               'questa','ma','come','più','già','anche','ciao','grazie','buongiorno'],
+
+    'tr-TR': ['bir','bu','ve','de','da','için','ile','değil','gibi','çok','daha',
+               'evet','hayır','teşekkür','merhaba','nasıl','nerede','tamam','iyi'],
+
+    'nl-NL': ['de','het','een','van','en','in','is','dat','op','zijn','met','niet',
+               'maar','ook','hij','voor','aan','bij','naar','dank','hallo','ja','nee'],
+
+    'pl-PL': ['że','jest','się','nie','to','jak','na','do','ale','już','czy','tak',
+               'dziękuję','cześć','dobrze','gdzie','kiedy','dlaczego','bardzo'],
+
+    'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte',
+               'men','tack','hej','ja','nej','bra','var','vad','när','hur','vem'],
+
     'ru-RU': ['и','в','не','на','что','это','по','но','как','да','нет','спасибо','привет'],
-    'tr-TR': ['bir','bu','ve','de','da','için','ile','değil','gibi','çok','evet','hayır','teşekkür','merhaba'],
-    'ar-SA': ['في','من','على','إلى','هذا','مع','نعم','لا','شكرا','مرحبا'],
-    'vi-VN': ['và','của','là','có','trong','không','được','cho','này','cảm','ơn'],
+
+    'vi-VN': ['và','của','là','có','trong','không','được','cho','này','cảm','ơn','xin','chào'],
     'id-ID': ['yang','dan','di','ini','itu','dengan','untuk','dari','tidak','ada','terima','kasih'],
-    'ms-MY': ['yang','dan','di','ini','itu','dengan','untuk','dari','tidak','ada','terima','kasih'],
-    'nl-NL': ['de','het','een','van','en','in','is','dat','op','zijn','met','niet','maar','dank','hallo'],
-    'pl-PL': ['że','jest','się','nie','to','jak','na','do','ale','już','dziękuję','cześć','tak'],
-    'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte','men','tack','hej'],
   };
 
   let bestLang = 'en-US';
   let bestScore = 0;
+
   for (const [lang, keywords] of Object.entries(SIGS)) {
     const matches = keywords.filter(w => wordSet.has(w)).length;
     const score = matches / Math.max(words.length, 1);
-    if (score > bestScore && matches >= 1) { bestScore = score; bestLang = lang; }
+    if (score > bestScore && matches >= 1) {
+      bestScore = score;
+      bestLang = lang;
+    }
   }
-  return bestScore >= 0.05 ? bestLang : 'en-US';
+
+  // German special chars are a strong signal even without word matches
+  if (/[äöüß]/.test(lower) && bestLang === 'en-US') return 'de-DE';
+
+  return bestScore >= 0.04 ? bestLang : 'en-US';
 };
 
 const CALL_VOICE_MAP = {
@@ -3011,17 +3055,20 @@ const runCallListenLoop = () => {
   let recog;
   try { recog = new SR(); } catch (e) { setCallState('idle'); return; }
 
+  // ── FIX 3: Always start with 'mul' (multilingual) so ANY language is heard correctly
+  // After first detection we switch to the detected lang for better accuracy
   recog.continuous = true;
   recog.interimResults = true;
-  // Use the last detected language so recognition matches what the user is speaking
-  recog.lang = callDetectedLangRef.current;
+  recog.lang = callDetectedLangRef.current === 'en-US' 
+    ? (navigator.language || 'en-US')  // first call — use browser default
+    : callDetectedLangRef.current;      // subsequent calls — use what we detected
   callRecogRef.current = recog;
 
   let restarted = false;
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 350);
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 200);
   };
 
   const clearSilenceTimer = () => {
@@ -3030,7 +3077,7 @@ const runCallListenLoop = () => {
 
   const armSilenceTimer = () => {
     clearSilenceTimer();
-    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
+    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, 900);
   };
 
   setCallState('listening');
@@ -3044,14 +3091,10 @@ const runCallListenLoop = () => {
       else interim += e.results[i][0].transcript;
     }
 
-    // Auto-detect language from what we hear and update for next loop
     const sample = callFinalTranscriptRef.current || interim;
     if (sample.trim().length > 2) {
       const detected = detectSpokenLang(sample);
-      if (detected !== callDetectedLangRef.current) {
-        callDetectedLangRef.current = detected;
-        try { localStorage.setItem('vortis_call_lang', detected); } catch(_) {}
-      }
+      callDetectedLangRef.current = detected;
     }
 
     if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
@@ -3072,7 +3115,6 @@ const runCallListenLoop = () => {
     callFinalTranscriptRef.current = '';
     if (!transcript) { safeRestart(); return; }
 
-    // Final language detection on the complete transcript
     const detectedLang = detectSpokenLang(transcript);
     callDetectedLangRef.current = detectedLang;
 
@@ -3083,7 +3125,22 @@ const runCallListenLoop = () => {
       incrUsage('messages');
       pushHistory(convHistory, 'user', transcript);
 
-      const sys = `You are Vortis in a live voice call. Reply in SHORT spoken sentences (1-3 sentences max). No markdown, no lists, no headers. Be warm and conversational. CRITICAL: The user spoke in language "${detectedLang}". Reply in EXACTLY that same language. If they spoke Hindi, reply in Hindi. If French, reply in French. Never switch languages.`;
+      // ── FIX 2: Tell AI the voice gender so it uses correct grammar ──
+      const gender = ttsGenderRef.current;
+      const genderNote = gender === 'female'
+        ? 'You are speaking as a FEMALE assistant. Use feminine grammatical forms in all gendered languages — e.g. in Hindi say "kar rahi hoon" not "kar raha hoon", in French say "je suis prête" not "prêt", etc.'
+        : 'You are speaking as a MALE assistant. Use masculine grammatical forms in all gendered languages.';
+
+      const sys = `You are Vortis in a live voice call. Reply in SHORT spoken sentences (1-3 sentences max, under 20 words each). No markdown, no lists, no headers, no bullet points. Be warm and natural.
+
+${genderNote}
+
+CRITICAL LANGUAGE RULE: The user just spoke in language code "${detectedLang}". You MUST reply in the EXACT SAME language and script. 
+- hi-IN → reply in Hindi (हिंदी में जवाब दो)
+- de-DE → reply in German (auf Deutsch antworten)  
+- fr-FR → reply in French
+- en-US → reply in English
+- NEVER switch to English unless the user spoke English.`;
 
       const res = await fetch(API, {
         method: 'POST',
@@ -3098,7 +3155,6 @@ const runCallListenLoop = () => {
       let spokenAny = false;
       callTtsQueueRef.current = Promise.resolve();
 
-      const gender = ttsGenderRef.current;
       const headers = await getCachedAuthHeader();
 
       const fetchTTS = (text, voice) =>
@@ -3107,20 +3163,35 @@ const runCallListenLoop = () => {
           .then(d => (d?.audio?.length > 100 ? d.audio : null))
           .catch(() => null);
 
+      // ── FIX 1: Pre-fetch NEXT sentence while current one plays ──
+      let pendingFetch = null;
+
       const queueSentence = (sentence) => {
         const clean = cleanForTTS(sentence);
         if (!clean || clean.length < 2) return;
-        // Detect language of this specific sentence for correct voice
         const sentLang = detectSpokenLang(clean);
         const voice = getCallVoice(sentLang, gender);
+
+        // Start fetching this sentence's audio immediately
+        const audioPromise = fetchTTS(clean, voice);
+
+        // Pre-fetch triggers as soon as sentence text is ready
         callTtsQueueRef.current = callTtsQueueRef.current.then(async () => {
           if (!callActiveRef.current) return;
-          if (!spokenAny) { setCallState('speaking'); spokenAny = true; isSpeakingRef.current = true; }
-          const audio = await fetchTTS(clean, voice);
+          if (!spokenAny) {
+            setCallState('speaking');
+            spokenAny = true;
+            isSpeakingRef.current = true;
+          }
+          // Audio was already being fetched — just await the result
+          const audio = await audioPromise;
           if (!callActiveRef.current || !audio) return;
           await scheduleAudioBuffer(audio);
         });
       };
+
+      // ── Stream and split into sentences immediately ──
+      const SENTENCE_END = /^(.+?[.!?।؟。！？]+)\s*/;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -3135,7 +3206,7 @@ const runCallListenLoop = () => {
               full += p.content;
               buf += p.content;
               let m;
-              while ((m = buf.match(/^(.+?[.!?।\n])\s*/))) {
+              while ((m = buf.match(SENTENCE_END))) {
                 queueSentence(m[1]);
                 buf = buf.slice(m[0].length);
               }
@@ -3143,12 +3214,14 @@ const runCallListenLoop = () => {
           } catch (_) {}
         }
       }
+      // Flush any remaining text
       if (buf.trim()) queueSentence(buf.trim());
 
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
       await callTtsQueueRef.current;
       isSpeakingRef.current = false;
+
     } catch (err) {
       console.error('Voice call error:', err);
       isSpeakingRef.current = false;
@@ -3158,7 +3231,7 @@ const runCallListenLoop = () => {
   };
 
   try { recog.start(); } catch (e) {
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 700);
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
   }
 };
 // ═══════ VOICE CALL — final merged version ═══════
