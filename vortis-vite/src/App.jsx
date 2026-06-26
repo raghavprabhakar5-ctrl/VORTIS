@@ -3938,9 +3938,9 @@ return (
               </div>
             </div>
           </>
-        )}
+       )}
 
-        <div className="chat-feed scr">
+<div className="chat-feed scr">
   <div className="chat-inner">
     {messages.length === 0 && (
       <div className="welcome-wrap">
@@ -3978,7 +3978,27 @@ return (
           </>
         )}
 
-      {showVoiceCall && (
+        {isIncognito && (
+          <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,.12)', border: '1px solid rgba(139,92,246,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.8)"/>
+                <circle cx="9" cy="10" r="1.5" fill="#080810"/>
+                <circle cx="15" cy="10" r="1.5" fill="#080810"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: 12.5, fontWeight: 700, color: '#a78bfa', fontFamily: 'JetBrains Mono', marginBottom: 2 }}>Incognito mode active</p>
+              <p style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No history • No saved chats • Nothing stored</p>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* ── MOVED OUT: voice call now renders regardless of messages.length, so it
+         stays visible after the user has already chatted ── */}
+    {showVoiceCall && (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
     background: 'radial-gradient(ellipse at 50% 30%, #1a1040 0%, #0c0820 40%, #050510 100%)',
@@ -4213,25 +4233,8 @@ return (
       {callPaused ? 'Tap play to resume' : 'Pause  ·  End call'}
     </p>
   </div>
-)}
-        {isIncognito && (
-          <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,.12)', border: '1px solid rgba(139,92,246,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.8)"/>
-                <circle cx="9" cy="10" r="1.5" fill="#080810"/>
-                <circle cx="15" cy="10" r="1.5" fill="#080810"/>
-              </svg>
-            </div>
-            <div>
-              <p style={{ fontSize: 12.5, fontWeight: 700, color: '#a78bfa', fontFamily: 'JetBrains Mono', marginBottom: 2 }}>Incognito mode active</p>
-              <p style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No history • No saved chats • Nothing stored</p>
-            </div>
-          </div>
-        )}
-      </div>
-    )}
-            {messages.map((msg, idx) => (
+)}    
+        {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (
                   <div style={{ display: 'flex', justifyContent: 'center' }}><div className="bubble-sys">{msg.text}</div></div>
