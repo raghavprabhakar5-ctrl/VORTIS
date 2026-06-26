@@ -2916,11 +2916,18 @@ const addMsg = (type, text, speak = false) => {
   return msg;
 };
 
-// ═══════════════════════════════════════════════════
-// VOICE CALL — replace lines 2911 through 3083
-// ═══════════════════════════════════════════════════
+// ═══════ VOICE CALL — rewritten ═══════
 
-// ═══════ VOICE CALL (only declare ONCE) ═══════
+// Pick recognition language from browser locale instead of hardcoding en-IN.
+// (Web Speech API can't auto-detect language — whatever you set is the only
+// language it'll transcribe accurately. Let users override this in Settings
+// later; for now default to their browser locale.)
+const getRecogLang = () => {
+  try { return localStorage.getItem('vortis_recog_lang') || navigator.language || 'en-US'; }
+  catch (_) { return 'en-US'; }
+};
+
+const callSilenceMsRef = useRef(1100); // ms of silence before we treat speech as "done"
 
 const startVoiceCall = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -2929,17 +2936,14 @@ const startVoiceCall = () => {
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
-  setTimeout(() => {
-    try { runCallListenLoop(); } catch (e) {
-      console.error('Initial start failed:', e);
-    }
-  }, 300);
+  setTimeout(() => { try { runCallListenLoop(); } catch (e) { console.error('Initial start failed:', e); } }, 300);
 };
 
 const endVoiceCall = () => {
   callActiveRef.current = false;
-  try { callRecogRef.current?.stop(); } catch(_) {}
-  try { stopSpeaking(); } catch(_) {}
+  try { callRecogRef.current?.stop(); } catch (_) {}
+  try { stopSpeaking(); } catch (_) {}
+  clearTimeout(callSilenceTORef.current);
   setCallState('idle');
   setCallPaused(false);
   setShowVoiceCall(false);
@@ -2954,33 +2958,75 @@ const runCallListenLoop = () => {
   let recog;
   try { recog = new SR(); } catch (e) { console.error('SR create failed:', e); setCallState('idle'); return; }
 
-  recog.continuous = false;
-  recog.interimResults = false;
-  recog.lang = 'en-IN';
+  // ── KEY FIX #1: continuous + interim results instead of one-shot ──
+  // continuous:false makes the browser end the session on the first natural
+  // pause (a breath, a comma) — that's the "cuts off mid-sentence" bug.
+  recog.continuous = true;
+  recog.interimResults = true;
+  recog.lang = getRecogLang();
   callRecogRef.current = recog;
 
+  let finalTranscript = '';
   let restarted = false;
+
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
-    if (callActiveRef.current) {
-      setTimeout(() => { try { runCallListenLoop(); } catch(e) {} }, 500);
-    }
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 400);
+  };
+
+  const clearSilenceTimer = () => {
+    if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+  };
+
+  // Fires when the user has stopped talking for ~1.1s — this, not the
+  // browser's onend, is what decides "they're done speaking."
+  const armSilenceTimer = () => {
+    clearSilenceTimer();
+    callSilenceTORef.current = setTimeout(() => {
+      try { recog.stop(); } catch (_) {}
+    }, callSilenceMsRef.current);
   };
 
   setCallState('listening');
 
-  recog.onresult = async (e) => {
+  recog.onresult = (e) => {
+    // ── KEY FIX #2: barge-in — if the AI is speaking and the user starts
+    // talking, cut the AI off immediately instead of waiting for it to finish ──
+    if (isSpeakingRef.current) {
+      stopSpeaking();
+      setCallState('listening');
+    }
+
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    // Any new speech (final or interim) resets the silence clock.
+    if (interim.trim() || finalTranscript.trim()) armSilenceTimer();
+  };
+
+  recog.onerror = (e) => {
+    if (!callActiveRef.current) return;
+    if (e?.error === 'aborted') return;
+    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
+    if (e?.error === 'no-speech') { safeRestart(); return; }
+    safeRestart();
+  };
+
+  recog.onend = async () => {
+    clearSilenceTimer();
+    if (!callActiveRef.current) return;
+
+    const transcript = finalTranscript.trim();
+    if (!transcript) { safeRestart(); return; }
+
+    setCallState('thinking');
+
     try {
-      const transcript = e.results?.[0]?.[0]?.transcript;
-      if (!callActiveRef.current) return;
-      if (!transcript?.trim()) { safeRestart(); return; }
-
-      setCallState('thinking');
-
       if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
       incrUsage('messages');
-
       pushHistory(convHistory, 'user', transcript);
 
       const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers. Be conversational and warm.`;
@@ -2991,108 +3037,95 @@ const runCallListenLoop = () => {
         body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
       });
 
+      // ── KEY FIX #3: stream + speak sentence-by-sentence as they arrive,
+      // instead of waiting for the entire reply before any TTS is fetched.
+      // This is the single biggest perceived-latency fix — ChatGPT's
+      // real-time voice does the audio equivalent of this natively; we
+      // fake it by chunking text as it streams and pipelining TTS fetches. ──
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let full = '';
+      let buf = '';       // unflushed text waiting to become a sentence
+      let full = '';       // full reply, for history
+      let spokenAny = false;
+      let ttsQueue = Promise.resolve(); // serializes playback so sentences don't overlap
+
+      const gender = ttsGenderRef.current;
+      const headers = await getCachedAuthHeader();
+
+      const toBlobUrl = (dataUrl) => {
+        if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
+        try {
+          const base64 = dataUrl.split(',')[1];
+          const bin = window.atob(base64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
+        } catch (_) { return dataUrl; }
+      };
+
+      const fetchChunk = (txt, voice) =>
+        fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text: txt, voice }) })
+          .then(r => r.ok ? r.json() : null)
+          .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
+          .catch(() => null);
+
+      const playSentence = (sentence) => {
+        const clean = cleanForTTS(sentence);
+        if (!clean || clean.length < 2) return;
+        const voice = detectLangVoice(clean, gender);
+        // Chain onto the queue so sentences play in order, back-to-back.
+        ttsQueue = ttsQueue.then(async () => {
+          if (!callActiveRef.current) return;
+          if (!spokenAny) { setCallState('speaking'); spokenAny = true; }
+          const src = await fetchChunk(clean, voice);
+          if (!callActiveRef.current || !src) return;
+          isSpeakingRef.current = true;
+          const audio = new Audio(toBlobUrl(src));
+          currentAudiosRef.current = [audio];
+          await new Promise((resolve) => { audio.onended = resolve; audio.onerror = resolve; audio.play().catch(resolve); });
+        });
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        for (const line of dec.decode(value).split('\n')) {
+        for (const line of dec.decode(value, { stream: true }).split('\n')) {
           if (!line.startsWith('data: ')) continue;
           const raw = line.slice(6).trim();
           if (raw === '[DONE]' || !raw) continue;
-          try { const p = JSON.parse(raw); if (p.content) full += p.content; } catch(_) {}
+          try {
+            const p = JSON.parse(raw);
+            if (p.content) {
+              full += p.content;
+              buf += p.content;
+              // Flush whenever we hit a sentence boundary.
+              let m;
+              while ((m = buf.match(/^(.+?[.!?।])\s+/))) {
+                playSentence(m[1]);
+                buf = buf.slice(m[0].length);
+              }
+            }
+          } catch (_) {}
         }
       }
+      if (buf.trim()) playSentence(buf.trim()); // flush any trailing fragment
 
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
 
-      if (!callActiveRef.current) return;
-      setCallState('speaking');
-
-      // Inline TTS for voice call (bypasses speakText to avoid conflicts)
-      try {
-        stopSpeaking();
-        isSpeakingRef.current = false;
-        await new Promise(r => setTimeout(r, 100));
-        isSpeakingRef.current = true;
-
-        const gender = ttsGenderRef.current;
-        const clean = cleanForTTS(reply);
-        const voice = detectLangVoice(clean, gender);
-        const headers = await getCachedAuthHeader();
-
-        const toBlobUrl = (dataUrl) => {
-          if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
-          try {
-            const base64 = dataUrl.split(',')[1];
-            const bin = window.atob(base64);
-            const bytes = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-            return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
-          } catch(e) { return dataUrl; }
-        };
-
-        const fetchChunk = (txt) =>
-          fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text: txt, voice }) })
-            .then(r => r.ok ? r.json() : null)
-            .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
-            .catch(() => null);
-
-        if (clean.length <= 800) {
-          const src = await fetchChunk(clean);
-          if (callActiveRef.current && src) {
-            const audio = new Audio(toBlobUrl(src));
-            currentAudiosRef.current = [audio];
-            await new Promise(r => { audio.onended = r; audio.onerror = r; audio.play().catch(r); });
-          }
-        } else {
-          const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
-          const chunks = []; let cur = '';
-          for (const s of sentences) {
-            if ((cur + s).length > 800 && cur) { chunks.push(cur.trim()); cur = s; } else cur += s;
-          }
-          if (cur.trim()) chunks.push(cur.trim());
-          let nextFetch = fetchChunk(chunks[0]);
-          for (let i = 0; i < chunks.length; i++) {
-            if (!callActiveRef.current) break;
-            const src = await nextFetch;
-            if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
-            if (!callActiveRef.current || !src) continue;
-            const audio = new Audio(toBlobUrl(src));
-            currentAudiosRef.current = [audio];
-            await new Promise(r => { audio.onended = r; audio.onerror = r; audio.play().catch(r); });
-          }
-        }
-      } catch(speakErr) {
-        console.error('Voice speak error:', speakErr);
-      } finally {
-        isSpeakingRef.current = false;
-        currentAudiosRef.current = [];
-      }
-
-    } catch(err) {
-      console.error('onresult error:', err);
+      await ttsQueue; // wait for all queued audio to finish playing
+      isSpeakingRef.current = false;
+      currentAudiosRef.current = [];
+    } catch (err) {
+      console.error('Voice call turn error:', err);
     }
 
+    finalTranscript = '';
     safeRestart();
   };
 
-  recog.onerror = (e) => {
-    if (!callActiveRef.current) return;
-    if (e?.error === 'aborted') return;
-    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
-    safeRestart();
-  };
-
-  recog.onend = () => {
-    if (!callActiveRef.current) return;
-    safeRestart();
-  };
-
-  try { recog.start(); } catch(e) {
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch(err) {} }, 800);
+  try { recog.start(); } catch (e) {
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 800);
   }
 };
  const doSearch = async (query) => {
