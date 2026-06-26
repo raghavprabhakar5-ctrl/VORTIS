@@ -2033,14 +2033,12 @@ export default function VortisAI() {
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
   const callActiveRef = useRef(false);
-  const callAudioCtxRef   = useRef(null);
-  const callAnalyserRef   = useRef(null);
-  const callMicStreamRef  = useRef(null);
-  const callRafRef        = useRef(null);
-  const callSilenceTORef  = useRef(null);
-  const callSpeechHeard   = useRef(false);
-  const callAbortTTSRef   = useRef(null);
-  const callModeRef       = useRef('idle');
+  const callAudioCtxOutRef = useRef(null);      // shared output AudioContext
+  const callNextPlayTimeRef = useRef(0);          // playback cursor for gapless scheduling
+  const callActiveSourcesRef = useRef([]);        // currently scheduled/playing buffer sources
+  const callTtsQueueRef = useRef(Promise.resolve()); // serializes sentence playback order
+  const callFinalTranscriptRef = useRef('');
+  const callSilenceMsRef = useRef(1100);
   const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -2915,35 +2913,126 @@ const addMsg = (type, text, speak = false) => {
   if (speak && autoSpeak && type === 'vortis') speakText(text);
   return msg;
 };
-
-// ═══════ VOICE CALL — rewritten ═══════
-
-// Pick recognition language from browser locale instead of hardcoding en-IN.
-// (Web Speech API can't auto-detect language — whatever you set is the only
-// language it'll transcribe accurately. Let users override this in Settings
-// later; for now default to their browser locale.)
 const getRecogLang = () => {
   try { return localStorage.getItem('vortis_recog_lang') || navigator.language || 'en-US'; }
   catch (_) { return 'en-US'; }
 };
 
-const callSilenceMsRef = useRef(1100); // ms of silence before we treat speech as "done"
+const base64ToArrayBuffer = (base64) => {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+};
 
-const startVoiceCall = () => {
+// Decode an mp3-base64 TTS response and schedule it to play immediately after
+// whatever's already queued — this is what makes multi-sentence replies sound
+// like one continuous voice instead of stutter-gap-stutter.
+const scheduleAudioBuffer = async (base64Audio) => {
+  if (!callAudioCtxOutRef.current) {
+    callAudioCtxOutRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    callNextPlayTimeRef.current = callAudioCtxOutRef.current.currentTime;
+  }
+  const ctx = callAudioCtxOutRef.current;
+  if (ctx.state === 'suspended') await ctx.resume();
+
+  let audioBuffer;
+  try {
+    audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(base64Audio));
+  } catch (e) { console.error('TTS decode failed:', e); return; }
+
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(ctx.destination);
+  callActiveSourcesRef.current.push(src);
+
+  const startAt = Math.max(ctx.currentTime, callNextPlayTimeRef.current);
+  src.start(startAt);
+  callNextPlayTimeRef.current = startAt + audioBuffer.duration;
+
+  return new Promise((resolve) => {
+    src.onended = resolve;
+  });
+};
+
+// Stops everything currently playing/scheduled — used for barge-in.
+const stopCallPlayback = () => {
+  callActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch (_) {} });
+  callActiveSourcesRef.current = [];
+  if (callAudioCtxOutRef.current) callNextPlayTimeRef.current = callAudioCtxOutRef.current.currentTime;
+  isSpeakingRef.current = false;
+};
+
+// ═══════ VOICE CALL — final merged version ═══════
+
+const getRecogLang = () => {
+  try { return localStorage.getItem('vortis_recog_lang') || navigator.language || 'en-US'; }
+  catch (_) { return 'en-US'; }
+};
+
+const base64ToArrayBuffer = (base64) => {
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+};
+
+// Decodes an mp3-base64 TTS response and schedules it to play immediately
+// after whatever's already queued — this is what makes multi-sentence
+// replies sound like one continuous voice instead of stutter-gap-stutter.
+const scheduleAudioBuffer = async (base64Audio) => {
+  if (!callAudioCtxOutRef.current) {
+    callAudioCtxOutRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    callNextPlayTimeRef.current = callAudioCtxOutRef.current.currentTime;
+  }
+  const ctx = callAudioCtxOutRef.current;
+  if (ctx.state === 'suspended') await ctx.resume();
+
+  let audioBuffer;
+  try {
+    audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(base64Audio));
+  } catch (e) { console.error('TTS decode failed:', e); return; }
+
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(ctx.destination);
+  callActiveSourcesRef.current.push(src);
+
+  const startAt = Math.max(ctx.currentTime, callNextPlayTimeRef.current);
+  src.start(startAt);
+  callNextPlayTimeRef.current = startAt + audioBuffer.duration;
+
+  return new Promise((resolve) => { src.onended = resolve; });
+};
+
+// Stops everything currently playing/scheduled — used for barge-in and hangup.
+const stopCallPlayback = () => {
+  callActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch (_) {} });
+  callActiveSourcesRef.current = [];
+  if (callAudioCtxOutRef.current) callNextPlayTimeRef.current = callAudioCtxOutRef.current.currentTime;
+  isSpeakingRef.current = false;
+};
+
+const startVoiceCall = async () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
+
   setShowVoiceCall(true);
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
-  setTimeout(() => { try { runCallListenLoop(); } catch (e) { console.error('Initial start failed:', e); } }, 300);
+  callFinalTranscriptRef.current = '';
+
+  setTimeout(() => { try { runCallListenLoop(); } catch (e) { console.error('Voice call start failed:', e); } }, 250);
 };
 
 const endVoiceCall = () => {
   callActiveRef.current = false;
   try { callRecogRef.current?.stop(); } catch (_) {}
-  try { stopSpeaking(); } catch (_) {}
   clearTimeout(callSilenceTORef.current);
+  stopCallPlayback();
+  try { callAudioCtxOutRef.current?.close(); } catch (_) {}
+  callAudioCtxOutRef.current = null;
   setCallState('idle');
   setCallPaused(false);
   setShowVoiceCall(false);
@@ -2958,21 +3047,19 @@ const runCallListenLoop = () => {
   let recog;
   try { recog = new SR(); } catch (e) { console.error('SR create failed:', e); setCallState('idle'); return; }
 
-  // ── KEY FIX #1: continuous + interim results instead of one-shot ──
-  // continuous:false makes the browser end the session on the first natural
-  // pause (a breath, a comma) — that's the "cuts off mid-sentence" bug.
+  // KEY FIX #1: continuous + interim — browser no longer hard-cuts on a
+  // natural pause (a breath, a comma). We decide "done talking" ourselves.
   recog.continuous = true;
   recog.interimResults = true;
   recog.lang = getRecogLang();
   callRecogRef.current = recog;
 
-  let finalTranscript = '';
   let restarted = false;
 
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 400);
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 350);
   };
 
   const clearSilenceTimer = () => {
@@ -2980,31 +3067,28 @@ const runCallListenLoop = () => {
   };
 
   // Fires when the user has stopped talking for ~1.1s — this, not the
-  // browser's onend, is what decides "they're done speaking."
+  // browser's onend, decides "they're done speaking."
   const armSilenceTimer = () => {
     clearSilenceTimer();
-    callSilenceTORef.current = setTimeout(() => {
-      try { recog.stop(); } catch (_) {}
-    }, callSilenceMsRef.current);
+    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
   };
 
   setCallState('listening');
 
   recog.onresult = (e) => {
-    // ── KEY FIX #2: barge-in — if the AI is speaking and the user starts
-    // talking, cut the AI off immediately instead of waiting for it to finish ──
+    // KEY FIX #2: barge-in — the instant new speech is detected while the
+    // AI is talking, kill its audio immediately instead of waiting it out.
     if (isSpeakingRef.current) {
-      stopSpeaking();
+      stopCallPlayback();
       setCallState('listening');
     }
 
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalTranscript += e.results[i][0].transcript;
+      if (e.results[i].isFinal) callFinalTranscriptRef.current += e.results[i][0].transcript;
       else interim += e.results[i][0].transcript;
     }
-    // Any new speech (final or interim) resets the silence clock.
-    if (interim.trim() || finalTranscript.trim()) armSilenceTimer();
+    if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
   };
 
   recog.onerror = (e) => {
@@ -3019,7 +3103,8 @@ const runCallListenLoop = () => {
     clearSilenceTimer();
     if (!callActiveRef.current) return;
 
-    const transcript = finalTranscript.trim();
+    const transcript = callFinalTranscriptRef.current.trim();
+    callFinalTranscriptRef.current = '';
     if (!transcript) { safeRestart(); return; }
 
     setCallState('thinking');
@@ -3029,7 +3114,8 @@ const runCallListenLoop = () => {
       incrUsage('messages');
       pushHistory(convHistory, 'user', transcript);
 
-      const sys = `You are Vortis in live voice call mode. Reply ONLY in short, natural spoken sentences (1-3 sentences max). No markdown, no lists, no code blocks, no headers. Be conversational and warm.`;
+      // Short, voice-only system prompt — fewer tokens = faster first response.
+      const sys = `You are Vortis in a live voice call. Reply in short, natural spoken sentences (1-3 sentences, 8-15 words each). No markdown, no lists, no headers. Be warm and conversational. Match the user's language.`;
 
       const res = await fetch(API, {
         method: 'POST',
@@ -3037,52 +3123,35 @@ const runCallListenLoop = () => {
         body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
       });
 
-      // ── KEY FIX #3: stream + speak sentence-by-sentence as they arrive,
+      // KEY FIX #3: stream + speak sentence-by-sentence as they arrive,
+      // and play them through one shared AudioContext with no gaps,
       // instead of waiting for the entire reply before any TTS is fetched.
-      // This is the single biggest perceived-latency fix — ChatGPT's
-      // real-time voice does the audio equivalent of this natively; we
-      // fake it by chunking text as it streams and pipelining TTS fetches. ──
       const reader = res.body.getReader();
       const dec = new TextDecoder();
-      let buf = '';       // unflushed text waiting to become a sentence
-      let full = '';       // full reply, for history
+      let buf = '';
+      let full = '';
       let spokenAny = false;
-      let ttsQueue = Promise.resolve(); // serializes playback so sentences don't overlap
+      callTtsQueueRef.current = Promise.resolve(); // fresh queue for this turn
 
       const gender = ttsGenderRef.current;
       const headers = await getCachedAuthHeader();
 
-      const toBlobUrl = (dataUrl) => {
-        if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
-        try {
-          const base64 = dataUrl.split(',')[1];
-          const bin = window.atob(base64);
-          const bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-          return URL.createObjectURL(new Blob([bytes], { type: 'audio/mp3' }));
-        } catch (_) { return dataUrl; }
-      };
-
-      const fetchChunk = (txt, voice) =>
-        fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text: txt, voice }) })
+      const fetchTTS = (text, voice) =>
+        fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text, voice }) })
           .then(r => r.ok ? r.json() : null)
-          .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
+          .then(d => (d?.audio?.length > 100 ? d.audio : null))
           .catch(() => null);
 
-      const playSentence = (sentence) => {
+      const queueSentence = (sentence) => {
         const clean = cleanForTTS(sentence);
         if (!clean || clean.length < 2) return;
         const voice = detectLangVoice(clean, gender);
-        // Chain onto the queue so sentences play in order, back-to-back.
-        ttsQueue = ttsQueue.then(async () => {
+        callTtsQueueRef.current = callTtsQueueRef.current.then(async () => {
           if (!callActiveRef.current) return;
-          if (!spokenAny) { setCallState('speaking'); spokenAny = true; }
-          const src = await fetchChunk(clean, voice);
-          if (!callActiveRef.current || !src) return;
-          isSpeakingRef.current = true;
-          const audio = new Audio(toBlobUrl(src));
-          currentAudiosRef.current = [audio];
-          await new Promise((resolve) => { audio.onended = resolve; audio.onerror = resolve; audio.play().catch(resolve); });
+          if (!spokenAny) { setCallState('speaking'); spokenAny = true; isSpeakingRef.current = true; }
+          const audio = await fetchTTS(clean, voice);
+          if (!callActiveRef.current || !audio) return;
+          await scheduleAudioBuffer(audio);
         });
       };
 
@@ -3098,34 +3167,29 @@ const runCallListenLoop = () => {
             if (p.content) {
               full += p.content;
               buf += p.content;
-              // Flush whenever we hit a sentence boundary.
               let m;
-              while ((m = buf.match(/^(.+?[.!?।])\s+/))) {
-                playSentence(m[1]);
-                buf = buf.slice(m[0].length);
-              }
+              while ((m = buf.match(/^(.+?[.!?।])\s+/))) { queueSentence(m[1]); buf = buf.slice(m[0].length); }
             }
           } catch (_) {}
         }
       }
-      if (buf.trim()) playSentence(buf.trim()); // flush any trailing fragment
+      if (buf.trim()) queueSentence(buf.trim());
 
       const reply = full.trim() || "Sorry, I didn't catch that.";
       pushHistory(convHistory, 'assistant', reply);
 
-      await ttsQueue; // wait for all queued audio to finish playing
+      await callTtsQueueRef.current; // wait for all queued sentences to finish playing
       isSpeakingRef.current = false;
-      currentAudiosRef.current = [];
     } catch (err) {
       console.error('Voice call turn error:', err);
+      isSpeakingRef.current = false;
     }
 
-    finalTranscript = '';
-    safeRestart();
+    if (callActiveRef.current) { setCallState('listening'); safeRestart(); }
   };
 
   try { recog.start(); } catch (e) {
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 800);
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 700);
   }
 };
  const doSearch = async (query) => {
