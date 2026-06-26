@@ -186,23 +186,40 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 
 // ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
+  // ── STEP 1: TOKEN OPTIMIZATION ──────────────────────────────────
+  // Extract the system prompt if it exists so it doesn't get discarded
+  const systemPrompt = messages.find(m => m.role === 'system');
+
+  // Slice down conversation history turns to avoid hitting token limits
+  const recentConversations = messages
+    .filter(m => m.role !== 'system')
+    .slice(-6); // Maxes out context window history at 6 interactions
+
+  // Assemble the lean message context block
+  const optimizedMessages = systemPrompt 
+    ? [systemPrompt, ...recentConversations] 
+    : recentConversations;
+  // ────────────────────────────────────────────────────────────────
+
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
   const tier      = await classifyTier(groq, lastMsg);
   const isHard    = tier === 'hard';
   const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const maxTokens = isHard ? 2000 : 800;
+  
+  // Use a sensible token ceiling relative to intent
+  const maxTokens = isHard ? 1200 : 600; 
 
   console.log(`Tier: ${tier} → model: ${model}`);
 
+  // ── GROQ COMPLETION & FALLBACK LOOP ─────────────────────────────
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
       const stream = await groq.chat.completions.create({
         model: modelToTry,
-        messages,
-        max_tokens: maxTokens,
+        messages: optimizedMessages, // Uses optimized list
+        max_tokens: maxTokens,       // Uses clean context parameters dynamically
         temperature: 0.7,
-        reasoning_effort: isHard ? 'high' : 'low',
         stream: true,
       });
 
@@ -222,9 +239,15 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       console.warn(`Model ${modelToTry} returned empty — trying fallback`);
     } catch (e) {
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
+      
+      // If a rate limit hits (429), it drops directly to the loop's next model or Cloudflare
+      if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {
+        console.log('Skipping choked rate limit route...');
+      }
     }
   }
 
+  // ── CLOUDFLARE WORKERS AI BACKUP FALLBACK ───────────────────────
   for (const cfModel of CF_CHAT_MODELS) {
     try {
       const cfRes = await fetch(
@@ -232,7 +255,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages, stream: false, max_tokens: 1200 }),
+          // Cloudflare handles full messages array fine or fallback parameters
+          body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
         }
       );
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
@@ -681,9 +705,9 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
 
       let aiSummary = null;
       if (allResults.length > 0) {
-        const contextSnippets = allResults.slice(0, 6).map((r, i) =>
-          `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 400)}\nSource: ${r.source} | Date: ${r.date}`
-        ).join('\n\n');
+       const contextSnippets = allResults.slice(0, 4).map((r, i) =>
+  `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 250)}\nSource: ${r.source}`
+).join('\n\n');
         const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         try {
           const result = await Promise.race([
