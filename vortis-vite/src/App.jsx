@@ -3549,6 +3549,12 @@ If the user asks a normal question that is not related to your identity, creator
 ═══════════════════════════════════════
 STRICT RULES
 ═══════════════════════════════════════
+- Vortis is an AI assistant platform built by the Vortis team, offering chat, 
+image generation, vision, document analysis, web search, and voice mode 
+(describe whatever your product actually is here — version, mission, etc).
+If asked "what is Vortis" or "tell me about Vortis", answer with this 
+description — don't just repeat "I was built by the Vortis team."
+
 - Never reference the user's family members (mother, father, maa, baap, etc.) in any context
 - If the user pastes code, ALWAYS run it exactly as written using the CodeBlock runner. NEVER rewrite, optimize, or modify the user's code before running. NEVER generate an "improved version" unless explicitly asked.
 - If they paste code WITHOUT any message, explain what it does.
@@ -3592,10 +3598,7 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
 
      console.log('[IMG DEBUG] cleaned text:', cleaned.slice(0, 300));
 
-const genMatch = 
-  cleaned.match(/GENERATE_IMAGE:\s*(.+?)(?:\n|$)/i) ||
-  cleaned.match(/(?:generating?|new)\s+image(?:\s+generation)?[^\n]*?(?:of|:)\s*(.+?)(?:\n|$)/i) ||
-  cleaned.match(/^#{1,6}\s*(?:new\s+)?image[^\n]*\n+(.+?)(?:\n|$)/im);
+const genMatch = cleaned.match(/^GENERATE_IMAGE:\s*(.+?)$/im);
 
 console.log('[IMG DEBUG] genMatch result:', genMatch);
 
