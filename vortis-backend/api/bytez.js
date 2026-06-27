@@ -507,7 +507,7 @@ ${prompt ? `\n${prompt.slice(0, 3000)}` : ''}${searchContext}`;
       if (prompt.length > 800)  return res.status(400).json({ error: 'Prompt too long' });
 
       try {
-        console.log(`Generating image with ${NIM_IMAGE}`);
+        console.log(`Generating elite quality image with ${NIM_IMAGE}`);
         const imgRes = await fetchWithTimeout(
           `${NVIDIA_BASE_URL}/images/generations`,
           {
@@ -520,8 +520,11 @@ ${prompt ? `\n${prompt.slice(0, 3000)}` : ''}${searchContext}`;
             body: JSON.stringify({
               model:           NIM_IMAGE,
               prompt:          prompt.trim(),
+              // Added negative prompt styling automatically behind the scenes to maximize quality bro
+              negative_prompt: 'blurry, low quality, distorted, extra limbs, bad anatomy, text errors',
               n:               1,
               size:            '1024x1024',
+              steps:           30, // Cleans up details, sharpness, and text alignment
               response_format: 'b64_json',
             }),
           },
@@ -534,16 +537,16 @@ ${prompt ? `\n${prompt.slice(0, 3000)}` : ''}${searchContext}`;
         const url     = imgData?.data?.[0]?.url;
 
         if (b64 && b64.length > 100) {
-          return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, provider: 'nvidia-flux' });
+          return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, provider: 'nvidia-highres' });
         }
         if (url) {
-          return res.status(200).json({ success: true, imageUrl: url, provider: 'nvidia-flux' });
+          return res.status(200).json({ success: true, imageUrl: url, provider: 'nvidia-highres' });
         }
         throw new Error('No image returned');
 
       } catch (error) {
         console.error('IMAGE GEN ERROR:', error.message);
-        // Fallback to Pollinations Flux
+        // Fallback to Pollinations Flux so your frontend never gets a broken UI loop
         try {
           console.log('Falling back to Pollinations Flux...');
           const seed        = Math.floor(Math.random() * 999999);
@@ -566,7 +569,7 @@ ${prompt ? `\n${prompt.slice(0, 3000)}` : ''}${searchContext}`;
         return res.status(503).json({ error: 'Image generation unavailable, try again.' });
       }
     }
-
+    
     // ╔══════════════════════════════════════╗
     // ║  TEXT TO SPEECH                      ║
     // ╚══════════════════════════════════════╝
