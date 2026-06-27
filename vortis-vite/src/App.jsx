@@ -2030,6 +2030,8 @@ export default function VortisAI() {
   const [showStarredPanel, setShowStarredPanel] = useState(false);
   const [isDark, setIsDark] = useState(true);
   const [wordCount, setWordCount] = useState(0);
+  const [callDuration, setCallDuration] = useState(0);
+  const callTimerRef = useRef(null);
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
@@ -3123,7 +3125,10 @@ const runCallListenLoop = () => {
   recog.onresult = (e) => {
     // Barge-in: user started talking while VORTIS is speaking — stop
     // playback immediately so we don't talk over them.
-    if (isSpeakingRef.current) { stopCallPlayback(); setCallState('listening'); }
+    if (isSpeakingRef.current) {
+  const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
+  if (sample.trim().length >= 4) { stopCallPlayback(); setCallState('listening'); }
+}
  
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -3146,24 +3151,49 @@ const runCallListenLoop = () => {
     safeRestart();
   };
  
-  recog.onend = async () => {
+ recog.onend = async () => {
   clearSilenceTimer();
   if (!callActiveRef.current) return;
- 
+
   const transcript = callFinalTranscriptRef.current.trim();
   callFinalTranscriptRef.current = '';
   if (!transcript) { safeRestart(); return; }
- 
+
   const detectedLang = detectSpokenLang(transcript);
   callDetectedLangRef.current = detectedLang;
- 
+
+  // ── ADD THIS BLOCK HERE ──
+  const voiceCmd = transcript.toLowerCase().match(/change (your )?voice to (male|female)/);
+  if (voiceCmd) {
+    const newGender = voiceCmd[2];
+    setTtsGender(newGender);
+    ttsGenderRef.current = newGender; // keep ref in sync immediately, don't wait for the effect
+    try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
+
+    const confirmMsg = newGender === 'female' ? "Sure, switching to a female voice." : "Sure, switching to a male voice.";
+    setCallState('speaking');
+    isSpeakingRef.current = true;
+
+    try {
+      const headers = await getCachedAuthHeader();
+      const res = await fetch(API, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'tts', text: confirmMsg, voice: getCallVoice(detectedLang, newGender) })
+      });
+      const d = res.ok ? await res.json() : null;
+      if (d?.audio?.length > 100) await scheduleAudioBuffer(d.audio);
+    } catch(_) {}
+
+    isSpeakingRef.current = false;
+    safeRestart(); // restart the listen loop — this replaces the role safeRestart() does lower down
+    if (callActiveRef.current) setCallState('listening');
+    return; // skip sending this transcript to the AI entirely
+  }
+  // ── END ADDED BLOCK ──
+
   setCallState('thinking');
- 
-  // Start the next recognizer now (for responsiveness + barge-in),
-  // but DO NOT change callState here — state follows what's actually
-  // playing, not what's technically listening in the background.
   safeRestart();
- 
   try {
     if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
     incrUsage('messages');
@@ -3174,7 +3204,9 @@ const runCallListenLoop = () => {
       ? 'Speak as a female assistant; use feminine grammatical forms where the language requires it.'
       : 'Speak as a male assistant; use masculine grammatical forms where the language requires it.';
  
-    const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each. No markdown, no lists, no labels, no explanation of what you're doing — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}`;
+   const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each.
+Do NOT introduce yourself, state your name, or list your features unless the user explicitly asks who you are or what you can do.
+No markdown, no lists, no labels — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}`;
  
     const res = await fetch(API, {
       method: 'POST',
@@ -3328,10 +3360,14 @@ const startVoiceCall = async () => {
   callFinalTranscriptRef.current = '';
 
   setTimeout(() => { try { runCallListenLoop(); } catch (e) { console.error('Voice call start failed:', e); } }, 250);
+  setCallDuration(0);
+  callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 };
+
 
 const endVoiceCall = () => {
   callActiveRef.current = false;
+  clearInterval(callTimerRef.current);
   try { callRecogRef.current?.stop(); } catch (_) {}
   clearTimeout(callSilenceTORef.current);
   stopCallPlayback();
@@ -3341,6 +3377,8 @@ const endVoiceCall = () => {
   setCallPaused(false);
   setShowVoiceCall(false);
 };
+
+const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 
  const doSearch = async (query) => {
   setProcessingStatus('searching');
@@ -4434,21 +4472,21 @@ return (
     }}>
       {/* Pause / Resume */}
       <button
-        onClick={() => {
-     if (callPaused) {
-       setCallPaused(false);
-       callActiveRef.current = true;
-       beginListening();
-     } else {
-       setCallPaused(true);
-       callModeRef.current = 'idle';
-       try { callRecogRef.current?.stop(); } catch(_) {}
-       if (callRafRef.current) { cancelAnimationFrame(callRafRef.current); callRafRef.current = null; }
-       if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
-       stopSpeaking();
-       setCallState('idle');
-     }
-   }}
+       onClick={() => {
+  if (callPaused) {
+    setCallPaused(false);
+    callActiveRef.current = true;
+    runCallListenLoop();
+  } else {
+    setCallPaused(true);
+    callActiveRef.current = false;
+    try { callRecogRef.current?.stop(); } catch(_) {}
+    if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+    stopCallPlayback();
+    setCallState('idle');
+  }
+}}
+   
         style={{
           width: 58, height: 58, borderRadius: '50%',
           background: 'rgba(255,255,255,.08)',
