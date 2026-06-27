@@ -30,7 +30,7 @@ const NIM_DOCS    = 'nvidia/nemotron-3-ultra-550b-a55b';        // 550B Heavy Du
 const NIM_SEARCH  = 'moonshotai/kimi-k2.6';                    // Web Synthesis Specialist
 const NIM_SUMMARY = 'stepfun-ai/step-3.7-flash';                // Ultra-Fast Summary Maker
 const NIM_VISION  = 'meta/llama-3.2-90b-vision-instruct';       // 90B Top-Tier Visual Reasoning & OCR
-const NIM_IMAGE   = 'black-forest-labs/flux-dev';               // Elite Quality Image Rendering
+const NIM_IMAGE   = 'black-forest-labs/flux.1-dev';               // Elite Quality Image Rendering
 const NIM_STT     = 'openai/whisper-large-v3';                 // Global Multilingual Audio Transcriber
 const NIM_TTS     = 'magpie-tts/multilingual-2.0';             // Ultra Natural Voice Synthesizer
 
