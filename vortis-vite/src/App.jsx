@@ -22,7 +22,7 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem  
+  Gem, PhoneOff
 } from 'lucide-react';
 
 
@@ -2997,24 +2997,22 @@ const detectSpokenLang = (text) => {
   };
 
  let bestLang = 'en-US';
-  let bestScore = 0;
-  let bestMatches = 0;
- 
-  for (const [lang, keywords] of Object.entries(SIGS)) {
-    const matches = keywords.filter(w => wordSet.has(w)).length;
-    const score = matches / Math.max(words.length, 1);
-    if (score > bestScore && matches >= 1) {
-      bestScore = score;
-      bestMatches = matches;
-      bestLang = lang;
-    }
-  }
+let bestScore = 0;
+let bestMatches = 0;
 
-  // German special chars are a strong signal even without word matches
-  if (/[äöüß]/.test(lower) && bestMatches === 0) return 'de-DE';
-  if (words.length <= 4 && bestMatches < 2) return 'en-US';
- 
-  return bestScore >= 0.08 ? bestLang : 'en-US';
+for (const [lang, keywords] of Object.entries(SIGS)) {
+  const matches = keywords.filter(w => wordSet.has(w)).length;
+  const score = matches / Math.max(words.length, 1);
+  if (score > bestScore && matches >= 2) {
+    bestScore = score;
+    bestMatches = matches;
+    bestLang = lang;
+  }
+}
+
+if (words.length <= 6 && bestMatches < 3) return 'en-US';
+
+return bestScore >= 0.18 ? bestLang : 'en-US';
 };
 
 const CALL_VOICE_MAP = {
@@ -3091,14 +3089,8 @@ const runCallListenLoop = () => {
   recog.continuous = true;
   recog.interimResults = true;
  
-  // No language bias: use whatever we detected last turn, or the
-  // browser's own locale on the very first turn — never hardcode
-  // English as a fallback default.
-  recog.lang = callDetectedLangRef.current || navigator.language || CALL_RECOG_LANGS[0];
+ recog.lang = navigator.language || 'en-US';
  
-  // Ask the browser to consider alternative language interpretations
-  // when it supports it (Chrome ignores this silently if unsupported —
-  // harmless either way).
   try { recog.maxAlternatives = 3; } catch (_) {}
  
   callRecogRef.current = recog;
@@ -3120,30 +3112,31 @@ const runCallListenLoop = () => {
 };
  
  
-  setCallState('listening');
- 
-  recog.onresult = (e) => {
-    // Barge-in: user started talking while VORTIS is speaking — stop
-    // playback immediately so we don't talk over them.
-    if (isSpeakingRef.current) {
-  const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
-  if (sample.trim().length >= 4) { stopCallPlayback(); setCallState('listening'); }
-}
- 
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) callFinalTranscriptRef.current += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
+ recog.onresult = (e) => {
+  if (isSpeakingRef.current) {
+    const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
+    if (sample.trim().length >= 6) {
+      stopCallPlayback();
+      setCallState('listening');
+    } else {
+      return; // ignore mic bleed from AI's own voice, don't arm silence timer
     }
- 
-    const sample = callFinalTranscriptRef.current || interim;
-    if (sample.trim().length > 2) {
-      callDetectedLangRef.current = detectSpokenLang(sample);
-    }
- 
-    if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
-  };
- 
+  }
+
+  let interim = '';
+  for (let i = e.resultIndex; i < e.results.length; i++) {
+    if (e.results[i].isFinal) callFinalTranscriptRef.current += e.results[i][0].transcript;
+    else interim += e.results[i][0].transcript;
+  }
+
+  const sample = callFinalTranscriptRef.current || interim;
+  if (sample.trim().length > 2) {
+    callDetectedLangRef.current = detectSpokenLang(sample);
+  }
+
+  if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
+};
+
   recog.onerror = (e) => {
     if (!callActiveRef.current) return;
     if (e?.error === 'aborted') return;
@@ -3163,34 +3156,34 @@ const runCallListenLoop = () => {
   callDetectedLangRef.current = detectedLang;
 
   // ── ADD THIS BLOCK HERE ──
-  const voiceCmd = transcript.toLowerCase().match(/change (your )?voice to (male|female)/);
-  if (voiceCmd) {
-    const newGender = voiceCmd[2];
-    setTtsGender(newGender);
-    ttsGenderRef.current = newGender; // keep ref in sync immediately, don't wait for the effect
-    try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
+ const voiceCmd = transcript.toLowerCase().match(/\b(change|switch|set|make|use)\b.{0,25}\bvoice\b.{0,25}\b(male|female)\b/);
+if (voiceCmd) {
+  const newGender = voiceCmd[2];
+  setTtsGender(newGender);
+  ttsGenderRef.current = newGender;
+  try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
 
-    const confirmMsg = newGender === 'female' ? "Sure, switching to a female voice." : "Sure, switching to a male voice.";
-    setCallState('speaking');
-    isSpeakingRef.current = true;
+  const confirmMsg = newGender === 'female' ? "Sure, switching to a female voice." : "Sure, switching to a male voice.";
+  setCallState('speaking');
+  isSpeakingRef.current = true;
 
-    try {
-      const headers = await getCachedAuthHeader();
-      const res = await fetch(API, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ action: 'tts', text: confirmMsg, voice: getCallVoice(detectedLang, newGender) })
-      });
-      const d = res.ok ? await res.json() : null;
-      if (d?.audio?.length > 100) await scheduleAudioBuffer(d.audio);
-    } catch(_) {}
+  try {
+    const headers = await getCachedAuthHeader();
+    const res = await fetch(API, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ action: 'tts', text: confirmMsg, voice: getCallVoice(detectedLang, newGender) })
+    });
+    const d = res.ok ? await res.json() : null;
+    if (d?.audio?.length > 100) await scheduleAudioBuffer(d.audio);
+  } catch(_) {}
 
-    isSpeakingRef.current = false;
-    safeRestart(); // restart the listen loop — this replaces the role safeRestart() does lower down
-    if (callActiveRef.current) setCallState('listening');
-    return; // skip sending this transcript to the AI entirely
-  }
-  // ── END ADDED BLOCK ──
+  isSpeakingRef.current = false;
+  safeRestart();
+  if (callActiveRef.current) setCallState('listening');
+  return;
+}
+  
 
   setCallState('thinking');
   safeRestart();
@@ -3373,9 +3366,15 @@ const endVoiceCall = () => {
   stopCallPlayback();
   try { callAudioCtxOutRef.current?.close(); } catch (_) {}
   callAudioCtxOutRef.current = null;
+
+  if (callDuration > 0) {
+    addMsg('system', `Voice call ended · ${fmtDuration(callDuration)}`, false);
+  }
+
   setCallState('idle');
   setCallPaused(false);
   setShowVoiceCall(false);
+  setCallDuration(0);
 };
 
 const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
@@ -4538,7 +4537,12 @@ return (
         {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (
-                  <div style={{ display: 'flex', justifyContent: 'center' }}><div className="bubble-sys">{msg.text}</div></div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <div className="bubble-sys">
+                      {msg.text.startsWith('Voice call ended') && <PhoneOff size={11} color="var(--text3)"/>}
+                      {msg.text}
+                    </div>
+                  </div>
                 ) : msg.type === 'user' ? (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
@@ -4564,7 +4568,6 @@ return (
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
                           { ic: <Volume2 size={11}/>, fn: () => {
-  // Get the actual rendered text from the DOM — not raw markdown
   const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
   if (bubble) {
     const rawText = bubble.innerText || bubble.textContent || '';
