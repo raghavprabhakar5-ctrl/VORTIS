@@ -1078,14 +1078,12 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       }
     }
 
-    // ╔══════════════════════════════════════╗
+// ╔══════════════════════════════════════╗
 // ║  IMAGE GENERATION                    ║
 // ╚══════════════════════════════════════╝
 if (action === 'image') {
   if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
   if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
-
-  const forceGemini = body.forceGemini === true;
 
   // ── Helper: Try Flux Worker (Cloudflare Worker Primary) ──
   async function tryFlux(promptText) {
@@ -1101,11 +1099,13 @@ if (action === 'image') {
         25000
       );
       if (!imgRes.ok) return null;
+      
       const contentType = imgRes.headers.get('content-type') || '';
       if (contentType.includes('json')) {
         const json = await imgRes.json();
         return json?.imageUrl ? json : null;
-          }
+      }
+      
       const responseText = await imgRes.text();
       try {
         return JSON.parse(responseText);
@@ -1118,62 +1118,14 @@ if (action === 'image') {
     }
   }
 
-  // ── Helper: Try Pollinations Flux (Fallback) ──
-  // Function name left untouched to support your frontend infrastructure
-  async function tryGemini(promptText) {
-    try {
-      const encodedPrompt = encodeURIComponent(promptText.trim());
-      const seed = Math.floor(Math.random() * 999999);
-
-      const polRes = await fetchWithTimeout(
-        `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true&enhance=false`,
-        {
-          method: 'GET',
-          headers: { 'User-Agent': BROWSER_UA },
-        },
-        30000
-      );
-
-      console.log('Pollinations Flux status:', polRes.status);
-
-      if (!polRes.ok) {
-        console.log('Pollinations Flux error:', polRes.status);
-        return null;
-      }
-
-      const contentType = polRes.headers.get('content-type') || '';
-      if (!contentType.startsWith('image/')) {
-        console.log('Pollinations returned non-image content-type:', contentType);
-        return null;
-      }
-
-      const arrayBuffer = await polRes.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString('base64');
-
-      if (!base64 || base64.length < 100) {
-        console.log('Pollinations returned empty image');
-        return null;
-      }
-
-      const mime = contentType.split(';')[0].trim() || 'image/jpeg';
-      console.log('Pollinations Flux image received ✅');
-      return { success: true, imageUrl: `data:${mime};base64,${base64}` };
-    } catch (e) {
-      console.error('Pollinations Flux failed:', e.message);
-      return null;
-    }
-  }
-
-  // ── Helper: Try NVIDIA NIM Qwen-Image (free third fallback) ──
-  // Uses the OpenAI-image-style /v1/images/generations endpoint (different
-  // shape than chat completions: returns base64 directly in data[0].b64_json
-  // rather than a streamed/text response). Normalized here to the same
-  // { success, imageUrl } shape the other two helpers return so the
-  // downstream response code doesn't need to change.
+  // ── Helper: Try NVIDIA NIM (Stable Diffusion 3.5 Large Fallback) ──
   async function tryNvidiaImage(promptText) {
     try {
       const nvKey = process.env.NVIDIA_API_KEY;
       if (!nvKey) return null;
+
+      // Swapped out Flux Schnell for Stable Diffusion 3.5 Large
+      const NVIDIA_IMAGE_MODEL = 'stabilityai/stable-diffusion-3.5-large';
 
       const nvRes = await fetchWithTimeout(
         `${NVIDIA_BASE_URL}/images/generations`,
@@ -1205,7 +1157,7 @@ if (action === 'image') {
         return null;
       }
 
-      console.log('NVIDIA Qwen-Image generation received ✅');
+      console.log('NVIDIA image generation received ✅');
       return { success: true, imageUrl: `data:image/png;base64,${b64}` };
     } catch (e) {
       console.error('NVIDIA image gen failed:', e.message);
@@ -1213,100 +1165,23 @@ if (action === 'image') {
     }
   }
 
-  // ── Complexity check ──
-  async function isComplexImagePrompt(promptText) {
-    const DETAIL_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
-    if (DETAIL_KEYWORDS.test(promptText)) return true;
-    if (promptText.trim().length <= 80) return false;
-
-    try {
-      const result = await Promise.race([
-        groq.chat.completions.create({
-          model:    GROQ_CHAT_PRIMARY,
-          messages: [
-            {
-              role:    'system',
-              content: `You decide if an image prompt needs HIGH-QUALITY AI (Pollinations) or BASIC AI (Flux worker).
-Use Pollinations for: religious figures, gods, goddesses, realistic humans/faces, cinematic scenes, mythology, intricate art, portraits, epic/dramatic scenes, cultural icons, detailed illustrations.
-Use Flux for: simple objects, logos, icons, cartoons, basic backgrounds, abstract patterns, simple illustrations.
-Reply ONLY one word: POLLINATIONS or FLUX`,
-            },
-            { role: 'user', content: promptText },
-          ],
-          max_tokens:  5,
-          temperature: 0,
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
-      ]);
-      const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'FLUX';
-      return answer.includes('POLLINATIONS');
-    } catch (e) {
-      console.error('Complexity check failed:', e.message);
-      return promptText.length > 100;
-    }
-  }
-
   try {
-    // ── forceGemini flag / Redo button execution logic ──
-    if (forceGemini) {
-      console.log('Force parameter active - Routing to Cloudflare primary first');
-      const fluxResult = await tryFlux(prompt);
-      if (fluxResult?.imageUrl) {
-        return res.status(200).json({ ...fluxResult, provider: 'flux' });
-      }
-      console.log('Cloudflare failed under forced flow, shifting to Pollinations fallback');
-      const polFallback = await tryGemini(prompt);
-      if (polFallback?.imageUrl) {
-        return res.status(200).json({ ...polFallback, provider: 'pollinations' });
-      }
-      console.log('Pollinations failed under forced flow, shifting to NVIDIA Qwen-Image fallback');
-      const nvFallback = await tryNvidiaImage(prompt);
-      if (nvFallback?.imageUrl) {
-        return res.status(200).json({ ...nvFallback, provider: 'nvidia-qwen' });
-      }
-      return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+    console.log('Routing prompt to Cloudflare Flux worker as Primary...');
+    
+    // 1. Try Primary (Cloudflare)
+    const fluxResult = await tryFlux(prompt);
+    if (fluxResult?.imageUrl) {
+      return res.status(200).json({ ...fluxResult, provider: 'flux' });
     }
 
-    // ── Normal flow: Reordered to run Cloudflare Worker (tryFlux) as Primary ──
-    const needsQuality = await isComplexImagePrompt(prompt);
-    console.log(`Prompt preferred path evaluation: ${needsQuality ? 'POLLINATIONS' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
-
-    if (needsQuality) {
-      // Complex prompt → Still try Cloudflare Flux first, fall back to Pollinations, then NVIDIA
-      console.log('Routing complex prompt to Cloudflare Flux worker first...');
-      const fluxResult = await tryFlux(prompt);
-      if (fluxResult?.imageUrl) {
-        return res.status(200).json({ ...fluxResult, provider: 'flux' });
-      }
-      console.log('Cloudflare failed for complex topic, falling back to Pollinations');
-      const polResult = await tryGemini(prompt);
-      if (polResult?.imageUrl) {
-        return res.status(200).json({ ...polResult, provider: 'pollinations' });
-      }
-      console.log('Pollinations failed for complex topic, falling back to NVIDIA Qwen-Image');
-      const nvResult = await tryNvidiaImage(prompt);
-      if (nvResult?.imageUrl) {
-        return res.status(200).json({ ...nvResult, provider: 'nvidia-qwen' });
-      }
-    } else {
-      // Simple prompt → Cloudflare Flux worker first, fall back to Pollinations, then NVIDIA
-      console.log('Routing simple prompt to Cloudflare Flux worker first...');
-      const fluxResult = await tryFlux(prompt);
-      if (fluxResult?.imageUrl) {
-        return res.status(200).json({ ...fluxResult, provider: 'flux' });
-      }
-      console.log('Cloudflare failed for simple topic, falling back to Pollinations');
-      const polResult = await tryGemini(prompt);
-      if (polResult?.imageUrl) {
-        return res.status(200).json({ ...polResult, provider: 'pollinations' });
-      }
-      console.log('Pollinations failed for simple topic, falling back to NVIDIA Qwen-Image');
-      const nvResult = await tryNvidiaImage(prompt);
-      if (nvResult?.imageUrl) {
-        return res.status(200).json({ ...nvResult, provider: 'nvidia-qwen' });
-      }
+    // 2. Try Fallback (NVIDIA NIM - SD 3.5 Large)
+    console.log('Cloudflare failed, shifting to NVIDIA fallback...');
+    const nvFallback = await tryNvidiaImage(prompt);
+    if (nvFallback?.imageUrl) {
+      return res.status(200).json({ ...nvFallback, provider: 'nvidia-sd-3.5-large' });
     }
 
+    // 3. Both Providers Failed
     return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
 
   } catch (error) {
