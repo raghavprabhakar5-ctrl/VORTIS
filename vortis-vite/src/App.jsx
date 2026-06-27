@@ -3111,7 +3111,7 @@ const runCallListenLoop = () => {
   callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, 1700);
 };
  
- 
+ let speakingStartedAt = 0;
  recog.onresult = (e) => {
   if (isSpeakingRef.current) {
     const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
@@ -3202,9 +3202,11 @@ const runCallListenLoop = () => {
       ? 'Speak as a female assistant; use feminine grammatical forms where the language requires it.'
       : 'Speak as a male assistant; use masculine grammatical forms where the language requires it.';
 
-    const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each.
+   const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each.
 Do NOT introduce yourself, state your name, or list your features unless the user explicitly asks who you are or what you can do.
-No markdown, no lists, no labels — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}`;
+No markdown, no lists, no labels — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}
+If the user asks you to change, switch, or set your voice to male or female (in any phrasing, any language), respond ONLY with: SET_VOICE: male or SET_VOICE: female on its own line — nothing else, no other words. You decide based on understanding their request, not exact keywords.`;
+
 
     const res = await fetch(API, {
       method: 'POST',
@@ -3230,6 +3232,7 @@ No markdown, no lists, no labels — just the spoken reply itself, in the same l
     const replyVoice = getCallVoice(detectedLang, gender);
 
     const queueSentence = (sentence) => {
+      if (/SET_VOICE:/i.test(sentence)) return; 
       const safe = sanitizeForVoice(sentence);
       const clean = cleanForTTS(safe);
       if (!clean || clean.length < 2) return;
@@ -3242,6 +3245,7 @@ No markdown, no lists, no labels — just the spoken reply itself, in the same l
           setCallState('speaking');
           spokenAny = true;
           isSpeakingRef.current = true;
+          speakingStartedAt = Date.now();
         }
         const audio = await audioPromise;
         if (!callActiveRef.current || !audio) return;
@@ -3275,11 +3279,28 @@ No markdown, no lists, no labels — just the spoken reply itself, in the same l
     if (buf.trim()) queueSentence(buf.trim());
 
     const reply = sanitizeForVoice(full.trim()) || "Sorry, I didn't catch that.";
-    pushHistory(convHistory, 'assistant', reply);
-    await callTtsQueueRef.current;
-    isSpeakingRef.current = false;
 
-    if (callActiveRef.current) setCallState('listening');
+const voiceSetMatch = full.match(/SET_VOICE:\s*(male|female)/i);
+if (voiceSetMatch) {
+  const newGender = voiceSetMatch[1].toLowerCase();
+  setTtsGender(newGender);
+  ttsGenderRef.current = newGender;
+  try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
+
+  const confirmMsg = newGender === 'female' ? "Sure, switching to a female voice." : "Sure, switching to a male voice.";
+  setCallState('speaking');
+  isSpeakingRef.current = true;
+  speakingStartedAt = Date.now();
+  const confirmAudio = await fetchTTS(confirmMsg, getCallVoice(detectedLang, newGender));
+  if (confirmAudio) await scheduleAudioBuffer(confirmAudio);
+  isSpeakingRef.current = false;
+  if (callActiveRef.current) setCallState('listening');
+  pushHistory(convHistory, 'assistant', confirmMsg);
+  return; // skip normal TTS playback of "SET_VOICE: female" text
+}
+
+pushHistory(convHistory, 'assistant', reply);
+await callTtsQueueRef.current;
 
   } catch (err) {
     console.error('Voice call error:', err);
