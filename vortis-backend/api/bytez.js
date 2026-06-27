@@ -21,6 +21,13 @@ const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
 const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
+// NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
+// fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
+const NVIDIA_BASE_URL    = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_CHAT_FAST   = 'deepseek-ai/deepseek-v4-flash'; // fast tier, 1M ctx
+const NVIDIA_CHAT_QUALITY = 'z-ai/glm-5.1';                  // hard tier, agentic/coding
+const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
+const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -152,11 +159,11 @@ function isObviouslyTrivial(text) {
 // ── AI-BASED TIER CLASSIFIER ───────────────────────────────────
 async function classifyTier(groq, text) {
   const lowerText = text.toLowerCase();
-  
+
   // 1. Instant local heuristic overrides
   if (
-    lowerText.includes('table') || 
-    lowerText.includes('line-by-line') || 
+    lowerText.includes('table') ||
+    lowerText.includes('line-by-line') ||
     lowerText.includes('line by line') ||
     isObviouslyHard(text)
   ) {
@@ -193,11 +200,57 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
-    
+
     // 3. Clean fallback if LLM or timeout fails
     return isComplexMessage(text) ? 'hard' : 'medium';
   }
 }
+
+// ── NVIDIA NIM CHAT FALLBACK ────────────────────────────────────
+// Plain fetch (not a separate SDK) against NVIDIA's OpenAI-compatible
+// /v1/chat/completions endpoint. Mirrors the Groq/Cloudflare call shapes
+// already used elsewhere in this file so it slots into the same loop style.
+async function tryNvidiaChat(modelId, messages, maxTokens) {
+  const key = process.env.NVIDIA_API_KEY;
+  if (!key) return null;
+  try {
+    const res = await fetchWithTimeout(
+      `${NVIDIA_BASE_URL}/chat/completions`,
+      {
+        method:  'POST',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type':  'application/json',
+        },
+        body: JSON.stringify({
+          model:       modelId,
+          messages,
+          max_tokens:  maxTokens,
+          temperature: 0.7,
+          stream:      false,
+          // Some NVIDIA models (e.g. deepseek-v4-flash) support an optional
+          // "thinking" mode that emits chain-of-thought. Keep it off so the
+          // response is plain content, matching every other fallback here.
+          extra_body: { chat_template_kwargs: { thinking: false } },
+        }),
+      },
+      20000
+    );
+    if (!res.ok) {
+      console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
+      return null;
+    }
+    const data = await res.json();
+    const rawText = data?.choices?.[0]?.message?.content ?? null;
+    if (typeof rawText !== 'string') return null;
+    const text = stripInternalReasoning(rawText);
+    return isValidResponse(text) ? text : null;
+  } catch (e) {
+    console.log(`NVIDIA model error (${modelId}):`, e.message);
+    return null;
+  }
+}
+
 // ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   // ── STEP 1: TOKEN OPTIMIZATION ──────────────────────────────────
@@ -210,8 +263,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
     .slice(-6); // Maxes out context window history at 6 interactions
 
   // Assemble the lean message context block
-  const optimizedMessages = systemPrompt 
-    ? [systemPrompt, ...recentConversations] 
+  const optimizedMessages = systemPrompt
+    ? [systemPrompt, ...recentConversations]
     : recentConversations;
   // ────────────────────────────────────────────────────────────────
 
@@ -220,7 +273,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const tier      = await classifyTier(groq, lastMsg);
   const isHard    = tier === 'hard';
   const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  
+
   // Use a sensible token ceiling relative to intent
   const maxTokens = isHard ? 3000 : 500;
 
@@ -253,12 +306,32 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       console.warn(`Model ${modelToTry} returned empty — trying fallback`);
     } catch (e) {
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
-      
+
       // If a rate limit hits (429), it drops directly to the loop's next model or Cloudflare
       if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {
         console.log('Skipping choked rate limit route...');
       }
     }
+  }
+
+  // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
+  // Non-streaming (NVIDIA's free tier is fine with this), so we fake a
+  // single-chunk "stream" by writing the whole text at once — the frontend
+  // just sees SSE data events either way.
+  const nvidiaModelsToTry = isHard
+    ? [NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
+    : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
+
+  for (const nvModel of nvidiaModelsToTry) {
+    const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens);
+    if (text) {
+      console.log(`NVIDIA fallback succeeded: ${nvModel}`);
+      res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return true;
+    }
+    console.warn(`NVIDIA model ${nvModel} returned empty — trying next`);
   }
 
   // ── CLOUDFLARE WORKERS AI BACKUP FALLBACK ───────────────────────
@@ -775,8 +848,10 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       if (!isValidBase64Image(image)) return res.status(400).json({ error: 'Invalid image format' });
       if (isImageTooLarge(image))     return res.status(400).json({ error: 'Image too large (max 5MB)' });
 
+      const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
+
+      // ── Attempt 1: Cloudflare Llama-4-Scout (existing primary) ──
       try {
-        const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
         const cfRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct`,
           {
@@ -799,7 +874,59 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
           const description = data.result?.response || data.result?.description || null;
           if (description && description.trim().length > 2) return res.status(200).json({ success: true, description });
         }
+      } catch (e) {
+        console.log('Cloudflare vision failed:', e.message);
+      }
 
+      // ── Attempt 2: NVIDIA NIM (minimax-m3) — free vision/doc-analysis fallback ──
+      // Same OpenAI-style image_url content block as Cloudflare above, just a
+      // different host + model. This is the fallback layer requested for
+      // vision/document analysis before dropping to llava.
+      try {
+        const nvKey = process.env.NVIDIA_API_KEY;
+        if (nvKey) {
+          const nvRes = await fetchWithTimeout(
+            `${NVIDIA_BASE_URL}/chat/completions`,
+            {
+              method:  'POST',
+              headers: {
+                'Authorization': `Bearer ${nvKey}`,
+                'Content-Type':  'application/json',
+              },
+              body: JSON.stringify({
+                model: NVIDIA_VISION_MODEL,
+                messages: [{
+                  role: 'user',
+                  content: [
+                    { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail.', 500) },
+                    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+                  ],
+                }],
+                max_tokens: 2048,
+                temperature: 0.5,
+              }),
+            },
+            20000
+          );
+          if (nvRes.ok) {
+            const data = await nvRes.json();
+            const rawDesc = data?.choices?.[0]?.message?.content ?? null;
+            if (typeof rawDesc === 'string') {
+              const description = stripInternalReasoning(rawDesc);
+              if (description && description.trim().length > 2) {
+                return res.status(200).json({ success: true, description });
+              }
+            }
+          } else {
+            console.log(`NVIDIA vision HTTP ${nvRes.status}`);
+          }
+        }
+      } catch (e) {
+        console.log('NVIDIA vision failed:', e.message);
+      }
+
+      // ── Attempt 3: Cloudflare LLaVA (existing final fallback) ──
+      try {
         const bytes = Array.from(Buffer.from(base64Data, 'base64'));
         const llavaRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
@@ -905,6 +1032,55 @@ if (action === 'image') {
     }
   }
 
+  // ── Helper: Try NVIDIA NIM Qwen-Image (free third fallback) ──
+  // Uses the OpenAI-image-style /v1/images/generations endpoint (different
+  // shape than chat completions: returns base64 directly in data[0].b64_json
+  // rather than a streamed/text response). Normalized here to the same
+  // { success, imageUrl } shape the other two helpers return so the
+  // downstream response code doesn't need to change.
+  async function tryNvidiaImage(promptText) {
+    try {
+      const nvKey = process.env.NVIDIA_API_KEY;
+      if (!nvKey) return null;
+
+      const nvRes = await fetchWithTimeout(
+        `${NVIDIA_BASE_URL}/images/generations`,
+        {
+          method:  'POST',
+          headers: {
+            'Authorization': `Bearer ${nvKey}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            model:           NVIDIA_IMAGE_MODEL,
+            prompt:          promptText.trim(),
+            n:               1,
+            response_format: 'b64_json',
+          }),
+        },
+        30000
+      );
+
+      if (!nvRes.ok) {
+        console.log('NVIDIA image gen HTTP', nvRes.status);
+        return null;
+      }
+
+      const data   = await nvRes.json();
+      const b64    = data?.data?.[0]?.b64_json;
+      if (!b64 || b64.length < 100) {
+        console.log('NVIDIA image gen returned empty payload');
+        return null;
+      }
+
+      console.log('NVIDIA Qwen-Image generation received ✅');
+      return { success: true, imageUrl: `data:image/png;base64,${b64}` };
+    } catch (e) {
+      console.error('NVIDIA image gen failed:', e.message);
+      return null;
+    }
+  }
+
   // ── Complexity check ──
   async function isComplexImagePrompt(promptText) {
     const DETAIL_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
@@ -951,6 +1127,11 @@ Reply ONLY one word: POLLINATIONS or FLUX`,
       if (polFallback?.imageUrl) {
         return res.status(200).json({ ...polFallback, provider: 'pollinations' });
       }
+      console.log('Pollinations failed under forced flow, shifting to NVIDIA Qwen-Image fallback');
+      const nvFallback = await tryNvidiaImage(prompt);
+      if (nvFallback?.imageUrl) {
+        return res.status(200).json({ ...nvFallback, provider: 'nvidia-qwen' });
+      }
       return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
     }
 
@@ -959,7 +1140,7 @@ Reply ONLY one word: POLLINATIONS or FLUX`,
     console.log(`Prompt preferred path evaluation: ${needsQuality ? 'POLLINATIONS' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
 
     if (needsQuality) {
-      // Complex prompt → Still try Cloudflare Flux first, fall back to Pollinations
+      // Complex prompt → Still try Cloudflare Flux first, fall back to Pollinations, then NVIDIA
       console.log('Routing complex prompt to Cloudflare Flux worker first...');
       const fluxResult = await tryFlux(prompt);
       if (fluxResult?.imageUrl) {
@@ -970,8 +1151,13 @@ Reply ONLY one word: POLLINATIONS or FLUX`,
       if (polResult?.imageUrl) {
         return res.status(200).json({ ...polResult, provider: 'pollinations' });
       }
+      console.log('Pollinations failed for complex topic, falling back to NVIDIA Qwen-Image');
+      const nvResult = await tryNvidiaImage(prompt);
+      if (nvResult?.imageUrl) {
+        return res.status(200).json({ ...nvResult, provider: 'nvidia-qwen' });
+      }
     } else {
-      // Simple prompt → Cloudflare Flux worker first, fall back to Pollinations
+      // Simple prompt → Cloudflare Flux worker first, fall back to Pollinations, then NVIDIA
       console.log('Routing simple prompt to Cloudflare Flux worker first...');
       const fluxResult = await tryFlux(prompt);
       if (fluxResult?.imageUrl) {
@@ -981,6 +1167,11 @@ Reply ONLY one word: POLLINATIONS or FLUX`,
       const polResult = await tryGemini(prompt);
       if (polResult?.imageUrl) {
         return res.status(200).json({ ...polResult, provider: 'pollinations' });
+      }
+      console.log('Pollinations failed for simple topic, falling back to NVIDIA Qwen-Image');
+      const nvResult = await tryNvidiaImage(prompt);
+      if (nvResult?.imageUrl) {
+        return res.status(200).json({ ...nvResult, provider: 'nvidia-qwen' });
       }
     }
 
