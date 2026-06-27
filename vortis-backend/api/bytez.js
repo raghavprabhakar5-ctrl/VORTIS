@@ -699,7 +699,7 @@ export default async function handler(req, res) {
     // ╔══════════════════════════════════════╗
     // ║  CHAT  — true token streaming        ║
     // ╚══════════════════════════════════════╝
-    if (action === 'chat') {
+  if (action === 'chat') {
   if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -707,67 +707,67 @@ export default async function handler(req, res) {
   res.setHeader('Connection', 'keep-alive');
 
   try {
+    // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
     const isVoiceCall = prompt.trim().startsWith('You are Vortis, a voice AI') ||
                         prompt.includes('1-3 short spoken sentences') ||
                         prompt.includes('spoken sentences only');
 
     if (isVoiceCall) {
-      const voiceMessages = [
-        { role: 'system', content: prompt.trim().slice(0, 400) },
-        ...sanitizeHistory(history, 8),
-      ];
-
       const nvKey = process.env.NVIDIA_API_KEY;
-      if (nvKey) {
-        try {
-          const nvRes = await fetchWithTimeout(
-            `${NVIDIA_BASE_URL}/chat/completions`,
-            {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${nvKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model:       NVIDIA_CHAT_FAST,
-                messages:    voiceMessages,
-                max_tokens:  300,
-                temperature: 0.7,
-                stream:      false,
-                extra_body: { chat_template_kwargs: { thinking: false } },
-              }),
+      try {
+        const nvRes = await fetchWithTimeout(
+          `${NVIDIA_BASE_URL}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${nvKey}`,
+              'Content-Type': 'application/json',
             },
-            15000
-          );
+            body: JSON.stringify({
+              model:      NVIDIA_CHAT_FAST,
+              messages:   [
+                { role: 'system', content: prompt.trim().slice(0, 400) },
+                ...sanitizeHistory(history, 8),
+              ],
+              max_tokens:  300,
+              temperature: 0.7,
+              stream:      false,
+              extra_body: { chat_template_kwargs: { thinking: false } },
+            }),
+          },
+          15000
+        );
 
-          if (nvRes.ok) {
-            const data = await nvRes.json();
-            const rawText = data?.choices?.[0]?.message?.content ?? null;
-            if (rawText && typeof rawText === 'string') {
-              const text = stripInternalReasoning(rawText).trim();
-              if (text.length > 2) {
-                console.log('Voice call served by NVIDIA ✅');
-                const words = text.split(' ');
-                for (let i = 0; i < words.length; i++) {
-                  const token = (i === 0 ? '' : ' ') + words[i];
-                  res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-                }
-                res.write('data: [DONE]\n\n');
-                res.end();
-                return;
-              }
+        if (nvRes.ok) {
+          const data = await nvRes.json();
+          const text = stripInternalReasoning(
+            data?.choices?.[0]?.message?.content ?? ''
+          ).trim();
+
+          if (text.length > 2) {
+            console.log('Voice → NVIDIA ✅ (no Groq tokens used)');
+            // stream it out word by word so frontend works same as before
+            const words = text.split(' ');
+            for (let i = 0; i < words.length; i++) {
+              res.write(`data: ${JSON.stringify({ content: (i === 0 ? '' : ' ') + words[i] })}\n\n`);
             }
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return;
           }
-        } catch (e) {
-          console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
         }
+      } catch (e) {
+        console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
       }
 
-      // Groq fallback for voice
+      // ── Groq fallback ONLY if NVIDIA fails ──
       try {
         const stream = await groq.chat.completions.create({
-          model:       GROQ_CHAT_PRIMARY,
-          messages:    voiceMessages,
+          model:      GROQ_CHAT_PRIMARY,
+          messages:   [
+            { role: 'system', content: prompt.trim().slice(0, 400) },
+            ...sanitizeHistory(history, 8),
+          ],
           max_tokens:  300,
           temperature: 0.7,
           stream:      true,
@@ -782,12 +782,13 @@ export default async function handler(req, res) {
         return;
       } catch (e) {
         console.error('Groq voice fallback failed:', e.message);
-        res.write(`data: ${JSON.stringify({ content: 'Sorry, voice service is unavailable right now.' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ content: 'Sorry, voice is unavailable right now.' })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
         return;
       }
     }
+
         const lastUserMsg = history[history.length - 1]?.content || '';
 
         const [searchContext, userLocation] = await Promise.all([
