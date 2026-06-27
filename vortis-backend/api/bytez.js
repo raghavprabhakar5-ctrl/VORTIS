@@ -18,12 +18,12 @@ if (!admin.apps.length) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── NVIDIA NIM CONFIG (FRONTIER FLAGSHIPS - 2026)
+// ── NVIDIA NIM PRODUCTION ROUTING (2026 SPECS)
 // ══════════════════════════════════════════════════════════════
 const NVIDIA_API_KEY  = process.env.NVIDIA_API_KEY;
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
-// ── ELITE MODEL MAPPING ───────────────────────────────────────
+// ── FRONT-LINE ELITE MODELS ───────────────────────────────────
 const NIM_CHAT    = 'deepseek-ai/deepseek-v4-pro';
 const NIM_CODER   = 'qwen/qwen3-coder-480b-a35b-instruct';
 const NIM_DOCS    = 'nvidia/nemotron-3-ultra-550b-a55b';
@@ -31,35 +31,26 @@ const NIM_SEARCH  = 'moonshotai/kimi-k2.6';
 const NIM_SUMMARY = 'stepfun-ai/step-3.7-flash';
 const NIM_VISION  = 'meta/llama-3.2-90b-vision-instruct';
 
-// ⚡ HIGH-SPEED PRODUCTION STRINGS
-const NIM_IMAGE   = 'black-forest-labs/flux.1-schnell'; // 4-step rapid elite rendering
-const NIM_STT     = 'openai/whisper-large-v3';
-const NIM_TTS     = 'nvidia/magpie-tts-multilingual';
+// ── BACKUP / RESILIENT STABLE NODES ───────────────────────────
+const NIM_STABLE_FALLBACK = 'nvidia/llama-3.3-nemotron-super-49b-v1.5'; 
+const NIM_IMAGE           = 'black-forest-labs/flux.1-schnell'; // Fast 4-step execution
+const NIM_STT             = 'openai/whisper-large-v3';
+const NIM_TTS             = 'nvidia/magpie-tts-multilingual';
 
-// ── EXPANDED CEILING TOKEN BUDGETS ────────────────────────────
 const TOKENS = {
-  chat:    4096,
-  code:    8192,
-  docs:    6144,
-  search:  2048,
-  summary: 1024,
-  vision:  2048,
+  chat: 4096, code: 8192, docs: 6144, search: 2048, summary: 1024, vision: 2048,
 };
 
 // ══════════════════════════════════════════════════════════════
-// ── RATE LIMITER
+// ── RATE LIMIT MANAGEMENT
 // ══════════════════════════════════════════════════════════════
 const rateLimiter = new Map();
 const RATE_LIMITS = {
-  chat:    { window: 60000, max: 35 },
-  code:    { window: 60000, max: 30 },
-  docs:    { window: 60000, max: 20 },
-  image:   { window: 60000, max: 10 },
-  search:  { window: 60000, max: 30 },
-  summary: { window: 60000, max: 35 },
-  vision:  { window: 60000, max: 10 },
-  tts:     { window: 60000, max: 25 },
-  stt:     { window: 60000, max: 20 },
+  chat: { window: 60000, max: 40 }, code: { window: 60000, max: 35 },
+  docs: { window: 60000, max: 25 }, image: { window: 60000, max: 15 },
+  search: { window: 60000, max: 35 }, summary: { window: 60000, max: 40 },
+  vision: { window: 60000, max: 15 }, tts: { window: 60000, max: 30 },
+  stt: { window: 60000, max: 25 },
 };
 
 function checkRateLimit(ip, action) {
@@ -75,7 +66,7 @@ function checkRateLimit(ip, action) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── SANITIZATION HELPERS
+// ── SANITIZATION & TEXT UTILITIES
 // ══════════════════════════════════════════════════════════════
 function sanitizeString(str, maxLen = 2000) {
   if (typeof str !== 'string') return '';
@@ -113,7 +104,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── WEB SERPER SEARCH
+// ── WEB SERPER ENGINE
 // ══════════════════════════════════════════════════════════════
 async function fetchSerper(query) {
   const key = process.env.SERPER_API_KEY;
@@ -123,7 +114,7 @@ async function fetchSerper(query) {
       method:  'POST',
       headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
       body:    JSON.stringify({ q: query, num: 6 }),
-    }, 6000);
+    }, 5000);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.organic || []).map(r => ({
@@ -135,25 +126,30 @@ async function fetchSerper(query) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── TEXT STREAMING INTERFACE
+// ── STREAMING INTERFACE WITH AUTOMATIC HOT-SWAP RESILIENCE
 // ══════════════════════════════════════════════════════════════
 async function nimStream(messages, model, maxTokens, res) {
-  const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${NVIDIA_API_KEY}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      messages,
-      max_tokens:  maxTokens,
-      temperature: 0.6,
-      stream:      true,
-    }),
-  });
+  let response;
+  try {
+    // Attempt primary model target with an aggressive timeout to avoid Vercel 502s
+    response = await fetchWithTimeout(`${NVIDIA_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.5, stream: true }),
+    }, 7000);
 
-  if (!response.ok) throw new Error(`NIM Server side error: ${response.status}`);
+    if (!response.ok) throw new Error('Primary cluster node congested');
+  } catch (primaryErr) {
+    console.log(`[VORTIS SYS] Core node failed. Hot-swapping to high-availability cluster...`);
+    
+    // Failover Step: Instantly pivot to an ultra-stable corporate node
+    response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: NIM_STABLE_FALLBACK, messages, max_tokens: maxTokens, temperature: 0.5, stream: true }),
+    });
+    if (!response.ok) throw new Error('All cloud nodes fully occupied.');
+  }
 
   const reader  = response.body.getReader();
   const decoder = new TextDecoder();
@@ -184,7 +180,7 @@ async function nimStream(messages, model, maxTokens, res) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── MAIN ROUTER
+// ── ROUTER HANDLER EXPORT
 // ══════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
   const origin = req.headers.origin || '';
@@ -215,7 +211,7 @@ export default async function handler(req, res) {
     const audio   = body.audio || null;
     const history = sanitizeHistory(body.history || []);
 
-    // ── TEXT GENERATION ROUTER ────────────────────────────────
+    // ── 1. TEXT GENERATION ROUTER ────────────────────────────
     if (['chat', 'code', 'docs', 'search', 'summary'].includes(action)) {
       if (!prompt.trim()) return res.status(400).json({ error: 'Prompt is mandatory.' });
 
@@ -246,19 +242,19 @@ export default async function handler(req, res) {
         res.end();
         return;
       } catch (err) {
-        res.write(`data: ${JSON.stringify({ content: 'Node connection hiccup. Recalibrating route...' })}\n\n`);
+        res.write(`data: ${JSON.stringify({ content: 'Deep connection failover error.' })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
         return;
       }
     }
 
-    // ── VISION ANALYSIS ───────────────────────────────────────
+    // ── 2. VISION ANALYSIS ARRAY ──────────────────────────────
     if (action === 'vision') {
       if (!image) return res.status(400).json({ error: 'Missing analysis target image.' });
       try {
         const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
-        const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
+        const response = await fetchWithTimeout(`${NVIDIA_BASE_URL}/chat/completions`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -266,7 +262,7 @@ export default async function handler(req, res) {
             messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: imageUrl } }, { type: 'text', text: prompt || 'Analyze closely.' }] }],
             max_tokens: TOKENS.vision,
           }),
-        });
+        }, 12000);
         const data = await response.json();
         return res.status(200).json({ success: true, description: stripThinking(data.choices?.[0]?.message?.content || '') });
       } catch (e) {
@@ -274,7 +270,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── FLUX IMAGE GENERATION WITH INSTANT FALLBACK ───────────
+    // ── 3. IMAGE GENERATION ENGINE (FLUX UPGRADES) ────────────
     if (action === 'image') {
       if (!prompt.trim()) return res.status(400).json({ error: 'Empty prompt payload.' });
       try {
@@ -282,50 +278,49 @@ export default async function handler(req, res) {
           method:  'POST',
           headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: NIM_IMAGE, prompt: prompt.trim(), n: 1, size: '1024x1024', steps: 4, response_format: 'b64_json' }),
-        }, 12000);
+        }, 8000);
 
-        if (!imgRes.ok) throw new Error('Primary engine busy');
+        if (!imgRes.ok) throw new Error('Primary image node overloaded');
         const imgData = await imgRes.json();
         const b64 = imgData?.data?.[0]?.b64_json;
         if (b64) return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, provider: 'nvidia-flux' });
-        throw new Error('Empty matrix payload');
+        throw new Error('Fallback trigger');
       } catch (err) {
-        // High speed proxy fallback so your UI stays solid
+        // High speed open-weights fallback proxy
         const seed = Math.floor(Math.random() * 888888);
         const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.trim())}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true`;
         return res.status(200).json({ success: true, imageUrl: fallbackUrl, provider: 'vortis-image-fallback' });
       }
     }
 
-    // ── TEXT TO SPEECH (TTS) WITH BULLETPROOF BACKUP ──────────
+    // ── 4. LIGHTSPEED SPEECH SYNTHESIS (TTS) ──────────────────
     if (action === 'tts') {
-      const text = sanitizeString(body.text || '', 1000);
+      const text = sanitizeString(body.text || '', 600);
       if (!text) return res.status(400).json({ error: 'No text given.' });
       try {
         const ttsRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/audio/speech`, {
           method:  'POST',
           headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ model: NIM_TTS, input: text, voice: 'Magpie-Multilingual.EN-US.Aria', response_format: 'mp3' }),
-        }, 10000);
+        }, 5000);
 
-        if (!ttsRes.ok) throw new Error('NVIDIA TTS saturated');
+        if (!ttsRes.ok) throw new Error('NVIDIA TTS core busy');
         const buf = await ttsRes.arrayBuffer();
         return res.status(200).json({ success: true, audio: Buffer.from(buf).toString('base64'), provider: 'nvidia-magpie' });
       } catch (e) {
-        // Fallback production synthesis link ensures zero 502 crashes
         try {
           const fallbackAudioUrl = `https://api.pollinations.ai/tts?text=${encodeURIComponent(text)}&voice=dffemale`;
-          const audioFetch = await fetchWithTimeout(fallbackAudioUrl, {}, 8000);
-          if (!audioFetch.ok) throw new Error('Backup down');
+          const audioFetch = await fetchWithTimeout(fallbackAudioUrl, {}, 5000);
+          if (!audioFetch.ok) throw new Error('Proxy error');
           const backupBuf = await audioFetch.arrayBuffer();
           return res.status(200).json({ success: true, audio: Buffer.from(backupBuf).toString('base64'), provider: 'vortis-speech-fallback' });
         } catch (fbErr) {
-          return res.status(502).json({ error: 'Audio synthesis engine fully loaded.' });
+          return res.status(200).json({ success: false, error: 'Speech system offline', audio: '' });
         }
       }
     }
 
-    // ── WHISPER SPEECH TO TEXT (STT) ──────────────────────────
+    // ── 5. SPEECH TRANSCRIBER (STT) ───────────────────────────
     if (action === 'stt') {
       if (!audio) return res.status(400).json({ error: 'No audio stream input.' });
       try {
