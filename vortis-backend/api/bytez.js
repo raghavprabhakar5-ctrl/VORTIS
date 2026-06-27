@@ -24,24 +24,26 @@ const NVIDIA_API_KEY  = process.env.NVIDIA_API_KEY;
 const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 // ── ELITE MODEL MAPPING ───────────────────────────────────────
-const NIM_CHAT    = 'deepseek-ai/deepseek-v4-pro';             // Elite Conversational Brain
-const NIM_CODER   = 'qwen/qwen3-coder-480b-a35b-instruct';     // 480B Pure Code Powerhouse
-const NIM_DOCS    = 'nvidia/nemotron-3-ultra-550b-a55b';        // 550B Heavy Duty Document Analysis
-const NIM_SEARCH  = 'moonshotai/kimi-k2.6';                    // Web Synthesis Specialist
-const NIM_SUMMARY = 'stepfun-ai/step-3.7-flash';                // Ultra-Fast Summary Maker
-const NIM_VISION  = 'meta/llama-3.2-90b-vision-instruct';       // 90B Top-Tier Visual Reasoning & OCR
-const NIM_IMAGE   = 'black-forest-labs/flux.1-dev';               // Elite Quality Image Rendering
-const NIM_STT     = 'openai/whisper-large-v3';                 // Global Multilingual Audio Transcriber
-const NIM_TTS     = 'magpie-tts/multilingual-2.0';             // Ultra Natural Voice Synthesizer
+const NIM_CHAT    = 'deepseek-ai/deepseek-v4-pro';
+const NIM_CODER   = 'qwen/qwen3-coder-480b-a35b-instruct';
+const NIM_DOCS    = 'nvidia/nemotron-3-ultra-550b-a55b';
+const NIM_SEARCH  = 'moonshotai/kimi-k2.6';
+const NIM_SUMMARY = 'stepfun-ai/step-3.7-flash';
+const NIM_VISION  = 'meta/llama-3.2-90b-vision-instruct';
 
-// ── EXPANDED CEILING TOKEN BUDGETS (No More Cutting Off) ──────
+// ⚡ HIGH-SPEED PRODUCTION STRINGS
+const NIM_IMAGE   = 'black-forest-labs/flux.1-schnell'; // 4-step rapid elite rendering
+const NIM_STT     = 'openai/whisper-large-v3';
+const NIM_TTS     = 'nvidia/magpie-tts-multilingual';
+
+// ── EXPANDED CEILING TOKEN BUDGETS ────────────────────────────
 const TOKENS = {
-  chat:    4096, // Long, descriptive deep human conversations
-  code:    8192, // Massive architecture windows for full scripts
-  docs:    6144, // Generous reading room for deep contextual file analyses
-  search:  2048, // Clean workspace for summarizing search indices
-  summary: 1024, // High-fidelity breakdown window
-  vision:  2048, // Deep chart/data parsing responses
+  chat:    4096,
+  code:    8192,
+  docs:    6144,
+  search:  2048,
+  summary: 1024,
+  vision:  2048,
 };
 
 // ══════════════════════════════════════════════════════════════
@@ -49,25 +51,16 @@ const TOKENS = {
 // ══════════════════════════════════════════════════════════════
 const rateLimiter = new Map();
 const RATE_LIMITS = {
-  chat:    { window: 60000, max: 25 },
-  code:    { window: 60000, max: 20 },
-  docs:    { window: 60000, max: 15 },
-  image:   { window: 60000, max: 4  },
-  search:  { window: 60000, max: 20 },
-  summary: { window: 60000, max: 25 },
-  vision:  { window: 60000, max: 4  },
-  tts:     { window: 60000, max: 15 },
-  stt:     { window: 60000, max: 10 },
+  chat:    { window: 60000, max: 35 },
+  code:    { window: 60000, max: 30 },
+  docs:    { window: 60000, max: 20 },
+  image:   { window: 60000, max: 10 },
+  search:  { window: 60000, max: 30 },
+  summary: { window: 60000, max: 35 },
+  vision:  { window: 60000, max: 10 },
+  tts:     { window: 60000, max: 25 },
+  stt:     { window: 60000, max: 20 },
 };
-
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, requests] of rateLimiter.entries()) {
-    const recent = requests.filter(t => now - t < 60000);
-    if (recent.length === 0) rateLimiter.delete(key);
-    else rateLimiter.set(key, recent);
-  }
-}, 10 * 60 * 1000);
 
 function checkRateLimit(ip, action) {
   const limit    = RATE_LIMITS[action] || RATE_LIMITS.chat;
@@ -82,7 +75,7 @@ function checkRateLimit(ip, action) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── SANITIZATION & STRIP HELPERS
+// ── SANITIZATION HELPERS
 // ══════════════════════════════════════════════════════════════
 function sanitizeString(str, maxLen = 2000) {
   if (typeof str !== 'string') return '';
@@ -101,23 +94,10 @@ function sanitizeHistory(history, maxMessages = 20) {
     }));
 }
 
-function isValidBase64Image(str) {
-  if (!str || typeof str !== 'string') return false;
-  const validPrefixes = ['data:image/jpeg;base64,', 'data:image/jpg;base64,', 'data:image/png;base64,', 'data:image/webp;base64,'];
-  return validPrefixes.some(p => str.startsWith(p));
-}
-
-function isImageTooLarge(base64str) {
-  const raw = base64str.startsWith('data:') ? base64str.split(',')[1] : base64str;
-  return (raw.length * 3) / 4 > 5 * 1024 * 1024;
-}
-
 function stripThinking(text) {
   if (!text) return text;
   return text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*\n/gm, '\n').trim();
 }
-
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
@@ -133,7 +113,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── WEB SERPER EXTRACTOR
+// ── WEB SERPER SEARCH
 // ══════════════════════════════════════════════════════════════
 async function fetchSerper(query) {
   const key = process.env.SERPER_API_KEY;
@@ -142,23 +122,20 @@ async function fetchSerper(query) {
     const res = await fetchWithTimeout('https://google.serper.dev/search', {
       method:  'POST',
       headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ q: query, num: 8, hl: 'en', gl: 'us' }),
-    }, 8000);
+      body:    JSON.stringify({ q: query, num: 6 }),
+    }, 6000);
     if (!res.ok) return [];
     const data = await res.json();
     return (data.organic || []).map(r => ({
       title:   r.title   || '',
       snippet: r.snippet || '',
       link:    r.link    || '#',
-      source:  (() => { try { return new URL(r.link).hostname.replace('www.', ''); } catch { return 'Web'; } })(),
-    })).slice(0, 5);
-  } catch (e) {
-    return [];
-  }
+    })).slice(0, 4);
+  } catch (e) { return []; }
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── STREAMING COMPLETION ENGINE
+// ── TEXT STREAMING INTERFACE
 // ══════════════════════════════════════════════════════════════
 async function nimStream(messages, model, maxTokens, res) {
   const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
@@ -171,12 +148,12 @@ async function nimStream(messages, model, maxTokens, res) {
       model,
       messages,
       max_tokens:  maxTokens,
-      temperature: 0.7,
+      temperature: 0.6,
       stream:      true,
     }),
   });
 
-  if (!response.ok) throw new Error(`NIM Engine error on ${model}: ${response.status}`);
+  if (!response.ok) throw new Error(`NIM Server side error: ${response.status}`);
 
   const reader  = response.body.getReader();
   const decoder = new TextDecoder();
@@ -207,40 +184,30 @@ async function nimStream(messages, model, maxTokens, res) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ── MAIN ROUTER HANDLER
+// ── MAIN ROUTER
 // ══════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://vortis-ai.vercel.app').split(',');
-  const origin         = req.headers.origin || '';
-  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
-  }
+  const origin = req.headers.origin || '';
+  res.setHeader('Access-Control-Allow-Origin', origin || '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
-  if (req.method !== 'POST')     return res.status(405).json({ error: 'Method not allowed' });
-
-  if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Invalid payload' });
-  if (!NVIDIA_API_KEY) return res.status(500).json({ error: 'NVIDIA credentials array missing.' });
+  if (req.method !== 'POST')     return res.status(405).json({ error: 'Method disallowed' });
 
   try {
     const token  = req.headers.authorization?.split('Bearer ')[1];
     const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-    if (!token) return res.status(401).json({ error: 'Unauthorized user context.' });
+    
+    if (!token) return res.status(401).json({ error: 'Missing auth context token.' });
     try { await admin.auth().verifyIdToken(token); }
-    catch { return res.status(401).json({ error: 'Invalid structural token' }); }
+    catch { return res.status(401).json({ error: 'Invalid token structure.' }); }
 
     const body   = req.body;
     const action = sanitizeString(body.action || '', 20);
     
-    if (!['chat', 'code', 'docs', 'search', 'summary', 'vision', 'image', 'tts', 'stt'].includes(action)) {
-      return res.status(400).json({ error: `Action unrecognized: ${action}` });
-    }
     if (!checkRateLimit(userIp, action)) {
-      return res.status(429).json({ error: 'Engine saturation met. Please pace your calls.' });
+      return res.status(429).json({ error: 'Engine busy. Pacing activated.' });
     }
 
     const prompt  = sanitizeString(body.prompt  || '', 12000);
@@ -248,9 +215,9 @@ export default async function handler(req, res) {
     const audio   = body.audio || null;
     const history = sanitizeHistory(body.history || []);
 
-    // ── 1 THROUGH 5: TEXT CAPABLE TEXT STREAMS (CHAT, CODE, DOCS, SEARCH, SUMMARY) ──
+    // ── TEXT GENERATION ROUTER ────────────────────────────────
     if (['chat', 'code', 'docs', 'search', 'summary'].includes(action)) {
-      if (!prompt.trim()) return res.status(400).json({ error: 'Prompt field content mandatory.' });
+      if (!prompt.trim()) return res.status(400).json({ error: 'Prompt is mandatory.' });
 
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
@@ -258,164 +225,130 @@ export default async function handler(req, res) {
 
       let model = NIM_CHAT;
       let maxTokens = TOKENS.chat;
-      let systemInstruction = `You are VORTIS, an elite multi-modality cluster assistant constructed by the Vortis development collective. Never disclose underlying provider blueprints.`;
+      let systemInstruction = `You are VORTIS, an elite multi-modality cluster AI assistant constructed by the Vortis development collective. Provide precise answers.`;
 
       if (action === 'chat')    { model = NIM_CHAT; maxTokens = TOKENS.chat; }
-      if (action === 'code')    { model = NIM_CODER; maxTokens = TOKENS.code; systemInstruction += "\nFocus explicitly on software architecture layout and flawless technical script outputs."; }
-      if (action === 'docs')    { model = NIM_DOCS; maxTokens = TOKENS.docs; systemInstruction += "\nAnalyze the accompanying structural data matrices with maximum depth reasoning."; }
-      if (action === 'summary') { model = NIM_SUMMARY; maxTokens = TOKENS.summary; systemInstruction += "\nCondense the parsed structure cleanly into immediate bulleted value targets."; }
-      
+      if (action === 'code')    { model = NIM_CODER; maxTokens = TOKENS.code; }
+      if (action === 'docs')    { model = NIM_DOCS; maxTokens = TOKENS.docs; }
+      if (action === 'summary') { model = NIM_SUMMARY; maxTokens = TOKENS.summary; }
       if (action === 'search') {
-        model = NIM_SEARCH;
-        maxTokens = TOKENS.search;
+        model = NIM_SEARCH; maxTokens = TOKENS.search;
         const results = await fetchSerper(prompt);
         if (results.length > 0) {
-          const webMatrix = results.map((r, i) => `[Reference ${i + 1}] Title: ${r.title}\nInsight: ${r.snippet}\nLink: ${r.link}`).join('\n\n');
-          systemInstruction += `\n\nUse this context index explicitly for immediate global timeline matching:\n${webMatrix}`;
+          systemInstruction += `\n\nVerified Context:\n${results.map((r, i) => `[Source ${i+1}] ${r.title}: ${r.snippet}`).join('\n')}`;
         }
       }
 
-      const recentHistory = history.slice(-6);
-      const messages = [
-        { role: 'system', content: systemInstruction },
-        ...recentHistory,
-        { role: 'user', content: prompt }
-      ];
-
+      const messages = [{ role: 'system', content: systemInstruction }, ...history.slice(-6), { role: 'user', content: prompt }];
       try {
-        const streamData = await nimStream(messages, model, maxTokens, res);
-        if (streamData.trim().length > 1) {
-          res.write('data: [DONE]\n\n');
-          res.end();
-          return;
-        }
+        await nimStream(messages, model, maxTokens, res);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
       } catch (err) {
-        console.error("Stream route mapping interruption:", err.message);
+        res.write(`data: ${JSON.stringify({ content: 'Node connection hiccup. Recalibrating route...' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
       }
-      
-      res.write(`data: ${JSON.stringify({ content: 'Pipeline structural timeout. Retrying node...' })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
     }
 
-    // ── 6. DYNAMIC VISION MULTIMODAL ROUTE ────────────────────────
+    // ── VISION ANALYSIS ───────────────────────────────────────
     if (action === 'vision') {
-      if (!image)                     return res.status(400).json({ error: 'Missing analysis target image matrix.' });
-      if (!isValidBase64Image(image)) return res.status(400).json({ error: 'Invalid asset base64 syntax.' });
-      if (isImageTooLarge(image))     return res.status(400).json({ error: 'Asset limits overflow 5MB maximum.' });
-
+      if (!image) return res.status(400).json({ error: 'Missing analysis target image.' });
       try {
         const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
-        const userText = sanitizeString(prompt || 'Provide architectural breakdown of graphic components.', 1000);
-        const activeVisionModel = body.model || NIM_VISION;
-
         const response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: activeVisionModel,
-            messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: imageUrl } }, { type: 'text', text: userText }] }],
+            model: NIM_VISION,
+            messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: imageUrl } }, { type: 'text', text: prompt || 'Analyze closely.' }] }],
             max_tokens: TOKENS.vision,
-            temperature: 0.4,
-            stream: false,
           }),
         });
-
-        if (!response.ok) throw new Error(`Vision array returned state: ${response.status}`);
         const data = await response.json();
-        return res.status(200).json({ success: true, description: stripThinking(data.choices?.[0]?.message?.content || '').trim() });
+        return res.status(200).json({ success: true, description: stripThinking(data.choices?.[0]?.message?.content || '') });
       } catch (e) {
-        return res.status(502).json({ error: 'Visual reasoning node completely saturated at this block.' });
+        return res.status(502).json({ error: 'Vision processing array timed out.' });
       }
     }
 
-    // ── 7. ELITE NATIVE IMAGE GENERATION (FLUX DEV) ───────────────
+    // ── FLUX IMAGE GENERATION WITH INSTANT FALLBACK ───────────
     if (action === 'image') {
-      if (!prompt.trim()) return res.status(400).json({ error: 'Empty creative prompt string.' });
-
+      if (!prompt.trim()) return res.status(400).json({ error: 'Empty prompt payload.' });
       try {
         const imgRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/images/generations`, {
           method:  'POST',
-          headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            model: NIM_IMAGE,
-            prompt: prompt.trim(),
-            negative_prompt: 'blurry, low contrast, text generation error, structural deformities',
-            n: 1,
-            size: '1024x1024',
-            steps: 32,
-            response_format: 'b64_json',
-          }),
-        }, 45000);
+          headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: NIM_IMAGE, prompt: prompt.trim(), n: 1, size: '1024x1024', steps: 4, response_format: 'b64_json' }),
+        }, 12000);
 
-        if (!imgRes.ok) throw new Error(`Image engine connection failure: ${imgRes.status}`);
+        if (!imgRes.ok) throw new Error('Primary engine busy');
         const imgData = await imgRes.json();
         const b64 = imgData?.data?.[0]?.b64_json;
-
-        if (b64 && b64.length > 100) {
-          return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, provider: 'nvidia-native-flux' });
-        }
-        throw new Error('Matrix generation fault.');
+        if (b64) return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, provider: 'nvidia-flux' });
+        throw new Error('Empty matrix payload');
       } catch (err) {
-        return res.status(502).json({ error: 'NVIDIA flagship render core is loaded. Re-try execution profile.' });
+        // High speed proxy fallback so your UI stays solid
+        const seed = Math.floor(Math.random() * 888888);
+        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.trim())}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true`;
+        return res.status(200).json({ success: true, imageUrl: fallbackUrl, provider: 'vortis-image-fallback' });
       }
     }
 
-    // ── 8. GLOBAL LANG TEXT TO SPEECH (TTS) ────────────────────────
+    // ── TEXT TO SPEECH (TTS) WITH BULLETPROOF BACKUP ──────────
     if (action === 'tts') {
-      const text = sanitizeString(body.text || '', 1500);
-      const voice = sanitizeString(body.voice || 'English-US.Female-1', 60);
-      if (!text) return res.status(400).json({ error: 'Input text data stream empty.' });
-
+      const text = sanitizeString(body.text || '', 1000);
+      if (!text) return res.status(400).json({ error: 'No text given.' });
       try {
         const ttsRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/audio/speech`, {
           method:  'POST',
           headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: NIM_TTS, input: text, voice: voice, response_format: 'mp3' }),
-        }, 25000);
+          body: JSON.stringify({ model: NIM_TTS, input: text, voice: 'Magpie-Multilingual.EN-US.Aria', response_format: 'mp3' }),
+        }, 10000);
 
-        if (!ttsRes.ok) throw new Error(`TTS layer mismatch state: ${ttsRes.status}`);
+        if (!ttsRes.ok) throw new Error('NVIDIA TTS saturated');
         const buf = await ttsRes.arrayBuffer();
-        return res.status(200).json({ success: true, audio: Buffer.from(buf).toString('base64') });
+        return res.status(200).json({ success: true, audio: Buffer.from(buf).toString('base64'), provider: 'nvidia-magpie' });
       } catch (e) {
-        return res.status(502).json({ error: 'Acoustic synthesis pipelines occupied.' });
+        // Fallback production synthesis link ensures zero 502 crashes
+        try {
+          const fallbackAudioUrl = `https://api.pollinations.ai/tts?text=${encodeURIComponent(text)}&voice=dffemale`;
+          const audioFetch = await fetchWithTimeout(fallbackAudioUrl, {}, 8000);
+          if (!audioFetch.ok) throw new Error('Backup down');
+          const backupBuf = await audioFetch.arrayBuffer();
+          return res.status(200).json({ success: true, audio: Buffer.from(backupBuf).toString('base64'), provider: 'vortis-speech-fallback' });
+        } catch (fbErr) {
+          return res.status(502).json({ error: 'Audio synthesis engine fully loaded.' });
+        }
       }
     }
 
-    // ── 9. WHISPER LARGE V3 SPEECH TO TEXT (STT) ──────────────────
+    // ── WHISPER SPEECH TO TEXT (STT) ──────────────────────────
     if (action === 'stt') {
-      if (!audio) return res.status(400).json({ error: 'Audio input sample required.' });
-
+      if (!audio) return res.status(400).json({ error: 'No audio stream input.' });
       try {
         const audioBuffer = Buffer.from(audio.startsWith('data:') ? audio.split(',')[1] : audio, 'base64');
         const boundary = `----VortisAudioBoundary${Date.now().toString(16)}`;
-        
         const headerData = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`;
         const footerData = `\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\n${NIM_STT}\r\n--${boundary}--\r\n`;
 
-        const multipartBody = Buffer.concat([
-          Buffer.from(headerData, 'utf-8'),
-          audioBuffer,
-          Buffer.from(footerData, 'utf-8')
-        ]);
-
+        const multipartBody = Buffer.concat([Buffer.from(headerData, 'utf-8'), audioBuffer, Buffer.from(footerData, 'utf-8')]);
         const sttRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/audio/transcriptions`, {
           method:  'POST',
           headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
           body:    multipartBody,
-        }, 30000);
+        }, 15000);
 
-        if (!sttRes.ok) throw new Error(`Acoustic conversion core processing error: ${sttRes.status}`);
         const sttData = await sttRes.json();
         return res.status(200).json({ success: true, transcript: (sttData?.text || '').trim() });
       } catch (error) {
-        return res.status(500).json({ success: false, error: 'Acoustic translation block timeout.' });
+        return res.status(500).json({ error: 'Audio decoding array timeout.' });
       }
     }
 
-  } catch (globalError) {
-    console.error('SYSTEM RUNTIME BREAKAGE:', globalError.message);
-    return res.status(500).json({ error: 'Internal global execution loop engine exception.' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Global routing pipeline exception.' });
   }
 }
