@@ -255,25 +255,39 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
 
+  // ── TOKEN EFFICIENCY INJECTION ──
+  const efficiencyRule = {
+    role: 'system',
+    content: `TOKEN EFFICIENCY RULES — ALWAYS FOLLOW:
+- Match response length to task complexity. Simple question = 1-3 sentences. Complex task = as long as needed, no more.
+- Give fast response to the user.
+- NEVER pad, repeat, or over-explain. Say it once, say it well.
+- NEVER truncate or cut off mid-sentence. Always finish your complete thought.
+- Short tasks (greetings, yes/no, simple facts) = under 50 words.
+- Medium tasks (explanations, comparisons) = under 200 words.
+- Hard tasks (code, essays, research) = as long as needed to fully complete.
+- Always write complete sentences. Never stop mid-word or mid-thought.`
+  };
+
   const recentConversations = messages
     .filter(m => m.role !== 'system')
     .slice(-12);
 
+  // Inject efficiency rule right after system prompt
   const optimizedMessages = systemPrompt
-    ? [systemPrompt, ...recentConversations]
-    : recentConversations;
+    ? [systemPrompt, efficiencyRule, ...recentConversations]
+    : [efficiencyRule, ...recentConversations];
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  // ── REPLACE classifyTier() WITH INSTANT LOCAL CHECK ──
-  // No extra AI call, no 1-2 second delay, just regex
-  const isHard = isObviouslyHard(lastMsg) || isComplexMessage(lastMsg);
+  const tier   = await classifyTier(groq, lastMsg);
+  const isHard = tier === 'hard';
   const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+
+  // Sensible limits — enough to complete any task, not wasteful
   const maxTokens = isHard ? 4000 : 1500;
 
-  console.log(`Tier: ${isHard ? 'hard' : 'medium'} → model: ${model}`);
-
-
+  console.log(`Tier: ${tier} → model: ${model} → maxTokens: ${maxTokens}`);
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
