@@ -9,7 +9,7 @@
     "@andresaya/edge-tts": "^1.8.0",
     "@supabase/supabase-js": "^2.108.2",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
+    "dotenv": "^17.4.2",
     "edge-tts": "^1.0.1",
     "edge-tts-universal": "^1.4.0",
     "express": "^5.2.1",

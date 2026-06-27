@@ -8,6 +8,10 @@ export const config = {
 };
 
 import admin from 'firebase-admin';
+import dotenv from 'dotenv'
+dotenv.config()
+
+const apiKey = process.env.NVIDIA_API_KEY
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -569,7 +573,7 @@ ${prompt ? `\n${prompt.slice(0, 3000)}` : ''}${searchContext}`;
         return res.status(503).json({ error: 'Image generation unavailable, try again.' });
       }
     }
-    
+
     // ╔══════════════════════════════════════╗
     // ║  TEXT TO SPEECH                      ║
     // ╚══════════════════════════════════════╝
