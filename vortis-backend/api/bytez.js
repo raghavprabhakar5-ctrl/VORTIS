@@ -253,64 +253,77 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
 
 // ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
-  // ── STEP 1: TOKEN OPTIMIZATION ──────────────────────────────────
-  // Extract the system prompt if it exists so it doesn't get discarded
   const systemPrompt = messages.find(m => m.role === 'system');
 
-  // Slice down conversation history turns to avoid hitting token limits
+  // ── TOKEN EFFICIENCY INJECTION ──
+  const efficiencyRule = {
+    role: 'system',
+    content: `TOKEN EFFICIENCY RULES — ALWAYS FOLLOW:
+- Match response length to task complexity. Simple question = 1-3 sentences. Complex task = as long as needed, no more.
+- NEVER pad, repeat, or over-explain. Say it once, say it well.
+- NEVER truncate or cut off mid-sentence. Always finish your complete thought.
+- Short tasks (greetings, yes/no, simple facts) = under 50 words.
+- Medium tasks (explanations, comparisons) = under 200 words.
+- Hard tasks (code, essays, research) = as long as needed to fully complete.
+- Always write complete sentences. Never stop mid-word or mid-thought.`
+  };
+
   const recentConversations = messages
     .filter(m => m.role !== 'system')
-    .slice(-6); // Maxes out context window history at 6 interactions
+    .slice(-12);
 
-  // Assemble the lean message context block
+  // Inject efficiency rule right after system prompt
   const optimizedMessages = systemPrompt
-    ? [systemPrompt, ...recentConversations]
-    : recentConversations;
-  // ────────────────────────────────────────────────────────────────
+    ? [systemPrompt, efficiencyRule, ...recentConversations]
+    : [efficiencyRule, ...recentConversations];
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  const tier      = await classifyTier(groq, lastMsg);
-  const isHard    = tier === 'hard';
-  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const tier   = await classifyTier(groq, lastMsg);
+  const isHard = tier === 'hard';
+  const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
 
-  // Use a sensible token ceiling relative to intent
-  const maxTokens = isHard ? 3000 : 500;
+  // Sensible limits — enough to complete any task, not wasteful
+  const maxTokens = isHard ? 4000 : 1500;
 
-  console.log(`Tier: ${tier} → model: ${model}`);
+  console.log(`Tier: ${tier} → model: ${model} → maxTokens: ${maxTokens}`);
 
-  // ── GROQ COMPLETION & FALLBACK LOOP ─────────────────────────────
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
       const stream = await groq.chat.completions.create({
-        model: modelToTry,
-        messages: optimizedMessages, // Uses optimized list
-        max_tokens: maxTokens,       // Uses clean context parameters dynamically
+        model:       modelToTry,
+        messages:    optimizedMessages,
+        max_tokens:  maxTokens,
         temperature: 0.7,
-        stream: true,
+        stream:      true,
       });
 
       let buffer = '';
+      let chunkCount = 0;
+
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content;
         if (!token) continue;
         buffer += token;
+        chunkCount++;
         res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+        if (chunkCount % 10 === 0 && res.flush) res.flush();
       }
 
-      if (buffer.trim().length > 2) {
+      if (buffer.trim().length > 0) {
         res.write('data: [DONE]\n\n');
         res.end();
         return true;
       }
+
       console.warn(`Model ${modelToTry} returned empty — trying fallback`);
     } catch (e) {
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
-
-      // If a rate limit hits (429), it drops directly to the loop's next model or Cloudflare
       if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {
-        console.log('Skipping choked rate limit route...');
+        console.log('Rate limit hit, trying next model...');
+        continue;
       }
+      console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
 
@@ -596,72 +609,185 @@ export default async function handler(req, res) {
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
     if (action === 'tts') {
-      const text  = sanitizeString(body.text  || '', 1000);
-      const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
-      if (!text) return res.status(400).json({ error: 'Missing text' });
+  const text  = sanitizeString(body.text  || '', 1000);
+  const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
+  if (!text) return res.status(400).json({ error: 'Missing text' });
 
-      const cleanText = text
-        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-        .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
-        .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
-        .replace(/[\u2600-\u27BF]/g, '')
-        .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 900);
+  const cleanText = text
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
+    .replace(/[\u2600-\u27BF]/g, '')
+    .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 900);
 
-      if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
+  if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
 
-      try {
-        const { EdgeTTS } = await import('@andresaya/edge-tts');
-        const tts = new EdgeTTS();
-        await tts.synthesize(cleanText, voice, {
-          outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
-          rate: '-12%',
-        });
-        const base64 = await tts.toBase64();
-        if (base64 && base64.length > 100) {
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          return res.status(200).json({ audio: base64 });
-        }
-        throw new Error('Empty audio');
-      } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
+  // ── NVIDIA TTS (primary for voice calls) ──
+  // NVIDIA doesn't have a native TTS API so Edge TTS stays,
+  // but we add a Cloudflare TTS fallback using @cf/myshell-ai/melotts
+  // so voice calls don't depend only on Edge TTS
 
-      try {
-        const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
-        const tts = new MsEdgeTTS();
-        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-        const readable = tts.toStream(cleanText);
-        const chunks = [];
-        await new Promise((resolve, reject) => {
-          readable.on('data', chunk => chunks.push(chunk));
-          readable.on('end', resolve);
-          readable.on('error', reject);
-          setTimeout(() => reject(new Error('stream timeout')), 10000);
-        });
-        const buf = Buffer.concat(chunks);
-        if (buf.length > 100) {
-          res.setHeader('Cache-Control', 'public, max-age=86400');
-          return res.status(200).json({ audio: buf.toString('base64') });
-        }
-        throw new Error('Empty buffer');
-      } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
-
-      return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
+  // ── Attempt 1: Edge TTS (@andresaya/edge-tts) ──
+  try {
+    const { EdgeTTS } = await import('@andresaya/edge-tts');
+    const tts = new EdgeTTS();
+    await tts.synthesize(cleanText, voice, {
+      outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+      rate: '-12%',
+    });
+    const base64 = await tts.toBase64();
+    if (base64 && base64.length > 100) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).json({ audio: base64 });
     }
+    throw new Error('Empty audio');
+  } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
 
+  // ── Attempt 2: msedge-tts ──
+  try {
+    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+    const readable = tts.toStream(cleanText);
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+      readable.on('data', chunk => chunks.push(chunk));
+      readable.on('end', resolve);
+      readable.on('error', reject);
+      setTimeout(() => reject(new Error('stream timeout')), 10000);
+    });
+    const buf = Buffer.concat(chunks);
+    if (buf.length > 100) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.status(200).json({ audio: buf.toString('base64') });
+    }
+    throw new Error('Empty buffer');
+  } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
+
+  // ── Attempt 3: Cloudflare MeloTTS (free, no external dependency) ──
+  try {
+    const cfTtsRes = await fetchWithTimeout(
+      `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/myshell-ai/melotts`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${CF_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: cleanText }),
+      },
+      15000
+    );
+    if (cfTtsRes.ok) {
+      const arrayBuffer = await cfTtsRes.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+      if (base64 && base64.length > 100) {
+        console.log('Cloudflare MeloTTS succeeded ✅');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        return res.status(200).json({ audio: base64 });
+      }
+    }
+    console.log('Cloudflare MeloTTS failed:', cfTtsRes.status);
+  } catch(e) { console.log('TTS attempt 3 (CF MeloTTS) failed:', e.message); }
+
+  return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
+}
     // ╔══════════════════════════════════════╗
     // ║  CHAT  — true token streaming        ║
     // ╚══════════════════════════════════════╝
     if (action === 'chat') {
-      if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+  if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection',    'keep-alive');
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
 
+  try {
+    const isVoiceCall = prompt.trim().startsWith('You are Vortis, a voice AI') ||
+                        prompt.includes('1-3 short spoken sentences') ||
+                        prompt.includes('spoken sentences only');
+
+    if (isVoiceCall) {
+      const voiceMessages = [
+        { role: 'system', content: prompt.trim().slice(0, 400) },
+        ...sanitizeHistory(history, 8),
+      ];
+
+      const nvKey = process.env.NVIDIA_API_KEY;
+      if (nvKey) {
+        try {
+          const nvRes = await fetchWithTimeout(
+            `${NVIDIA_BASE_URL}/chat/completions`,
+            {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${nvKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model:       NVIDIA_CHAT_FAST,
+                messages:    voiceMessages,
+                max_tokens:  300,
+                temperature: 0.7,
+                stream:      false,
+                extra_body: { chat_template_kwargs: { thinking: false } },
+              }),
+            },
+            15000
+          );
+
+          if (nvRes.ok) {
+            const data = await nvRes.json();
+            const rawText = data?.choices?.[0]?.message?.content ?? null;
+            if (rawText && typeof rawText === 'string') {
+              const text = stripInternalReasoning(rawText).trim();
+              if (text.length > 2) {
+                console.log('Voice call served by NVIDIA ✅');
+                const words = text.split(' ');
+                for (let i = 0; i < words.length; i++) {
+                  const token = (i === 0 ? '' : ' ') + words[i];
+                  res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+                }
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+              }
+            }
+          }
+        } catch (e) {
+          console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
+        }
+      }
+
+      // Groq fallback for voice
       try {
+        const stream = await groq.chat.completions.create({
+          model:       GROQ_CHAT_PRIMARY,
+          messages:    voiceMessages,
+          max_tokens:  300,
+          temperature: 0.7,
+          stream:      true,
+        });
+        for await (const chunk of stream) {
+          const token = chunk.choices?.[0]?.delta?.content;
+          if (!token) continue;
+          res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+        }
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+      } catch (e) {
+        console.error('Groq voice fallback failed:', e.message);
+        res.write(`data: ${JSON.stringify({ content: 'Sorry, voice service is unavailable right now.' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return;
+      }
+    }
         const lastUserMsg = history[history.length - 1]?.content || '';
 
         const [searchContext, userLocation] = await Promise.all([
