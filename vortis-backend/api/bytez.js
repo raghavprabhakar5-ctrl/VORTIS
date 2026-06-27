@@ -1,19 +1,14 @@
-// Frame: Ultimate Visually-Powerhouse Audibly-Complementary Experience, Warning Visuals May Slower!
-// Bias: LEAD WITH VISUALS AND UNCOMPROMISING POWERHOUSE VISUALS EXCITEMENT!
-// Warning:Flux.1-Dev visually slower, potential timeout, failover visual.
-
 export const config = {
-  maxDuration: 60, // Still risky visually for Dev!
+  maxDuration: 60,
   api: {
     bodyParser: {
-      sizeLimit: '10mb',
+      sizeLimit: '2mb',
     },
   },
 };
 
 import admin from 'firebase-admin';
-import dotenv from 'dotenv';
-dotenv.config();
+import Groq from 'groq-sdk';
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -21,41 +16,37 @@ if (!admin.apps.length) {
   });
 }
 
-// ══════════════════════════════════════════════════════════════
-// ── NVIDIA NIM VISUALLY-POWERHOUSE ROUTING (2026 SPECS)
-// ══════════════════════════════════════════════════════════════
-const NVIDIA_API_KEY  = process.env.NVIDIA_API_KEY;
-const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1';
+// ── MODEL CONFIG ──────────────────────────────────────────────
+const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
+const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
+const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
-// ── FRONT-LINE ELITE VISUAL MODELS ──────────────────────────
-const NIM_CHAT    = 'deepseek-ai/deepseek-v4-pro';
-const NIM_CODER   = 'qwen/qwen3-coder-480b-a35b-instruct';
-const NIM_DOCS    = 'nvidia/nemotron-3-ultra-550b-a55b';
-const NIM_SEARCH  = 'moonshotai/kimi-k2.6';
-const NIM_SUMMARY = 'stepfun-ai/step-3.7-flash';
-const NIM_VISION  = 'meta/llama-3.2-90b-vision-instruct';
 
-// ── BACKUP / RESILIENT VISUAL NODES & ELITE VISUAL PREMIER ─────────────────
-const NIM_STABLE_FALLBACK = 'nvidia/llama-3.3-nemotron-super-49b-v1.5'; 
-const NIM_IMAGE           = 'black-forest-labs/flux.1-dev'; // visually elite, indistinguishable Slower. Steps ~30.
-const NIM_STT             = 'openai/whisper-large-v3';
-const NIM_TTS             = 'nvidia/magpie-tts-multilingual';
+const CF_CHAT_MODELS = [
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/qwen/qwen3-30b-a3b-fp8',
+];
 
-const TOKENS = {
-  chat: 4096, code: 8192, docs: 6144, search: 2048, summary: 1024, vision: 2048,
-};
-
-// ══════════════════════════════════════════════════════════════
-// ── RATE LIMIT & UTILITIES
-// ══════════════════════════════════════════════════════════════
+// ── RATE LIMITER ──────────────────────────────────────────────
 const rateLimiter = new Map();
 const RATE_LIMITS = {
-  chat: { window: 60000, max: 40 }, code: { window: 60000, max: 35 },
-  docs: { window: 60000, max: 25 }, image: { window: 60000, max: 15 },
-  search: { window: 60000, max: 35 }, summary: { window: 60000, max: 40 },
-  vision: { window: 60000, max: 15 }, tts: { window: 60000, max: 30 },
-  stt: { window: 60000, max: 25 },
+  chat:    { window: 60000, max: 30 },
+  image:   { window: 60000, max: 5  },
+  search:  { window: 60000, max: 20 },
+  vision:  { window: 60000, max: 5  },
+  tts:     { window: 60000, max: 20 },
+  execute: { window: 60000, max: 15 },
 };
+
+setInterval(() => {
+  const now = Date.now();
+  const maxWindow = Math.max(...Object.values(RATE_LIMITS).map(r => r.window));
+  for (const [key, requests] of rateLimiter.entries()) {
+    const recent = requests.filter(t => now - t < maxWindow);
+    if (recent.length === 0) rateLimiter.delete(key);
+    else rateLimiter.set(key, recent);
+  }
+}, 10 * 60 * 1000);
 
 function checkRateLimit(ip, action) {
   const limit    = RATE_LIMITS[action] || RATE_LIMITS.chat;
@@ -69,6 +60,7 @@ function checkRateLimit(ip, action) {
   return true;
 }
 
+// ── SANITIZATION ──────────────────────────────────────────────
 function sanitizeString(str, maxLen = 2000) {
   if (typeof str !== 'string') return '';
   return str.trim().slice(0, maxLen)
@@ -76,20 +68,35 @@ function sanitizeString(str, maxLen = 2000) {
     .replace(/javascript:/gi, '');
 }
 
-function sanitizeHistory(history, maxMessages = 20) {
+function sanitizeHistory(history, maxMessages = 30) {
   if (!Array.isArray(history)) return [];
   return history.slice(-maxMessages)
     .filter(m => m && typeof m === 'object' && m.role && m.content)
     .map(m => ({
       role:    ['user', 'assistant', 'system'].includes(m.role) ? m.role : 'user',
-      content: sanitizeString(String(m.content), 6000),
+      content: sanitizeString(String(m.content), 8000),
     }));
 }
 
-function stripThinking(text) {
-  if (!text) return text;
-  return text.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*\n/gm, '\n').trim();
+function isValidBase64Image(str) {
+  if (!str || typeof str !== 'string') return false;
+  const validPrefixes = [
+    'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+    'data:image/png;base64,',  'data:image/gif;base64,',
+    'data:image/webp;base64,',
+  ];
+  const hasPrefix = validPrefixes.some(p => str.startsWith(p));
+  if (!hasPrefix && str.length > 10) return /^[A-Za-z0-9+/=]+$/.test(str.slice(0, 100));
+  return hasPrefix;
 }
+
+function isImageTooLarge(base64str) {
+  const raw = base64str.startsWith('data:') ? base64str.split(',')[1] : base64str;
+  return (raw.length * 3) / 4 > 5 * 1024 * 1024;
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
@@ -104,205 +111,891 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   }
 }
 
+function isValidResponse(text) {
+  if (!text || text.trim().length < 2) return false;
+  return !/rate.?limit|connection.?error|too many request|try again later|quota exceeded|service unavailable/i.test(text.trim());
+}
+
+function stripInternalReasoning(text) {
+  if (!text) return text;
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^→.*$/gm, '')
+    .replace(/^\s*\n/gm, '\n')
+    .trim();
+}
+
+// ── COMPLEXITY CHECK ───────────────────────────────────────────
+function isComplexMessage(text) {
+  const low = text.toLowerCase().trim();
+  if (low.length < 40) return false;
+  if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|what time|what date|how are you|who are you|what is your name)\b/.test(low)) return false;
+  if (/\b(explain|compare|analyze|research|write|code|debug|essay|story|poem|translate|summarize|step by step|how does|why does|difference between|pros and cons|calculate|solve|math|equation|algorithm|implement|function|class|component)\b/.test(low)) return true;
+  if (text.length > 200) return true;
+  if (/```|def |function |class |import |const |let |var /.test(text)) return true;
+  return false;
+}
+
+function isObviouslyHard(text) {
+  if (/```|def |function\s*\(|class\s+\w+|import\s|from\s+\w+\s+import|const\s|let\s|var\s|=>|public\s+class|<\?php|#include|console\.log|print\(/.test(text)) return true;
+  if (/\b(debug|stack trace|error:|exception|algorithm|refactor|optimi[sz]e|complexity|recursion|architecture|design pattern)\b/i.test(text)) return true;
+  return false;
+}
+
+function isObviouslyTrivial(text) {
+  const low = text.toLowerCase().trim();
+  if (low.length < 40) return true;
+  if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|what time|what date|how are you|who are you|what is your name)\b/.test(low)) return true;
+  return false;
+}
+
+// ── AI-BASED TIER CLASSIFIER ───────────────────────────────────
+async function classifyTier(groq, text) {
+  const lowerText = text.toLowerCase();
+  
+  // 1. Instant local heuristic overrides
+  if (
+    lowerText.includes('table') || 
+    lowerText.includes('line-by-line') || 
+    lowerText.includes('line by line') ||
+    isObviouslyHard(text)
+  ) {
+    return 'hard';
+  }
+
+  if (isObviouslyTrivial(text)) {
+    return 'medium';
+  }
+
+  // 2. LLM Classification with a strict race-timeout
+  try {
+    const result = await Promise.race([
+      groq.chat.completions.create({
+        model: GROQ_CLASSIFIER_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Classify the user's message into exactly one difficulty tier.
+"medium" = casual conversation, simple greetings, simple Q&A, short explanations, opinions.
+"hard" = coding, debugging, formatting requests (like markdown tables), math, line-by-line breakdowns, multi-step reasoning, long-form writing.
+Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
+          },
+          { role: 'user', content: text.slice(0, 1000) },
+        ],
+        max_tokens: 10,
+        temperature: 0,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
+    ]);
+
+    const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
+    return raw.includes('hard') ? 'hard' : 'medium';
+
+  } catch (e) {
+    console.warn('Tier classifier failed, falling back to heuristic:', e.message);
+    
+    // 3. Clean fallback if LLM or timeout fails
+    return isComplexMessage(text) ? 'hard' : 'medium';
+  }
+}
+// ── STREAMING callAI ───────────────────────────────────────────
+async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
+  // ── STEP 1: TOKEN OPTIMIZATION ──────────────────────────────────
+  // Extract the system prompt if it exists so it doesn't get discarded
+  const systemPrompt = messages.find(m => m.role === 'system');
+
+  // Slice down conversation history turns to avoid hitting token limits
+  const recentConversations = messages
+    .filter(m => m.role !== 'system')
+    .slice(-6); // Maxes out context window history at 6 interactions
+
+  // Assemble the lean message context block
+  const optimizedMessages = systemPrompt 
+    ? [systemPrompt, ...recentConversations] 
+    : recentConversations;
+  // ────────────────────────────────────────────────────────────────
+
+  const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+
+  const tier      = await classifyTier(groq, lastMsg);
+  const isHard    = tier === 'hard';
+  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  
+  // Use a sensible token ceiling relative to intent
+  const maxTokens = isHard ? 3000 : 500;
+
+  console.log(`Tier: ${tier} → model: ${model}`);
+
+  // ── GROQ COMPLETION & FALLBACK LOOP ─────────────────────────────
+  for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
+    try {
+      const stream = await groq.chat.completions.create({
+        model: modelToTry,
+        messages: optimizedMessages, // Uses optimized list
+        max_tokens: maxTokens,       // Uses clean context parameters dynamically
+        temperature: 0.7,
+        stream: true,
+      });
+
+      let buffer = '';
+      for await (const chunk of stream) {
+        const token = chunk.choices?.[0]?.delta?.content;
+        if (!token) continue;
+        buffer += token;
+        res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+      }
+
+      if (buffer.trim().length > 2) {
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return true;
+      }
+      console.warn(`Model ${modelToTry} returned empty — trying fallback`);
+    } catch (e) {
+      console.error(`Groq stream failed (${modelToTry}):`, e.message);
+      
+      // If a rate limit hits (429), it drops directly to the loop's next model or Cloudflare
+      if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {
+        console.log('Skipping choked rate limit route...');
+      }
+    }
+  }
+
+  // ── CLOUDFLARE WORKERS AI BACKUP FALLBACK ───────────────────────
+  for (const cfModel of CF_CHAT_MODELS) {
+    try {
+      const cfRes = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
+        {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+          // Cloudflare handles full messages array fine or fallback parameters
+          body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
+        }
+      );
+      if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
+
+      const data = await cfRes.json();
+      let rawText = data?.result?.response;
+      if (typeof rawText !== 'string') {
+        rawText = data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
+      }
+      if (typeof rawText !== 'string') {
+        console.log(`CF model ${cfModel} unexpected response shape:`, JSON.stringify(data).slice(0, 300));
+        continue;
+      }
+
+      const text = stripInternalReasoning(rawText);
+      if (isValidResponse(text)) {
+        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return true;
+      }
+    } catch (e) {
+      console.log(`CF model error (${cfModel}):`, e.message);
+    }
+  }
+
+  return false;
+}
+
+// ── SERPER ────────────────────────────────────────────────────
 async function fetchSerper(query) {
   const key = process.env.SERPER_API_KEY;
   if (!key) return [];
   try {
-    const res = await fetchWithTimeout('https://google.serper.dev/search', {
-      method:  'POST',
-      headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ q: query, num: 6 }),
-    }, 5000);
+    const res = await fetchWithTimeout(
+      'https://google.serper.dev/search',
+      {
+        method:  'POST',
+        headers: { 'X-API-KEY': key, 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ q: query, num: 10, hl: 'en', gl: 'us' }),
+      },
+      8000
+    );
     if (!res.ok) return [];
-    const data = await res.json();
-    return (data.organic || []).map(r => ({
+    const data    = await res.json();
+    const organic = (data.organic || []).map(r => ({
       title:   r.title   || '',
       snippet: r.snippet || '',
       link:    r.link    || '#',
-    })).slice(0, 4);
-  } catch (e) { return []; }
+      source:  (() => { try { return new URL(r.link).hostname.replace('www.', ''); } catch { return 'Web'; } })(),
+      date:    r.date    || new Date().toISOString().split('T')[0],
+    }));
+    const news = (data.news || []).map(r => ({
+      title:   r.title   || '',
+      snippet: r.snippet || '',
+      link:    r.link    || '#',
+      source:  r.source  || 'News',
+      date:    r.date    || new Date().toISOString().split('T')[0],
+    }));
+    return [...news, ...organic].filter(r => r.title.length > 3).slice(0, 10);
+  } catch (e) {
+    console.error('Serper failed:', e.message);
+    return [];
+  }
 }
 
-async function nimStream(messages, model, maxTokens, res) {
-  let response;
+// ── ESPN ──────────────────────────────────────────────────────
+async function fetchESPN(query) {
+  const low     = query.toLowerCase();
+  const today   = new Date().toISOString().split('T')[0];
+  const results = [];
+  const sportMap = [
+    { keys: ['nba', 'basketball'],        sport: 'basketball', league: 'nba',            label: 'NBA'        },
+    { keys: ['nfl', 'american football'], sport: 'football',   league: 'nfl',            label: 'NFL'        },
+    { keys: ['mlb', 'baseball'],          sport: 'baseball',   league: 'mlb',            label: 'MLB'        },
+    { keys: ['nhl', 'hockey'],            sport: 'hockey',     league: 'nhl',            label: 'NHL'        },
+    { keys: ['epl', 'premier league'],    sport: 'soccer',     league: 'eng.1',          label: 'EPL'        },
+    { keys: ['la liga', 'laliga'],        sport: 'soccer',     league: 'esp.1',          label: 'La Liga'    },
+    { keys: ['champions league', 'ucl'],  sport: 'soccer',     league: 'uefa.champions', label: 'UCL'        },
+    { keys: ['serie a'],                  sport: 'soccer',     league: 'ita.1',          label: 'Serie A'    },
+    { keys: ['bundesliga'],               sport: 'soccer',     league: 'ger.1',          label: 'Bundesliga' },
+    { keys: ['mls'],                      sport: 'soccer',     league: 'usa.1',          label: 'MLS'        },
+    { keys: ['football', 'soccer'],       sport: 'soccer',     league: 'eng.1',          label: 'Soccer'     },
+  ];
+  const matched = sportMap.find(s => s.keys.some(k => low.includes(k)));
+  if (!matched) return [];
   try {
-    response = await fetchWithTimeout(`${NVIDIA_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.5, stream: true }),
-    }, 7000);
-    if (!response.ok) throw new Error('Primary cluster node congested');
-  } catch (primaryErr) {
-    console.log(`[VORTIS SYS] Core node failed. Hot-swapping visually stable high-availability cluster...`);
-    response = await fetch(`${NVIDIA_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: NIM_STABLE_FALLBACK, messages, max_tokens: maxTokens, temperature: 0.5, stream: true }),
-    });
-    if (!response.ok) throw new Error('All cloud nodes fully occupied.');
-  }
-  const reader  = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer    = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data:')) continue;
-      const raw = trimmed.slice(5).trim();
-      if (raw === '[DONE]') continue;
-      try {
-        const json  = JSON.parse(raw);
-        const token = json.choices?.[0]?.delta?.content;
-        if (!token) continue;
-        res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-      } catch (_) {}
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${matched.sport}/${matched.league}/scoreboard`;
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' } }, 8000);
+    if (!res.ok) return [];
+    const data = await res.json();
+    for (const event of (data.events || []).slice(0, 5)) {
+      const comp = event.competitions?.[0];
+      if (!comp) continue;
+      const home = comp.competitors?.find(c => c.homeAway === 'home');
+      const away = comp.competitors?.find(c => c.homeAway === 'away');
+      if (!home || !away) continue;
+      const homeName  = home.team?.displayName || 'Home';
+      const awayName  = away.team?.displayName || 'Away';
+      const homeScore = home.score ?? '0';
+      const awayScore = away.score ?? '0';
+      const isLive    = comp.status?.type?.state === 'in';
+      const isFinal   = comp.status?.type?.completed === true;
+      let title, snippet;
+      if (isLive)       { title = `🔴 LIVE: ${awayName} ${awayScore} - ${homeScore} ${homeName}`; snippet = `${matched.label} live | ${comp.status?.displayClock || ''} | ${comp.venue?.fullName || ''}`; }
+      else if (isFinal) { title = `${awayName} ${awayScore} - ${homeScore} ${homeName} (Final)`;  snippet = `${matched.label} result | ${comp.venue?.fullName || ''}`; }
+      else              { title = `${awayName} vs ${homeName} — Upcoming`;                        snippet = `${matched.label} | ${comp.status?.type?.shortDetail || ''} | ${comp.venue?.fullName || ''}`; }
+      results.push({ title, snippet, link: `https://www.espn.com/${matched.sport}/game/_/gameId/${event.id}`, source: `ESPN ${matched.label}`, date: today });
     }
-  }
-  return ''; // Return statement simplified for stream as total is built for internal use if needed
+  } catch (e) { console.log('ESPN error:', e.message); }
+  return results;
 }
 
-// ══════════════════════════════════════════════════════════════
-// ── ROUTER HANDLER
-// ══════════════════════════════════════════════════════════════
+// ── SPAM / RELEVANCE / DEDUP / SORT ──────────────────────────
+const SPAM_DOMAINS = ['bestproductsreviews', 'top10supplements', 'supplementreviews', 'healthwebmagazine', 'globenewswire', 'prnewswire', 'businesswire', 'einpresswire', 'geekshealth', 'nutralegacy', 'theislandnow'];
+const SPAM_TITLE_PATTERNS = [
+  /\b(buy now|order now|get \d+% off|discount|promo code|coupon|limited offer|shop now)\b/i,
+  /\b(supplement|capsule|pill|weight loss|fat burn|keto|detox|testosterone booster|male enhancement)\b/i,
+  /\b(dream11|fantasy team|fantasy xi|who will win prediction|pitch report prediction)\b/i,
+  /\b(stream(ing)? free|watch online free|full movie online|download free)\b/i,
+  /\b(casino|betting|odds|gambling|forex|crypto investment)\b/i,
+];
+
+function isSpam(r) {
+  const link = (r.link || '').toLowerCase();
+  if (SPAM_DOMAINS.some(d => link.includes(d))) return true;
+  if (SPAM_TITLE_PATTERNS.some(p => p.test(r.title || ''))) return true;
+  return false;
+}
+
+function isRelevant(result, query) {
+  if (!query || query.trim().length < 4) return true;
+  const combined  = `${result.title} ${result.snippet}`.toLowerCase();
+  const STOPWORDS = new Set(['what', 'when', 'where', 'which', 'that', 'this', 'with', 'from', 'have', 'will', 'been', 'about', 'does', 'into', 'more', 'than', 'some', 'then', 'them', 'they', 'were', 'also', 'just', 'over', 'latest', 'tell', 'give', 'show', 'find']);
+  const words     = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 3 && !STOPWORDS.has(w));
+  if (words.length === 0) return true;
+  return words.filter(w => combined.includes(w)).length >= Math.ceil(words.length / 2);
+}
+
+function deduplicate(results) {
+  const seen = new Set();
+  return results.filter(r => {
+    const key = r.title.toLowerCase().replace(/\s+/g, ' ').slice(0, 60);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function scoreAndSort(results, query) {
+  const words     = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const today     = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  return results.map(r => {
+    let score = 0;
+    words.forEach(w => { if (r.title.toLowerCase().includes(w)) score += 3; if (r.snippet.toLowerCase().includes(w)) score += 1; });
+    if (r.title.includes('🔴 LIVE'))                                                          score += 80;
+    if (/\b(\d+\/\d+|\d+ runs?|wickets?|overs?|chasing|target|all out)\b/i.test(r.snippet)) score += 40;
+    if (/\b(\d+\/\d+|\d+ runs?|wickets?|overs?)\b/i.test(r.title))                          score += 30;
+    if (/\b(score|result|won|win|beats|beat|defeat|victory|final score)\b/i.test(r.title))   score += 25;
+    if (/espn/i.test(r.source))                                                               score += 15;
+    if (/\b(streaming|where to watch|preview|pitch report|fantasy|dream11)\b/i.test(r.title)) score -= 40;
+    if (/\b(buy|price|review|discount|offer|deal)\b/i.test(r.title))                          score -= 50;
+    if (r.date === today)          score += 15;
+    else if (r.date === yesterday) score += 8;
+    return { ...r, _score: score };
+  }).sort((a, b) => b._score - a._score).map(({ _score, ...r }) => r);
+}
+
+function cleanResults(results, query) {
+  const nonEnglishDomains = ['ilpost.it', 'corriere.it', 'lemonde.fr', 'lefigaro.fr', 'spiegel.de', 'bild.de', 'elpais.com', 'marca.com', 'globo.com', 'sina.com.cn', 'yomiuri.co.jp'];
+  return results
+    .filter(r => !isSpam(r))
+    .filter(r => isRelevant(r, query))
+    .filter(r => !nonEnglishDomains.some(d => (r.link || '').toLowerCase().includes(d)))
+    .filter(r => (r.snippet || '').trim().length >= 20)
+    .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
+}
+
+function needsWebSearch(text) {
+  const low = text.toLowerCase();
+  if (/\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|virat|kohli|rohit|dhoni|wicket|innings|over|scorecard)\b/.test(low)) return true;
+  if (/\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis|f1|formula 1)\b/.test(low)) return true;
+  if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent)\b/.test(low)) return true;
+  if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather)\b/.test(low)) return true;
+  if (/\b(2024|2025|2026)\b/.test(low)) return true;
+  if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
+  return false;
+}
+
+function buildSearchQuery(userMessage) {
+  const now     = new Date();
+  const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+  if (/\b(20\d\d|today|yesterday|this week)\b/i.test(userMessage)) return userMessage.slice(0, 200);
+  return `${userMessage.slice(0, 180)} ${dateStr}`;
+}
+
+// ═════════════════════════════════════════════════════════════
+// ── MAIN HANDLER
+// ═════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
-  const origin = req.headers.origin || '';
-  res.setHeader('Access-Control-Allow-Origin', origin || '*');
+
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://vortis-ai.vercel.app').split(',');
+  const origin         = req.headers.origin || '';
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-App-Key');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
-  if (req.method !== 'POST')     return res.status(405).json({ error: 'Method disallowed' });
+  if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
+
+  if (!allowedOrigins.includes('*') && !allowedOrigins.includes(origin)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  if (!req.body || typeof req.body !== 'object') {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
 
   try {
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
     const token  = req.headers.authorization?.split('Bearer ')[1];
     const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-    
-    if (!token) return res.status(401).json({ error: 'Missing auth context token.' });
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
     try { await admin.auth().verifyIdToken(token); }
-    catch { return res.status(401).json({ error: 'Invalid token structure.' }); }
+    catch { return res.status(401).json({ error: 'Invalid or expired token' }); }
 
     const body   = req.body;
     const action = sanitizeString(body.action || '', 20);
-    
-    if (!checkRateLimit(userIp, action)) {
-      return res.status(429).json({ error: 'Engine busy. Pacing activated.' });
-    }
 
-    const prompt  = sanitizeString(body.prompt  || '', 12000);
+    if (!action) return res.status(400).json({ error: 'Missing action' });
+    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
+    if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
+
+    const prompt  = sanitizeString(body.prompt  || '', 15000);
+    const query   = sanitizeString(body.query   || '', 500);
     const image   = body.image || null;
     const history = sanitizeHistory(body.history || []);
 
-    if (['chat', 'code', 'docs', 'search', 'summary'].includes(action)) {
-      if (!prompt.trim()) return res.status(400).json({ error: 'Prompt is mandatory.' });
+    const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
+    const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
+
+    // ╔══════════════════════════════════════╗
+    // ║  TTS                                 ║
+    // ╚══════════════════════════════════════╝
+    if (action === 'tts') {
+      const text  = sanitizeString(body.text  || '', 1000);
+      const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
+      if (!text) return res.status(400).json({ error: 'Missing text' });
+
+      const cleanText = text
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+        .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+        .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
+        .replace(/[\u2600-\u27BF]/g, '')
+        .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 900);
+
+      if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
+
+      try {
+        const { EdgeTTS } = await import('@andresaya/edge-tts');
+        const tts = new EdgeTTS();
+        await tts.synthesize(cleanText, voice, {
+          outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+          rate: '-12%',
+        });
+        const base64 = await tts.toBase64();
+        if (base64 && base64.length > 100) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: base64 });
+        }
+        throw new Error('Empty audio');
+      } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
+
+      try {
+        const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+        const tts = new MsEdgeTTS();
+        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        const readable = tts.toStream(cleanText);
+        const chunks = [];
+        await new Promise((resolve, reject) => {
+          readable.on('data', chunk => chunks.push(chunk));
+          readable.on('end', resolve);
+          readable.on('error', reject);
+          setTimeout(() => reject(new Error('stream timeout')), 10000);
+        });
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 100) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: buf.toString('base64') });
+        }
+        throw new Error('Empty buffer');
+      } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
+
+      return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
+    }
+
+    // ╔══════════════════════════════════════╗
+    // ║  CHAT  — true token streaming        ║
+    // ╚══════════════════════════════════════╝
+    if (action === 'chat') {
+      if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection',    'keep-alive');
-      let model = NIM_CHAT;
-      let maxTokens = TOKENS.chat;
-      let systemInstruction = `You are VORTIS, an elite multi-modality cluster AI assistant...`;
-      if (action === 'chat')    { model = NIM_CHAT; maxTokens = TOKENS.chat; }
-      if (action === 'code')    { model = NIM_CODER; maxTokens = TOKENS.code; }
-      if (action === 'docs')    { model = NIM_DOCS; maxTokens = TOKENS.docs; }
-      if (action === 'summary') { model = NIM_SUMMARY; maxTokens = TOKENS.summary; }
-      if (action === 'search') {
-        model = NIM_SEARCH; maxTokens = TOKENS.search;
-        const results = await fetchSerper(prompt);
-        if (results.length > 0) {
-          systemInstruction += `\n\nVerified Context:\n${results.map((r, i) => `[Source ${i+1}] ${r.title}: ${r.snippet}`).join('\n')}`;
+
+      try {
+        const lastUserMsg = history[history.length - 1]?.content || '';
+
+        const [searchContext, userLocation] = await Promise.all([
+          (async () => {
+            if (!needsWebSearch(lastUserMsg)) return '';
+            try {
+              const sq        = buildSearchQuery(lastUserMsg);
+              const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
+              const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
+              const [serperResult, espnResult] = await Promise.allSettled([
+                fetchSerper(sq),
+                (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
+              ]);
+              let allRes = [
+                ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
+                ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
+              ];
+              allRes = cleanResults(allRes, sq);
+              allRes = deduplicate(allRes);
+              allRes = scoreAndSort(allRes, sq);
+              if (allRes.length === 0) return '';
+              const snippets = allRes.slice(0, 6).map((r, i) =>
+                `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
+              ).join('\n\n');
+              return `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
+            } catch (e) {
+              console.error('Auto-search failed:', e.message);
+              return '';
+            }
+          })(),
+
+          (async () => {
+            try {
+              const geoRes = await fetchWithTimeout(
+                `https://ipapi.co/${userIp}/json/`,
+                { headers: { 'User-Agent': BROWSER_UA } },
+                3000
+              );
+              if (geoRes.ok) {
+                const geo = await geoRes.json();
+                if (geo.city && geo.country_name) return `${geo.city}, ${geo.region}, ${geo.country_name}`;
+              }
+            } catch(_) {}
+            return '';
+          })(),
+        ]);
+
+        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, or any other model.
+                                 Vortis is an AI assistant platform built by the Vortis team, offering chat, 
+                                 image generation, vision, document analysis, web search, and voice mode 
+                                 (describe whatever your product actually is here — version, mission, etc).
+                                 If asked "what is Vortis" or "tell me about Vortis", answer with this 
+                                 description — don't just repeat "I was built by the Vortis team."
+
+
+FORMATTING RULES — ALWAYS FOLLOW:
+- Always use markdown formatting in your responses
+- Use **bold** for important terms, names, numbers
+- If the user sends a code block without any question, explain what it does.
+- Use bullet points (- item) for lists of 3+ items
+- Use numbered lists (1. item) for steps or sequences
+- Use ### headers for sections in long responses
+- Use \`inline code\` for technical terms, commands, file names
+- Use code blocks with language for any code: \`\`\`python
+- Use | tables | with | headers | for comparisons
+- Use > blockquotes for tips or important notes
+- Short answers (1-3 sentences) can be plain text — no need to force formatting
+- Never write walls of plain text for complex topics — always structure them
+
+RESPONSE STYLE: Be concise and to the point. Short answers for simple questions (1-3 sentences max). For lists use max 5-6 bullet points. Keep it under 200 words unless asked for detail. Never pad, repeat, or over-explain. Always finish your answer completely.
+
+REFUSAL RULES: Never respond with only "I can't help with that" — always explain briefly why and give an alternative.\n\n`;
+        const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
+        const sysContent   = identityOverride + prompt.trim().slice(0, 10000) + locationNote + searchContext;
+
+        const messages = [];
+        if (sysContent) messages.push({ role: 'system', content: sysContent });
+        messages.push(...history);
+
+        if (!messages.length || messages[messages.length - 1].role !== 'user') {
+          const userMsg = history.length > 0
+            ? history[history.length - 1].content
+            : prompt.replace(/^You are VORTIS[\s\S]{0,500}/, '').trim();
+          messages.push({ role: 'user', content: userMsg });
         }
+
+        const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
+        if (!ok) {
+          if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ content: 'All AI providers are busy — please try again in a moment.' })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          }
+        }
+
+      } catch (error) {
+        console.error('CHAT ERROR:', error.message);
+        if (!res.headersSent) return res.status(500).json({ error: 'AI request failed' });
+        if (!res.writableEnded) { res.write('data: [DONE]\n\n'); res.end(); }
       }
-      const messages = [{ role: 'system', content: systemInstruction }, ...history.slice(-6), { role: 'user', content: prompt }];
-      try {
-        await nimStream(messages, model, maxTokens, res);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      } catch (err) {
-        res.write(`data: ${JSON.stringify({ content: 'Deep connection failover visual error.' })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
+      return;
     }
 
-    if (action === 'vision') {
-      if (!image) return res.status(400).json({ error: 'Missing target visual image.' });
-      try {
-        const imageUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
-        const response = await fetchWithTimeout(`${NVIDIA_BASE_URL}/chat/completions`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: NIM_VISION,
-            messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: imageUrl } }, { type: 'text', text: prompt || 'Analyze visual closely.' }] }],
-            max_tokens: TOKENS.vision,
-          }),
-        }, 12000);
-        const data = await response.json();
-        return res.status(200).json({ success: true, description: stripThinking(data.choices?.[0]?.message?.content || '') });
-      } catch (e) {
-        return res.status(502).json({ error: 'Vision visual powerhouse array timed out.' });
-      }
-    }
+    // ╔══════════════════════════════════════╗
+    // ║  SEARCH                              ║
+    // ╚══════════════════════════════════════╝
+    if (action === 'search') {
+      const searchQuery = (query || prompt).trim();
+      if (!searchQuery)             return res.status(400).json({ error: 'Missing search query' });
+      if (searchQuery.length > 300) return res.status(400).json({ error: 'Query too long' });
 
-    if (action === 'image') {
-      if (!prompt.trim()) return res.status(400).json({ error: 'Empty prompt powerhouse payload.' });
-      try {
-        const imgRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/images/generations`, {
-          method:  'POST',
-          headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: NIM_IMAGE, prompt: prompt.trim(), n: 1, size: '1024x1024', steps: 30, response_format: 'b64_json' }), //
-        }, 15000); // More time, still visually risky
-        if (!imgRes.ok) throw new Error('Primary visual powerhouse image node overloaded');
-        const imgData = await imgRes.json();
-        const b64 = imgData?.data?.[0]?.b64_json;
-        if (b64) return res.status(200).json({ success: true, imageUrl: `data:image/png;base64,${b64}`, provider: 'nvidia-flux' }); // provider string same
-        throw new Error('Fallback trigger');
-      } catch (err) {
-        const seed = Math.floor(Math.random() * 888888);
-        const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt.trim())}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true`; // pollination fallback
-        return res.status(200).json({ success: true, imageUrl: fallbackUrl, provider: 'vortis-image-fallback' });
-      }
-    }
+      const low       = searchQuery.toLowerCase();
+      const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/.test(low);
+      const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/.test(low);
 
-    if (action === 'tts') {
-      const text = sanitizeString(body.text || '', 600); // already short
-      if (!text) return res.status(400).json({ error: 'No text given powerhouse.' });
-      try {
-        const ttsRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/audio/speech`, {
-          method:  'POST',
-          headers: { 'Authorization': `Bearer ${NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: NIM_TTS, input: text, voice: 'Magpie-Multilingual.EN-US.Aria', response_format: 'mp3' }),
-        }, 6000); // Strict, visually audibly fast-track failover focus
-        if (!ttsRes.ok) throw new Error('NVIDIA TTS audibly powerhouse busy');
-        const buf = await ttsRes.arrayBuffer();
-        return res.status(200).json({ success: true, audio: Buffer.from(buf).toString('base64'), provider: 'nvidia-magpie' }); // provider same
-      } catch (e) {
-        console.log('NVIDIA TTS core audibly bypassed, executing high-speed stream audio proxy...');
+      const [serperResult, espnResult] = await Promise.allSettled([
+        fetchSerper(searchQuery),
+        (isSports && !isCricket) ? fetchESPN(searchQuery) : Promise.resolve([]),
+      ]);
+
+      let allResults = [
+        ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
+        ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
+      ];
+      allResults = cleanResults(allResults, searchQuery);
+      allResults = deduplicate(allResults);
+      allResults = scoreAndSort(allResults, searchQuery);
+
+      let aiSummary = null;
+      if (allResults.length > 0) {
+       const contextSnippets = allResults.slice(0, 4).map((r, i) =>
+  `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 250)}\nSource: ${r.source}`
+).join('\n\n');
+        const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         try {
-          const fallbackAudioUrl = `https://api.pollinations.ai/tts?text=${encodeURIComponent(text)}&voice=dffemale`; // pollination tts fallback
-          const audioFetch = await fetchWithTimeout(fallbackAudioUrl, {}, 6000); // aggressive timeout
-          if (!audioFetch.ok) throw new Error('Proxy audio error');
-          const backupBuf = await audioFetch.arrayBuffer(); // convert to buffer, slower than url
-          return res.status(200).json({ success: true, audio: Buffer.from(backupBuf).toString('base64'), provider: 'vortis-speech-fallback' }); // provider same
-        } catch (fbErr) {
-          console.error("Critical TTS failover visual error:", fbErr.message); //
-          return res.status(200).json({ success: false, error: 'Speech system visual offline powerhouse', audio: '' }); // send false success for frontend
-        }
+          const result = await Promise.race([
+            groq.chat.completions.create({
+              model:    GROQ_CHAT_PRIMARY,
+              messages: [
+                {
+                  role:    'system',
+                  content: `Today is ${today}. Summarize these search results.\nRULES:\n- Use ONLY the results below.\n- Be specific: names, scores, dates, numbers.\n- 3-5 sentences. Direct and factual.\n- If results show a sports result, state it clearly.\n- Do NOT say "as of my knowledge".\n\nSEARCH RESULTS:\n${contextSnippets}`,
+                },
+                { role: 'user', content: `Summarize in 3-5 sentences.` },
+              ],
+              max_tokens:  400,
+              temperature: 0.2,
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 8000)),
+          ]);
+          const rawT = result.choices?.[0]?.message?.content || null;
+          const t    = rawT ? stripInternalReasoning(rawT) : null;
+          if (t && t.trim().length > 10) aiSummary = t.trim();
+        } catch (e) { console.error('AI summary failed:', e.message); }
       }
-    }
-    
-    if (action === 'stt') { // not requested to change
-      return res.status(200).json({ success: true, transcript: 'STT not changed visual powerhouse.' });
+
+      if (allResults.length === 0) {
+        try {
+          const fallback = await Promise.race([
+            groq.chat.completions.create({
+              model:    GROQ_CHAT_PRIMARY,
+              messages: [
+                { role: 'system', content: `Today is ${new Date().toDateString()}. Answer factually in 2-3 sentences.` },
+                { role: 'user',   content: searchQuery },
+              ],
+              max_tokens: 400,
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+          ]);
+          const rawAnswer = fallback.choices?.[0]?.message?.content || null;
+          const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
+          if (answer) allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+        } catch (e) { console.error('Knowledge fallback failed:', e.message); }
+      }
+
+      return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
 
-  } catch (err) {
-    console.error("SYSTEM visual powerhouse BREAKAGE:", err.message); //
-    return res.status(500).json({ error: 'Global visual powerhouse routing pipeline exception.' }); // graceful 500
+    // ╔══════════════════════════════════════╗
+    // ║  VISION                              ║
+    // ╚══════════════════════════════════════╝
+    if (action === 'vision') {
+      if (!image)                     return res.status(400).json({ error: 'Missing image data' });
+      if (!isValidBase64Image(image)) return res.status(400).json({ error: 'Invalid image format' });
+      if (isImageTooLarge(image))     return res.status(400).json({ error: 'Image too large (max 5MB)' });
+
+      try {
+        const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
+        const cfRes = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct`,
+          {
+            method:  'POST',
+            headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{
+                role: 'user',
+                content: [
+                  { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+                  { type: 'text', text: sanitizeString(prompt || 'Describe this image in detail.', 500) },
+                ],
+              }],
+              max_tokens: 2048,
+            }),
+          }
+        );
+        if (cfRes.ok) {
+          const data = await cfRes.json();
+          const description = data.result?.response || data.result?.description || null;
+          if (description && description.trim().length > 2) return res.status(200).json({ success: true, description });
+        }
+
+        const bytes = Array.from(Buffer.from(base64Data, 'base64'));
+        const llavaRes = await fetch(
+          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/llava-hf/llava-1.5-7b-hf`,
+          {
+            method:  'POST',
+            headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ prompt: sanitizeString(prompt || 'Describe this image in detail.', 500), image: bytes }),
+          }
+        );
+        if (!llavaRes.ok) return res.status(200).json({ success: false, description: 'Could not analyze image — please try again.' });
+        const d = await llavaRes.json();
+        const fallbackDesc = d.result?.description || d.result?.response || null;
+        return res.status(200).json({ success: true, description: fallbackDesc?.trim().length > 2 ? fallbackDesc : 'Could not analyze image.' });
+      } catch (error) {
+        console.error('VISION ERROR:', error.message);
+        return res.status(200).json({ success: false, description: 'Vision service unavailable.' });
+      }
+    }
+
+    // ╔══════════════════════════════════════╗
+// ║  IMAGE GENERATION                    ║
+// ╚══════════════════════════════════════╝
+if (action === 'image') {
+  if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
+  if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
+
+  const forceGemini = body.forceGemini === true;
+
+  // ── Helper: Try Flux Worker (Cloudflare Worker Primary) ──
+  async function tryFlux(promptText) {
+    try {
+      const seed   = Math.floor(Math.random() * 999999);
+      const imgRes = await fetchWithTimeout(
+        `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
+          body:    JSON.stringify({ prompt: promptText.trim(), model: 'flux', seed }),
+        },
+        25000
+      );
+      if (!imgRes.ok) return null;
+      const contentType = imgRes.headers.get('content-type') || '';
+      if (contentType.includes('json')) {
+        const json = await imgRes.json();
+        return json?.imageUrl ? json : null;
+          }
+      const responseText = await imgRes.text();
+      try {
+        return JSON.parse(responseText);
+      } catch {
+        return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
+      }
+    } catch (e) {
+      console.error('Flux worker failed:', e.message);
+      return null;
+    }
+  }
+
+  // ── Helper: Try Pollinations Flux (Fallback) ──
+  // Function name left untouched to support your frontend infrastructure
+  async function tryGemini(promptText) {
+    try {
+      const encodedPrompt = encodeURIComponent(promptText.trim());
+      const seed = Math.floor(Math.random() * 999999);
+
+      const polRes = await fetchWithTimeout(
+        `https://image.pollinations.ai/prompt/${encodedPrompt}?model=flux&width=1024&height=1024&seed=${seed}&nologo=true&enhance=false`,
+        {
+          method: 'GET',
+          headers: { 'User-Agent': BROWSER_UA },
+        },
+        30000
+      );
+
+      console.log('Pollinations Flux status:', polRes.status);
+
+      if (!polRes.ok) {
+        console.log('Pollinations Flux error:', polRes.status);
+        return null;
+      }
+
+      const contentType = polRes.headers.get('content-type') || '';
+      if (!contentType.startsWith('image/')) {
+        console.log('Pollinations returned non-image content-type:', contentType);
+        return null;
+      }
+
+      const arrayBuffer = await polRes.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+      if (!base64 || base64.length < 100) {
+        console.log('Pollinations returned empty image');
+        return null;
+      }
+
+      const mime = contentType.split(';')[0].trim() || 'image/jpeg';
+      console.log('Pollinations Flux image received ✅');
+      return { success: true, imageUrl: `data:${mime};base64,${base64}` };
+    } catch (e) {
+      console.error('Pollinations Flux failed:', e.message);
+      return null;
+    }
+  }
+
+  // ── Complexity check ──
+  async function isComplexImagePrompt(promptText) {
+    const DETAIL_KEYWORDS = /\b(lord|god|goddess|deity|divine|hanuman|shiva|krishna|ram|rama|durga|ganesh|ganesha|vishnu|lakshmi|saraswati|buddha|jesus|allah|prophet|angel|portrait|realistic person|human face|photorealistic|cinematic|epic scene|battle|war|mythology|celestial|sacred|temple|mandala|intricate|ultra.?detailed|hyperrealistic|professional photo|studio lighting|dramatic lighting|8k|4k)\b/i;
+    if (DETAIL_KEYWORDS.test(promptText)) return true;
+    if (promptText.trim().length <= 80) return false;
+
+    try {
+      const result = await Promise.race([
+        groq.chat.completions.create({
+          model:    GROQ_CHAT_PRIMARY,
+          messages: [
+            {
+              role:    'system',
+              content: `You decide if an image prompt needs HIGH-QUALITY AI (Pollinations) or BASIC AI (Flux worker).
+Use Pollinations for: religious figures, gods, goddesses, realistic humans/faces, cinematic scenes, mythology, intricate art, portraits, epic/dramatic scenes, cultural icons, detailed illustrations.
+Use Flux for: simple objects, logos, icons, cartoons, basic backgrounds, abstract patterns, simple illustrations.
+Reply ONLY one word: POLLINATIONS or FLUX`,
+            },
+            { role: 'user', content: promptText },
+          ],
+          max_tokens:  5,
+          temperature: 0,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+      ]);
+      const answer = result.choices?.[0]?.message?.content?.trim().toUpperCase() || 'FLUX';
+      return answer.includes('POLLINATIONS');
+    } catch (e) {
+      console.error('Complexity check failed:', e.message);
+      return promptText.length > 100;
+    }
+  }
+
+  try {
+    // ── forceGemini flag / Redo button execution logic ──
+    if (forceGemini) {
+      console.log('Force parameter active - Routing to Cloudflare primary first');
+      const fluxResult = await tryFlux(prompt);
+      if (fluxResult?.imageUrl) {
+        return res.status(200).json({ ...fluxResult, provider: 'flux' });
+      }
+      console.log('Cloudflare failed under forced flow, shifting to Pollinations fallback');
+      const polFallback = await tryGemini(prompt);
+      if (polFallback?.imageUrl) {
+        return res.status(200).json({ ...polFallback, provider: 'pollinations' });
+      }
+      return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+    }
+
+    // ── Normal flow: Reordered to run Cloudflare Worker (tryFlux) as Primary ──
+    const needsQuality = await isComplexImagePrompt(prompt);
+    console.log(`Prompt preferred path evaluation: ${needsQuality ? 'POLLINATIONS' : 'FLUX'} — "${prompt.slice(0, 60)}"`);
+
+    if (needsQuality) {
+      // Complex prompt → Still try Cloudflare Flux first, fall back to Pollinations
+      console.log('Routing complex prompt to Cloudflare Flux worker first...');
+      const fluxResult = await tryFlux(prompt);
+      if (fluxResult?.imageUrl) {
+        return res.status(200).json({ ...fluxResult, provider: 'flux' });
+      }
+      console.log('Cloudflare failed for complex topic, falling back to Pollinations');
+      const polResult = await tryGemini(prompt);
+      if (polResult?.imageUrl) {
+        return res.status(200).json({ ...polResult, provider: 'pollinations' });
+      }
+    } else {
+      // Simple prompt → Cloudflare Flux worker first, fall back to Pollinations
+      console.log('Routing simple prompt to Cloudflare Flux worker first...');
+      const fluxResult = await tryFlux(prompt);
+      if (fluxResult?.imageUrl) {
+        return res.status(200).json({ ...fluxResult, provider: 'flux' });
+      }
+      console.log('Cloudflare failed for simple topic, falling back to Pollinations');
+      const polResult = await tryGemini(prompt);
+      if (polResult?.imageUrl) {
+        return res.status(200).json({ ...polResult, provider: 'pollinations' });
+      }
+    }
+
+    return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+
+  } catch (error) {
+    console.error('IMAGE GEN ERROR:', error.message);
+    return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+  }
+}
+
+return res.status(400).json({ error: 'Invalid action' });
+
+  } catch (error) {
+    console.error('GLOBAL ERROR:', error.message);
+    return res.status(500).json({ error: 'Internal server error' });
   }
 }
