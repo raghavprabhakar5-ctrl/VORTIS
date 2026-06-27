@@ -747,10 +747,14 @@ export default async function handler(req, res) {
           if (text.length > 2) {
             console.log('Voice → NVIDIA ✅ (no Groq tokens used)');
             // stream it out word by word so frontend works same as before
-            const words = text.split(' ');
-            for (let i = 0; i < words.length; i++) {
-              res.write(`data: ${JSON.stringify({ content: (i === 0 ? '' : ' ') + words[i] })}\n\n`);
-            }
+           if (text.length > 2) {
+          console.log('Voice → NVIDIA ✅ (no Groq tokens used)');
+        // send full text in one chunk, no splitting
+          res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
             res.write('data: [DONE]\n\n');
             res.end();
             return;
