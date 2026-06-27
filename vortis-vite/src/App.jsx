@@ -2262,6 +2262,7 @@ export default function VortisAI() {
       loadMemories();
       startNewChat();
     } catch (e) {
+      console.error('Firebase auth error:', e.code, e.message);
       const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in failed.' :
                   e.code === 'auth/account-exists-with-different-credential' ? 'An account already exists with this email.' :
                   'Login failed. Please try again.';
