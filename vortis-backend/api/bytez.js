@@ -280,14 +280,25 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  const tier   = await classifyTier(groq, lastMsg);
+  // ── CORE TASK ROUTING ROUTINES ──
+  let tier = await classifyTier(groq, lastMsg);
+  
+  // Guardrail: Ensure premium/quality model is strictly isolated to actual code or deep math tasks
+  if (tier === 'hard') {
+    const codeAndMathRegex = /(```|function|const|let|async|def|import|class|return|\b(integral|derivative|matrix|vector|equation|algebra|calculus|trigonometry)\b|[\+\-\*\/=\<\>\{\}\[\]]{3,})/i;
+    if (!codeAndMathRegex.test(lastMsg)) {
+      console.log(`Downgrading 'hard' task to primary tier because it lacks math/code markers.`);
+      tier = 'medium'; // Falls back safely to your fast primary model
+    }
+  }
+
   const isHard = tier === 'hard';
   const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
 
   // Sensible limits — enough to complete any task, not wasteful
   const maxTokens = isHard ? 4000 : 1500;
 
-  console.log(`Tier: ${tier} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Final Selection Tier: ${tier} → model: ${model} → maxTokens: ${maxTokens}`);
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
@@ -327,7 +338,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
-
   // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
   // Non-streaming (NVIDIA's free tier is fine with this), so we fake a
   // single-chunk "stream" by writing the whole text at once — the frontend
@@ -1118,13 +1128,12 @@ if (action === 'image') {
     }
   }
 
-  // ── Helper: Try NVIDIA NIM (Stable Diffusion 3.5 Large Fallback) ──
-  async function tryNvidiaImage(promptText) {
+  // ── Helper: Try NVIDIA NIM (Stable Diffusion 3.5 Large - Fallback 1) ──
+  async function tryNvidiaSD35(promptText) {
     try {
       const nvKey = process.env.NVIDIA_API_KEY;
       if (!nvKey) return null;
 
-      // Swapped out Flux Schnell for Stable Diffusion 3.5 Large
       const NVIDIA_IMAGE_MODEL = 'stabilityai/stable-diffusion-3.5-large';
 
       const nvRes = await fetchWithTimeout(
@@ -1146,21 +1155,67 @@ if (action === 'image') {
       );
 
       if (!nvRes.ok) {
-        console.log('NVIDIA image gen HTTP', nvRes.status);
+        console.log('NVIDIA SD 3.5 gen HTTP', nvRes.status);
         return null;
       }
 
       const data   = await nvRes.json();
       const b64    = data?.data?.[0]?.b64_json;
       if (!b64 || b64.length < 100) {
-        console.log('NVIDIA image gen returned empty payload');
+        console.log('NVIDIA SD 3.5 gen returned empty payload');
         return null;
       }
 
-      console.log('NVIDIA image generation received ✅');
+      console.log('NVIDIA SD 3.5 image generation received ✅');
       return { success: true, imageUrl: `data:image/png;base64,${b64}` };
     } catch (e) {
-      console.error('NVIDIA image gen failed:', e.message);
+      console.error('NVIDIA SD 3.5 gen failed:', e.message);
+      return null;
+    }
+  }
+
+    // ── Helper: Try NVIDIA NIM (Llama-3-Diffusion - Fallback 2) ──
+  async function tryNvidiaLlama(promptText) {
+    try {
+      const nvKey = process.env.NVIDIA_API_KEY;
+      if (!nvKey) return null;
+
+      const NVIDIA_IMAGE_MODEL = 'meta/llama-3-diffusion-xl'; // Use XL for better quality
+
+      const nvRes = await fetchWithTimeout(
+        `${NVIDIA_BASE_URL}/images/generations`,
+        {
+          method:  'POST',
+          headers: {
+            'Authorization': `Bearer ${nvKey}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            model:           NVIDIA_IMAGE_MODEL,
+            prompt:          promptText.trim(),
+            n:               1,
+            response_format: 'b64_json',
+          }),
+        },
+        30000
+      );
+
+      if (!nvRes.ok) {
+        console.log('NVIDIA Llama-3 gen HTTP', nvRes.status);
+        return null;
+      }
+
+      const data   = await nvRes.json();
+      const b64    = data?.data?.[0]?.b64_json;
+      if (!b64 || b64.length < 100) {
+        console.log('NVIDIA Llama-3 gen returned empty payload');
+        return null;
+      }
+
+      console.log('NVIDIA Llama-3 image generation received ✅');
+      return { success: true, imageUrl: `data:image/png;base64,${b64}` };
+    } catch (e) {
+      console.error('NVIDIA Llama-3 gen failed:', e.message);
       return null;
     }
   }
@@ -1174,14 +1229,22 @@ if (action === 'image') {
       return res.status(200).json({ ...fluxResult, provider: 'flux' });
     }
 
-    // 2. Try Fallback (NVIDIA NIM - SD 3.5 Large)
-    console.log('Cloudflare failed, shifting to NVIDIA fallback...');
-    const nvFallback = await tryNvidiaImage(prompt);
-    if (nvFallback?.imageUrl) {
-      return res.status(200).json({ ...nvFallback, provider: 'nvidia-sd-3.5-large' });
+    // 2. Try Fallback 1 (NVIDIA NIM - SD 3.5 Large)
+    console.log('Cloudflare failed, shifting to NVIDIA SD 3.5...');
+    const sd35Fallback = await tryNvidiaSD35(prompt);
+    if (sd35Fallback?.imageUrl) {
+      return res.status(200).json({ ...sd35Fallback, provider: 'nvidia-sd-3.5-large' });
     }
 
-    // 3. Both Providers Failed
+    // 3. Try Fallback 2 (NVIDIA NIM - Llama-3-Diffusion-XL)
+    console.log('NVIDIA SD 3.5 failed, shifting to NVIDIA Llama-3...');
+    const llamaFallback = await tryNvidiaLlama(prompt);
+    if (llamaFallback?.imageUrl) {
+        return res.status(200).json({ ...llamaFallback, provider: 'nvidia-llama-3' });
+    }
+
+    // 4. All Providers Failed
+    console.log('All image generation providers failed.');
     return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
 
   } catch (error) {
