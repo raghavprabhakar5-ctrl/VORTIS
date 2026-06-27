@@ -3155,35 +3155,40 @@ const runCallListenLoop = () => {
   const detectedLang = detectSpokenLang(transcript);
   callDetectedLangRef.current = detectedLang;
 
-  // ── ADD THIS BLOCK HERE ──
- const voiceCmd = transcript.toLowerCase().match(/\b(change|switch|set|make|use)\b.{0,25}\bvoice\b.{0,25}\b(male|female)\b/);
-if (voiceCmd) {
-  const newGender = voiceCmd[2];
-  setTtsGender(newGender);
-  ttsGenderRef.current = newGender;
-  try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
+  // ── VOICE GENDER SWITCH COMMAND — checked BEFORE anything goes to the AI ──
+  const lowerTranscript = transcript.toLowerCase();
+  const voiceCmd = lowerTranscript.match(/\b(change|switch|set|make|use)\b.{0,25}\bvoice\b.{0,25}\b(male|female)\b/)
+                 || lowerTranscript.match(/\b(male|female)\b.{0,25}\bvoice\b/); // catches "use female voice" reversed order
 
-  const confirmMsg = newGender === 'female' ? "Sure, switching to a female voice." : "Sure, switching to a male voice.";
-  setCallState('speaking');
-  isSpeakingRef.current = true;
+  if (voiceCmd) {
+    const newGender = voiceCmd[2] || voiceCmd[1]; // handles either capture group order
+    if (newGender === 'male' || newGender === 'female') {
+      setTtsGender(newGender);
+      ttsGenderRef.current = newGender;
+      try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
 
-  try {
-    const headers = await getCachedAuthHeader();
-    const res = await fetch(API, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ action: 'tts', text: confirmMsg, voice: getCallVoice(detectedLang, newGender) })
-    });
-    const d = res.ok ? await res.json() : null;
-    if (d?.audio?.length > 100) await scheduleAudioBuffer(d.audio);
-  } catch(_) {}
+      const confirmMsg = newGender === 'female' ? "Sure, switching to a female voice." : "Sure, switching to a male voice.";
+      setCallState('speaking');
+      isSpeakingRef.current = true;
 
-  isSpeakingRef.current = false;
-  safeRestart();
-  if (callActiveRef.current) setCallState('listening');
-  return;
-}
-  
+      try {
+        const headers = await getCachedAuthHeader();
+        const res = await fetch(API, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ action: 'tts', text: confirmMsg, voice: getCallVoice(detectedLang, newGender) })
+        });
+        const d = res.ok ? await res.json() : null;
+        if (d?.audio?.length > 100) await scheduleAudioBuffer(d.audio);
+      } catch(_) {}
+
+      isSpeakingRef.current = false;
+      safeRestart();
+      if (callActiveRef.current) setCallState('listening');
+      return; // ← critical: stop here, never reaches the AI fetch below
+    }
+  }
+  // ── END VOICE COMMAND BLOCK ──
 
   setCallState('thinking');
   safeRestart();
@@ -3191,49 +3196,46 @@ if (voiceCmd) {
     if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
     incrUsage('messages');
     pushHistory(convHistory, 'user', transcript);
- 
+
     const gender = ttsGenderRef.current;
     const genderNote = gender === 'female'
       ? 'Speak as a female assistant; use feminine grammatical forms where the language requires it.'
       : 'Speak as a male assistant; use masculine grammatical forms where the language requires it.';
- 
-   const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each.
+
+    const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each.
 Do NOT introduce yourself, state your name, or list your features unless the user explicitly asks who you are or what you can do.
 No markdown, no lists, no labels — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}`;
- 
+
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
     });
- 
+
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '';
     let full = '';
     let spokenAny = false;
     callTtsQueueRef.current = Promise.resolve();
- 
+
     const headers = await getCachedAuthHeader();
- 
+
     const fetchTTS = (text, voice) =>
       fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text, voice }) })
         .then(r => r.ok ? r.json() : null)
         .then(d => (d?.audio?.length > 100 ? d.audio : null))
         .catch(() => null);
- 
-    // CHANGE 3 — lock the voice/language for this ENTIRE reply to what
-    // the user actually spoke (detectedLang), instead of re-detecting
-    // per sentence from the AI's own output text. One turn = one voice.
+
     const replyVoice = getCallVoice(detectedLang, gender);
- 
+
     const queueSentence = (sentence) => {
       const safe = sanitizeForVoice(sentence);
       const clean = cleanForTTS(safe);
       if (!clean || clean.length < 2) return;
- 
+
       const audioPromise = fetchTTS(clean, replyVoice);
- 
+
       callTtsQueueRef.current = callTtsQueueRef.current.then(async () => {
         if (!callActiveRef.current) return;
         if (!spokenAny) {
@@ -3246,9 +3248,9 @@ No markdown, no lists, no labels — just the spoken reply itself, in the same l
         await scheduleAudioBuffer(audio);
       });
     };
- 
+
     const SENTENCE_END = /^(.+?[.!?।؟。！？]+)\s*/;
- 
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -3271,16 +3273,14 @@ No markdown, no lists, no labels — just the spoken reply itself, in the same l
       }
     }
     if (buf.trim()) queueSentence(buf.trim());
- 
+
     const reply = sanitizeForVoice(full.trim()) || "Sorry, I didn't catch that.";
     pushHistory(convHistory, 'assistant', reply);
     await callTtsQueueRef.current;
     isSpeakingRef.current = false;
- 
-    // State now correctly reflects "we just finished talking" —
-    // set to listening only after playback truly drained.
+
     if (callActiveRef.current) setCallState('listening');
- 
+
   } catch (err) {
     console.error('Voice call error:', err);
     isSpeakingRef.current = false;
