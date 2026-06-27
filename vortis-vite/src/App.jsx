@@ -2994,22 +2994,25 @@ const detectSpokenLang = (text) => {
     'id-ID': ['yang','dan','di','ini','itu','dengan','untuk','dari','tidak','ada','terima','kasih'],
   };
 
-  let bestLang = 'en-US';
+ let bestLang = 'en-US';
   let bestScore = 0;
-
+  let bestMatches = 0;
+ 
   for (const [lang, keywords] of Object.entries(SIGS)) {
     const matches = keywords.filter(w => wordSet.has(w)).length;
     const score = matches / Math.max(words.length, 1);
     if (score > bestScore && matches >= 1) {
       bestScore = score;
+      bestMatches = matches;
       bestLang = lang;
     }
   }
 
   // German special chars are a strong signal even without word matches
-  if (/[äöüß]/.test(lower) && bestLang === 'en-US') return 'de-DE';
-
-  return bestScore >= 0.04 ? bestLang : 'en-US';
+  if (/[äöüß]/.test(lower) && bestMatches === 0) return 'de-DE';
+  if (words.length <= 4 && bestMatches < 2) return 'en-US';
+ 
+  return bestScore >= 0.08 ? bestLang : 'en-US';
 };
 
 const CALL_VOICE_MAP = {
