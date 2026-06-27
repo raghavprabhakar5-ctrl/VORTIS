@@ -1225,30 +1225,31 @@ function DemoPanel({ tabId, color }) {
   const rgb = color;
 
   // CHAT
-  if (tabId === "chat") return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 20, height: "100%", overflowY: "auto" }}>
-      {data.messages.map((m, i) => (
-        <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.5 ? 1 : 0, transform: tick > i * 1.5 ? "translateY(0)" : "translateY(12px)", transition: "all 0.5s ease" }}>
-          {m.role === "ai" && (
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.7))`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <VortisLogo size={14} color="#fff" />
-            </div>
-          )}
-          <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px", background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)", border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none", fontSize: 13, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.85)" }}>
-            {m.text}
+  // CHAT
+if (tabId === "chat") return (
+  <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 20, height: "100%", overflowY: "auto" }}>
+    {data.messages.map((m, i) => (
+      <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.5 ? 1 : 0, transform: tick > i * 1.5 ? "translateY(0)" : "translateY(12px)", transition: "all 0.5s ease" }}>
+        {m.role === "ai" && (
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.7))`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <VortisLogo size={18} color="#fff" />
           </div>
-        </div>
-      ))}
-      <div style={{ display: "flex", gap: 10, opacity: tick > 6 ? 1 : 0, transition: "opacity 0.5s" }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: `rgba(${rgb},0.2)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <VortisLogo size={14} color={`rgb(${rgb})`} />
-        </div>
-        <div style={{ padding: "10px 14px", borderRadius: "4px 16px 16px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 5, alignItems: "center" }}>
-          {[0,1,2].map(d => <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${rgb})`, animation: `pulse 1.2s ease-in-out ${d*0.2}s infinite` }} />)}
+        )}
+        <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px", background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)", border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none", fontSize: 13, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.85)" }}>
+          {m.text}
         </div>
       </div>
+    ))}
+    <div style={{ display: "flex", gap: 10, opacity: tick > 6 ? 1 : 0, transition: "opacity 0.5s" }}>
+      <div style={{ width: 28, height: 28, borderRadius: 8, background: `rgba(${rgb},0.2)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <VortisLogo size={18} color="#8b5cf6" />
+      </div>
+      <div style={{ padding: "10px 14px", borderRadius: "4px 16px 16px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 5, alignItems: "center" }}>
+        {[0,1,2].map(d => <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${rgb})`, animation: `pulse 1.2s ease-in-out ${d*0.2}s infinite` }} />)}
+      </div>
     </div>
-  );
+  </div>
+);
 
   // CODE
   if (tabId === "code") return (
