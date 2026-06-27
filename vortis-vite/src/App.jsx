@@ -3113,9 +3113,10 @@ const runCallListenLoop = () => {
   };
  
   const armSilenceTimer = () => {
-    clearSilenceTimer();
-    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, 900);
-  };
+  clearSilenceTimer();
+  callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, 1700);
+};
+ 
  
   setCallState('listening');
  
@@ -3146,117 +3147,121 @@ const runCallListenLoop = () => {
   };
  
   recog.onend = async () => {
-    clearSilenceTimer();
-    if (!callActiveRef.current) return;
+  clearSilenceTimer();
+  if (!callActiveRef.current) return;
  
-    const transcript = callFinalTranscriptRef.current.trim();
-    callFinalTranscriptRef.current = '';
-    if (!transcript) { safeRestart(); return; }
+  const transcript = callFinalTranscriptRef.current.trim();
+  callFinalTranscriptRef.current = '';
+  if (!transcript) { safeRestart(); return; }
  
-    const detectedLang = detectSpokenLang(transcript);
-    callDetectedLangRef.current = detectedLang;
+  const detectedLang = detectSpokenLang(transcript);
+  callDetectedLangRef.current = detectedLang;
  
-    setCallState('thinking');
+  setCallState('thinking');
  
-    // Restart listening RIGHT NOW, in parallel with the AI+TTS
-    // roundtrip below, instead of waiting for the whole reply to
-    // finish. This is what makes barge-in actually possible and
-    // makes the call feel faster overall.
-    safeRestart();
+  // Start the next recognizer now (for responsiveness + barge-in),
+  // but DO NOT change callState here — state follows what's actually
+  // playing, not what's technically listening in the background.
+  safeRestart();
  
-    try {
-      if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
-      incrUsage('messages');
-      pushHistory(convHistory, 'user', transcript);
+  try {
+    if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+    incrUsage('messages');
+    pushHistory(convHistory, 'user', transcript);
  
-      const gender = ttsGenderRef.current;
-      const genderNote = gender === 'female'
-        ? 'Speak as a female assistant; use feminine grammatical forms where the language requires it.'
-        : 'Speak as a male assistant; use masculine grammatical forms where the language requires it.';
+    const gender = ttsGenderRef.current;
+    const genderNote = gender === 'female'
+      ? 'Speak as a female assistant; use feminine grammatical forms where the language requires it.'
+      : 'Speak as a male assistant; use masculine grammatical forms where the language requires it.';
  
-      // Short, plain instruction — no meta-commentary about commands,
-      // nothing for the model to accidentally narrate back.
-      const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each. No markdown, no lists, no labels, no explanation of what you're doing — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}`;
+    const sys = `Reply only with what you would say out loud, in 1-3 short sentences, under 20 words each. No markdown, no lists, no labels, no explanation of what you're doing — just the spoken reply itself, in the same language and script the user just used (detected: ${detectedLang}). ${genderNote}`;
  
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: await getAuthHeader(),
-        body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
-      });
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'chat', prompt: sys, history: convHistory.current })
+    });
  
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '';
-      let full = '';
-      let spokenAny = false;
-      callTtsQueueRef.current = Promise.resolve();
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    let full = '';
+    let spokenAny = false;
+    callTtsQueueRef.current = Promise.resolve();
  
-      const headers = await getCachedAuthHeader();
+    const headers = await getCachedAuthHeader();
  
-      const fetchTTS = (text, voice) =>
-        fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text, voice }) })
-          .then(r => r.ok ? r.json() : null)
-          .then(d => (d?.audio?.length > 100 ? d.audio : null))
-          .catch(() => null);
+    const fetchTTS = (text, voice) =>
+      fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text, voice }) })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => (d?.audio?.length > 100 ? d.audio : null))
+        .catch(() => null);
  
-      const queueSentence = (sentence) => {
-        const safe = sanitizeForVoice(sentence);
-        const clean = cleanForTTS(safe);
-        if (!clean || clean.length < 2) return;
-        const sentLang = detectSpokenLang(clean);
-        const voice = getCallVoice(sentLang, gender);
+    // CHANGE 3 — lock the voice/language for this ENTIRE reply to what
+    // the user actually spoke (detectedLang), instead of re-detecting
+    // per sentence from the AI's own output text. One turn = one voice.
+    const replyVoice = getCallVoice(detectedLang, gender);
  
-        const audioPromise = fetchTTS(clean, voice);
+    const queueSentence = (sentence) => {
+      const safe = sanitizeForVoice(sentence);
+      const clean = cleanForTTS(safe);
+      if (!clean || clean.length < 2) return;
  
-        callTtsQueueRef.current = callTtsQueueRef.current.then(async () => {
-          if (!callActiveRef.current) return;
-          if (!spokenAny) {
-            setCallState('speaking');
-            spokenAny = true;
-            isSpeakingRef.current = true;
-          }
-          const audio = await audioPromise;
-          if (!callActiveRef.current || !audio) return;
-          await scheduleAudioBuffer(audio);
-        });
-      };
+      const audioPromise = fetchTTS(clean, replyVoice);
  
-      const SENTENCE_END = /^(.+?[.!?।؟。！？]+)\s*/;
- 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of dec.decode(value, { stream: true }).split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]' || !raw) continue;
-          try {
-            const p = JSON.parse(raw);
-            if (p.content) {
-              full += p.content;
-              buf += p.content;
-              let m;
-              while ((m = buf.match(SENTENCE_END))) {
-                queueSentence(m[1]);
-                buf = buf.slice(m[0].length);
-              }
-            }
-          } catch (_) {}
+      callTtsQueueRef.current = callTtsQueueRef.current.then(async () => {
+        if (!callActiveRef.current) return;
+        if (!spokenAny) {
+          setCallState('speaking');
+          spokenAny = true;
+          isSpeakingRef.current = true;
         }
+        const audio = await audioPromise;
+        if (!callActiveRef.current || !audio) return;
+        await scheduleAudioBuffer(audio);
+      });
+    };
+ 
+    const SENTENCE_END = /^(.+?[.!?।؟。！？]+)\s*/;
+ 
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value, { stream: true }).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try {
+          const p = JSON.parse(raw);
+          if (p.content) {
+            full += p.content;
+            buf += p.content;
+            let m;
+            while ((m = buf.match(SENTENCE_END))) {
+              queueSentence(m[1]);
+              buf = buf.slice(m[0].length);
+            }
+          }
+        } catch (_) {}
       }
-      if (buf.trim()) queueSentence(buf.trim());
- 
-      const reply = sanitizeForVoice(full.trim()) || "Sorry, I didn't catch that.";
-      pushHistory(convHistory, 'assistant', reply);
-      await callTtsQueueRef.current;
-      isSpeakingRef.current = false;
-      if (callActiveRef.current && callState !== 'listening') setCallState('listening');
- 
-    } catch (err) {
-      console.error('Voice call error:', err);
-      isSpeakingRef.current = false;
     }
-  };
+    if (buf.trim()) queueSentence(buf.trim());
+ 
+    const reply = sanitizeForVoice(full.trim()) || "Sorry, I didn't catch that.";
+    pushHistory(convHistory, 'assistant', reply);
+    await callTtsQueueRef.current;
+    isSpeakingRef.current = false;
+ 
+    // State now correctly reflects "we just finished talking" —
+    // set to listening only after playback truly drained.
+    if (callActiveRef.current) setCallState('listening');
+ 
+  } catch (err) {
+    console.error('Voice call error:', err);
+    isSpeakingRef.current = false;
+    if (callActiveRef.current) setCallState('listening');
+  }
+};
  
   try { recog.start(); } catch (e) {
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
