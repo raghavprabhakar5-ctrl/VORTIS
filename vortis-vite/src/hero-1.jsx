@@ -626,7 +626,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
   boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
   animation: "iconPop 0.45s 0.05s cubic-bezier(.2,.9,.3,1.4) both",
 }}>
-  <VortisLogo size={28} color="#a855f7" />
+  <VortisLogo size={28} color="#8b5cf6" />
 </div>
 
           <h3 style={{
@@ -1230,10 +1230,10 @@ function DemoPanel({ tabId, color }) {
       {data.messages.map((m, i) => (
         <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.5 ? 1 : 0, transform: tick > i * 1.5 ? "translateY(0)" : "translateY(12px)", transition: "all 0.5s ease" }}>
           {m.role === "ai" && (
-         <div style={{ width: 26, height: 26, borderRadius: 8, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-        <VortisLogo size={18} color="#fff" />
-      </div>
-      )}
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.7))`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <VortisLogo size={14} color="#fff" />
+            </div>
+          )}
           <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px", background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)", border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none", fontSize: 13, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.85)" }}>
             {m.text}
           </div>
