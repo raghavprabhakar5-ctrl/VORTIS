@@ -3237,47 +3237,43 @@ ${genderNote}`;
     if (!cleanReply || cleanReply.length < 2) return;
 
     // ── FIX 6: single TTS fetch, correct voice for detected language ──
-try {
-  const headers = await getCachedAuthHeader();
-  const ttsRes = await fetch(API, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ 
-      action: 'tts', 
-      text: cleanReply,
-      voice: replyVoice
-    })
-  });
-
-  const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-  if (ttsData?.audio?.length > 100) {
-    setCallState('speaking'); // ← only NOW, audio is ready to play
+    setCallState('speaking');
     isSpeakingRef.current = true;
-    await scheduleAudioBuffer(ttsData.audio);
-    // scheduleAudioBuffer onended sets 'listening' instantly
-  } else {
-    // no audio — go straight to listening
+
+    try {
+      const headers = await getCachedAuthHeader();
+      const ttsRes = await fetch(API, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          action: 'tts', 
+          text: cleanReply,
+          voice: replyVoice  // Hindi voice if Hindi, English if English
+        })
+      });
+
+      const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+      if (ttsData?.audio?.length > 100) {
+        await scheduleAudioBuffer(ttsData.audio);
+      }
+    } catch(e) {
+      console.error('TTS failed:', e.message);
+    }
+
+    isSpeakingRef.current = false;
+    if (callActiveRef.current) setCallState('listening');
+
+  } catch(err) {
+    console.error('Voice call error:', err);
     isSpeakingRef.current = false;
     if (callActiveRef.current) setCallState('listening');
   }
-} catch(e) {
-  console.error('TTS failed:', e.message);
-  isSpeakingRef.current = false;
-  if (callActiveRef.current) setCallState('listening');
-}
-
-} catch(err) {
-  console.error('Voice call error:', err);
-  isSpeakingRef.current = false;
-  if (callActiveRef.current) setCallState('listening');
-}
 };
 
-try { recog.start(); } catch (e) {
-  if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
-}
+  try { recog.start(); } catch (e) {
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
+  }
 };
-
 // ═══════ VOICE CALL — final merged version ═══════
 
 const getRecogLang = () => {
@@ -3295,9 +3291,6 @@ const base64ToArrayBuffer = (base64) => {
 // Decodes an mp3-base64 TTS response and schedules it to play immediately
 // after whatever's already queued — this is what makes multi-sentence
 // replies sound like one continuous voice instead of stutter-gap-stutter.
-// 2. In recog.onend — switch to listening THE MOMENT audio ends
-// Find your scheduleAudioBuffer call and add onended state update:
-
 const scheduleAudioBuffer = async (base64Audio) => {
   if (!callAudioCtxOutRef.current) {
     callAudioCtxOutRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -3320,15 +3313,9 @@ const scheduleAudioBuffer = async (base64Audio) => {
   src.start(startAt);
   callNextPlayTimeRef.current = startAt + audioBuffer.duration;
 
-  return new Promise((resolve) => { 
-    src.onended = () => {
-      isSpeakingRef.current = false;
-      // ← instant switch to listening the moment audio stops
-      if (callActiveRef.current) setCallState('listening');
-      resolve();
-    };
-  });
+  return new Promise((resolve) => { src.onended = resolve; });
 };
+
 // Stops everything currently playing/scheduled — used for barge-in and hangup.
 const stopCallPlayback = () => {
   callActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch (_) {} });
@@ -3342,12 +3329,12 @@ const startVoiceCall = async () => {
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
 
   setShowVoiceCall(true);
-  setCallState('listening'); // ← was 'idle', now instantly shows listening
+  setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
   callFinalTranscriptRef.current = '';
 
-  setTimeout(() => { try { runCallListenLoop(); } catch (e) {} }, 100); // ← was 250ms, faster
+  setTimeout(() => { try { runCallListenLoop(); } catch (e) { console.error('Voice call start failed:', e); } }, 250);
   setCallDuration(0);
   callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 };
