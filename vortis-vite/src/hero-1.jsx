@@ -620,12 +620,13 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
         <div style={{ position: "relative", zIndex: 1 }}>
          <div style={{
   width: 52, height: 52, borderRadius: 16, margin: "0 auto 20px",
-  background: "linear-gradient(135deg,#7C3AED,#8b5cf6)",
+  background: "rgba(139,92,246,0.12)",
+  border: "1px solid rgba(139,92,246,0.35)",
   display: "flex", alignItems: "center", justifyContent: "center",
-  boxShadow: "0 8px 24px rgba(124,58,237,0.45)",
+  boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
   animation: "iconPop 0.45s 0.05s cubic-bezier(.2,.9,.3,1.4) both",
 }}>
-  <VortisLogo size={28} color="#fff" />
+  <VortisLogo size={28} color="#8b5cf6" />
 </div>
 
           <h3 style={{
