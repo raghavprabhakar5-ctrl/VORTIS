@@ -2,6 +2,10 @@ import { useEffect } from 'react';
 
 export default function useDevToolsGuard() {
   useEffect(() => {
+    // DevTools blocking disabled for debugging.
+    // Re-enable the logic below when you're done.
+
+    /*
     const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
 
     const blockKeys = (e) => {
@@ -19,10 +23,8 @@ export default function useDevToolsGuard() {
         e.stopPropagation();
 
         if (isIncognito) {
-          // In incognito tab → go back to normal, same tab
           window.location.href = window.location.origin + '/';
         } else {
-          // Normal → go incognito, same tab
           window.location.href = window.location.origin + '/?incognito=true';
         }
 
@@ -39,5 +41,6 @@ export default function useDevToolsGuard() {
       document.removeEventListener('keydown', blockKeys, true);
       document.removeEventListener('contextmenu', blockContext, true);
     };
+    */
   }, []);
 }
