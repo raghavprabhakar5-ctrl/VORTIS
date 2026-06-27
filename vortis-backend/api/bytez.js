@@ -273,7 +273,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   console.log(`Tier: ${isHard ? 'hard' : 'medium'} → model: ${model}`);
 
-  console.log(`Tier: ${tier} → model: ${model} → maxTokens: ${maxTokens}`);
+
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
