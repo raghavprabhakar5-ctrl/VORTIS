@@ -2060,6 +2060,8 @@ export default function VortisAI() {
   const cleanStream = (text) => {
   if (!text) return '';
   return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')   // ← add this
+    .replace(/<think>[\s\S]*$/gi, '')             // ← also strip an UNCLOSED think tag still streaming in
     .replace(/^GENERATE_IMAGE:.*$/gim, '')
     .replace(/^WEB_SEARCH:.*$/gim, '')
     .replace(/^CURRENT_TIME\s*$/gim, '')
@@ -3616,6 +3618,8 @@ image generation, vision, document analysis, web search, and voice mode
 (describe whatever your product actually is here — version, mission, etc).
 If asked "what is Vortis" or "tell me about Vortis", answer with this 
 description — don't just repeat "I was built by the Vortis team."
+
+- Never output any reasoning, thinking, or planning text before a command like GENERATE_IMAGE: or WEB_SEARCH:. The very first thing you output for an image or search request must be the command itself on its own line — no preamble, no explanation, no "let me think about this" text of any kind, ever.
 
 - Never repeat that you are vortis and made by vortis team if it is not required or not asked.
 
