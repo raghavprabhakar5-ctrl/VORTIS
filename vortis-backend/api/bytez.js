@@ -293,11 +293,13 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   // Everything else (chat, explanations, casual questions) stays cheap.
   const codeAndMathRegex = /(```|function\s*\(|const\s|let\s+\w|async\s|def\s|import\s|from\s+\w+\s+import|class\s+\w|return\s|public\s+class|<\?php|#include|console\.log|print\(|\b(integral|derivative|matrix|vector|equation|algebra|calculus|trigonometry|algorithm|recursion|complexity|refactor|debug|stack trace)\b|[\+\-\*\/=\<\>\{\}\[\]]{3,})/i;
 
-  const isHard = codeAndMathRegex.test(lastMsg);
-  const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+ // Dynamic token allocation based on regex routing
+const isHard = codeAndMathRegex.test(lastMsg);
+const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
 
-  // Sensible limits — enough to complete any task, not wasteful
-    const maxTokens = isHard ? 4096 : 2500;
+// FIX: If it's a simple greeting or tiny phrase, don't request thousands of tokens
+const isTinyPrompt = lastMsg.trim().length < 15; 
+const maxTokens = isHard ? 4096 : (isTinyPrompt ? 150 : 2500);
 
   console.log(`Routing: isHard=${isHard} → model: ${model} → maxTokens: ${maxTokens}`);
 
