@@ -768,42 +768,29 @@ export default async function handler(req, res) {
 
   // ── PRIMARY: NVIDIA ──
   try {
-    const nvRes = await fetchWithTimeout(
-      `${NVIDIA_BASE_URL}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${nvKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model:      NVIDIA_CHAT_FAST,
-          messages:   [
-            { role: 'system', content: prompt.trim().slice(0, 400) },
-            ...sanitizeHistory(history, 8),
-          ],
-          max_tokens:  800,
-          temperature: 0.7,
-          stream:      false,
-        }),
-      },
-      6000 // fail fast, don't let a slow NVIDIA call stall the whole turn
-    );
+  const nvRes = await fetchWithTimeout(
+    `${NVIDIA_BASE_URL}/chat/completions`,
+    { ... },
+    6000
+  );
 
-    if (nvRes.ok) {
-      const data = await nvRes.json();
-      const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
-      if (text.length > 2) {
-        console.log('Voice → NVIDIA ✅ (primary)');
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
+  if (nvRes.ok) {
+    const data = await nvRes.json();
+    const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
+    if (text.length > 2) {
+      console.log('Voice → NVIDIA ✅ (primary)');
+      ...
+      return;
     }
-  } catch (e) {
-    console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
+    console.warn('NVIDIA voice returned empty text — falling back to Groq');
+  } else {
+    // ← ADD THIS — tells you exactly what NVIDIA actually said
+    const errBody = await nvRes.text().catch(() => '');
+    console.warn(`NVIDIA voice HTTP ${nvRes.status} — ${errBody.slice(0, 200)} — falling back to Groq`);
   }
+} catch (e) {
+  console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
+}
 
   // ── FALLBACK 1: Groq ──
   try {
