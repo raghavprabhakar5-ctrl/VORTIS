@@ -299,7 +299,8 @@ const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
 
 // FIX: If it's a simple greeting or tiny phrase, don't request thousands of tokens
 const isTinyPrompt = lastMsg.trim().length < 15; 
-const maxTokens = isHard ? 4096 : (isTinyPrompt ? 150 : 2500);
+// Change this line in your token allocation logic:
+const maxTokens = isHard ? 4096 : (isTiny ? 400 : 2500);
 
   console.log(`Routing: isHard=${isHard} → model: ${model} → maxTokens: ${maxTokens}`);
 
