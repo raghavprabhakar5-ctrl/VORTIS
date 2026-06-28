@@ -3076,7 +3076,7 @@ const CALL_RECOG_LANGS = [
   'en-US', 'hi-IN', 'es-ES', 'fr-FR', 'de-DE', 'pt-BR', 'ar-SA',
   'zh-CN', 'ja-JP', 'ko-KR', 'ru-RU', 'it-IT', 'tr-TR', 'vi-VN', 'id-ID',
 ];
- 
+
 const runCallListenLoop = () => {
   if (!callActiveRef.current) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -3088,63 +3088,66 @@ const runCallListenLoop = () => {
   recog.continuous = true;
   recog.interimResults = true;
   recog.lang = callDetectedLangRef.current || navigator.language || 'en-US'; // was navigator.language only
- 
+
   try { recog.maxAlternatives = 3; } catch (_) {}
- 
+
   callRecogRef.current = recog;
- 
+
   let restarted = false;
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 150);
   };
- 
+
   const clearSilenceTimer = () => {
     if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
   };
- 
+
+  // ── FIX: was hardcoded to 1700ms regardless of context. Now reads the
+  // tunable ref (callSilenceMsRef) that already existed but was never wired
+  // in, so the silence cutoff is consistent and adjustable from one place. ──
   const armSilenceTimer = () => {
-  clearSilenceTimer();
-  callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, 1700);
-};
- 
- let speakingStartedAt = 0;
+    clearSilenceTimer();
+    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
+  };
 
-recog.onresult = (e) => {
-  if (isSpeakingRef.current) {
-    // grace period: ignore the first ~600ms of playback entirely —
-    // this is almost always speaker bleed picked up before echo settles
-    if (!speakingStartedAt) speakingStartedAt = Date.now();
-    if (Date.now() - speakingStartedAt < 600) return;
+  let speakingStartedAt = 0;
 
-    const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
-    // require a much longer, clearly-final fragment before treating it
-    // as a real interruption — short fragments are almost always echo
-    if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 15) {
-      stopCallPlayback();
-      setCallState('listening');
-      speakingStartedAt = 0;
+  recog.onresult = (e) => {
+    if (isSpeakingRef.current) {
+      // grace period: ignore the first ~600ms of playback entirely —
+      // this is almost always speaker bleed picked up before echo settles
+      if (!speakingStartedAt) speakingStartedAt = Date.now();
+      if (Date.now() - speakingStartedAt < 600) return;
+
+      const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
+      // require a much longer, clearly-final fragment before treating it
+      // as a real interruption — short fragments are almost always echo
+      if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 15) {
+        stopCallPlayback();
+        setCallState('listening');
+        speakingStartedAt = 0;
+      } else {
+        return; // ignore mic bleed from AI's own voice, don't arm silence timer
+      }
     } else {
-      return; // ignore mic bleed from AI's own voice, don't arm silence timer
+      speakingStartedAt = 0;
     }
-  } else {
-    speakingStartedAt = 0;
-  }
 
-  let interim = '';
-  for (let i = e.resultIndex; i < e.results.length; i++) {
-    if (e.results[i].isFinal) callFinalTranscriptRef.current += e.results[i][0].transcript;
-    else interim += e.results[i][0].transcript;
-  }
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) callFinalTranscriptRef.current += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
 
-  const sample = callFinalTranscriptRef.current || interim;
-  if (sample.trim().length > 2) {
-    callDetectedLangRef.current = detectSpokenLang(sample);
-  }
+    const sample = callFinalTranscriptRef.current || interim;
+    if (sample.trim().length > 2) {
+      callDetectedLangRef.current = detectSpokenLang(sample);
+    }
 
-  if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
-};
+    if (interim.trim() || callFinalTranscriptRef.current.trim()) armSilenceTimer();
+  };
 
   recog.onerror = (e) => {
     if (!callActiveRef.current) return;
@@ -3152,152 +3155,189 @@ recog.onresult = (e) => {
     if (e?.error === 'not-allowed') { setCallState('idle'); return; }
     safeRestart();
   };
- 
- recog.onend = async () => {
-  clearSilenceTimer();
-  if (!callActiveRef.current) return;
 
-  const transcript = callFinalTranscriptRef.current.trim();
-  callFinalTranscriptRef.current = '';
-  if (!transcript) { safeRestart(); return; }
+  recog.onend = async () => {
+    clearSilenceTimer();
+    if (!callActiveRef.current) return;
 
-  const detectedLang = detectSpokenLang(transcript);
-  callDetectedLangRef.current = detectedLang;
+    const transcript = callFinalTranscriptRef.current.trim();
+    callFinalTranscriptRef.current = '';
+    if (!transcript) { safeRestart(); return; }
 
-  setCallState('thinking');
-  safeRestart();
+    const detectedLang = detectSpokenLang(transcript);
+    callDetectedLangRef.current = detectedLang;
 
-  // ── LOCAL VOICE-SWITCH DETECTION — no AI involved, deterministic ──
-  const low = transcript.toLowerCase();
-  const wantsMale   = /\b(change|switch|set|make).{0,15}(voice|sound).{0,15}male\b|\bmale voice\b/.test(low) ||
-                       /(आवाज़|आवाज).{0,15}(पुरुष|मेल|मर्द)/.test(transcript);
-  const wantsFemale = /\b(change|switch|set|make).{0,15}(voice|sound).{0,15}female\b|\bfemale voice\b/.test(low) ||
-                       /(आवाज़|आवाज).{0,15}(महिला|फीमेल|औरत)/.test(transcript);
+    setCallState('thinking');
+    safeRestart();
 
-  if (wantsMale || wantsFemale) {
-    const newGender = wantsMale ? 'male' : 'female';
-    setTtsGender(newGender);
-    ttsGenderRef.current = newGender;
-    try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
+    // ── REMOVED: the old regex-based, English/Hindi-only voice-switch
+    // detection. It required exact keyword phrasing ("change voice to
+    // male", literal Hindi words) and silently failed for any other
+    // language or natural phrasing. Detection now happens via the model
+    // itself below (SWITCH_VOICE_MALE / SWITCH_VOICE_FEMALE token), which
+    // understands any language and any phrasing the user actually uses. ──
 
-    const confirmText = detectedLang === 'hi-IN'
-      ? (newGender === 'male' ? 'ठीक है, पुरुष आवाज़ में बदल दिया।' : 'ठीक है, महिला आवाज़ में बदल दिया।')
-      : (newGender === 'male' ? 'Okay, switched to a male voice.' : 'Okay, switched to a female voice.');
-
-    setCallState('speaking');
-    isSpeakingRef.current = true;
     try {
-      const headers = await getCachedAuthHeader();
-      const ttsRes = await fetch(API, {
-        method: 'POST', headers,
-        body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
-      });
-      const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-      if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
-    } catch(_) {}
-    isSpeakingRef.current = false;
-    if (callActiveRef.current) setCallState('listening');
-    return; // skip the AI call entirely — handled locally, no tokens spent
-  }
+      if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+      incrUsage('messages');
+      pushHistory(convHistory, 'user', transcript);
 
-  try {
-    if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
-    incrUsage('messages');
-    pushHistory(convHistory, 'user', transcript);
+      const gender = ttsGenderRef.current;
+      const genderNote = gender === 'female'
+        ? 'Speak as a female assistant.'
+        : 'Speak as a male assistant.';
 
-    const gender = ttsGenderRef.current;
-    const genderNote = gender === 'female'
-      ? 'Speak as a female assistant.'
-      : 'Speak as a male assistant.';
-
-    const sys = `You are Vortis, a voice AI assistant. 
+      const sys = `You are Vortis, a voice AI assistant. 
 Reply in 1-3 short spoken sentences only. 
 No markdown, no lists, no symbols, no emojis.
-CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish.
+CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish. Any other language, reply in that same language.
 Detected language: ${detectedLang}.
-${genderNote}`;
+${genderNote}
 
-    const replyVoice = getCallVoice(detectedLang, gender);
+VOICE SWITCH COMMAND:
+If — and only if — the user is asking you to change your speaking voice/gender (to male, to female, to a man's voice, to a woman's voice — in ANY language or phrasing, however they say it), respond with ONLY one of these exact tokens and nothing else, no punctuation, no other words: SWITCH_VOICE_MALE or SWITCH_VOICE_FEMALE
+Do not add any other text when using this token. For every other message, ignore this command entirely and just answer normally.`;
 
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({ 
-        action: 'chat', 
-        prompt: sys, 
-        history: convHistory.current.slice(-8),// ← cap voice history, fixes growing latency
-        isVoiceCall: true 
-      })
-    });
+      const replyVoice = getCallVoice(detectedLang, gender);
 
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let full = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of dec.decode(value, { stream: true }).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try {
-          const p = JSON.parse(raw);
-          if (p.content) full += p.content;
-        } catch(_) {}
-      }
-    }
-
-    if (!full.trim() || !callActiveRef.current) return;
-
-    const reply = full
-      .replace(/<think>[\s\S]*?<\/think>/gi, '')
-      .replace(/^(system|assistant|user):\s*/gim, '')
-      .trim();
-
-    if (!reply) return;
-
-    pushHistory(convHistory, 'assistant', reply);
-
-    const cleanReply = reply
-      .replace(/[*_`#~]/g, '')
-      .replace(/\s{2,}/g, ' ')
-      .trim();
-
-    if (!cleanReply || cleanReply.length < 2) return;
-
-    setCallState('speaking');
-    isSpeakingRef.current = true;
-
-    try {
-      const headers = await getCachedAuthHeader();
-      const ttsRes = await fetch(API, {
+      const res = await fetch(API, {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ 
-          action: 'tts', 
-          text: cleanReply,
-          voice: replyVoice
+        headers: await getAuthHeader(),
+        body: JSON.stringify({
+          action: 'chat',
+          prompt: sys,
+          history: convHistory.current.slice(-8), // ← cap voice history, fixes growing latency
+          isVoiceCall: true
         })
       });
 
-      const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-      if (ttsData?.audio?.length > 100) {
-        await scheduleAudioBuffer(ttsData.audio);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let full = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of dec.decode(value, { stream: true }).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]' || !raw) continue;
+          try {
+            const p = JSON.parse(raw);
+            if (p.content) full += p.content;
+          } catch (_) {}
+        }
       }
-    } catch(e) {
-      console.error('TTS failed:', e.message);
+
+      if (!full.trim() || !callActiveRef.current) return;
+
+      const trimmedFull = full
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/^(system|assistant|user):\s*/gim, '')
+        .trim();
+
+      // ── NEW: AI-driven, language-agnostic voice switch handling ──
+      if (trimmedFull === 'SWITCH_VOICE_MALE' || trimmedFull === 'SWITCH_VOICE_FEMALE') {
+        const newGender = trimmedFull === 'SWITCH_VOICE_MALE' ? 'male' : 'female';
+        setTtsGender(newGender);
+        ttsGenderRef.current = newGender;
+        try { localStorage.setItem('vortis_tts_gender', newGender); } catch (_) {}
+
+        // Ask the model for a short natural confirmation in the user's own
+        // language instead of a hardcoded two-branch (Hindi/English) string.
+        let confirmText = newGender === 'male'
+          ? 'Okay, switched to a male voice.'
+          : 'Okay, switched to a female voice.';
+
+        try {
+          const confirmRes = await fetch(API, {
+            method: 'POST',
+            headers: await getAuthHeader(),
+            body: JSON.stringify({
+              action: 'chat',
+              prompt: `Say a short one-sentence confirmation that you've switched to a ${newGender} voice, in this language: ${detectedLang}. No markdown, no extra text, just the one sentence.`,
+              history: [],
+              isVoiceCall: true
+            })
+          });
+          if (confirmRes.ok) {
+            const cReader = confirmRes.body.getReader();
+            const cDec = new TextDecoder();
+            let cFull = '';
+            while (true) {
+              const { done, value } = await cReader.read();
+              if (done) break;
+              for (const line of cDec.decode(value, { stream: true }).split('\n')) {
+                if (!line.startsWith('data: ')) continue;
+                const raw = line.slice(6).trim();
+                if (raw === '[DONE]' || !raw) continue;
+                try { const p = JSON.parse(raw); if (p.content) cFull += p.content; } catch (_) {}
+              }
+            }
+            if (cFull.trim()) confirmText = cFull.trim();
+          }
+        } catch (_) {}
+
+        setCallState('speaking');
+        isSpeakingRef.current = true;
+        try {
+          const headers = await getCachedAuthHeader();
+          const ttsRes = await fetch(API, {
+            method: 'POST', headers,
+            body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
+          });
+          const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+          if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+        } catch (_) {}
+        isSpeakingRef.current = false;
+        if (callActiveRef.current) setCallState('listening');
+        return;
+      }
+
+      const reply = trimmedFull;
+      if (!reply) return;
+
+      pushHistory(convHistory, 'assistant', reply);
+
+      const cleanReply = reply
+        .replace(/[*_`#~]/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      if (!cleanReply || cleanReply.length < 2) return;
+
+      setCallState('speaking');
+      isSpeakingRef.current = true;
+
+      try {
+        const headers = await getCachedAuthHeader();
+        const ttsRes = await fetch(API, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            action: 'tts',
+            text: cleanReply,
+            voice: replyVoice
+          })
+        });
+
+        const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+        if (ttsData?.audio?.length > 100) {
+          await scheduleAudioBuffer(ttsData.audio);
+        }
+      } catch (e) {
+        console.error('TTS failed:', e.message);
+      }
+
+      isSpeakingRef.current = false;
+      if (callActiveRef.current) setCallState('listening');
+
+    } catch (err) {
+      console.error('Voice call error:', err);
+      isSpeakingRef.current = false;
+      if (callActiveRef.current) setCallState('listening');
     }
-
-    isSpeakingRef.current = false;
-    if (callActiveRef.current) setCallState('listening');
-
-  } catch(err) {
-    console.error('Voice call error:', err);
-    isSpeakingRef.current = false;
-    if (callActiveRef.current) setCallState('listening');
-  }
-};
+  };
   try { recog.start(); } catch (e) {
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
   }
@@ -3389,7 +3429,7 @@ const endVoiceCall = () => {
 
 const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 
- const doSearch = async (query) => {
+const doSearch = async (query) => {
   setProcessingStatus('searching');
   try {
     const userLang = navigator.language || 'en-US';
@@ -3404,29 +3444,29 @@ const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
     const data = await res.json();
     if (data.success && data.results?.length > 0)
       return { success: true, results: data.results, aiSummary: data.aiSummary || null };
-  } catch(_) {} finally { setProcessingStatus(''); }
+  } catch (_) {} finally { setProcessingStatus(''); }
   return { success: false, results: [], aiSummary: null };
 };
 
-  const extractImageUrl = (data) => {
-    if (!data) return null;
-    const unwrap = (url) => { if (!url || typeof url !== 'string') return url; if (url.startsWith('data:image/') || url.startsWith('data:application/json;base64,')) { try { const b64 = url.slice(url.indexOf(',')+1).replace(/\s/g,''); const dec = atob(b64); if (dec.trim().startsWith('{')) return extractImageUrl(JSON.parse(dec)); } catch(_) {} } return url; };
-    for (const c of [data.imageUrl, data.url, data.image, data.output]) { if (c) return unwrap(c); }
-    return null;
-  };
+const extractImageUrl = (data) => {
+  if (!data) return null;
+  const unwrap = (url) => { if (!url || typeof url !== 'string') return url; if (url.startsWith('data:image/') || url.startsWith('data:application/json;base64,')) { try { const b64 = url.slice(url.indexOf(',')+1).replace(/\s/g,''); const dec = atob(b64); if (dec.trim().startsWith('{')) return extractImageUrl(JSON.parse(dec)); } catch(_) {} } return url; };
+  for (const c of [data.imageUrl, data.url, data.image, data.output]) { if (c) return unwrap(c); }
+  return null;
+};
 
-  const callImageAPI = async (prompt, forceGemini = false) => {
+const callImageAPI = async (prompt, forceGemini = false) => {
   const seed = Math.floor(Math.random() * 999999);
-  const res = await fetch(API, { 
-    method: 'POST', 
-    headers: await getAuthHeader(), 
-    body: JSON.stringify({ action: 'image', prompt: prompt.trim(), seed, forceGemini }) 
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: await getAuthHeader(),
+    body: JSON.stringify({ action: 'image', prompt: prompt.trim(), seed, forceGemini })
   });
   if (!res.ok) throw new Error(`SERVICE_UNAVAILABLE:${res.status}`);
   return await res.json();
 };
 
- const enrichImagePrompt = (rawPrompt, style) => {
+const enrichImagePrompt = (rawPrompt, style) => {
   // Don't over-process — backend Llama will handle enrichment
   // Just append the style so Flux knows the aesthetic
   const styleMap = {
@@ -3446,7 +3486,7 @@ const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
   return `${rawPrompt.trim()}, ${styleTag}, highly detailed, sharp focus, 8k resolution`;
 };
 
-  const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = false) => {
+const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = false) => {
   if (imgGenLock.current) return; imgGenLock.current = true;
   if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
   setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
@@ -3455,16 +3495,16 @@ const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
   try {
     const imgData = await callImageAPI(enriched, forceGemini);
     const imgUrl = extractImageUrl(imgData);
-    if (imgUrl) { 
-      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m)); 
-      setTimeout(() => addMsg('system', '💾 Images are not stored — save yours before leaving'), 500); 
-    } else { 
-      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Couldn't get an image back — try a different description." } : m)); 
+    if (imgUrl) {
+      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m));
+      setTimeout(() => addMsg('system', '💾 Images are not stored — save yours before leaving'), 500);
+    } else {
+      setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Couldn't get an image back — try a different description." } : m));
     }
-  } catch(_) { 
-    setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m)); 
-  } finally { 
-    imgGenLock.current = false; setIsProcessing(false); setProcessingStatus(''); 
+  } catch (_) {
+    setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: "Image service is temporarily unavailable — please try again shortly." } : m));
+  } finally {
+    imgGenLock.current = false; setIsProcessing(false); setProcessingStatus('');
   }
 };
 
