@@ -1476,9 +1476,6 @@ const SettingsModal = ({
     },
   };
 
-  <button className="hdr-btn" onClick={startVoiceCall} title="Voice call">
-  <Mic size={15}/>
-</button>
 
   const NAV = [
     { id: 'account',   label: 'Account',   color: '#6366f1', icon: <Crown size={13}/> },
@@ -3228,7 +3225,8 @@ ${genderNote}`;
       body: JSON.stringify({ 
         action: 'chat', 
         prompt: sys, 
-        history: convHistory.current.slice(-8) // ← cap voice history, fixes growing latency
+        history: convHistory.current.slice(-8),// ← cap voice history, fixes growing latency
+        isVoiceCall: true 
       })
     });
 

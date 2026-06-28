@@ -297,7 +297,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
 
   // Sensible limits — enough to complete any task, not wasteful
-  const maxTokens = isHard ? 2500 : 1800;
+    const maxTokens = isHard ? 4096 : 2500;
 
   console.log(`Routing: isHard=${isHard} → model: ${model} → maxTokens: ${maxTokens}`);
 
@@ -782,7 +782,7 @@ export default async function handler(req, res) {
             { role: 'system', content: prompt.trim().slice(0, 400) },
             ...sanitizeHistory(history, 8),
           ],
-          max_tokens:  500,
+          max_tokens:  800,
           temperature: 0.7,
           stream:      false,
         }),
@@ -813,7 +813,7 @@ export default async function handler(req, res) {
         { role: 'system', content: prompt.trim().slice(0, 400) },
         ...sanitizeHistory(history, 8),
       ],
-      max_tokens:  500,
+      max_tokens:  600,
       temperature: 0.7,
       stream:      true,
     });
@@ -1022,7 +1022,7 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
                 },
                 { role: 'user', content: `Summarize in 3-5 sentences.` },
               ],
-              max_tokens:  400,
+              max_tokens:  500,
               temperature: 0.2,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 8000)),
