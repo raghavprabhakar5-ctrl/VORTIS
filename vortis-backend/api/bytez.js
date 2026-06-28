@@ -17,15 +17,15 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_QUALITY = 'qwen/qwen3-32b';
+const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';      
+const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';    
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 // NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
 // fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
 const NVIDIA_BASE_URL    = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST   = 'deepseek-ai/deepseek-v4-flash'; // fast tier, 1M ctx
-const NVIDIA_CHAT_QUALITY = 'z-ai/glm-5.1';                  // hard tier, agentic/coding
+const NVIDIA_CHAT_FAST    = 'minimaxai/minimax-m2.7';        // was deepseek-v4-flash — non-thinking, fast
+const NVIDIA_CHAT_QUALITY = 'mistralai/devstral-2-123b-instruct-2512'; // was z-ai/glm-5.1 — non-thinking, code-focused
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
 const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
 
@@ -43,6 +43,7 @@ const RATE_LIMITS = {
   vision:  { window: 60000, max: 5  },
   tts:     { window: 60000, max: 20 },
   execute: { window: 60000, max: 15 },
+  nvidia_global: { window: 60000, max: 35 }, 
 };
 
 setInterval(() => {
@@ -207,9 +208,6 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 }
 
 // ── NVIDIA NIM CHAT FALLBACK ────────────────────────────────────
-// Plain fetch (not a separate SDK) against NVIDIA's OpenAI-compatible
-// /v1/chat/completions endpoint. Mirrors the Groq/Cloudflare call shapes
-// already used elsewhere in this file so it slots into the same loop style.
 async function tryNvidiaChat(modelId, messages, maxTokens) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) return null;
@@ -228,10 +226,6 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
           max_tokens:  maxTokens,
           temperature: 0.7,
           stream:      false,
-          // Some NVIDIA models (e.g. deepseek-v4-flash) support an optional
-          // "thinking" mode that emits chain-of-thought. Keep it off so the
-          // response is plain content, matching every other fallback here.
-          extra_body: { chat_template_kwargs: { thinking: false } },
         }),
       },
       20000
@@ -251,6 +245,20 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
   }
 }
 
+// ── GLOBAL NVIDIA RATE GUARD (protects shared API key across all users) ──
+function checkGlobalLimit(action) {
+  const limit    = RATE_LIMITS[action];
+  if (!limit) return true;
+  const key      = `__global__${action}`;
+  const now      = Date.now();
+  const requests = rateLimiter.get(key) || [];
+  const recent   = requests.filter(t => now - t < limit.window);
+  if (recent.length >= limit.max) return false;
+  recent.push(now);
+  rateLimiter.set(key, recent);
+  return true;
+}
+
 // ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
@@ -266,39 +274,32 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 - Short tasks (greetings, yes/no, simple facts) = under 50 words.
 - Medium tasks (explanations, comparisons) = under 200 words.
 - Hard tasks (code, essays, research) = as long as needed to fully complete.
-- Always write complete sentences. Never stop mid-word or mid-thought.`
+- Always write complete sentences. Never stop mid-word or mid-thought.
+- NEVER output any reasoning, thinking, or planning text before an answer or a command. The first thing you output must be the actual answer — no preamble, no "let me think" text of any kind, ever.`
   };
 
   const recentConversations = messages
     .filter(m => m.role !== 'system')
     .slice(-12);
 
-  // Inject efficiency rule right after system prompt
   const optimizedMessages = systemPrompt
     ? [systemPrompt, efficiencyRule, ...recentConversations]
     : [efficiencyRule, ...recentConversations];
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  // ── CORE TASK ROUTING ROUTINES ──
-  let tier = await classifyTier(groq, lastMsg);
-  
-  // Guardrail: Ensure premium/quality model is strictly isolated to actual code or deep math tasks
-  if (tier === 'hard') {
-    const codeAndMathRegex = /(```|function|const|let|async|def|import|class|return|\b(integral|derivative|matrix|vector|equation|algebra|calculus|trigonometry)\b|[\+\-\*\/=\<\>\{\}\[\]]{3,})/i;
-    if (!codeAndMathRegex.test(lastMsg)) {
-      console.log(`Downgrading 'hard' task to primary tier because it lacks math/code markers.`);
-      tier = 'medium'; // Falls back safely to your fast primary model
-    }
-  }
+  // ── PURE REGEX ROUTING — no LLM classifier call, no extra latency/tokens ──
+  // Only genuine code/math syntax escalates to the quality model.
+  // Everything else (chat, explanations, casual questions) stays cheap.
+  const codeAndMathRegex = /(```|function\s*\(|const\s|let\s+\w|async\s|def\s|import\s|from\s+\w+\s+import|class\s+\w|return\s|public\s+class|<\?php|#include|console\.log|print\(|\b(integral|derivative|matrix|vector|equation|algebra|calculus|trigonometry|algorithm|recursion|complexity|refactor|debug|stack trace)\b|[\+\-\*\/=\<\>\{\}\[\]]{3,})/i;
 
-  const isHard = tier === 'hard';
+  const isHard = codeAndMathRegex.test(lastMsg);
   const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
 
   // Sensible limits — enough to complete any task, not wasteful
-  const maxTokens = isHard ? 4000 : 1500;
+  const maxTokens = isHard ? 2500 : 1800;
 
-  console.log(`Final Selection Tier: ${tier} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: isHard=${isHard} → model: ${model} → maxTokens: ${maxTokens}`);
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
@@ -308,21 +309,62 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         max_tokens:  maxTokens,
         temperature: 0.7,
         stream:      true,
+        ...(modelToTry === GROQ_CHAT_QUALITY ? { reasoning_effort: 'low' } : {}),
       });
 
       let buffer = '';
       let chunkCount = 0;
+      let finishReason = null;
+      let inThink = false;
+      let pending = ''; // holds text that might be a partial <think>/</think> tag
 
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content;
+        finishReason = chunk.choices?.[0]?.finish_reason || finishReason;
         if (!token) continue;
+
         buffer += token;
-        chunkCount++;
-        res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-        if (chunkCount % 10 === 0 && res.flush) res.flush();
+        pending += token;
+
+        // ── Strip <think>...</think> live, even across chunk boundaries ──
+        let safe = '';
+        while (true) {
+          if (!inThink) {
+            const openIdx = pending.indexOf('<think>');
+            if (openIdx === -1) {
+              const holdBack = Math.min(pending.length, 8);
+              safe += pending.slice(0, pending.length - holdBack);
+              pending = pending.slice(pending.length - holdBack);
+              break;
+            } else {
+              safe += pending.slice(0, openIdx);
+              pending = pending.slice(openIdx + '<think>'.length);
+              inThink = true;
+            }
+          } else {
+            const closeIdx = pending.indexOf('</think>');
+            if (closeIdx === -1) {
+              const holdBack = Math.min(pending.length, 9);
+              pending = pending.slice(pending.length - holdBack);
+              break;
+            } else {
+              pending = pending.slice(closeIdx + '</think>'.length);
+              inThink = false;
+            }
+          }
+        }
+
+        if (safe) {
+          chunkCount++;
+          res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+          if (chunkCount % 10 === 0 && res.flush) res.flush();
+        }
       }
 
-      if (buffer.trim().length > 0) {
+      if (stripInternalReasoning(buffer).trim().length > 0) {
+        if (finishReason === 'length') {
+          console.warn(`Response truncated by max_tokens (${maxTokens}) — model: ${modelToTry}`);
+        }
         res.write('data: [DONE]\n\n');
         res.end();
         return true;
@@ -338,24 +380,26 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
-  // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
-  // Non-streaming (NVIDIA's free tier is fine with this), so we fake a
-  // single-chunk "stream" by writing the whole text at once — the frontend
-  // just sees SSE data events either way.
-  const nvidiaModelsToTry = isHard
-    ? [NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
-    : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
 
-  for (const nvModel of nvidiaModelsToTry) {
-    const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens);
-    if (text) {
-      console.log(`NVIDIA fallback succeeded: ${nvModel}`);
-      res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return true;
+  // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
+  if (checkGlobalLimit('nvidia_global')) {
+    const nvidiaModelsToTry = isHard
+      ? [NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
+      : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
+
+    for (const nvModel of nvidiaModelsToTry) {
+      const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens);
+      if (text) {
+        console.log(`NVIDIA fallback succeeded: ${nvModel}`);
+        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        return true;
+      }
+      console.warn(`NVIDIA model ${nvModel} returned empty — trying next`);
     }
-    console.warn(`NVIDIA model ${nvModel} returned empty — trying next`);
+  } else {
+    console.warn('NVIDIA global rate limit reached — skipping straight to Cloudflare');
   }
 
   // ── CLOUDFLARE WORKERS AI BACKUP FALLBACK ───────────────────────
@@ -366,7 +410,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          // Cloudflare handles full messages array fine or fallback parameters
           body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
         }
       );
