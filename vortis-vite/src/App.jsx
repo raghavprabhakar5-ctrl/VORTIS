@@ -3090,7 +3090,7 @@ const runCallListenLoop = () => {
 
   recog.continuous = true;
   recog.interimResults = true;
-  recog.lang = callDetectedLangRef.current || navigator.language || 'en-US';
+  recog.lang = callDetectedLangRef.current || navigator.language || 'en-US'; // was navigator.language only
  
   try { recog.maxAlternatives = 3; } catch (_) {}
  
@@ -3164,18 +3164,44 @@ recog.onresult = (e) => {
   callFinalTranscriptRef.current = '';
   if (!transcript) { safeRestart(); return; }
 
-  // ── FIX 1: detect language BEFORE anything else ──
   const detectedLang = detectSpokenLang(transcript);
   callDetectedLangRef.current = detectedLang;
 
-  // ── FIX 2: set recognition language for NEXT turn ──
-  // so next time user speaks Hindi, browser recognizes it better
-  if (callRecogRef.current) {
-    try { callRecogRef.current.lang = detectedLang; } catch(_) {}
-  }
-
   setCallState('thinking');
   safeRestart();
+
+  // ── LOCAL VOICE-SWITCH DETECTION — no AI involved, deterministic ──
+  const low = transcript.toLowerCase();
+  const wantsMale   = /\b(change|switch|set|make).{0,15}(voice|sound).{0,15}male\b|\bmale voice\b/.test(low) ||
+                       /(आवाज़|आवाज).{0,15}(पुरुष|मेल|मर्द)/.test(transcript);
+  const wantsFemale = /\b(change|switch|set|make).{0,15}(voice|sound).{0,15}female\b|\bfemale voice\b/.test(low) ||
+                       /(आवाज़|आवाज).{0,15}(महिला|फीमेल|औरत)/.test(transcript);
+
+  if (wantsMale || wantsFemale) {
+    const newGender = wantsMale ? 'male' : 'female';
+    setTtsGender(newGender);
+    ttsGenderRef.current = newGender;
+    try { localStorage.setItem('vortis_tts_gender', newGender); } catch(_) {}
+
+    const confirmText = detectedLang === 'hi-IN'
+      ? (newGender === 'male' ? 'ठीक है, पुरुष आवाज़ में बदल दिया।' : 'ठीक है, महिला आवाज़ में बदल दिया।')
+      : (newGender === 'male' ? 'Okay, switched to a male voice.' : 'Okay, switched to a female voice.');
+
+    setCallState('speaking');
+    isSpeakingRef.current = true;
+    try {
+      const headers = await getCachedAuthHeader();
+      const ttsRes = await fetch(API, {
+        method: 'POST', headers,
+        body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
+      });
+      const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+      if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+    } catch(_) {}
+    isSpeakingRef.current = false;
+    if (callActiveRef.current) setCallState('listening');
+    return; // skip the AI call entirely — handled locally, no tokens spent
+  }
 
   try {
     if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
@@ -3187,7 +3213,6 @@ recog.onresult = (e) => {
       ? 'Speak as a female assistant.'
       : 'Speak as a male assistant.';
 
-    // ── FIX 3: short focused system prompt, no sanitize stripping Hindi ──
     const sys = `You are Vortis, a voice AI assistant. 
 Reply in 1-3 short spoken sentences only. 
 No markdown, no lists, no symbols, no emojis.
@@ -3196,7 +3221,6 @@ Detected language: ${detectedLang}.
 ${genderNote}`;
 
     const replyVoice = getCallVoice(detectedLang, gender);
-    console.log(`Voice call — lang: ${detectedLang}, voice: ${replyVoice}`);
 
     const res = await fetch(API, {
       method: 'POST',
@@ -3204,7 +3228,7 @@ ${genderNote}`;
       body: JSON.stringify({ 
         action: 'chat', 
         prompt: sys, 
-        history: convHistory.current 
+        history: convHistory.current.slice(-8) // ← cap voice history, fixes growing latency
       })
     });
 
@@ -3228,10 +3252,7 @@ ${genderNote}`;
 
     if (!full.trim() || !callActiveRef.current) return;
 
-    // ── FIX 4: don't sanitize Hindi through English regex ──
-    // only strip obvious system leaks, preserve all scripts
     const reply = full
-      .replace(/SET_VOICE:\s*(male|female)/gi, '')
       .replace(/<think>[\s\S]*?<\/think>/gi, '')
       .replace(/^(system|assistant|user):\s*/gim, '')
       .trim();
@@ -3240,15 +3261,13 @@ ${genderNote}`;
 
     pushHistory(convHistory, 'assistant', reply);
 
-    // ── FIX 5: clean for TTS without destroying Hindi ──
     const cleanReply = reply
-      .replace(/[*_`#~]/g, '')        // strip markdown only
-      .replace(/\s{2,}/g, ' ')        // collapse spaces
+      .replace(/[*_`#~]/g, '')
+      .replace(/\s{2,}/g, ' ')
       .trim();
 
     if (!cleanReply || cleanReply.length < 2) return;
 
-    // ── FIX 6: single TTS fetch, correct voice for detected language ──
     setCallState('speaking');
     isSpeakingRef.current = true;
 
@@ -3260,7 +3279,7 @@ ${genderNote}`;
         body: JSON.stringify({ 
           action: 'tts', 
           text: cleanReply,
-          voice: replyVoice  // Hindi voice if Hindi, English if English
+          voice: replyVoice
         })
       });
 
@@ -3281,7 +3300,6 @@ ${genderNote}`;
     if (callActiveRef.current) setCallState('listening');
   }
 };
-
   try { recog.start(); } catch (e) {
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
   }
