@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 
 export default function useDevToolsGuard() {
   useEffect(() => {
-  
+  /*
     const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
 
     const blockKeys = (e) => {
@@ -37,7 +37,7 @@ export default function useDevToolsGuard() {
     return () => {
       document.removeEventListener('keydown', blockKeys, true);
       document.removeEventListener('contextmenu', blockContext, true);
-    };
+    }; */
     
   }, []);
 }
