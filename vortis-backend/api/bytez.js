@@ -267,7 +267,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const efficiencyRule = {
     role: 'system',
     content: `TOKEN EFFICIENCY RULES — ALWAYS FOLLOW:
-- Match response length to task complexity. Simple question = 1-3 sentences. Complex task = as long as needed, no more.
+- Match response length to task complexity. Be brief and fast; answer short questions naturally without being robotic, and provide full depth only for hard, complex, or technical tasks without any preamble or thinking text.
 - Give fast response to the user.
 - NEVER pad, repeat, or over-explain. Say it once, say it well.
 - NEVER truncate or cut off mid-sentence. Always finish your complete thought.
