@@ -763,106 +763,143 @@ export default async function handler(req, res) {
 
   try {
     // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
+   // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
     if (isVoiceCall) {
-  const nvKey = process.env.NVIDIA_API_KEY;
+      const nvKey = process.env.NVIDIA_API_KEY;
 
-  // ── PRIMARY: NVIDIA ──
-  try {
-  const nvRes = await fetchWithTimeout(
-    `${NVIDIA_BASE_URL}/chat/completions`,
-    { ... },
-    6000
-  );
+      // ── PRIMARY: NVIDIA ──
+      try {
+        const nvRes = await fetchWithTimeout(
+          `${NVIDIA_BASE_URL}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${nvKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model:      NVIDIA_CHAT_FAST,
+              messages:   [
+                { role: 'system', content: prompt.trim().slice(0, 400) },
+                ...sanitizeHistory(history, 8),
+              ],
+              max_tokens:  800,
+              temperature: 0.7,
+              stream:      false,
+            }),
+          },
+          6000 // fail fast, don't let a slow NVIDIA call stall the whole turn
+        );
 
-  if (nvRes.ok) {
-    const data = await nvRes.json();
-    const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
-    if (text.length > 2) {
-      console.log('Voice → NVIDIA ✅ (primary)');
-      ...
-      return;
-    }
-    console.warn('NVIDIA voice returned empty text — falling back to Groq');
-  } else {
-    // ← ADD THIS — tells you exactly what NVIDIA actually said
-    const errBody = await nvRes.text().catch(() => '');
-    console.warn(`NVIDIA voice HTTP ${nvRes.status} — ${errBody.slice(0, 200)} — falling back to Groq`);
-  }
-} catch (e) {
-  console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
-}
+        if (nvRes.ok) {
+          const data = await nvRes.json();
+          const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
+          if (text.length > 2) {
+            console.log('Voice → NVIDIA ✅ (primary)');
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return;
+          }
+          // ── NEW: log when NVIDIA responded OK but gave nothing usable ──
+          console.warn('NVIDIA voice returned empty/too-short text:', JSON.stringify(data).slice(0, 300), '— falling back to Groq');
+        } else {
+          // ── NEW: log the actual HTTP status + error body from NVIDIA ──
+          // This is the line that tells you crash (5xx) vs rate-limit (429)
+          // vs bad request (4xx) vs anything else — instead of guessing.
+          let errBody = '';
+          try { errBody = await nvRes.text(); } catch (_) {}
+          console.warn(`NVIDIA voice HTTP ${nvRes.status} — ${errBody.slice(0, 300)} — falling back to Groq`);
+        }
+      } catch (e) {
+        // ── This is the ONLY branch that produces "This operation was
+        // aborted" — it fires purely from fetchWithTimeout's own
+        // AbortController, meaning NVIDIA simply took longer than 6000ms
+        // to respond. It does NOT tell you whether NVIDIA crashed,
+        // queued, or was just slow — those would show up in the nvRes.ok
+        // branch above instead, with a real HTTP status code attached. ──
+        console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
+      }
 
-  // ── FALLBACK 1: Groq ──
-  try {
-    const stream = await groq.chat.completions.create({
-      model:      GROQ_CHAT_PRIMARY,
-      messages:   [
-        { role: 'system', content: prompt.trim().slice(0, 400) },
-        ...sanitizeHistory(history, 8),
-      ],
-      max_tokens:  600,
-      temperature: 0.7,
-      stream:      true,
-    });
-    let buffer = '';
-    for await (const chunk of stream) {
-      const token = chunk.choices?.[0]?.delta?.content;
-      if (!token) continue;
-      buffer += token;
-      res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-    }
-    if (buffer.trim().length > 0) {
-      console.log('Voice → Groq ✅ (fallback 1)');
+      // ── FALLBACK 1: Groq ──
+      try {
+        const stream = await groq.chat.completions.create({
+          model:      GROQ_CHAT_PRIMARY,
+          messages:   [
+            { role: 'system', content: prompt.trim().slice(0, 400) },
+            ...sanitizeHistory(history, 8),
+          ],
+          max_tokens:  600,
+          temperature: 0.7,
+          stream:      true,
+        });
+        let buffer = '';
+        for await (const chunk of stream) {
+          const token = chunk.choices?.[0]?.delta?.content;
+          if (!token) continue;
+          buffer += token;
+          res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+        }
+        if (buffer.trim().length > 0) {
+          console.log('Voice → Groq ✅ (fallback 1)');
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+        console.warn('Groq voice returned empty — trying CF');
+      } catch (e) {
+        console.error('Groq voice fallback failed:', e.message, '— trying CF');
+      }
+
+      // ── FALLBACK 2: Cloudflare ──
+      for (const cfModel of CF_CHAT_MODELS) {
+        try {
+          const cfRes = await fetch(
+            `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
+            {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                messages: [
+                  { role: 'system', content: prompt.trim().slice(0, 400) },
+                  ...sanitizeHistory(history, 8),
+                ],
+                stream: false,
+                max_tokens: 400,
+              }),
+            }
+          );
+          if (!cfRes.ok) {
+            // ── NEW: log CF status too, was completely silent before ──
+            console.warn(`CF voice HTTP ${cfRes.status} (${cfModel}) — trying next`);
+            continue;
+          }
+          const data = await cfRes.json();
+          let rawText = data?.result?.response ?? data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
+          if (typeof rawText !== 'string') {
+            console.warn(`CF voice (${cfModel}) unexpected response shape:`, JSON.stringify(data).slice(0, 200));
+            continue;
+          }
+          const text = stripInternalReasoning(rawText);
+          if (isValidResponse(text)) {
+            console.log(`Voice → Cloudflare ✅ (fallback 2: ${cfModel})`);
+            res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return;
+          }
+        } catch (e) {
+          console.log(`CF voice fallback error (${cfModel}):`, e.message);
+        }
+      }
+
+      // ── All three failed ──
+      console.error('Voice: ALL THREE PROVIDERS FAILED (NVIDIA, Groq, Cloudflare)');
+      res.write(`data: ${JSON.stringify({ content: 'Sorry, voice is unavailable right now.' })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
       return;
     }
-    console.warn('Groq voice returned empty — trying CF');
-  } catch (e) {
-    console.error('Groq voice fallback failed:', e.message, '— trying CF');
-  }
-
-  // ── FALLBACK 2: Cloudflare ──
-  for (const cfModel of CF_CHAT_MODELS) {
-    try {
-      const cfRes = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [
-              { role: 'system', content: prompt.trim().slice(0, 400) },
-              ...sanitizeHistory(history, 8),
-            ],
-            stream: false,
-            max_tokens: 400,
-          }),
-        }
-      );
-      if (!cfRes.ok) continue;
-      const data = await cfRes.json();
-      let rawText = data?.result?.response ?? data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
-      if (typeof rawText !== 'string') continue;
-      const text = stripInternalReasoning(rawText);
-      if (isValidResponse(text)) {
-        console.log(`Voice → Cloudflare ✅ (fallback 2: ${cfModel})`);
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
-    } catch (e) {
-      console.log(`CF voice fallback error (${cfModel}):`, e.message);
-    }
-  }
-
-  // ── All three failed ──
-  res.write(`data: ${JSON.stringify({ content: 'Sorry, voice is unavailable right now.' })}\n\n`);
-  res.write('data: [DONE]\n\n');
-  res.end();
-  return;
-}
 
         const lastUserMsg = history[history.length - 1]?.content || '';
 
