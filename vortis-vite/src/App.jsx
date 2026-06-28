@@ -3082,14 +3082,13 @@ const runCallListenLoop = () => {
   if (!callActiveRef.current) return;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { setCallState('idle'); return; }
- 
+
   let recog;
   try { recog = new SR(); } catch (e) { setCallState('idle'); return; }
- 
+
   recog.continuous = true;
   recog.interimResults = true;
- 
- recog.lang = navigator.language || 'en-US';
+  recog.lang = callDetectedLangRef.current || navigator.language || 'en-US';
  
   try { recog.maxAlternatives = 3; } catch (_) {}
  
@@ -3112,15 +3111,26 @@ const runCallListenLoop = () => {
 };
  
  let speakingStartedAt = 0;
- recog.onresult = (e) => {
+
+recog.onresult = (e) => {
   if (isSpeakingRef.current) {
+    // grace period: ignore the first ~600ms of playback entirely —
+    // this is almost always speaker bleed picked up before echo settles
+    if (!speakingStartedAt) speakingStartedAt = Date.now();
+    if (Date.now() - speakingStartedAt < 600) return;
+
     const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
-    if (sample.trim().length >= 6) {
+    // require a much longer, clearly-final fragment before treating it
+    // as a real interruption — short fragments are almost always echo
+    if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 15) {
       stopCallPlayback();
       setCallState('listening');
+      speakingStartedAt = 0;
     } else {
       return; // ignore mic bleed from AI's own voice, don't arm silence timer
     }
+  } else {
+    speakingStartedAt = 0;
   }
 
   let interim = '';
