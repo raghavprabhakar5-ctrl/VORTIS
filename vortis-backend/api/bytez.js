@@ -654,6 +654,7 @@ export default async function handler(req, res) {
     const query   = sanitizeString(body.query   || '', 500);
     const image   = body.image || null;
     const history = sanitizeHistory(body.history || []);
+    const isVoiceCall = Boolean(body.isVoiceCall);  
 
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
