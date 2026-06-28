@@ -44,7 +44,10 @@ const getAuthHeader = async () => {
       'Authorization': `Bearer ${token}`,
       'X-App-Key': 'vortis-2026'
     };
-  } catch (_) {}
+    console.warn('getAuthHeader: no token available, currentUser =', auth.currentUser);
+  } catch (e) {
+    console.warn('getAuthHeader failed:', e.message);
+  }
   return { 'Content-Type': 'application/json', 'X-App-Key': 'vortis-2026' };
 };
 
