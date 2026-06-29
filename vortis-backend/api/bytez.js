@@ -292,6 +292,7 @@ function checkGlobalLimit(action) {
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
 
+  // ── TOKEN EFFICIENCY INJECTION ──
   const efficiencyRule = {
     role: 'system',
     content: `TOKEN EFFICIENCY RULES — ALWAYS FOLLOW:
@@ -316,6 +317,10 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
+  // ── ESCALATE ONLY ON A REAL CODE FENCE — no punctuation guessing ──
+  // Triple-backtick fences are the only reliable signal that the user
+  // pasted/asked for actual multi-line code. Inline single-backticks,
+  // symbols, and keywords no longer trigger the expensive model.
   const hasCodeFence = /```/.test(lastMsg);
   const isHard = hasCodeFence;
 
@@ -339,7 +344,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       let chunkCount = 0;
       let finishReason = null;
       let inThink = false;
-      let pending = '';
+      let pending = ''; // holds text that might be a partial <think>/</think> tag
 
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content;
@@ -349,6 +354,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         buffer += token;
         pending += token;
 
+        // ── Strip <think>...</think> live, even across chunk boundaries ──
         let safe = '';
         while (true) {
           if (!inThink) {
@@ -383,11 +389,19 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         }
       }
 
+      // ── FLUSH LEFTOVER LOOKAHEAD BUFFER ──────────────────────────
+      // The loop above always holds back up to 8-9 trailing chars in
+      // `pending` in case they're the start of a <think>/</think> tag.
+      // Once the stream ends, that tail is never written unless we
+      // flush it here — this was silently truncating short replies.
       if (!inThink && pending) {
         chunkCount++;
         res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
         pending = '';
       }
+      // If inThink is still true, the model opened <think> but never
+      // closed it (likely cut off) — drop it intentionally so raw
+      // reasoning text never leaks to the client.
 
       if (stripInternalReasoning(buffer).trim().length > 0) {
         if (finishReason === 'length') {
@@ -408,7 +422,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
-
   // ── NVIDIA NIM BACKUP FALLBACK ────────────────────────────────
   if (checkGlobalLimit('nvidia_global')) {
     const nvidiaModelsToTry = isHard
