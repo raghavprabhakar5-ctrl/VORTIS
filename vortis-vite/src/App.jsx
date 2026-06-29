@@ -3855,12 +3855,12 @@ return {
     setProcessingStatus('');
 
     const finalText = (sr.aiSummary || '').trim();
-    if (finalText) {
-  const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
- const chips = clean.map((r) =>
- `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
-  ).join('');
- const cards = clean.map((r, i) => `
+
+    const chips = clean.map((r) =>
+      `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
+    ).join('');
+
+    const cards = clean.map((r, i) => `
     <a class="vsr-card" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:block;">
       <div class="vsr-card-top">
         <img class="vsr-fav-img" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />
@@ -3869,8 +3869,10 @@ return {
       <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
       <div class="vsr-snip">${r.snippet}</div>
     </a>`
-).join('');
- const searchHTML = `<style>
+    ).join('');
+
+    if (finalText) {
+      const searchHTML = `<style>
 .vsr-wrap{font-size:14px}
 .vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px}
 .vsr-toggle:hover{background:var(--bg3);border-color:rgba(99,102,241,.35);color:var(--text1)}
@@ -3919,10 +3921,10 @@ return {
     <div class="vsr-chips">${chips}</div>
   </div>
 </div>`;
- pushHistory(convHistory, 'assistant', finalText);
-  addMsg('vortis', searchHTML, false);
-} else {
-  const fallbackHTML = `<style>
+      pushHistory(convHistory, 'assistant', finalText);
+      addMsg('vortis', searchHTML, false);
+    } else {
+      const fallbackHTML = `<style>
 .vsr-wrap{font-size:14px}
 .vsr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px}
 .vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:all .15s;display:block;text-decoration:none;color:inherit}
@@ -3939,13 +3941,13 @@ return {
   <p class="vsr-note">Couldn't generate a summary, but here's what I found:</p>
   <div class="vsr-grid">${cards}</div>
 </div>`;
-  pushHistory(convHistory, 'assistant', `[Found ${clean.length} sources but summary generation failed]`);
-  addMsg('vortis', fallbackHTML, false);
-}
+      pushHistory(convHistory, 'assistant', `[Found ${clean.length} sources but summary generation failed]`);
+      addMsg('vortis', fallbackHTML, false);
+    }
 
-setIsProcessing(false);
-setProcessingStatus('');
-};
+    setIsProcessing(false);
+    setProcessingStatus('');
+  };
 
   const handleCmd = async (cmd) => {
     if (!cmd.trim()) return;
