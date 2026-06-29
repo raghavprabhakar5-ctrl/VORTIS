@@ -192,6 +192,8 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
         ],
         max_tokens: 10,
         temperature: 0,
+        tools: [],
+        tool_choice: 'none',
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
     ]);
@@ -302,12 +304,14 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
-      const stream = await groq.chat.completions.create({
+     const stream = await groq.chat.completions.create({
         model:       modelToTry,
         messages:    optimizedMessages,
         max_tokens:  maxTokens,
         temperature: 0.7,
         stream:      true,
+        tools:       [],
+        tool_choice: 'none',
         ...(modelToTry === GROQ_CHAT_QUALITY ? { reasoning_effort: 'low' } : {}),
       });
 
@@ -835,6 +839,8 @@ export default async function handler(req, res) {
       max_tokens:  600,
       temperature: 0.7,
       stream:      true,
+      tools:       [],
+      tool_choice: 'none',
     });
     let buffer = '';
     for await (const chunk of stream) {
@@ -1100,7 +1106,7 @@ ${contextSnippets}`;
       return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
 
-    
+
     // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
     // ╚══════════════════════════════════════╝
