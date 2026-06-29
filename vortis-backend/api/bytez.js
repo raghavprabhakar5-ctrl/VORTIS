@@ -288,21 +288,17 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  // ── PURE REGEX ROUTING — no LLM classifier call, no extra latency/tokens ──
-  // Only genuine code/math syntax escalates to the quality model.
-  // Everything else (chat, explanations, casual questions) stays cheap.
-  const codeAndMathRegex = /(```|function\s*\(|const\s|let\s+\w|async\s|def\s|import\s|from\s+\w+\s+import|class\s+\w|return\s|public\s+class|<\?php|#include|console\.log|print\(|\b(integral|derivative|matrix|vector|equation|algebra|calculus|trigonometry|algorithm|recursion|complexity|refactor|debug|stack trace)\b|[\+\-\*\/=\<\>\{\}\[\]]{3,})/i;
+  // ── ESCALATE ONLY ON A REAL CODE FENCE — no punctuation guessing ──
+  // Triple-backtick fences are the only reliable signal that the user
+  // pasted/asked for actual multi-line code. Inline single-backticks,
+  // symbols, and keywords no longer trigger the expensive model.
+  const hasCodeFence = /```/.test(lastMsg);
+  const isHard = hasCodeFence;
 
- // Dynamic token allocation based on regex routing
-const isHard = codeAndMathRegex.test(lastMsg);
-const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const maxTokens = isHard ? 4096 : 1200;
 
-// FIX: If it's a simple greeting or tiny phrase, don't request thousands of tokens
-const isTinyPrompt = lastMsg.trim().length < 15; 
-// Change this line in your token allocation logic:
-const maxTokens = isHard ? 4096 : 2500;
-
-  console.log(`Routing: isHard=${isHard} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: codeFence=${hasCodeFence} → model: ${model} → maxTokens: ${maxTokens}`);
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
