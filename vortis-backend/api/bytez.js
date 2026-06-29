@@ -616,6 +616,13 @@ function needsWebSearch(text) {
 function buildSearchQuery(userMessage) {
   const now     = new Date();
   const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
+  const low = userMessage.toLowerCase();
+
+  // vague "latest news X" queries return index pages — make them specific
+  if (/^(latest news|top news|news today|today'?s news)\b/.test(low.trim())) {
+    return `top news headlines today ${dateStr}`;
+  }
+
   if (/\b(20\d\d|today|yesterday|this week)\b/i.test(userMessage)) return userMessage.slice(0, 200);
   return `${userMessage.slice(0, 180)} ${dateStr}`;
 }
@@ -1030,7 +1037,18 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
               messages: [
                 {
                   role:    'system',
-                  content: `Today is ${today}. Summarize these search results.\nRULES:\n- Use ONLY the results below.\n- Be specific: names, scores, dates, numbers.\n- 3-5 sentences. Direct and factual.\n- If results show a sports result, state it clearly.\n- Do NOT say "as of my knowledge".\n\nSEARCH RESULTS:\n${contextSnippets}`,
+                  content: `Today is ${today}. Summarize these search results.
+RULES:
+- Use ONLY the results below.
+- Be specific: names, scores, dates, numbers, actual events.
+- 3-5 sentences. Direct and factual.
+- NEVER describe what a source "offers", "provides", "reports", or "covers" — extract the actual news facts only.
+- If a result is just a homepage, archive page, or generic roundup link with no real story content, ignore it entirely.
+- If none of the results contain real news facts, say: "I couldn't find specific recent news articles for this — try a more specific topic or person."
+- Do NOT say "as of my knowledge".
+
+SEARCH RESULTS:
+${contextSnippets}`,
                 },
                 { role: 'user', content: `Summarize in 3-5 sentences.` },
               ],
