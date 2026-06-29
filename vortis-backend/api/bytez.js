@@ -1024,20 +1024,14 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       allResults = deduplicate(allResults);
       allResults = scoreAndSort(allResults, searchQuery);
 
-      let aiSummary = null;
+     let aiSummary = null;
       if (allResults.length > 0) {
-       const contextSnippets = allResults.slice(0, 4).map((r, i) =>
-  `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 250)}\nSource: ${r.source}`
-).join('\n\n');
+        const contextSnippets = allResults.slice(0, 4).map((r, i) =>
+          `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 250)}\nSource: ${r.source}`
+        ).join('\n\n');
         const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        try {
-          const result = await Promise.race([
-            groq.chat.completions.create({
-              model:    GROQ_CHAT_PRIMARY,
-              messages: [
-                {
-                  role:    'system',
-                  content: `Today is ${today}. Summarize these search results.
+
+        const summarySystemPrompt = `Today is ${today}. Summarize these search results.
 RULES:
 - Use ONLY the results below.
 - Be specific: names, scores, dates, numbers, actual events.
@@ -1048,19 +1042,33 @@ RULES:
 - Do NOT say "as of my knowledge".
 
 SEARCH RESULTS:
-${contextSnippets}`,
-                },
-                { role: 'user', content: `Summarize in 3-5 sentences.` },
-              ],
-              max_tokens:  500,
-              temperature: 0.2,
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 8000)),
-          ]);
-          const rawT = result.choices?.[0]?.message?.content || null;
-          const t    = rawT ? stripInternalReasoning(rawT) : null;
-          if (t && t.trim().length > 10) aiSummary = t.trim();
-        } catch (e) { console.error('AI summary failed:', e.message); }
+${contextSnippets}`;
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const result = await Promise.race([
+              groq.chat.completions.create({
+                model:    GROQ_CHAT_PRIMARY,
+                messages: [
+                  { role: 'system', content: summarySystemPrompt },
+                  { role: 'user',   content: `Summarize in 3-5 sentences.` },
+                ],
+                max_tokens:  500,
+                temperature: 0.2,
+              }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
+            ]);
+            const rawT = result.choices?.[0]?.message?.content || null;
+            const t    = rawT ? stripInternalReasoning(rawT) : null;
+            if (t && t.trim().length > 10) {
+              aiSummary = t.trim();
+              break;
+            }
+            console.warn(`Summary attempt ${attempt + 1} returned too-short/empty text`);
+          } catch (e) {
+            console.error(`AI summary failed (attempt ${attempt + 1}):`, e.message);
+          }
+        }
       }
 
       if (allResults.length === 0) {
@@ -1087,7 +1095,7 @@ ${contextSnippets}`,
 
       return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
-
+    
     // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
     // ╚══════════════════════════════════════╝
