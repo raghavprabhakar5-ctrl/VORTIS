@@ -3794,13 +3794,13 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     }
   };
 
-  // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
+ // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
     const stripHtml = (s) => (s||'').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
 
-    let sr;
-    try { sr = await doSearch(q); } catch(_) { sr = { success: false, results: [] }; }
+   let sr;
+try { sr = await doSearch(q); } catch(_) { sr = { success: false, results: [] }; }
 
     if (!sr.success || !sr.results?.length) {
       setProcessingStatus('thinking');
@@ -3810,36 +3810,37 @@ addMsg('vortis', finalDisplay, shouldSpeak);
       return;
     }
 
-    const clean = sr.results
-      .slice(0, 12)
-      .map(r => {
-        let source = stripHtml(r.source || '');
-        if (!source || source === 'AI' || source === 'Web') {
-          try {
-            const url = r.link || r.url || r.href || '';
-            source = new URL(url).hostname.replace('www.', '') || 'Web';
-          } catch(_) {
-            source = 'Web';
-          }
-        }
-        let rawUrl = r.link || r.url || r.href || r.displayLink || '';
-        if (rawUrl && !rawUrl.startsWith('http')) rawUrl = 'https://' + rawUrl;
-        return {
-          title: stripHtml(r.title),
-          snippet: stripHtml(r.snippet),
-          source,
-          date: r.date || '',
-          url: rawUrl
-        };
-      })
-      .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
-      .reduce((acc, r) => {
-        const domain = r.source?.toLowerCase().replace('www.','') || '';
-        const domainCount = acc.filter(a => (a.source?.toLowerCase().replace('www.','') || '') === domain).length;
-        if (domainCount < 2) acc.push(r);
-        return acc;
-      }, [])
-      .slice(0, 10);
+  
+  const clean = sr.results
+ .slice(0, 12)
+  .map(r => {
+    let source = stripHtml(r.source || '');
+    if (!source || source === 'AI' || source === 'Web') {
+      try {
+        const url = r.link || r.url || r.href || '';
+        source = new URL(url).hostname.replace('www.', '') || 'Web';
+      } catch(_) {
+        source = 'Web';
+      }
+    }
+   let rawUrl = r.link || r.url || r.href || r.displayLink || '';
+if (rawUrl && !rawUrl.startsWith('http')) rawUrl = 'https://' + rawUrl;
+return {
+  title: stripHtml(r.title),
+  snippet: stripHtml(r.snippet),
+  source,
+  date: r.date || '',
+  url: rawUrl
+};
+  })
+ .filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 20 && r.snippet !== r.title)
+.reduce((acc, r) => {
+  const domain = r.source?.toLowerCase().replace('www.','') || '';
+  const domainCount = acc.filter(a => (a.source?.toLowerCase().replace('www.','') || '') === domain).length;
+  if (domainCount < 2) acc.push(r);
+  return acc;
+}, [])
+.slice(0, 10);
 
     if (!clean.length) {
       setProcessingStatus('thinking');
@@ -3850,17 +3851,20 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     }
 
     // Build a rich context block for the AI to synthesize — just like Claude does internally
+
     pushHistory(convHistory, 'assistant', `[Searched web for: "${q}" — found ${clean.length} sources]`);
 
-    const finalText = (sr.aiSummary || '').trim();
+    const ft = sr.aiSummary || "I found some results but couldn't summarize them. Please try again.";
 
-    setProcessingStatus('');
+setProcessingStatus('');
 
-    const chips = clean.map((r) =>
-      `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
-    ).join('');
-
-    const cards = clean.map((r, i) => `
+const finalText = ft.trim();
+if (finalText) {
+  const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
+ const chips = clean.map((r) =>
+ `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
+  ).join('');
+ const cards = clean.map((r, i) => `
     <a class="vsr-card" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:block;">
       <div class="vsr-card-top">
         <img class="vsr-fav-img" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />
@@ -3869,11 +3873,8 @@ addMsg('vortis', finalDisplay, shouldSpeak);
       <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
       <div class="vsr-snip">${r.snippet}</div>
     </a>`
-    ).join('');
-
-    if (finalText) {
-      // ── Real summary available — show full card with "Vortis summary" box ──
-      const searchHTML = `<style>
+).join('');
+ const searchHTML = `<style>
 .vsr-wrap{font-size:14px}
 .vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px}
 .vsr-toggle:hover{background:var(--bg3);border-color:rgba(99,102,241,.35);color:var(--text1)}
@@ -3922,39 +3923,15 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     <div class="vsr-chips">${chips}</div>
   </div>
 </div>`;
-      pushHistory(convHistory, 'assistant', finalText);
-      addMsg('vortis', searchHTML, false);
-    } else {
-      // ── No usable summary — show sources honestly without a fake summary box ──
-      const fallbackHTML = `<style>
-.vsr-wrap{font-size:14px}
-.vsr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px}
-.vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:all .15s;display:block;text-decoration:none;color:inherit}
-.vsr-card:hover{border-color:rgba(99,102,241,.5);transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.1)}
-.vsr-card-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.vsr-fav-img{width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:cover;background:var(--bg3)}
-.vsr-site{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vsr-num{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:3px;background:var(--bg3);font-size:9px;color:var(--text3);flex-shrink:0;margin-right:3px;border:1px solid var(--border);vertical-align:middle}
-.vsr-title{font-size:12.5px;font-weight:600;color:var(--text1);line-height:1.45;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.vsr-snip{font-size:11.5px;color:var(--text2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.vsr-note{font-size:12px;color:var(--text3);margin-bottom:10px;font-family:'JetBrains Mono',monospace}
-.vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
-.vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3);text-decoration:none;transition:all .15s}
-.vsr-chip:hover{border-color:rgba(99,102,241,.4);color:var(--indigo);background:rgba(99,102,241,.06)}
-.vsr-favicon{width:14px;height:14px;border-radius:3px;flex-shrink:0;object-fit:cover}
-</style>
-<div class="vsr-wrap">
-  <p class="vsr-note">Couldn't generate a summary, but here's what I found:</p>
-  <div class="vsr-grid">${cards}</div>
-  <div class="vsr-chips" style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;">${chips}</div>
-</div>`;
-      pushHistory(convHistory, 'assistant', `[Found ${clean.length} sources but summary generation failed]`);
-      addMsg('vortis', fallbackHTML, false);
-    }
+  pushHistory(convHistory, 'assistant', finalText);
+  addMsg('vortis', searchHTML, false);
+} else {
+  addMsg('vortis', "I found some results but couldn't summarize them. Please try again.", false);
+}
 
-    setIsProcessing(false);
-    setProcessingStatus('');
-  };
+setIsProcessing(false);
+setProcessingStatus('');
+};
 
   const handleCmd = async (cmd) => {
     if (!cmd.trim()) return;
