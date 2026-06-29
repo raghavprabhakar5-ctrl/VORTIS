@@ -223,8 +223,6 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
         ],
         max_tokens: 10,
         temperature: 0,
-        tools: [],
-        tool_choice: 'none',
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
     ]);
@@ -334,8 +332,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         max_tokens:  maxTokens,
         temperature: 0.7,
         stream:      true,
-        tools:       [],
-        tool_choice: 'none',
         ...(modelToTry === GROQ_CHAT_QUALITY ? { reasoning_effort: 'low' } : {}),
       });
 
@@ -1083,8 +1079,6 @@ ${contextSnippets}`;
                 // ── FIX 3: Raised from 500 to 600 — gives 20% more room to finish
                 max_tokens:  600,
                 temperature: 0.1,
-                tools:       [],
-                tool_choice: 'none',
               }),
               new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
             ]);
