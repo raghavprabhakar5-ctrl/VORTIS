@@ -288,21 +288,17 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  // ── PURE REGEX ROUTING — no LLM classifier call, no extra latency/tokens ──
-  // Only genuine code/math syntax escalates to the quality model.
-  // Everything else (chat, explanations, casual questions) stays cheap.
-  const codeAndMathRegex = /(```|function\s*\(|const\s|let\s+\w|async\s|def\s|import\s|from\s+\w+\s+import|class\s+\w|return\s|public\s+class|<\?php|#include|console\.log|print\(|\b(integral|derivative|matrix|vector|equation|algebra|calculus|trigonometry|algorithm|recursion|complexity|refactor|debug|stack trace)\b|[\+\-\*\/=\<\>\{\}\[\]]{3,})/i;
+  // ── ESCALATE ONLY ON A REAL CODE FENCE — no punctuation guessing ──
+  // Triple-backtick fences are the only reliable signal that the user
+  // pasted/asked for actual multi-line code. Inline single-backticks,
+  // symbols, and keywords no longer trigger the expensive model.
+  const hasCodeFence = /```/.test(lastMsg);
+  const isHard = hasCodeFence;
 
- // Dynamic token allocation based on regex routing
-const isHard = codeAndMathRegex.test(lastMsg);
-const model  = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const maxTokens = isHard ? 4096 : 1200;
 
-// FIX: If it's a simple greeting or tiny phrase, don't request thousands of tokens
-const isTinyPrompt = lastMsg.trim().length < 15; 
-// Change this line in your token allocation logic:
-const maxTokens = isHard ? 4096 : 2500;
-
-  console.log(`Routing: isHard=${isHard} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: codeFence=${hasCodeFence} → model: ${model} → maxTokens: ${maxTokens}`);
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
@@ -364,6 +360,20 @@ const maxTokens = isHard ? 4096 : 2500;
         }
       }
 
+      // ── FLUSH LEFTOVER LOOKAHEAD BUFFER ──────────────────────────
+      // The loop above always holds back up to 8-9 trailing chars in
+      // `pending` in case they're the start of a <think>/</think> tag.
+      // Once the stream ends, that tail is never written unless we
+      // flush it here — this was silently truncating short replies.
+      if (!inThink && pending) {
+        chunkCount++;
+        res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+        pending = '';
+      }
+      // If inThink is still true, the model opened <think> but never
+      // closed it (likely cut off) — drop it intentionally so raw
+      // reasoning text never leaks to the client.
+
       if (stripInternalReasoning(buffer).trim().length > 0) {
         if (finishReason === 'length') {
           console.warn(`Response truncated by max_tokens (${maxTokens}) — model: ${modelToTry}`);
@@ -383,7 +393,6 @@ const maxTokens = isHard ? 4096 : 2500;
       console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
-
   // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
   if (checkGlobalLimit('nvidia_global')) {
     const nvidiaModelsToTry = isHard
@@ -1051,7 +1060,10 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
           ]);
           const rawAnswer = fallback.choices?.[0]?.message?.content || null;
           const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
-          if (answer) allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+          if (answer) {
+            allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+            aiSummary = answer; // ← ADD THIS — fallback IS the summary
+          }
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
 
