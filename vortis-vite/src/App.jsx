@@ -2031,7 +2031,6 @@ export default function VortisAI() {
   const [isDark, setIsDark] = useState(true);
   const [wordCount, setWordCount] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
-  const isHandlingRef = useRef(false);
   const callTimerRef = useRef(null);
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
@@ -3953,9 +3952,7 @@ return {
 
   const handleCmd = async (cmd) => {
     if (!cmd.trim()) return;
-    if (isHandlingRef.current) return; 
-    isHandlingRef.current = true;     
-    if (!canDo('messages')) { hitLimit(); isHandlingRef.current = false; return; }
+    if (!canDo('messages')) { hitLimit(); return; }
     setIsStreaming(false);
     setStreamText('');
     setProcessingStatus('');
@@ -3966,23 +3963,10 @@ return {
     setShowSettings(false);
     await getAI(cmd, lastMethod === 'voice');
     setIsProcessing(false);
-    isHandlingRef.current = false;
   };
   useEffect(() => { handleCmdRef.current = handleCmd; });
   useEffect(() => {
   window.__vortisSend = (text) => { setInput(text); setTimeout(() => textareaRef.current?.focus(), 50); };
-  window.__vortisSearch = async (query) => {
-    if (!query?.trim() || isProcessing) return;
-    addMsg('user', `Search deeper: ${query}`);
-    incrUsage('messages');
-    setIsProcessing(true);
-    await explicitSearch(query);
-    setIsProcessing(false);
-  };
-  return () => { 
-    delete window.__vortisSend; 
-    delete window.__vortisSearch; 
-  };
   return () => { delete window.__vortisSend; };
 }, []);
 
