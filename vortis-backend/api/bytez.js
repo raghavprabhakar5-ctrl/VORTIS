@@ -620,13 +620,6 @@ function needsWebSearch(text) {
 function buildSearchQuery(userMessage) {
   const now     = new Date();
   const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
-  const low = userMessage.toLowerCase().trim();
-
-  // vague "latest news" queries — make them concrete enough to return real headlines
-  if (/^(latest news|top news|news today|today'?s news|breaking news)\b/.test(low)) {
-    return `breaking news headlines today`;
-  }
-
   if (/\b(20\d\d|today|yesterday|this week)\b/i.test(userMessage)) return userMessage.slice(0, 200);
   return `${userMessage.slice(0, 180)} ${dateStr}`;
 }
