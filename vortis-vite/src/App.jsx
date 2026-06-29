@@ -3085,11 +3085,6 @@ const runCallListenLoop = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { setCallState('idle'); return; }
 
-  // ── guard against overlapping recognizer instances ──
-  // If a previous recognizer is still alive (async onend/onerror hasn't
-  // fully settled yet), kill it cleanly before starting a new one.
-  // Without this, two SpeechRecognition objects can race on the mic and
-  // one silently no-ops — this is the "I try again and it's not listening" bug.
   if (callRecogRef.current) {
     try {
       callRecogRef.current.onresult = null;
@@ -3107,12 +3102,12 @@ const runCallListenLoop = () => {
   recog.continuous = true;
   recog.interimResults = true;
   recog.lang = callDetectedLangRef.current || navigator.language || 'en-US';
-
   try { recog.maxAlternatives = 3; } catch (_) {}
 
   callRecogRef.current = recog;
 
   let restarted = false;
+  let intentionalStop = false; // ← NEW: distinguishes "we stopped it for playback" from a real end
   const safeRestart = (delay = 150) => {
     if (restarted) return;
     restarted = true;
@@ -3128,37 +3123,14 @@ const runCallListenLoop = () => {
     callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
   };
 
-  let speakingStartedAt = 0;
-
-  // ── NEW: explicitly flip UI to "listening" once recognition is actually
-  // live — previously the state only changed reactively inside onresult,
-  // so the UI would sit on "Connecting"/stale state and never visibly show
-  // "Listening" until you'd already started talking (or never, if the
-  // recognizer timed out on silence first). ──
   recog.onstart = () => {
     if (callActiveRef.current && !isSpeakingRef.current) setCallState('listening');
   };
 
   recog.onresult = (e) => {
-    if (isSpeakingRef.current) {
-      // grace period: ignore the first ~600ms of playback entirely —
-      // this is almost always speaker bleed picked up before echo settles
-      if (!speakingStartedAt) speakingStartedAt = Date.now();
-      if (Date.now() - speakingStartedAt < 600) return;
-
-      const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
-      // require a much longer, clearly-final fragment before treating it
-      // as a real interruption — short fragments are almost always echo
-      if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 15) {
-        stopCallPlayback();
-        setCallState('listening');
-        speakingStartedAt = 0;
-      } else {
-        return; // ignore mic bleed from AI's own voice, don't arm silence timer
-      }
-    } else {
-      speakingStartedAt = 0;
-    }
+    // While the AI is speaking, the recognizer should already be stopped
+    // (see playAudioReply below) — this branch is now just a safety net.
+    if (isSpeakingRef.current) return;
 
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -3178,14 +3150,17 @@ const runCallListenLoop = () => {
     if (!callActiveRef.current) return;
     if (e?.error === 'aborted') return;
     if (e?.error === 'not-allowed') { setCallState('idle'); return; }
-    // back off a bit longer on real errors so the mic fully releases
-    // before we try to grab it again
     safeRestart(300);
   };
 
   recog.onend = async () => {
     clearSilenceTimer();
     if (!callActiveRef.current) return;
+
+    // ── NEW: if we stopped this recognizer ourselves to play audio,
+    // don't process it as a turn — just bail. The restart happens
+    // explicitly after playback finishes, in playAudioReply(). ──
+    if (intentionalStop) return;
 
     const transcript = callFinalTranscriptRef.current.trim();
     callFinalTranscriptRef.current = '';
@@ -3196,6 +3171,24 @@ const runCallListenLoop = () => {
 
     setCallState('thinking');
     safeRestart();
+
+    // ── helper: stop mic, play audio, then explicitly resume listening ──
+    const playAudioReply = async (base64Audio) => {
+      intentionalStop = true;
+      isSpeakingRef.current = true;
+      try { recog.stop(); } catch (_) {}
+      setCallState('speaking');
+      try {
+        await scheduleAudioBuffer(base64Audio);
+      } finally {
+        isSpeakingRef.current = false;
+        if (callActiveRef.current) {
+          // explicitly kick off a fresh listen cycle now that audio is done
+          restarted = false; // allow this loop's own restart guard to fire again if needed
+          runCallListenLoop();
+        }
+      }
+    };
 
     try {
       if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
@@ -3256,7 +3249,6 @@ Do not add any other text when using this token. For every other message, ignore
         .replace(/^(system|assistant|user):\s*/gim, '')
         .trim();
 
-      // ── AI-driven, language-agnostic voice switch handling ──
       if (trimmedFull === 'SWITCH_VOICE_MALE' || trimmedFull === 'SWITCH_VOICE_FEMALE') {
         const newGender = trimmedFull === 'SWITCH_VOICE_MALE' ? 'male' : 'female';
         setTtsGender(newGender);
@@ -3296,8 +3288,6 @@ Do not add any other text when using this token. For every other message, ignore
           }
         } catch (_) {}
 
-        setCallState('speaking');
-
         try {
           const headers = await getCachedAuthHeader();
           const ttsRes = await fetch(API, {
@@ -3305,17 +3295,12 @@ Do not add any other text when using this token. For every other message, ignore
             body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
           });
           const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-          if (ttsData?.audio?.length > 100) {
-            // ── FIX: only flip isSpeakingRef true right before playback
-            // actually begins, not before the network fetch. Otherwise the
-            // mic treats the entire fetch-latency window as "AI speaking"
-            // and drops/ignores anything the user says during that gap. ──
-            isSpeakingRef.current = true;
-            await scheduleAudioBuffer(ttsData.audio);
-          }
-        } catch (_) {}
-        isSpeakingRef.current = false;
-        if (callActiveRef.current) setCallState('listening');
+          if (ttsData?.audio?.length > 100) await playAudioReply(ttsData.audio);
+          else { isSpeakingRef.current = false; if (callActiveRef.current) setCallState('listening'); }
+        } catch (_) {
+          isSpeakingRef.current = false;
+          if (callActiveRef.current) setCallState('listening');
+        }
         return;
       }
 
@@ -3331,8 +3316,6 @@ Do not add any other text when using this token. For every other message, ignore
 
       if (!cleanReply || cleanReply.length < 2) return;
 
-      setCallState('speaking');
-
       try {
         const headers = await getCachedAuthHeader();
         const ttsRes = await fetch(API, {
@@ -3347,16 +3330,14 @@ Do not add any other text when using this token. For every other message, ignore
 
         const ttsData = ttsRes.ok ? await ttsRes.json() : null;
         if (ttsData?.audio?.length > 100) {
-          // ── FIX: same as above — set right before playback, not before fetch ──
-          isSpeakingRef.current = true;
-          await scheduleAudioBuffer(ttsData.audio);
+          await playAudioReply(ttsData.audio);
+        } else {
+          if (callActiveRef.current) setCallState('listening');
         }
       } catch (e) {
         console.error('TTS failed:', e.message);
+        if (callActiveRef.current) setCallState('listening');
       }
-
-      isSpeakingRef.current = false;
-      if (callActiveRef.current) setCallState('listening');
 
     } catch (err) {
       console.error('Voice call error:', err);
