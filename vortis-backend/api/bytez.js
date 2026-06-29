@@ -791,7 +791,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model:      NVIDIA_CHAT_FAST,
           messages:   [
-            { role: 'system', content: prompt.trim().slice(0, 400) },
+           { role: 'system', content: prompt.trim().slice(0, 2000) },
             ...sanitizeHistory(history, 8),
           ],
           max_tokens:  800,
@@ -822,7 +822,7 @@ export default async function handler(req, res) {
     const stream = await groq.chat.completions.create({
       model:      GROQ_CHAT_PRIMARY,
       messages:   [
-        { role: 'system', content: prompt.trim().slice(0, 400) },
+       { role: 'system', content: prompt.trim().slice(0, 2000) },
         ...sanitizeHistory(history, 8),
       ],
       max_tokens:  600,
@@ -857,7 +857,7 @@ export default async function handler(req, res) {
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [
-              { role: 'system', content: prompt.trim().slice(0, 400) },
+              { role: 'system', content: prompt.trim().slice(0, 2000) },
               ...sanitizeHistory(history, 8),
             ],
             stream: false,

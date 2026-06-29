@@ -3314,7 +3314,7 @@ Do not add any other text when using this token. For every other message, ignore
         return;
       }
 
-      const reply = trimmedFull;
+     const reply = sanitizeForVoice(trimmedFull);
       if (!reply) return;
 
       pushHistory(convHistory, 'assistant', reply);
@@ -3323,7 +3323,6 @@ Do not add any other text when using this token. For every other message, ignore
         .replace(/[*_`#~]/g, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
-
       if (!cleanReply || cleanReply.length < 2) return;
 
       setCallState('speaking');
