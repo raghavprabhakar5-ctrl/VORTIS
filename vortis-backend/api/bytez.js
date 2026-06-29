@@ -1060,7 +1060,10 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
           ]);
           const rawAnswer = fallback.choices?.[0]?.message?.content || null;
           const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
-          if (answer) allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+          if (answer) {
+            allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+            aiSummary = answer; // ← ADD THIS — fallback IS the summary
+          }
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
 
