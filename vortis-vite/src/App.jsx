@@ -3207,8 +3207,13 @@ const runCallListenLoop = () => {
         ? 'Speak as a female assistant.'
         : 'Speak as a male assistant.';
 
-      const sys = `You are Vortis, a voice AI assistant. 
-Reply in 1-3 short spoken sentences only. 
+     const sys = `OUTPUT RULES (read first, follow always):
+1. Output ONLY the words you would actually speak out loud. Nothing else.
+2. NEVER output reasoning, planning, or meta-commentary — no "the user wants", "let me", "so", "okay so", "I should", "I'll".
+3. Your very first character must be the start of your spoken answer.
+
+You are Vortis, a voice AI assistant. 
+Reply in 1-3 short spoken sentences only.
 No markdown, no lists, no symbols, no emojis.
 CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish. Any other language, reply in that same language.
 Detected language: ${detectedLang}.
@@ -3226,7 +3231,7 @@ Do not add any other text when using this token. For every other message, ignore
         body: JSON.stringify({
           action: 'chat',
           prompt: sys,
-          history: convHistory.current.slice(-8), // ← cap voice history, fixes growing latency
+          history: convHistory.current.slice(-8),
           isVoiceCall: true
         })
       });
@@ -3234,6 +3239,47 @@ Do not add any other text when using this token. For every other message, ignore
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let full = '';
+      let spokenUpTo = 0;
+      let firstChunkSpoken = false;
+
+      const speakReadyChunk = async (force = false) => {
+        const unspoken = full.slice(spokenUpTo);
+        const match = unspoken.match(/^[\s\S]*?[.!?।](?:\s|$)/);
+        if (match && (firstChunkSpoken || match[0].trim().length >= 8)) {
+          const chunkText = match[0].trim();
+          spokenUpTo += match[0].length;
+          if (chunkText) {
+            firstChunkSpoken = true;
+            setCallState('speaking');
+            isSpeakingRef.current = true;
+            try {
+              const headers = await getCachedAuthHeader();
+              const voice = getCallVoice(callDetectedLangRef.current, ttsGenderRef.current);
+              const ttsRes = await fetch(API, {
+                method: 'POST', headers,
+                body: JSON.stringify({ action: 'tts', text: chunkText, voice })
+              });
+              const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+              if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+            } catch (_) {}
+          }
+        } else if (force && unspoken.trim()) {
+          spokenUpTo = full.length;
+          const chunkText = unspoken.trim();
+          setCallState('speaking');
+          isSpeakingRef.current = true;
+          try {
+            const headers = await getCachedAuthHeader();
+            const voice = getCallVoice(callDetectedLangRef.current, ttsGenderRef.current);
+            const ttsRes = await fetch(API, {
+              method: 'POST', headers,
+              body: JSON.stringify({ action: 'tts', text: chunkText, voice })
+            });
+            const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+            if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+          } catch (_) {}
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -3244,13 +3290,16 @@ Do not add any other text when using this token. For every other message, ignore
           if (raw === '[DONE]' || !raw) continue;
           try {
             const p = JSON.parse(raw);
-            if (p.content) full += p.content;
+            if (p.content) {
+              full += p.content;
+              await speakReadyChunk(false);
+            }
           } catch (_) {}
         }
       }
+      await speakReadyChunk(true);
 
-      if (!full.trim() || !callActiveRef.current) return;
-
+      if (!full.trim() || !callActiveRef.current) { isSpeakingRef.current = false; if (callActiveRef.current) setCallState('listening'); return; }
       const trimmedFull = full
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/^(system|assistant|user):\s*/gim, '')
@@ -3298,19 +3347,8 @@ Do not add any other text when using this token. For every other message, ignore
           }
         } catch (_) {}
 
-        setCallState('speaking');
-        isSpeakingRef.current = true;
-        try {
-          const headers = await getCachedAuthHeader();
-          const ttsRes = await fetch(API, {
-            method: 'POST', headers,
-            body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
-          });
-          const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-          if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
-        } catch (_) {}
         isSpeakingRef.current = false;
-        if (callActiveRef.current) setCallState('listening');
+      if (callActiveRef.current) setCallState('listening');
         return;
       }
 

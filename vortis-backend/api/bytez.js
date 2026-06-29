@@ -791,23 +791,42 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model:      NVIDIA_CHAT_FAST,
           messages:   [
-           { role: 'system', content: prompt.trim().slice(0, 2000) },
+            { role: 'system', content: prompt.trim().slice(0, 3000) },
             ...sanitizeHistory(history, 8),
           ],
           max_tokens:  800,
           temperature: 0.7,
-          stream:      false,
+          stream:      true,
         }),
       },
-      10000 // fail fast, don't let a slow NVIDIA call stall the whole turn
+      10000
     );
 
-    if (nvRes.ok) {
-      const data = await nvRes.json();
-      const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
-      if (text.length > 2) {
-        console.log('Voice → NVIDIA ✅ (primary)');
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+    if (nvRes.ok && nvRes.body) {
+      const reader = nvRes.body.getReader();
+      const dec = new TextDecoder();
+      let buffer = '';
+      let total = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += dec.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const raw = line.replace(/^data:\s*/, '').trim();
+            if (!raw || raw === '[DONE]') continue;
+            try {
+              const p = JSON.parse(raw);
+              const tok = p?.choices?.[0]?.delta?.content;
+              if (tok) { total += tok; res.write(`data: ${JSON.stringify({ content: tok })}\n\n`); }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+      if (stripInternalReasoning(total).trim().length > 2) {
+        console.log('Voice → NVIDIA ✅ (primary, streamed)');
         res.write('data: [DONE]\n\n');
         res.end();
         return;
@@ -822,7 +841,7 @@ export default async function handler(req, res) {
     const stream = await groq.chat.completions.create({
       model:      GROQ_CHAT_PRIMARY,
       messages:   [
-       { role: 'system', content: prompt.trim().slice(0, 2000) },
+        { role: 'system', content: prompt.trim().slice(0, 3000) },
         ...sanitizeHistory(history, 8),
       ],
       max_tokens:  600,
@@ -857,7 +876,7 @@ export default async function handler(req, res) {
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             messages: [
-              { role: 'system', content: prompt.trim().slice(0, 2000) },
+              { role: 'system', content: prompt.trim().slice(0, 3000) },
               ...sanitizeHistory(history, 8),
             ],
             stream: false,
