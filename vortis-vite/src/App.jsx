@@ -3861,13 +3861,13 @@ setProcessingStatus('');
 const finalText = ft.trim();
 if (finalText) {
   const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
- const chips = clean.map((r, i) =>
- `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><span class="vsr-dot" style="background:${dotColors[i % dotColors.length]}"></span>${r.source}</a>`
+ const chips = clean.map((r) =>
+ `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
   ).join('');
  const cards = clean.map((r, i) => `
     <a class="vsr-card" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:block;">
       <div class="vsr-card-top">
-        <div class="vsr-fav">${(r.source||'?')[0].toUpperCase()}</div>
+        <img class="vsr-fav-img" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />
         <span class="vsr-site">${r.source}${r.date ? ' · ' + r.date : ''}</span>
       </div>
       <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
@@ -3886,7 +3886,7 @@ if (finalText) {
 .vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:all .15s;display:block;text-decoration:none;color:inherit}
 .vsr-card:hover{border-color:rgba(99,102,241,.5);transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.1)}
 .vsr-card-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.vsr-fav{width:16px;height:16px;border-radius:3px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text3);flex-shrink:0}
+.vsr-fav-img{width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:cover;background:var(--bg3)}
 .vsr-site{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vsr-num{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:3px;background:var(--bg3);font-size:9px;color:var(--text3);flex-shrink:0;margin-right:3px;border:1px solid var(--border);vertical-align:middle}
 .vsr-title{font-size:12.5px;font-weight:600;color:var(--text1);line-height:1.45;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -3901,7 +3901,7 @@ if (finalText) {
 .vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3);text-decoration:none;transition:all .15s}
 .vsr-chip:hover{border-color:rgba(99,102,241,.4);color:var(--indigo);background:rgba(99,102,241,.06)}
-.vsr-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.vsr-favicon{width:14px;height:14px;border-radius:3px;flex-shrink:0;object-fit:cover}
 </style>
 <div class="vsr-wrap">
   <button class="vsr-toggle" onclick="(function(btn){var d=btn.nextElementSibling;var ic=btn.querySelector('.vsr-toggle-icon');var isOpen=d.classList.contains('open');d.classList.toggle('open');ic.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';btn.querySelector('.vsr-toggle-label').textContent=isOpen?'Show ${clean.length} sources':'Hide sources';})(this)">
