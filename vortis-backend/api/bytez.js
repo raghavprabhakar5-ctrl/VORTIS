@@ -364,6 +364,20 @@ const maxTokens = isHard ? 4096 : 2500;
         }
       }
 
+      // ── FLUSH LEFTOVER LOOKAHEAD BUFFER ──────────────────────────
+      // The loop above always holds back up to 8-9 trailing chars in
+      // `pending` in case they're the start of a <think>/</think> tag.
+      // Once the stream ends, that tail is never written unless we
+      // flush it here — this was silently truncating short replies.
+      if (!inThink && pending) {
+        chunkCount++;
+        res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+        pending = '';
+      }
+      // If inThink is still true, the model opened <think> but never
+      // closed it (likely cut off) — drop it intentionally so raw
+      // reasoning text never leaks to the client.
+
       if (stripInternalReasoning(buffer).trim().length > 0) {
         if (finishReason === 'length') {
           console.warn(`Response truncated by max_tokens (${maxTokens}) — model: ${modelToTry}`);
@@ -383,7 +397,6 @@ const maxTokens = isHard ? 4096 : 2500;
       console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
-
   // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
   if (checkGlobalLimit('nvidia_global')) {
     const nvidiaModelsToTry = isHard
