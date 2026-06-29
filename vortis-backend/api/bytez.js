@@ -557,31 +557,6 @@ function isSpam(r) {
   return false;
 }
 
-// NEW: filters out low-value "news roundup" sources that look relevant
-// but contain no actual reportable facts — YouTube news-show uploads,
-// dated archive/index pages, social media posts standing in for articles.
-function isLowValueNewsSource(r) {
-  const link  = (r.link || '').toLowerCase();
-  const title = (r.title || '').toLowerCase();
-  if (link.includes('youtube.com') || link.includes('youtu.be')) return true;
-  if (link.includes('instagram.com') || link.includes('facebook.com') || link.includes('tiktok.com')) return true;
-  if (/\b(archive|index|category|tag:|page \d+|daily analysis|morning news|news archive)\b/i.test(title)) return true;
-  return false;
-}
-
-function cleanResults(results, query) {
-  const nonEnglishDomains = ['ilpost.it', 'corriere.it', 'lemonde.fr', 'lefigaro.fr', 'spiegel.de', 'bild.de', 'elpais.com', 'marca.com', 'globo.com', 'sina.com.cn', 'yomiuri.co.jp'];
-  const isGenericNewsQuery = /\b(latest|breaking|top)\s+(india\s+)?news\b/i.test(query);
-
-  return results
-    .filter(r => !isSpam(r))
-    .filter(r => isRelevant(r, query))
-    .filter(r => !nonEnglishDomains.some(d => (r.link || '').toLowerCase().includes(d)))
-    .filter(r => (r.snippet || '').trim().length >= 20)
-    .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); })
-    .filter(r => !(isGenericNewsQuery && isLowValueNewsSource(r)));
-}
-
 function isRelevant(result, query) {
   if (!query || query.trim().length < 4) return true;
   const combined  = `${result.title} ${result.snippet}`.toLowerCase();
@@ -623,12 +598,24 @@ function scoreAndSort(results, query) {
 
 function cleanResults(results, query) {
   const nonEnglishDomains = ['ilpost.it', 'corriere.it', 'lemonde.fr', 'lefigaro.fr', 'spiegel.de', 'bild.de', 'elpais.com', 'marca.com', 'globo.com', 'sina.com.cn', 'yomiuri.co.jp'];
+  const isGenericNewsQuery = /\b(latest|breaking|top)\s+(india\s+)?news\b/i.test(query);
+
   return results
     .filter(r => !isSpam(r))
     .filter(r => isRelevant(r, query))
     .filter(r => !nonEnglishDomains.some(d => (r.link || '').toLowerCase().includes(d)))
     .filter(r => (r.snippet || '').trim().length >= 20)
-    .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
+    .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); })
+    .filter(r => !(isGenericNewsQuery && isLowValueNewsSource(r)));
+}
+
+function isLowValueNewsSource(r) {
+  const link  = (r.link || '').toLowerCase();
+  const title = (r.title || '').toLowerCase();
+  if (link.includes('youtube.com') || link.includes('youtu.be')) return true;
+  if (link.includes('instagram.com') || link.includes('facebook.com') || link.includes('tiktok.com')) return true;
+  if (/\b(archive|index|category|tag:|page \d+|daily analysis|morning news|news archive)\b/i.test(title)) return true;
+  return false;
 }
 
 function needsWebSearch(text) {
@@ -641,6 +628,7 @@ function needsWebSearch(text) {
   if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
   return false;
 }
+
 
 function buildSearchQuery(userMessage) {
   const now     = new Date();
