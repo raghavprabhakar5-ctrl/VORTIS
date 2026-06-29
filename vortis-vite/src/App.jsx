@@ -3085,52 +3085,68 @@ const runCallListenLoop = () => {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { setCallState('idle'); return; }
 
-  if (callRecogRef.current) {
-    try {
-      callRecogRef.current.onresult = null;
-      callRecogRef.current.onend = null;
-      callRecogRef.current.onerror = null;
-      callRecogRef.current.onstart = null;
-      callRecogRef.current.stop();
-    } catch (_) {}
-    callRecogRef.current = null;
-  }
-
   let recog;
   try { recog = new SR(); } catch (e) { setCallState('idle'); return; }
 
   recog.continuous = true;
   recog.interimResults = true;
   recog.lang = callDetectedLangRef.current || navigator.language || 'en-US';
+
   try { recog.maxAlternatives = 3; } catch (_) {}
 
   callRecogRef.current = recog;
 
+  let gotAnyResult = false;
+  let startWatchdog = setTimeout(() => {
+    if (!gotAnyResult && callActiveRef.current) {
+      console.warn('[voice call] no audio captured in 6s — restarting recognizer');
+      try { recog.abort(); } catch (_) {}
+    }
+  }, 6000);
+
   let restarted = false;
-  let intentionalStop = false; // ← NEW: distinguishes "we stopped it for playback" from a real end
-  const safeRestart = (delay = 150) => {
+  const safeRestart = () => {
     if (restarted) return;
     restarted = true;
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, delay);
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 150);
   };
 
   const clearSilenceTimer = () => {
     if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
   };
 
+  // ── FIX: was hardcoded to 1700ms regardless of context. Now reads the
+  // tunable ref (callSilenceMsRef) that already existed but was never wired
+  // in, so the silence cutoff is consistent and adjustable from one place. ──
   const armSilenceTimer = () => {
     clearSilenceTimer();
     callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
   };
 
-  recog.onstart = () => {
-    if (callActiveRef.current && !isSpeakingRef.current) setCallState('listening');
-  };
+  let speakingStartedAt = 0;
 
   recog.onresult = (e) => {
-    // While the AI is speaking, the recognizer should already be stopped
-    // (see playAudioReply below) — this branch is now just a safety net.
-    if (isSpeakingRef.current) return;
+    gotAnyResult = true;
+    clearTimeout(startWatchdog);
+    if (isSpeakingRef.current) {
+      // grace period: ignore the first ~600ms of playback entirely —
+      // this is almost always speaker bleed picked up before echo settles
+      if (!speakingStartedAt) speakingStartedAt = Date.now();
+      if (Date.now() - speakingStartedAt < 600) return;
+
+      const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
+      // require a much longer, clearly-final fragment before treating it
+      // as a real interruption — short fragments are almost always echo
+      if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 15) {
+        stopCallPlayback();
+        setCallState('listening');
+        speakingStartedAt = 0;
+      } else {
+        return; // ignore mic bleed from AI's own voice, don't arm silence timer
+      }
+    } else {
+      speakingStartedAt = 0;
+    }
 
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -3147,20 +3163,22 @@ const runCallListenLoop = () => {
   };
 
   recog.onerror = (e) => {
+    clearTimeout(startWatchdog);
     if (!callActiveRef.current) return;
-    if (e?.error === 'aborted') return;
-    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
-    safeRestart(300);
+    console.warn('[voice call] recog error:', e?.error);
+    if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
+      setCallState('idle');
+      showToast('Microphone permission blocked — check browser settings', 'var(--red)');
+      return;
+    }
+    // 'aborted' and 'no-speech' both need a restart, not a silent drop
+    safeRestart();
   };
 
   recog.onend = async () => {
+    clearTimeout(startWatchdog);
     clearSilenceTimer();
     if (!callActiveRef.current) return;
-
-    // ── NEW: if we stopped this recognizer ourselves to play audio,
-    // don't process it as a turn — just bail. The restart happens
-    // explicitly after playback finishes, in playAudioReply(). ──
-    if (intentionalStop) return;
 
     const transcript = callFinalTranscriptRef.current.trim();
     callFinalTranscriptRef.current = '';
@@ -3172,23 +3190,12 @@ const runCallListenLoop = () => {
     setCallState('thinking');
     safeRestart();
 
-    // ── helper: stop mic, play audio, then explicitly resume listening ──
-    const playAudioReply = async (base64Audio) => {
-      intentionalStop = true;
-      isSpeakingRef.current = true;
-      try { recog.stop(); } catch (_) {}
-      setCallState('speaking');
-      try {
-        await scheduleAudioBuffer(base64Audio);
-      } finally {
-        isSpeakingRef.current = false;
-        if (callActiveRef.current) {
-          // explicitly kick off a fresh listen cycle now that audio is done
-          restarted = false; // allow this loop's own restart guard to fire again if needed
-          runCallListenLoop();
-        }
-      }
-    };
+    // ── REMOVED: the old regex-based, English/Hindi-only voice-switch
+    // detection. It required exact keyword phrasing ("change voice to
+    // male", literal Hindi words) and silently failed for any other
+    // language or natural phrasing. Detection now happens via the model
+    // itself below (SWITCH_VOICE_MALE / SWITCH_VOICE_FEMALE token), which
+    // understands any language and any phrasing the user actually uses. ──
 
     try {
       if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
@@ -3219,7 +3226,7 @@ Do not add any other text when using this token. For every other message, ignore
         body: JSON.stringify({
           action: 'chat',
           prompt: sys,
-          history: convHistory.current.slice(-8),
+          history: convHistory.current.slice(-8), // ← cap voice history, fixes growing latency
           isVoiceCall: true
         })
       });
@@ -3249,12 +3256,15 @@ Do not add any other text when using this token. For every other message, ignore
         .replace(/^(system|assistant|user):\s*/gim, '')
         .trim();
 
+      // ── NEW: AI-driven, language-agnostic voice switch handling ──
       if (trimmedFull === 'SWITCH_VOICE_MALE' || trimmedFull === 'SWITCH_VOICE_FEMALE') {
         const newGender = trimmedFull === 'SWITCH_VOICE_MALE' ? 'male' : 'female';
         setTtsGender(newGender);
         ttsGenderRef.current = newGender;
         try { localStorage.setItem('vortis_tts_gender', newGender); } catch (_) {}
 
+        // Ask the model for a short natural confirmation in the user's own
+        // language instead of a hardcoded two-branch (Hindi/English) string.
         let confirmText = newGender === 'male'
           ? 'Okay, switched to a male voice.'
           : 'Okay, switched to a female voice.';
@@ -3288,6 +3298,8 @@ Do not add any other text when using this token. For every other message, ignore
           }
         } catch (_) {}
 
+        setCallState('speaking');
+        isSpeakingRef.current = true;
         try {
           const headers = await getCachedAuthHeader();
           const ttsRes = await fetch(API, {
@@ -3295,12 +3307,10 @@ Do not add any other text when using this token. For every other message, ignore
             body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
           });
           const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-          if (ttsData?.audio?.length > 100) await playAudioReply(ttsData.audio);
-          else { isSpeakingRef.current = false; if (callActiveRef.current) setCallState('listening'); }
-        } catch (_) {
-          isSpeakingRef.current = false;
-          if (callActiveRef.current) setCallState('listening');
-        }
+          if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+        } catch (_) {}
+        isSpeakingRef.current = false;
+        if (callActiveRef.current) setCallState('listening');
         return;
       }
 
@@ -3316,6 +3326,9 @@ Do not add any other text when using this token. For every other message, ignore
 
       if (!cleanReply || cleanReply.length < 2) return;
 
+      setCallState('speaking');
+      isSpeakingRef.current = true;
+
       try {
         const headers = await getCachedAuthHeader();
         const ttsRes = await fetch(API, {
@@ -3330,14 +3343,14 @@ Do not add any other text when using this token. For every other message, ignore
 
         const ttsData = ttsRes.ok ? await ttsRes.json() : null;
         if (ttsData?.audio?.length > 100) {
-          await playAudioReply(ttsData.audio);
-        } else {
-          if (callActiveRef.current) setCallState('listening');
+          await scheduleAudioBuffer(ttsData.audio);
         }
       } catch (e) {
         console.error('TTS failed:', e.message);
-        if (callActiveRef.current) setCallState('listening');
       }
+
+      isSpeakingRef.current = false;
+      if (callActiveRef.current) setCallState('listening');
 
     } catch (err) {
       console.error('Voice call error:', err);
@@ -3345,10 +3358,7 @@ Do not add any other text when using this token. For every other message, ignore
       if (callActiveRef.current) setCallState('listening');
     }
   };
-
-  try {
-    recog.start();
-  } catch (e) {
+  try { recog.start(); } catch (e) {
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
   }
 };
