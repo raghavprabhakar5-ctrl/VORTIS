@@ -3896,7 +3896,6 @@ return {
 .vsr-atext{font-size:13.5px;color:var(--text1);line-height:1.75}
 .vsr-atext strong{font-weight:700;color:var(--text1)}
 .vsr-atext em{font-style:italic;color:var(--text2)}
-.vsr-atext{font-size:13.5px;color:var(--text1);line-height:1.75;overflow:hidden;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical}
 .vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3);text-decoration:none;transition:all .15s}
 .vsr-chip:hover{border-color:rgba(99,102,241,.4);color:var(--indigo);background:rgba(99,102,241,.06)}
