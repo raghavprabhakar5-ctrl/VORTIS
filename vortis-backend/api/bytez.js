@@ -1024,7 +1024,7 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       allResults = deduplicate(allResults);
       allResults = scoreAndSort(allResults, searchQuery);
 
-     let aiSummary = null;
+    let aiSummary = null;
       if (allResults.length > 0) {
         const contextSnippets = allResults.slice(0, 4).map((r, i) =>
           `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 250)}\nSource: ${r.source}`
@@ -1055,6 +1055,8 @@ ${contextSnippets}`;
                 ],
                 max_tokens:  500,
                 temperature: 0.2,
+                tools: [],
+                tool_choice: 'none',
               }),
               new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
             ]);
@@ -1064,7 +1066,7 @@ ${contextSnippets}`;
               aiSummary = t.trim();
               break;
             }
-            console.warn(`Summary attempt ${attempt + 1} returned too-short/empty text`);
+            console.warn(`Summary attempt ${attempt + 1} returned too-short/empty text (raw len: ${rawT?.length ?? 0})`);
           } catch (e) {
             console.error(`AI summary failed (attempt ${attempt + 1}):`, e.message);
           }
@@ -1081,6 +1083,8 @@ ${contextSnippets}`;
                 { role: 'user',   content: searchQuery },
               ],
               max_tokens: 400,
+              tools: [],
+              tool_choice: 'none',
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
           ]);
@@ -1088,13 +1092,14 @@ ${contextSnippets}`;
           const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
           if (answer) {
             allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
-            aiSummary = answer; // ← ADD THIS — fallback IS the summary
+            aiSummary = answer;
           }
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
 
       return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
+
     
     // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
