@@ -21,13 +21,11 @@ const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
 const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';    
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
-// NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
-// fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
-const NVIDIA_BASE_URL    = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-nano-30b-a3b'; // Blazing fast, lower latency
-const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
-const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
-const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
+const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-nano-30b-a3b';
+const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
+const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -37,13 +35,13 @@ const CF_CHAT_MODELS = [
 // ── RATE LIMITER ──────────────────────────────────────────────
 const rateLimiter = new Map();
 const RATE_LIMITS = {
-  chat:    { window: 60000, max: 30 },
-  image:   { window: 60000, max: 5  },
-  search:  { window: 60000, max: 20 },
-  vision:  { window: 60000, max: 5  },
-  tts:     { window: 60000, max: 20 },
-  execute: { window: 60000, max: 15 },
-  nvidia_global: { window: 60000, max: 35 }, 
+  chat:          { window: 60000, max: 30 },
+  image:         { window: 60000, max: 5  },
+  search:        { window: 60000, max: 20 },
+  vision:        { window: 60000, max: 5  },
+  tts:           { window: 60000, max: 20 },
+  execute:       { window: 60000, max: 15 },
+  nvidia_global: { window: 60000, max: 35 },
 };
 
 setInterval(() => {
@@ -133,6 +131,41 @@ function stripInternalReasoning(text) {
     .trim();
 }
 
+// ── FIX: Trim to last complete sentence — prevents mid-sentence cutoff ──
+// This is the core fix for the "An advisory was issued for" bug.
+// The model sometimes stops mid-sentence due to internal context limits.
+// We detect the last sentence-ending punctuation and slice there.
+function trimToCompleteSentence(text) {
+  if (!text || text.trim().length < 10) return text;
+  const t = text.trim();
+
+  // If it already ends with sentence-ending punctuation, it's fine
+  if (/[.!?](\s*)$/.test(t)) return t;
+
+  // Find the last complete sentence boundary
+  const lastEnd = Math.max(
+    t.lastIndexOf('. '),
+    t.lastIndexOf('! '),
+    t.lastIndexOf('? '),
+    t.lastIndexOf('.\n'),
+    t.lastIndexOf('!\n'),
+    t.lastIndexOf('?\n'),
+  );
+
+  // Also check if the very last char is a sentence ender (no trailing space needed)
+  const endsWithPunct = /[.!?]$/.test(t);
+  if (endsWithPunct) return t;
+
+  // Only trim if we found a boundary past 30% of the text
+  // (avoids over-trimming very short summaries)
+  if (lastEnd > t.length * 0.3) {
+    return t.slice(0, lastEnd + 1).trim();
+  }
+
+  // Nothing to trim — return as-is
+  return t;
+}
+
 // ── COMPLEXITY CHECK ───────────────────────────────────────────
 function isComplexMessage(text) {
   const low = text.toLowerCase().trim();
@@ -161,7 +194,6 @@ function isObviouslyTrivial(text) {
 async function classifyTier(groq, text) {
   const lowerText = text.toLowerCase();
 
-  // 1. Instant local heuristic overrides
   if (
     lowerText.includes('table') ||
     lowerText.includes('line-by-line') ||
@@ -175,7 +207,6 @@ async function classifyTier(groq, text) {
     return 'medium';
   }
 
-  // 2. LLM Classification with a strict race-timeout
   try {
     const result = await Promise.race([
       groq.chat.completions.create({
@@ -203,8 +234,6 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
-
-    // 3. Clean fallback if LLM or timeout fails
     return isComplexMessage(text) ? 'hard' : 'medium';
   }
 }
@@ -247,9 +276,9 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
   }
 }
 
-// ── GLOBAL NVIDIA RATE GUARD (protects shared API key across all users) ──
+// ── GLOBAL NVIDIA RATE GUARD ──────────────────────────────────
 function checkGlobalLimit(action) {
-  const limit    = RATE_LIMITS[action];
+  const limit = RATE_LIMITS[action];
   if (!limit) return true;
   const key      = `__global__${action}`;
   const now      = Date.now();
@@ -265,7 +294,6 @@ function checkGlobalLimit(action) {
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
 
-  // ── TOKEN EFFICIENCY INJECTION ──
   const efficiencyRule = {
     role: 'system',
     content: `TOKEN EFFICIENCY RULES — ALWAYS FOLLOW:
@@ -290,10 +318,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  // ── ESCALATE ONLY ON A REAL CODE FENCE — no punctuation guessing ──
-  // Triple-backtick fences are the only reliable signal that the user
-  // pasted/asked for actual multi-line code. Inline single-backticks,
-  // symbols, and keywords no longer trigger the expensive model.
   const hasCodeFence = /```/.test(lastMsg);
   const isHard = hasCodeFence;
 
@@ -304,7 +328,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
-     const stream = await groq.chat.completions.create({
+      const stream = await groq.chat.completions.create({
         model:       modelToTry,
         messages:    optimizedMessages,
         max_tokens:  maxTokens,
@@ -319,7 +343,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       let chunkCount = 0;
       let finishReason = null;
       let inThink = false;
-      let pending = ''; // holds text that might be a partial <think>/</think> tag
+      let pending = '';
 
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content;
@@ -329,7 +353,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         buffer += token;
         pending += token;
 
-        // ── Strip <think>...</think> live, even across chunk boundaries ──
         let safe = '';
         while (true) {
           if (!inThink) {
@@ -364,19 +387,11 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         }
       }
 
-      // ── FLUSH LEFTOVER LOOKAHEAD BUFFER ──────────────────────────
-      // The loop above always holds back up to 8-9 trailing chars in
-      // `pending` in case they're the start of a <think>/</think> tag.
-      // Once the stream ends, that tail is never written unless we
-      // flush it here — this was silently truncating short replies.
       if (!inThink && pending) {
         chunkCount++;
         res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
         pending = '';
       }
-      // If inThink is still true, the model opened <think> but never
-      // closed it (likely cut off) — drop it intentionally so raw
-      // reasoning text never leaks to the client.
 
       if (stripInternalReasoning(buffer).trim().length > 0) {
         if (finishReason === 'length') {
@@ -397,7 +412,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
-  // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
+
+  // ── NVIDIA NIM BACKUP FALLBACK ────────────────────────────────
   if (checkGlobalLimit('nvidia_global')) {
     const nvidiaModelsToTry = isHard
       ? [NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
@@ -418,7 +434,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
     console.warn('NVIDIA global rate limit reached — skipping straight to Cloudflare');
   }
 
-  // ── CLOUDFLARE WORKERS AI BACKUP FALLBACK ───────────────────────
+  // ── CLOUDFLARE WORKERS AI BACKUP FALLBACK ─────────────────────
   for (const cfModel of CF_CHAT_MODELS) {
     try {
       const cfRes = await fetch(
@@ -629,7 +645,6 @@ function needsWebSearch(text) {
   return false;
 }
 
-
 function buildSearchQuery(userMessage) {
   const now     = new Date();
   const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
@@ -683,7 +698,7 @@ export default async function handler(req, res) {
     const query   = sanitizeString(body.query   || '', 500);
     const image   = body.image || null;
     const history = sanitizeHistory(body.history || []);
-    const isVoiceCall = Boolean(body.isVoiceCall);  
+    const isVoiceCall = Boolean(body.isVoiceCall);
 
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -693,220 +708,215 @@ export default async function handler(req, res) {
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
     if (action === 'tts') {
-  const text  = sanitizeString(body.text  || '', 1000);
-  const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
-  if (!text) return res.status(400).json({ error: 'Missing text' });
+      const text  = sanitizeString(body.text  || '', 1000);
+      const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
+      if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  const cleanText = text
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
-    .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
-    .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
-    .replace(/[\u2600-\u27BF]/g, '')
-    .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 900);
+      const cleanText = text
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+        .replace(/[\u{1F600}-\u{1F64F}]/gu, '')
+        .replace(/[\u{1FA00}-\u{1FA9F}]/gu, '')
+        .replace(/[\u2600-\u27BF]/g, '')
+        .replace(/[★✦•→←↑↓◆◇○●©®™⚡️]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 900);
 
-  if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
+      if (!cleanText || cleanText.length < 2) return res.status(200).json({ audio: '' });
 
-  // ── NVIDIA TTS (primary for voice calls) ──
-  // NVIDIA doesn't have a native TTS API so Edge TTS stays,
-  // but we add a Cloudflare TTS fallback using @cf/myshell-ai/melotts
-  // so voice calls don't depend only on Edge TTS
+      // ── Attempt 1: Edge TTS (@andresaya/edge-tts) ──
+      try {
+        const { EdgeTTS } = await import('@andresaya/edge-tts');
+        const tts = new EdgeTTS();
+        await tts.synthesize(cleanText, voice, {
+          outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
+          rate: '-12%',
+        });
+        const base64 = await tts.toBase64();
+        if (base64 && base64.length > 100) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: base64 });
+        }
+        throw new Error('Empty audio');
+      } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
 
-  // ── Attempt 1: Edge TTS (@andresaya/edge-tts) ──
-  try {
-    const { EdgeTTS } = await import('@andresaya/edge-tts');
-    const tts = new EdgeTTS();
-    await tts.synthesize(cleanText, voice, {
-      outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
-      rate: '-12%',
-    });
-    const base64 = await tts.toBase64();
-    if (base64 && base64.length > 100) {
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.status(200).json({ audio: base64 });
+      // ── Attempt 2: msedge-tts ──
+      try {
+        const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
+        const tts = new MsEdgeTTS();
+        await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+        const readable = tts.toStream(cleanText);
+        const chunks = [];
+        await new Promise((resolve, reject) => {
+          readable.on('data', chunk => chunks.push(chunk));
+          readable.on('end', resolve);
+          readable.on('error', reject);
+          setTimeout(() => reject(new Error('stream timeout')), 10000);
+        });
+        const buf = Buffer.concat(chunks);
+        if (buf.length > 100) {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: buf.toString('base64') });
+        }
+        throw new Error('Empty buffer');
+      } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
+
+      // ── Attempt 3: Cloudflare MeloTTS ──
+      try {
+        const cfTtsRes = await fetchWithTimeout(
+          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/myshell-ai/melotts`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${CF_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: cleanText }),
+          },
+          15000
+        );
+        if (cfTtsRes.ok) {
+          const arrayBuffer = await cfTtsRes.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          if (base64 && base64.length > 100) {
+            console.log('Cloudflare MeloTTS succeeded ✅');
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+            return res.status(200).json({ audio: base64 });
+          }
+        }
+        console.log('Cloudflare MeloTTS failed:', cfTtsRes.status);
+      } catch(e) { console.log('TTS attempt 3 (CF MeloTTS) failed:', e.message); }
+
+      return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
     }
-    throw new Error('Empty audio');
-  } catch(e) { console.log('TTS attempt 1 failed:', e.message); }
 
-  // ── Attempt 2: msedge-tts ──
-  try {
-    const { MsEdgeTTS, OUTPUT_FORMAT } = await import('msedge-tts');
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
-    const readable = tts.toStream(cleanText);
-    const chunks = [];
-    await new Promise((resolve, reject) => {
-      readable.on('data', chunk => chunks.push(chunk));
-      readable.on('end', resolve);
-      readable.on('error', reject);
-      setTimeout(() => reject(new Error('stream timeout')), 10000);
-    });
-    const buf = Buffer.concat(chunks);
-    if (buf.length > 100) {
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.status(200).json({ audio: buf.toString('base64') });
-    }
-    throw new Error('Empty buffer');
-  } catch(e) { console.log('TTS attempt 2 failed:', e.message); }
-
-  // ── Attempt 3: Cloudflare MeloTTS (free, no external dependency) ──
-  try {
-    const cfTtsRes = await fetchWithTimeout(
-      `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/myshell-ai/melotts`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${CF_TOKEN}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ text: cleanText }),
-      },
-      15000
-    );
-    if (cfTtsRes.ok) {
-      const arrayBuffer = await cfTtsRes.arrayBuffer();
-      const base64 = Buffer.from(arrayBuffer).toString('base64');
-      if (base64 && base64.length > 100) {
-        console.log('Cloudflare MeloTTS succeeded ✅');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        return res.status(200).json({ audio: base64 });
-      }
-    }
-    console.log('Cloudflare MeloTTS failed:', cfTtsRes.status);
-  } catch(e) { console.log('TTS attempt 3 (CF MeloTTS) failed:', e.message); }
-
-  return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
-}
     // ╔══════════════════════════════════════╗
     // ║  CHAT  — true token streaming        ║
     // ╚══════════════════════════════════════╝
-  if (action === 'chat') {
-  if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+    if (action === 'chat') {
+      if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
 
-  try {
-    // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
-    if (isVoiceCall) {
-  const nvKey = process.env.NVIDIA_API_KEY;
+      try {
+        // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
+        if (isVoiceCall) {
+          const nvKey = process.env.NVIDIA_API_KEY;
 
-  // ── PRIMARY: NVIDIA ──
-  try {
-    const nvRes = await fetchWithTimeout(
-      `${NVIDIA_BASE_URL}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${nvKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model:      NVIDIA_CHAT_FAST,
-          messages:   [
-            { role: 'system', content: prompt.trim().slice(0, 400) },
-            ...sanitizeHistory(history, 8),
-          ],
-          max_tokens:  800,
-          temperature: 0.7,
-          stream:      false,
-        }),
-      },
-      10000 // fail fast, don't let a slow NVIDIA call stall the whole turn
-    );
+          // ── PRIMARY: NVIDIA ──
+          try {
+            const nvRes = await fetchWithTimeout(
+              `${NVIDIA_BASE_URL}/chat/completions`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${nvKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model:      NVIDIA_CHAT_FAST,
+                  messages:   [
+                    { role: 'system', content: prompt.trim().slice(0, 400) },
+                    ...sanitizeHistory(history, 8),
+                  ],
+                  max_tokens:  800,
+                  temperature: 0.7,
+                  stream:      false,
+                }),
+              },
+              10000
+            );
 
-    if (nvRes.ok) {
-      const data = await nvRes.json();
-      const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
-      if (text.length > 2) {
-        console.log('Voice → NVIDIA ✅ (primary)');
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
-    }
-  } catch (e) {
-    console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
-  }
+            if (nvRes.ok) {
+              const data = await nvRes.json();
+              const text = stripInternalReasoning(data?.choices?.[0]?.message?.content ?? '').trim();
+              if (text.length > 2) {
+                console.log('Voice → NVIDIA ✅ (primary)');
+                res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+              }
+            }
+          } catch (e) {
+            console.log('NVIDIA voice failed:', e.message, '— falling back to Groq');
+          }
 
-  // ── FALLBACK 1: Groq ──
-  try {
-    const stream = await groq.chat.completions.create({
-      model:      GROQ_CHAT_PRIMARY,
-      messages:   [
-        { role: 'system', content: prompt.trim().slice(0, 400) },
-        ...sanitizeHistory(history, 8),
-      ],
-      max_tokens:  600,
-      temperature: 0.7,
-      stream:      true,
-      tools:       [],
-      tool_choice: 'none',
-    });
-    let buffer = '';
-    for await (const chunk of stream) {
-      const token = chunk.choices?.[0]?.delta?.content;
-      if (!token) continue;
-      buffer += token;
-      res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
-    }
-    if (buffer.trim().length > 0) {
-      console.log('Voice → Groq ✅ (fallback 1)');
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
-    console.warn('Groq voice returned empty — trying CF');
-  } catch (e) {
-    console.error('Groq voice fallback failed:', e.message, '— trying CF');
-  }
+          // ── FALLBACK 1: Groq ──
+          try {
+            const stream = await groq.chat.completions.create({
+              model:      GROQ_CHAT_PRIMARY,
+              messages:   [
+                { role: 'system', content: prompt.trim().slice(0, 400) },
+                ...sanitizeHistory(history, 8),
+              ],
+              max_tokens:  600,
+              temperature: 0.7,
+              stream:      true,
+              tools:       [],
+              tool_choice: 'none',
+            });
+            let buffer = '';
+            for await (const chunk of stream) {
+              const token = chunk.choices?.[0]?.delta?.content;
+              if (!token) continue;
+              buffer += token;
+              res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
+            }
+            if (buffer.trim().length > 0) {
+              console.log('Voice → Groq ✅ (fallback 1)');
+              res.write('data: [DONE]\n\n');
+              res.end();
+              return;
+            }
+            console.warn('Groq voice returned empty — trying CF');
+          } catch (e) {
+            console.error('Groq voice fallback failed:', e.message, '— trying CF');
+          }
 
-  // ── FALLBACK 2: Cloudflare ──
-  for (const cfModel of CF_CHAT_MODELS) {
-    try {
-      const cfRes = await fetch(
-        `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
-        {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [
-              { role: 'system', content: prompt.trim().slice(0, 400) },
-              ...sanitizeHistory(history, 8),
-            ],
-            stream: false,
-            max_tokens: 400,
-          }),
+          // ── FALLBACK 2: Cloudflare ──
+          for (const cfModel of CF_CHAT_MODELS) {
+            try {
+              const cfRes = await fetch(
+                `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
+                {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    messages: [
+                      { role: 'system', content: prompt.trim().slice(0, 400) },
+                      ...sanitizeHistory(history, 8),
+                    ],
+                    stream: false,
+                    max_tokens: 400,
+                  }),
+                }
+              );
+              if (!cfRes.ok) continue;
+              const data = await cfRes.json();
+              let rawText = data?.result?.response ?? data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
+              if (typeof rawText !== 'string') continue;
+              const text = stripInternalReasoning(rawText);
+              if (isValidResponse(text)) {
+                console.log(`Voice → Cloudflare ✅ (fallback 2: ${cfModel})`);
+                res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
+                res.write('data: [DONE]\n\n');
+                res.end();
+                return;
+              }
+            } catch (e) {
+              console.log(`CF voice fallback error (${cfModel}):`, e.message);
+            }
+          }
+
+          res.write(`data: ${JSON.stringify({ content: 'Sorry, voice is unavailable right now.' })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
         }
-      );
-      if (!cfRes.ok) continue;
-      const data = await cfRes.json();
-      let rawText = data?.result?.response ?? data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
-      if (typeof rawText !== 'string') continue;
-      const text = stripInternalReasoning(rawText);
-      if (isValidResponse(text)) {
-        console.log(`Voice → Cloudflare ✅ (fallback 2: ${cfModel})`);
-        res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return;
-      }
-    } catch (e) {
-      console.log(`CF voice fallback error (${cfModel}):`, e.message);
-    }
-  }
-
-  // ── All three failed ──
-  res.write(`data: ${JSON.stringify({ content: 'Sorry, voice is unavailable right now.' })}\n\n`);
-  res.write('data: [DONE]\n\n');
-  res.end();
-  return;
-}
 
         const lastUserMsg = history[history.length - 1]?.content || '';
 
@@ -1036,22 +1046,27 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       allResults = deduplicate(allResults);
       allResults = scoreAndSort(allResults, searchQuery);
 
-    let aiSummary = null;
+      let aiSummary = null;
+
       if (allResults.length > 0) {
-        const contextSnippets = allResults.slice(0, 4).map((r, i) =>
-          `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 250)}\nSource: ${r.source}`
+        // ── FIX 1: Reduced from 4 results × 250 chars to 3 results × 150 chars
+        // This shrinks input by ~40%, giving the model room to finish sentences
+        const contextSnippets = allResults.slice(0, 3).map((r, i) =>
+          `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 150)}\nSource: ${r.source}`
         ).join('\n\n');
+
         const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-        const summarySystemPrompt = `Today is ${today}. Summarize these search results.
+        // ── FIX 2: Prompt now asks for exactly 2 sentences max (not 3-5)
+        // Fewer sentences = model finishes before hitting any internal limit
+        const summarySystemPrompt = `Today is ${today}. Write exactly 2 complete sentences summarizing the key facts from the search results below. Both sentences MUST end with a period. Be specific with names, numbers, and dates. Never stop mid-sentence under any circumstances.
 RULES:
-- Use ONLY the results below.
-- Be specific: names, scores, dates, numbers, actual events.
-- 3-5 sentences. Direct and factual.
-- NEVER describe what a source "offers", "provides", "reports", or "covers" — extract the actual news facts only.
-- If a result is just a homepage, archive page, or generic roundup link with no real story content, ignore it entirely.
-- If none of the results contain real news facts, say: "I couldn't find specific recent news articles for this — try a more specific topic or person."
-- Do NOT say "as of my knowledge".
+- Use ONLY the results below. Never use your own training data.
+- Extract actual facts: names, scores, dates, numbers, real events.
+- NEVER describe what a source "offers", "provides", "reports", or "covers".
+- Skip homepage/archive links with no real news content.
+- If no real news facts exist, write: "I couldn't find specific recent news for this topic. Try a more specific search."
+- Do NOT say "as of my knowledge" or any variation.
 
 SEARCH RESULTS:
 ${contextSnippets}`;
@@ -1063,21 +1078,30 @@ ${contextSnippets}`;
                 model:    GROQ_CHAT_PRIMARY,
                 messages: [
                   { role: 'system', content: summarySystemPrompt },
-                  { role: 'user',   content: `Summarize in 3-5 sentences.` },
+                  { role: 'user',   content: 'Write the 2-sentence summary now.' },
                 ],
-                max_tokens:  500,
-                temperature: 0.2,
-                tools: [],
+                // ── FIX 3: Raised from 500 to 600 — gives 20% more room to finish
+                max_tokens:  600,
+                temperature: 0.1,
+                tools:       [],
                 tool_choice: 'none',
               }),
               new Promise((_, reject) => setTimeout(() => reject(new Error('summary timeout')), 12000)),
             ]);
+
             const rawT = result.choices?.[0]?.message?.content || null;
             const t    = rawT ? stripInternalReasoning(rawT) : null;
+
             if (t && t.trim().length > 10) {
-              aiSummary = t.trim();
+              // ── FIX 4: THE CORE FIX — always trim to last complete sentence
+              // This is the safety net that catches ANY truncation scenario.
+              // Even if the model writes "An advisory was issued for" and stops,
+              // trimToCompleteSentence() finds the last "." before that and slices there.
+              aiSummary = trimToCompleteSentence(t.trim());
+              console.log(`Summary OK (attempt ${attempt + 1}), length: ${aiSummary.length}`);
               break;
             }
+
             console.warn(`Summary attempt ${attempt + 1} returned too-short/empty text (raw len: ${rawT?.length ?? 0})`);
           } catch (e) {
             console.error(`AI summary failed (attempt ${attempt + 1}):`, e.message);
@@ -1095,7 +1119,7 @@ ${contextSnippets}`;
                 { role: 'user',   content: searchQuery },
               ],
               max_tokens: 400,
-              tools: [],
+              tools:      [],
               tool_choice: 'none',
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
@@ -1103,15 +1127,16 @@ ${contextSnippets}`;
           const rawAnswer = fallback.choices?.[0]?.message?.content || null;
           const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
           if (answer) {
-            allResults.push({ title: searchQuery, snippet: answer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
-            aiSummary = answer;
+            // Apply the same sentence guard to fallback answers too
+            const cleanAnswer = trimToCompleteSentence(answer);
+            allResults.push({ title: searchQuery, snippet: cleanAnswer, link: '#', source: 'Vortis', date: new Date().toISOString().split('T')[0] });
+            aiSummary = cleanAnswer;
           }
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
 
       return res.json({ success: allResults.length > 0, results: allResults.slice(0, 10), aiSummary: aiSummary || null });
     }
-
 
     // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
@@ -1123,7 +1148,7 @@ ${contextSnippets}`;
 
       const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
 
-      // ── Attempt 1: Cloudflare Llama-4-Scout (existing primary) ──
+      // ── Attempt 1: Cloudflare Llama-4-Scout ──
       try {
         const cfRes = await fetch(
           `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct`,
@@ -1151,10 +1176,7 @@ ${contextSnippets}`;
         console.log('Cloudflare vision failed:', e.message);
       }
 
-      // ── Attempt 2: NVIDIA NIM (minimax-m3) — free vision/doc-analysis fallback ──
-      // Same OpenAI-style image_url content block as Cloudflare above, just a
-      // different host + model. This is the fallback layer requested for
-      // vision/document analysis before dropping to llava.
+      // ── Attempt 2: NVIDIA NIM (minimax-m3) ──
       try {
         const nvKey = process.env.NVIDIA_API_KEY;
         if (nvKey) {
@@ -1198,7 +1220,7 @@ ${contextSnippets}`;
         console.log('NVIDIA vision failed:', e.message);
       }
 
-      // ── Attempt 3: Cloudflare LLaVA (existing final fallback) ──
+      // ── Attempt 3: Cloudflare LLaVA ──
       try {
         const bytes = Array.from(Buffer.from(base64Data, 'base64'));
         const llavaRes = await fetch(
@@ -1219,172 +1241,149 @@ ${contextSnippets}`;
       }
     }
 
-// ╔══════════════════════════════════════╗
-// ║  IMAGE GENERATION                    ║
-// ╚══════════════════════════════════════╝
-if (action === 'image') {
-  if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
-  if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
+    // ╔══════════════════════════════════════╗
+    // ║  IMAGE GENERATION                    ║
+    // ╚══════════════════════════════════════╝
+    if (action === 'image') {
+      if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
+      if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
 
-  // ── Helper: Try Flux Worker (Cloudflare Worker Primary) ──
-  async function tryFlux(promptText) {
-    try {
-      const seed   = Math.floor(Math.random() * 999999);
-      const imgRes = await fetchWithTimeout(
-        `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
-        {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
-          body:    JSON.stringify({ prompt: promptText.trim(), model: 'flux', seed }),
-        },
-        25000
-      );
-      if (!imgRes.ok) return null;
-      
-      const contentType = imgRes.headers.get('content-type') || '';
-      if (contentType.includes('json')) {
-        const json = await imgRes.json();
-        return json?.imageUrl ? json : null;
+      async function tryFlux(promptText) {
+        try {
+          const seed   = Math.floor(Math.random() * 999999);
+          const imgRes = await fetchWithTimeout(
+            `https://floral-math-6a24.raghavprabhakar5.workers.dev/`,
+            {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json', 'x-worker-token': process.env.WORKER_SECRET },
+              body:    JSON.stringify({ prompt: promptText.trim(), model: 'flux', seed }),
+            },
+            25000
+          );
+          if (!imgRes.ok) return null;
+
+          const contentType = imgRes.headers.get('content-type') || '';
+          if (contentType.includes('json')) {
+            const json = await imgRes.json();
+            return json?.imageUrl ? json : null;
+          }
+
+          const responseText = await imgRes.text();
+          try {
+            return JSON.parse(responseText);
+          } catch {
+            return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
+          }
+        } catch (e) {
+          console.error('Flux worker failed:', e.message);
+          return null;
+        }
       }
-      
-      const responseText = await imgRes.text();
+
+      async function tryNvidiaSD35(promptText) {
+        try {
+          const nvKey = process.env.NVIDIA_API_KEY;
+          if (!nvKey) return null;
+
+          const nvRes = await fetchWithTimeout(
+            `${NVIDIA_BASE_URL}/images/generations`,
+            {
+              method:  'POST',
+              headers: {
+                'Authorization': `Bearer ${nvKey}`,
+                'Content-Type':  'application/json',
+              },
+              body: JSON.stringify({
+                model:           'stabilityai/stable-diffusion-3.5-large',
+                prompt:          promptText.trim(),
+                n:               1,
+                response_format: 'b64_json',
+              }),
+            },
+            30000
+          );
+
+          if (!nvRes.ok) { console.log('NVIDIA SD 3.5 gen HTTP', nvRes.status); return null; }
+
+          const data = await nvRes.json();
+          const b64  = data?.data?.[0]?.b64_json;
+          if (!b64 || b64.length < 100) { console.log('NVIDIA SD 3.5 gen returned empty payload'); return null; }
+
+          console.log('NVIDIA SD 3.5 image generation received ✅');
+          return { success: true, imageUrl: `data:image/png;base64,${b64}` };
+        } catch (e) {
+          console.error('NVIDIA SD 3.5 gen failed:', e.message);
+          return null;
+        }
+      }
+
+      async function tryNvidiaLlama(promptText) {
+        try {
+          const nvKey = process.env.NVIDIA_API_KEY;
+          if (!nvKey) return null;
+
+          const nvRes = await fetchWithTimeout(
+            `${NVIDIA_BASE_URL}/images/generations`,
+            {
+              method:  'POST',
+              headers: {
+                'Authorization': `Bearer ${nvKey}`,
+                'Content-Type':  'application/json',
+              },
+              body: JSON.stringify({
+                model:           'meta/llama-3-diffusion-xl',
+                prompt:          promptText.trim(),
+                n:               1,
+                response_format: 'b64_json',
+              }),
+            },
+            30000
+          );
+
+          if (!nvRes.ok) { console.log('NVIDIA Llama-3 gen HTTP', nvRes.status); return null; }
+
+          const data = await nvRes.json();
+          const b64  = data?.data?.[0]?.b64_json;
+          if (!b64 || b64.length < 100) { console.log('NVIDIA Llama-3 gen returned empty payload'); return null; }
+
+          console.log('NVIDIA Llama-3 image generation received ✅');
+          return { success: true, imageUrl: `data:image/png;base64,${b64}` };
+        } catch (e) {
+          console.error('NVIDIA Llama-3 gen failed:', e.message);
+          return null;
+        }
+      }
+
       try {
-        return JSON.parse(responseText);
-      } catch {
-        return { success: true, imageUrl: `data:image/jpeg;base64,${Buffer.from(responseText, 'binary').toString('base64')}` };
+        console.log('Routing prompt to Cloudflare Flux worker as Primary...');
+
+        const fluxResult = await tryFlux(prompt);
+        if (fluxResult?.imageUrl) {
+          return res.status(200).json({ ...fluxResult, provider: 'flux' });
+        }
+
+        console.log('Cloudflare failed, shifting to NVIDIA SD 3.5...');
+        const sd35Fallback = await tryNvidiaSD35(prompt);
+        if (sd35Fallback?.imageUrl) {
+          return res.status(200).json({ ...sd35Fallback, provider: 'nvidia-sd-3.5-large' });
+        }
+
+        console.log('NVIDIA SD 3.5 failed, shifting to NVIDIA Llama-3...');
+        const llamaFallback = await tryNvidiaLlama(prompt);
+        if (llamaFallback?.imageUrl) {
+          return res.status(200).json({ ...llamaFallback, provider: 'nvidia-llama-3' });
+        }
+
+        console.log('All image generation providers failed.');
+        return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
+
+      } catch (error) {
+        console.error('IMAGE GEN ERROR:', error.message);
+        return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
       }
-    } catch (e) {
-      console.error('Flux worker failed:', e.message);
-      return null;
-    }
-  }
-
-  // ── Helper: Try NVIDIA NIM (Stable Diffusion 3.5 Large - Fallback 1) ──
-  async function tryNvidiaSD35(promptText) {
-    try {
-      const nvKey = process.env.NVIDIA_API_KEY;
-      if (!nvKey) return null;
-
-      const NVIDIA_IMAGE_MODEL = 'stabilityai/stable-diffusion-3.5-large';
-
-      const nvRes = await fetchWithTimeout(
-        `${NVIDIA_BASE_URL}/images/generations`,
-        {
-          method:  'POST',
-          headers: {
-            'Authorization': `Bearer ${nvKey}`,
-            'Content-Type':  'application/json',
-          },
-          body: JSON.stringify({
-            model:           NVIDIA_IMAGE_MODEL,
-            prompt:          promptText.trim(),
-            n:               1,
-            response_format: 'b64_json',
-          }),
-        },
-        30000
-      );
-
-      if (!nvRes.ok) {
-        console.log('NVIDIA SD 3.5 gen HTTP', nvRes.status);
-        return null;
-      }
-
-      const data   = await nvRes.json();
-      const b64    = data?.data?.[0]?.b64_json;
-      if (!b64 || b64.length < 100) {
-        console.log('NVIDIA SD 3.5 gen returned empty payload');
-        return null;
-      }
-
-      console.log('NVIDIA SD 3.5 image generation received ✅');
-      return { success: true, imageUrl: `data:image/png;base64,${b64}` };
-    } catch (e) {
-      console.error('NVIDIA SD 3.5 gen failed:', e.message);
-      return null;
-    }
-  }
-
-    // ── Helper: Try NVIDIA NIM (Llama-3-Diffusion - Fallback 2) ──
-  async function tryNvidiaLlama(promptText) {
-    try {
-      const nvKey = process.env.NVIDIA_API_KEY;
-      if (!nvKey) return null;
-
-      const NVIDIA_IMAGE_MODEL = 'meta/llama-3-diffusion-xl'; // Use XL for better quality
-
-      const nvRes = await fetchWithTimeout(
-        `${NVIDIA_BASE_URL}/images/generations`,
-        {
-          method:  'POST',
-          headers: {
-            'Authorization': `Bearer ${nvKey}`,
-            'Content-Type':  'application/json',
-          },
-          body: JSON.stringify({
-            model:           NVIDIA_IMAGE_MODEL,
-            prompt:          promptText.trim(),
-            n:               1,
-            response_format: 'b64_json',
-          }),
-        },
-        30000
-      );
-
-      if (!nvRes.ok) {
-        console.log('NVIDIA Llama-3 gen HTTP', nvRes.status);
-        return null;
-      }
-
-      const data   = await nvRes.json();
-      const b64    = data?.data?.[0]?.b64_json;
-      if (!b64 || b64.length < 100) {
-        console.log('NVIDIA Llama-3 gen returned empty payload');
-        return null;
-      }
-
-      console.log('NVIDIA Llama-3 image generation received ✅');
-      return { success: true, imageUrl: `data:image/png;base64,${b64}` };
-    } catch (e) {
-      console.error('NVIDIA Llama-3 gen failed:', e.message);
-      return null;
-    }
-  }
-
-  try {
-    console.log('Routing prompt to Cloudflare Flux worker as Primary...');
-    
-    // 1. Try Primary (Cloudflare)
-    const fluxResult = await tryFlux(prompt);
-    if (fluxResult?.imageUrl) {
-      return res.status(200).json({ ...fluxResult, provider: 'flux' });
     }
 
-    // 2. Try Fallback 1 (NVIDIA NIM - SD 3.5 Large)
-    console.log('Cloudflare failed, shifting to NVIDIA SD 3.5...');
-    const sd35Fallback = await tryNvidiaSD35(prompt);
-    if (sd35Fallback?.imageUrl) {
-      return res.status(200).json({ ...sd35Fallback, provider: 'nvidia-sd-3.5-large' });
-    }
-
-    // 3. Try Fallback 2 (NVIDIA NIM - Llama-3-Diffusion-XL)
-    console.log('NVIDIA SD 3.5 failed, shifting to NVIDIA Llama-3...');
-    const llamaFallback = await tryNvidiaLlama(prompt);
-    if (llamaFallback?.imageUrl) {
-        return res.status(200).json({ ...llamaFallback, provider: 'nvidia-llama-3' });
-    }
-
-    // 4. All Providers Failed
-    console.log('All image generation providers failed.');
-    return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
-
-  } catch (error) {
-    console.error('IMAGE GEN ERROR:', error.message);
-    return res.status(503).json({ error: 'Image generation service is temporarily unavailable. Please try again later.' });
-  }
-}
-
-return res.status(400).json({ error: 'Invalid action' });
+    return res.status(400).json({ error: 'Invalid action' });
 
   } catch (error) {
     console.error('GLOBAL ERROR:', error.message);
