@@ -3090,19 +3090,11 @@ const runCallListenLoop = () => {
 
   recog.continuous = true;
   recog.interimResults = true;
-  recog.lang = callDetectedLangRef.current || navigator.language || 'en-US';
+  recog.lang = callDetectedLangRef.current || navigator.language || 'en-US'; // was navigator.language only
 
   try { recog.maxAlternatives = 3; } catch (_) {}
 
   callRecogRef.current = recog;
-
-  let gotAnyResult = false;
-  let startWatchdog = setTimeout(() => {
-    if (!gotAnyResult && callActiveRef.current) {
-      console.warn('[voice call] no audio captured in 6s — restarting recognizer');
-      try { recog.abort(); } catch (_) {}
-    }
-  }, 6000);
 
   let restarted = false;
   const safeRestart = () => {
@@ -3126,8 +3118,6 @@ const runCallListenLoop = () => {
   let speakingStartedAt = 0;
 
   recog.onresult = (e) => {
-    gotAnyResult = true;
-    clearTimeout(startWatchdog);
     if (isSpeakingRef.current) {
       // grace period: ignore the first ~600ms of playback entirely —
       // this is almost always speaker bleed picked up before echo settles
@@ -3163,20 +3153,13 @@ const runCallListenLoop = () => {
   };
 
   recog.onerror = (e) => {
-    clearTimeout(startWatchdog);
     if (!callActiveRef.current) return;
-    console.warn('[voice call] recog error:', e?.error);
-    if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
-      setCallState('idle');
-      showToast('Microphone permission blocked — check browser settings', 'var(--red)');
-      return;
-    }
-    // 'aborted' and 'no-speech' both need a restart, not a silent drop
+    if (e?.error === 'aborted') return;
+    if (e?.error === 'not-allowed') { setCallState('idle'); return; }
     safeRestart();
   };
 
   recog.onend = async () => {
-    clearTimeout(startWatchdog);
     clearSilenceTimer();
     if (!callActiveRef.current) return;
 
@@ -3207,13 +3190,8 @@ const runCallListenLoop = () => {
         ? 'Speak as a female assistant.'
         : 'Speak as a male assistant.';
 
-     const sys = `OUTPUT RULES (read first, follow always):
-1. Output ONLY the words you would actually speak out loud. Nothing else.
-2. NEVER output reasoning, planning, or meta-commentary — no "the user wants", "let me", "so", "okay so", "I should", "I'll".
-3. Your very first character must be the start of your spoken answer.
-
-You are Vortis, a voice AI assistant. 
-Reply in 1-3 short spoken sentences only.
+      const sys = `You are Vortis, a voice AI assistant. 
+Reply in 1-3 short spoken sentences only. 
 No markdown, no lists, no symbols, no emojis.
 CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish. Any other language, reply in that same language.
 Detected language: ${detectedLang}.
@@ -3231,7 +3209,7 @@ Do not add any other text when using this token. For every other message, ignore
         body: JSON.stringify({
           action: 'chat',
           prompt: sys,
-          history: convHistory.current.slice(-8),
+          history: convHistory.current.slice(-8), // ← cap voice history, fixes growing latency
           isVoiceCall: true
         })
       });
@@ -3239,47 +3217,6 @@ Do not add any other text when using this token. For every other message, ignore
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let full = '';
-      let spokenUpTo = 0;
-      let firstChunkSpoken = false;
-
-      const speakReadyChunk = async (force = false) => {
-        const unspoken = full.slice(spokenUpTo);
-        const match = unspoken.match(/^[\s\S]*?[.!?।](?:\s|$)/);
-        if (match && (firstChunkSpoken || match[0].trim().length >= 8)) {
-          const chunkText = match[0].trim();
-          spokenUpTo += match[0].length;
-          if (chunkText) {
-            firstChunkSpoken = true;
-            setCallState('speaking');
-            isSpeakingRef.current = true;
-            try {
-              const headers = await getCachedAuthHeader();
-              const voice = getCallVoice(callDetectedLangRef.current, ttsGenderRef.current);
-              const ttsRes = await fetch(API, {
-                method: 'POST', headers,
-                body: JSON.stringify({ action: 'tts', text: chunkText, voice })
-              });
-              const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-              if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
-            } catch (_) {}
-          }
-        } else if (force && unspoken.trim()) {
-          spokenUpTo = full.length;
-          const chunkText = unspoken.trim();
-          setCallState('speaking');
-          isSpeakingRef.current = true;
-          try {
-            const headers = await getCachedAuthHeader();
-            const voice = getCallVoice(callDetectedLangRef.current, ttsGenderRef.current);
-            const ttsRes = await fetch(API, {
-              method: 'POST', headers,
-              body: JSON.stringify({ action: 'tts', text: chunkText, voice })
-            });
-            const ttsData = ttsRes.ok ? await ttsRes.json() : null;
-            if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
-          } catch (_) {}
-        }
-      };
 
       while (true) {
         const { done, value } = await reader.read();
@@ -3290,16 +3227,13 @@ Do not add any other text when using this token. For every other message, ignore
           if (raw === '[DONE]' || !raw) continue;
           try {
             const p = JSON.parse(raw);
-            if (p.content) {
-              full += p.content;
-              await speakReadyChunk(false);
-            }
+            if (p.content) full += p.content;
           } catch (_) {}
         }
       }
-      await speakReadyChunk(true);
 
-      if (!full.trim() || !callActiveRef.current) { isSpeakingRef.current = false; if (callActiveRef.current) setCallState('listening'); return; }
+      if (!full.trim() || !callActiveRef.current) return;
+
       const trimmedFull = full
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/^(system|assistant|user):\s*/gim, '')
@@ -3347,12 +3281,23 @@ Do not add any other text when using this token. For every other message, ignore
           }
         } catch (_) {}
 
+        setCallState('speaking');
+        isSpeakingRef.current = true;
+        try {
+          const headers = await getCachedAuthHeader();
+          const ttsRes = await fetch(API, {
+            method: 'POST', headers,
+            body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
+          });
+          const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+          if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+        } catch (_) {}
         isSpeakingRef.current = false;
-      if (callActiveRef.current) setCallState('listening');
+        if (callActiveRef.current) setCallState('listening');
         return;
       }
 
-     const reply = sanitizeForVoice(trimmedFull);
+      const reply = trimmedFull;
       if (!reply) return;
 
       pushHistory(convHistory, 'assistant', reply);
@@ -3361,6 +3306,7 @@ Do not add any other text when using this token. For every other message, ignore
         .replace(/[*_`#~]/g, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
+
       if (!cleanReply || cleanReply.length < 2) return;
 
       setCallState('speaking');
@@ -3848,7 +3794,7 @@ addMsg('vortis', finalDisplay, shouldSpeak);
     }
   };
 
- // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
+  // ── CHANGED: explicitSearch now silently searches multiple sources and replies in plain conversational text — no cards, no AI Summary box ──
   const explicitSearch = async (q) => {
     setProcessingStatus('searching');
     const stripHtml = (s) => (s||'').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
@@ -3904,29 +3850,31 @@ return {
       return;
     }
 
-   pushHistory(convHistory, 'assistant', `[Searched web for: "${q}" — found ${clean.length} sources]`);
+    // Build a rich context block for the AI to synthesize — just like Claude does internally
 
-    setProcessingStatus('');
+    pushHistory(convHistory, 'assistant', `[Searched web for: "${q}" — found ${clean.length} sources]`);
 
-    const finalText = (sr.aiSummary || '').trim();
+    const ft = sr.aiSummary || "I found some results but couldn't summarize them. Please try again.";
 
-    const chips = clean.map((r) =>
-      `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
-    ).join('');
+setProcessingStatus('');
 
-    const cards = clean.map((r, i) => `
+const finalText = ft.trim();
+if (finalText) {
+  const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
+ const chips = clean.map((r, i) =>
+ `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><span class="vsr-dot" style="background:${dotColors[i % dotColors.length]}"></span>${r.source}</a>`
+  ).join('');
+ const cards = clean.map((r, i) => `
     <a class="vsr-card" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:block;">
       <div class="vsr-card-top">
-        <img class="vsr-fav-img" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />
+        <div class="vsr-fav">${(r.source||'?')[0].toUpperCase()}</div>
         <span class="vsr-site">${r.source}${r.date ? ' · ' + r.date : ''}</span>
       </div>
       <div class="vsr-title"><span class="vsr-num">${i+1}</span>${r.title}</div>
       <div class="vsr-snip">${r.snippet}</div>
     </a>`
-    ).join('');
-
-    if (finalText) {
-      const searchHTML = `<style>
+).join('');
+ const searchHTML = `<style>
 .vsr-wrap{font-size:14px}
 .vsr-toggle{width:100%;padding:9px 13px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;font-size:12px;color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:space-between;transition:all .15s;font-family:'Geist',sans-serif;margin-bottom:8px}
 .vsr-toggle:hover{background:var(--bg3);border-color:rgba(99,102,241,.35);color:var(--text1)}
@@ -3938,7 +3886,7 @@ return {
 .vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:all .15s;display:block;text-decoration:none;color:inherit}
 .vsr-card:hover{border-color:rgba(99,102,241,.5);transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.1)}
 .vsr-card-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.vsr-fav-img{width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:cover;background:var(--bg3)}
+.vsr-fav{width:16px;height:16px;border-radius:3px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text3);flex-shrink:0}
 .vsr-site{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vsr-num{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:3px;background:var(--bg3);font-size:9px;color:var(--text3);flex-shrink:0;margin-right:3px;border:1px solid var(--border);vertical-align:middle}
 .vsr-title{font-size:12.5px;font-weight:600;color:var(--text1);line-height:1.45;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -3953,7 +3901,7 @@ return {
 .vsr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
 .vsr-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:99px;border:1px solid var(--border);background:var(--bg3);font-size:11px;color:var(--text3);text-decoration:none;transition:all .15s}
 .vsr-chip:hover{border-color:rgba(99,102,241,.4);color:var(--indigo);background:rgba(99,102,241,.06)}
-.vsr-favicon{width:14px;height:14px;border-radius:3px;flex-shrink:0;object-fit:cover}
+.vsr-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
 </style>
 <div class="vsr-wrap">
   <button class="vsr-toggle" onclick="(function(btn){var d=btn.nextElementSibling;var ic=btn.querySelector('.vsr-toggle-icon');var isOpen=d.classList.contains('open');d.classList.toggle('open');ic.style.transform=isOpen?'rotate(0deg)':'rotate(180deg)';btn.querySelector('.vsr-toggle-label').textContent=isOpen?'Show ${clean.length} sources':'Hide sources';})(this)">
@@ -3975,33 +3923,15 @@ return {
     <div class="vsr-chips">${chips}</div>
   </div>
 </div>`;
-      pushHistory(convHistory, 'assistant', finalText);
-      addMsg('vortis', searchHTML, false);
-    } else {
-      const fallbackHTML = `<style>
-.vsr-wrap{font-size:14px}
-.vsr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:8px}
-.vsr-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 13px;transition:all .15s;display:block;text-decoration:none;color:inherit}
-.vsr-card:hover{border-color:rgba(99,102,241,.5);transform:translateY(-1px);box-shadow:0 4px 16px rgba(99,102,241,.1)}
-.vsr-card-top{display:flex;align-items:center;gap:6px;margin-bottom:6px}
-.vsr-fav-img{width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:cover;background:var(--bg3)}
-.vsr-site{font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.vsr-num{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:3px;background:var(--bg3);font-size:9px;color:var(--text3);flex-shrink:0;margin-right:3px;border:1px solid var(--border);vertical-align:middle}
-.vsr-title{font-size:12.5px;font-weight:600;color:var(--text1);line-height:1.45;margin-bottom:5px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.vsr-snip{font-size:11.5px;color:var(--text2);line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.vsr-note{font-size:12px;color:var(--text3);margin-bottom:10px;font-family:'JetBrains Mono',monospace}
-</style>
-<div class="vsr-wrap">
-  <p class="vsr-note">Couldn't generate a summary, but here's what I found:</p>
-  <div class="vsr-grid">${cards}</div>
-</div>`;
-      pushHistory(convHistory, 'assistant', `[Found ${clean.length} sources but summary generation failed]`);
-      addMsg('vortis', fallbackHTML, false);
-    }
+  pushHistory(convHistory, 'assistant', finalText);
+  addMsg('vortis', searchHTML, false);
+} else {
+  addMsg('vortis', "I found some results but couldn't summarize them. Please try again.", false);
+}
 
-    setIsProcessing(false);
-    setProcessingStatus('');
-  };
+setIsProcessing(false);
+setProcessingStatus('');
+};
 
   const handleCmd = async (cmd) => {
     if (!cmd.trim()) return;
