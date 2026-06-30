@@ -7,7 +7,9 @@ import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
- import { franc } from 'franc-min';
+import { startVoicePipeline } from './voicePipeline';
+import { transcribeAudio } from './whisper';
+import { franc } from 'franc-min';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
@@ -3466,13 +3468,14 @@ const stopCallPlayback = () => {
 };
 
 const vadRef = useRef(null);
-
+ 
 const startVoiceCall = async () => {
   setShowVoiceCall(true);
   setCallState('idle');
+  setCallPaused(false);
   callActiveRef.current = true;
-
-  // 1. Double-check microphone availability
+ 
+  // 1. Confirm mic permission first
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach(t => t.stop());
@@ -3482,93 +3485,210 @@ const startVoiceCall = async () => {
     callActiveRef.current = false;
     return;
   }
-
-  // 2. Initialize the Voice Pipeline with cross-origin handlers
+ 
+  if (!callActiveRef.current) return; // user hung up while permission dialog was open
+ 
+  // 2. Start VAD + local Whisper pipeline
   try {
     vadRef.current = await startVoicePipeline({
       onTranscript: async (transcript) => {
-        if (!transcript || !transcript.trim() || !callActiveRef.current) return;
-        
-        setCallState('thinking');
-        
-        try {
-          // Fetch user authentication token required by backend auth layer
-          const currentUser = admin.auth().currentUser;
-          if (!currentUser) {
-            showToast('User not authenticated', 'var(--red)');
-            return;
-          }
-          const token = await currentUser.getIdToken(true);
-
-          // Complete request format matching backend expectations exactly
-          const response = await fetch('https://vortis-backend.vercel.app/api/bytez', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              action: 'chat',
-              prompt: transcript,
-              history: [], // Pass conversation history here if tracked
-              isVoiceCall: true
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP network error: ${response.status}`);
-          }
-
-          // Parse the generated reply
-          const data = await response.json();
-          
-          // Trigger the text-to-speech engine if a valid text response is present
-          if (data && data.text) {
-            setCallState('speaking');
-            // Connect to your local browser TTS or backend audio player here
-          } else {
-            setCallState('idle');
-          }
-
-        } catch (error) {
-          console.error("Voice handler payload failed:", error);
-          setCallState('idle');
-        }
+        if (!transcript?.trim() || !callActiveRef.current) return;
+        await handleVoiceCallTurn(transcript.trim());
       },
       onStateChange: (state) => {
-        setCallState(state === 'listening' ? 'listening' : state === 'transcribing' ? 'thinking' : 'idle');
+        if (!callActiveRef.current) return;
+        if (state === 'listening') setCallState('listening');
+        else if (state === 'transcribing') setCallState('thinking');
       },
     });
-
-    // 3. Kick off session performance timer
-    setCallDuration(0);
-    callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
-
   } catch (pipelineError) {
-    console.error("Failed to initialize voice framework component:", pipelineError);
+    console.error('Failed to start voice pipeline:', pipelineError);
+    showToast('Voice pipeline failed to load', 'var(--red)');
     setShowVoiceCall(false);
     callActiveRef.current = false;
+    return;
+  }
+ 
+  setCallDuration(0);
+  callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
+};
+ 
+// ── handles one full turn: transcript -> AI reply -> TTS playback ──
+// Mirrors the logic that used to live inside recog.onend, but driven by Whisper text instead.
+const handleVoiceCallTurn = async (transcript) => {
+  callBusyRef.current = true;
+  setCallState('thinking');
+ 
+  try {
+    if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+ 
+    const detectedLang = detectSpokenLang(transcript);
+    callDetectedLangRef.current = detectedLang;
+ 
+    // voice-switch hard fallback (same as before)
+    const voiceSwitchRe = /\b(change|switch|use|badal|badlo|switch karo)\b.{0,20}\b(voice|awaaz|आवाज़)\b/i;
+    const wantsMale = /\b(male|man'?s|mard|aadmi)\b/i.test(transcript);
+    const wantsFemale = /\b(female|woman'?s|mahila|aurat)\b/i.test(transcript);
+    if (voiceSwitchRe.test(transcript) && (wantsMale || wantsFemale)) {
+      const newGender = wantsMale ? 'male' : 'female';
+      setTtsGender(newGender);
+      ttsGenderRef.current = newGender;
+      try { localStorage.setItem('vortis_tts_gender', newGender); } catch (_) {}
+      const confirmText = newGender === 'male' ? 'Okay, switched to a male voice.' : 'Okay, switched to a female voice.';
+      setCallState('speaking');
+      isSpeakingRef.current = true;
+      try {
+        const headers = await getCachedAuthHeader();
+        const ttsRes = await fetch(API, {
+          method: 'POST', headers,
+          body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
+        });
+        const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+        if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+      } catch (_) {}
+      isSpeakingRef.current = false;
+      callBusyRef.current = false;
+      if (callActiveRef.current) setCallState('listening');
+      return;
+    }
+ 
+    incrUsage('messages');
+    pushHistory(convHistory, 'user', transcript);
+ 
+    const gender = ttsGenderRef.current;
+    const genderNote = gender === 'female' ? 'Speak as a female assistant.' : 'Speak as a male assistant.';
+ 
+    const sys = `You are Vortis, a voice AI assistant.
+Output ONLY the final spoken reply — 1-3 short sentences. Nothing else.
+NEVER output your reasoning, analysis, or thoughts about what language the user spoke, what they meant, or how you should respond.
+No markdown, no lists, no symbols, no emojis, no labels, no quotes.
+CRITICAL: Reply in EXACTLY the same language the user spoke.
+Detected language: ${detectedLang}.
+${genderNote}
+ 
+VOICE SWITCH COMMAND — HIGHEST PRIORITY, CHECK THIS FIRST:
+If the user's message is asking you to change/switch your speaking voice or gender, your ENTIRE response must be ONLY one exact token: SWITCH_VOICE_MALE or SWITCH_VOICE_FEMALE
+No punctuation, no quotes, no extra words. This overrides every other instruction above.
+For all other messages, ignore this and reply normally.`;
+ 
+    const replyVoice = getCallVoice(detectedLang, gender);
+ 
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: sys,
+        history: convHistory.current.slice(-8),
+        isVoiceCall: true,
+        temperature: 0.4
+      })
+    });
+ 
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+ 
+    // Backend streams SSE "data: {...}" chunks — parse it the same way the rest of the app does
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let full = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value, { stream: true }).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try { const p = JSON.parse(raw); if (p.content) full += p.content; } catch (_) {}
+      }
+    }
+ 
+    if (!full.trim() || !callActiveRef.current) return;
+ 
+    const trimmedFull = full
+      .replace(/<think>[\s\S]*?<\/think>/gi, '')
+      .replace(/^(system|assistant|user):\s*/gim, '')
+      .trim();
+ 
+    const switchedMale = /SWITCH_VOICE_MALE/i.test(trimmedFull);
+    const switchedFemale = /SWITCH_VOICE_FEMALE/i.test(trimmedFull);
+    if (switchedMale || switchedFemale) {
+      const newGender = switchedMale ? 'male' : 'female';
+      setTtsGender(newGender);
+      ttsGenderRef.current = newGender;
+      try { localStorage.setItem('vortis_tts_gender', newGender); } catch (_) {}
+ 
+      const confirmText = newGender === 'male' ? 'Okay, switched to a male voice.' : 'Okay, switched to a female voice.';
+      setCallState('speaking');
+      isSpeakingRef.current = true;
+      try {
+        const headers = await getCachedAuthHeader();
+        const ttsRes = await fetch(API, {
+          method: 'POST', headers,
+          body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
+        });
+        const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+        if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+      } catch (_) {}
+      isSpeakingRef.current = false;
+      callBusyRef.current = false;
+      if (callActiveRef.current) setCallState('listening');
+      return;
+    }
+ 
+    const cleanReply = sanitizeForVoice(trimmedFull.replace(/[*_`#~]/g, '').replace(/\s{2,}/g, ' ').trim());
+    pushHistory(convHistory, 'assistant', cleanReply);
+    if (!cleanReply || cleanReply.length < 2) return;
+ 
+    setCallState('speaking');
+    isSpeakingRef.current = true;
+ 
+    try {
+      const headers = await getCachedAuthHeader();
+      const ttsRes = await fetch(API, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'tts', text: cleanReply, voice: replyVoice })
+      });
+      const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+      if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+    } catch (e) {
+      console.error('TTS failed:', e.message);
+    }
+ 
+    isSpeakingRef.current = false;
+    callBusyRef.current = false;
+    if (callActiveRef.current) setCallState('listening');
+ 
+  } catch (err) {
+    console.error('Voice call turn error:', err);
+    isSpeakingRef.current = false;
+    callBusyRef.current = false;
+    if (callActiveRef.current) setCallState('listening');
   }
 };
-
+ 
 const endVoiceCall = () => {
   callActiveRef.current = false;
-  
+ 
   if (vadRef.current) {
-    if (typeof vadRef.current.destroy === 'function') {
-      vadRef.current.destroy();
-    }
+    try { vadRef.current.destroy?.(); } catch (_) {}
     vadRef.current = null;
   }
-  
-  if (callTimerRef.current) {
-    clearInterval(callTimerRef.current);
+ 
+  if (callTimerRef.current) clearInterval(callTimerRef.current);
+  stopCallPlayback();
+  try { callAudioCtxOutRef.current?.close(); } catch (_) {}
+  callAudioCtxOutRef.current = null;
+ 
+  if (callDuration > 0) {
+    addMsg('system', `Voice call ended · ${fmtDuration(callDuration)}`, false);
   }
-  
+ 
   setCallState('idle');
+  setCallPaused(false);
   setShowVoiceCall(false);
+  setCallDuration(0);
 };
-
 const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 
 const doSearch = async (query) => {
