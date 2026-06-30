@@ -2031,7 +2031,6 @@ export default function VortisAI() {
   const [isDark, setIsDark] = useState(true);
   const [wordCount, setWordCount] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
-  const isFetchingRef = useRef(false);
   const callTimerRef = useRef(null);
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
@@ -2042,7 +2041,7 @@ export default function VortisAI() {
   const callActiveSourcesRef = useRef([]);        // currently scheduled/playing buffer sources
   const callTtsQueueRef = useRef(Promise.resolve()); // serializes sentence playback order
   const callFinalTranscriptRef = useRef('');
-  const callSilenceMsRef = useRef(1100);
+  const callSilenceMsRef = useRef(1400);
   const callSilenceTORef = useRef(null);
   const [callPaused, setCallPaused] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
@@ -3013,9 +3012,9 @@ for (const [lang, keywords] of Object.entries(SIGS)) {
   }
 }
 
-if (words.length <= 6 && bestMatches < 3) return 'en-US';
+if (words.length <= 6 && bestMatches < 2) return 'en-US';
 
-return bestScore >= 0.18 ? bestLang : 'en-US';
+return bestScore >= 0.12 ? bestLang : 'en-US';
 };
 
 const CALL_VOICE_MAP = {
@@ -3091,7 +3090,9 @@ const runCallListenLoop = () => {
 
   recog.continuous = true;
   recog.interimResults = true;
-  recog.lang = callDetectedLangRef.current || navigator.language || 'en-US';
+  recog.lang = (callDetectedLangRef.current && callDetectedLangRef.current !== 'en-US')
+  ? callDetectedLangRef.current
+  : (navigator.language || 'en-US');
 
   try { recog.maxAlternatives = 3; } catch (_) {}
 
@@ -3101,7 +3102,7 @@ const runCallListenLoop = () => {
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
-    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 150);
+    if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 50);
   };
 
   const clearSilenceTimer = () => {
@@ -3110,26 +3111,29 @@ const runCallListenLoop = () => {
 
   const armSilenceTimer = () => {
     clearSilenceTimer();
-    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, callSilenceMsRef.current);
+    const len = (callFinalTranscriptRef.current || '').length;
+    const dynamicMs = Math.min(2200, Math.max(callSilenceMsRef.current, len * 5));
+    callSilenceTORef.current = setTimeout(() => { try { recog.stop(); } catch (_) {} }, dynamicMs);
   };
 
   let speakingStartedAt = 0;
 
   recog.onresult = (e) => {
     if (isSpeakingRef.current) {
-      // grace period: ignore the first ~600ms of playback entirely
+      // grace period: ignore the first ~600ms of playback entirely —
+      // this is almost always speaker bleed picked up before echo settles
       if (!speakingStartedAt) speakingStartedAt = Date.now();
       if (Date.now() - speakingStartedAt < 600) return;
 
       const sample = e.results[e.resultIndex]?.[0]?.transcript || '';
-      
-      // ── FIX 1 & 3: Require 20+ chars for interruption, suppress entirely if below threshold ──
-      if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 20) {
+      // require a much longer, clearly-final fragment before treating it
+      // as a real interruption — short fragments are almost always echo
+      if (e.results[e.resultIndex]?.isFinal && sample.trim().length >= 15) {
         stopCallPlayback();
         setCallState('listening');
         speakingStartedAt = 0;
       } else {
-        return; // suppress completely: no transcript accumulation, no silence timer
+        return; // ignore mic bleed from AI's own voice, don't arm silence timer
       }
     } else {
       speakingStartedAt = 0;
@@ -3160,9 +3164,6 @@ const runCallListenLoop = () => {
     clearSilenceTimer();
     if (!callActiveRef.current) return;
 
-    // ── FIX 2: Block duplicate AI fetches if onend double-fires ──
-    if (isFetchingRef.current) return;
-
     const transcript = callFinalTranscriptRef.current.trim();
     callFinalTranscriptRef.current = '';
     if (!transcript) { safeRestart(); return; }
@@ -3171,9 +3172,14 @@ const runCallListenLoop = () => {
     callDetectedLangRef.current = detectedLang;
 
     setCallState('thinking');
-    safeRestart(); // Safe to do here, mic spins up to catch interruptions
+    safeRestart();
 
-    isFetchingRef.current = true; // ── LOCK ──
+    // ── REMOVED: the old regex-based, English/Hindi-only voice-switch
+    // detection. It required exact keyword phrasing ("change voice to
+    // male", literal Hindi words) and silently failed for any other
+    // language or natural phrasing. Detection now happens via the model
+    // itself below (SWITCH_VOICE_MALE / SWITCH_VOICE_FEMALE token), which
+    // understands any language and any phrasing the user actually uses. ──
 
     try {
       if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
@@ -3204,7 +3210,7 @@ Do not add any other text when using this token. For every other message, ignore
         body: JSON.stringify({
           action: 'chat',
           prompt: sys,
-          history: convHistory.current.slice(-8),
+          history: convHistory.current.slice(-8), // ← cap voice history, fixes growing latency
           isVoiceCall: true
         })
       });
@@ -3234,12 +3240,17 @@ Do not add any other text when using this token. For every other message, ignore
         .replace(/^(system|assistant|user):\s*/gim, '')
         .trim();
 
-      if (trimmedFull === 'SWITCH_VOICE_MALE' || trimmedFull === 'SWITCH_VOICE_FEMALE') {
-        const newGender = trimmedFull === 'SWITCH_VOICE_MALE' ? 'male' : 'female';
+      // ── NEW: AI-driven, language-agnostic voice switch handling ──
+      const switchedMale = /SWITCH_VOICE_MALE/i.test(trimmedFull);
+      const switchedFemale = /SWITCH_VOICE_FEMALE/i.test(trimmedFull);
+      if (switchedMale || switchedFemale) {
+        const newGender = switchedMale ? 'male' : 'female';
         setTtsGender(newGender);
         ttsGenderRef.current = newGender;
         try { localStorage.setItem('vortis_tts_gender', newGender); } catch (_) {}
 
+        // Ask the model for a short natural confirmation in the user's own
+        // language instead of a hardcoded two-branch (Hindi/English) string.
         let confirmText = newGender === 'male'
           ? 'Okay, switched to a male voice.'
           : 'Okay, switched to a female voice.';
@@ -3331,12 +3342,8 @@ Do not add any other text when using this token. For every other message, ignore
       console.error('Voice call error:', err);
       isSpeakingRef.current = false;
       if (callActiveRef.current) setCallState('listening');
-    } finally {
-      // ── UNLOCK: Placed in a finally block so it unlocks even if a return triggers early ──
-      isFetchingRef.current = false;
     }
   };
-
   try { recog.start(); } catch (e) {
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
   }
