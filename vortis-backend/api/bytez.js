@@ -627,52 +627,41 @@ function buildSearchQuery(userMessage) {
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── MAIN HANDLER
+// ── MAIN HANDLER (Replace this entire block at the bottom)
 // ═════════════════════════════════════════════════════════════
 export default async function handler(req, res) {
 
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://vortis-ai.vercel.app').split(',');
-  const origin         = req.headers.origin || '';
-  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes('*') ? '*' : origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
-  }
-  
-  // New Header Rules
+  // Force pass your exact frontend domain instantly
+  res.setHeader('Access-Control-Allow-Origin', 'https://vortis-ai.vercel.app');
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  
+  // Explicitly list ALL headers required for Auth, Voice metadata, and App keys
   res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-App-Key, x-api-key, x-client-time');
   res.setHeader('Access-Control-Max-Age', '86400');
 
-  // New Preflight check
+  // Handle preflight checks globally right at the entry point
   if (req.method === 'OPTIONS') { 
     res.writeHead(200); 
     res.end(); 
     return; 
   }
   
-  if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
-
-  if (!allowedOrigins.includes('*') && !allowedOrigins.includes(origin)) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  if (!req.body || typeof req.body !== 'object') {
-    return res.status(400).json({ error: 'Invalid request body' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!req.body || typeof req.body !== 'object') return res.status(400).json({ error: 'Invalid request body' });
 
   try {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
     const token  = req.headers.authorization?.split('Bearer ')[1];
     const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
+    
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     try { await admin.auth().verifyIdToken(token); }
     catch { return res.status(401).json({ error: 'Invalid or expired token' }); }
 
     const body   = req.body;
     const action = sanitizeString(body.action || '', 20);
-
+    
     if (!action) return res.status(400).json({ error: 'Missing action' });
     if (!['chat', 'search', 'image', 'vision', 'tts', 'execute'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
