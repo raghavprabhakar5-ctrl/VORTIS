@@ -2992,9 +2992,17 @@ const detectSpokenLang = (text) => {
     'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte',
                'men','tack','hej','ja','nej','bra','var','vad','när','hur','vem'],
 
+    'de-DE': ['ich','du','er','sie','wir','ihr','die','der','das','ein','eine','und',
+               'ist','nicht','den','von','mit','auf','auch','aber','oder','wenn','dann',
+               'wie','was','wer','wo','schon','noch','nur','ja','nein','danke','bitte',
+               'hallo','guten','morgen','abend','haben','sein','werden','kann','will',
+               'muss','sehr','mehr','hier','jetzt','immer','als','bei','nach','über',
+               'sprechen','deutsch','kannst','sprichst'],
+
     'ru-RU': ['и','в','не','на','что','это','по','но','как','да','нет','спасибо','привет'],
 
     'vi-VN': ['và','của','là','có','trong','không','được','cho','này','cảm','ơn','xin','chào'],
+
     'id-ID': ['yang','dan','di','ini','itu','dengan','untuk','dari','tidak','ada','terima','kasih'],
   };
 
@@ -3055,8 +3063,16 @@ const getCallVoice = (lang, gender) => {
 
 const sanitizeForVoice = (text) => {
   if (!text) return '';
-  return text
-    // model narrating its own reasoning/decision process
+  let t = text;
+  // If the model leaked reasoning, the real reply is usually the LAST sentence —
+  // strip any paragraph/sentence that talks ABOUT the user/language instead of TO them.
+  t = t
+    .split(/\n+/)
+    .filter(line => !/\b(the user|i (think|should|need to|will reply|have to reply)|reply in|detected language|is saying|is speaking|talking in)\b/i.test(line))
+    .join(' ')
+    .trim();
+  if (!t) t = text; // fallback if everything got stripped
+  return t
     .replace(/^(so|okay|ok|alright|well)?,?\s*(i |let me |i'll |i will |i should |i need to |i can |the user (wants|said|asked|is saying)).{0,80}(so|then|therefore|hence)\b.{0,80}[:\-]?\s*/gim, '')
     .replace(/\b(the user (wants|said|asked|is saying|told me) to .{0,100}?)(so|therefore|hence|thus)\b/gi, '')
     .replace(/\bshould i (give|tell|say|reply|respond)\b.{0,60}[?.]?/gi, '')
@@ -3174,15 +3190,36 @@ const runCallListenLoop = () => {
     setCallState('thinking');
     safeRestart();
 
-    // ── REMOVED: the old regex-based, English/Hindi-only voice-switch
-    // detection. It required exact keyword phrasing ("change voice to
-    // male", literal Hindi words) and silently failed for any other
-    // language or natural phrasing. Detection now happens via the model
-    // itself below (SWITCH_VOICE_MALE / SWITCH_VOICE_FEMALE token), which
-    // understands any language and any phrasing the user actually uses. ──
 
     try {
       if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
+
+      // Hard fallback — don't rely solely on the LLM emitting the token.
+      const voiceSwitchRe = /\b(change|switch|use|badal|badlo|switch karo)\b.{0,20}\b(voice|awaaz|आवाज़)\b/i;
+      const wantsMale = /\b(male|man'?s|mard|aadmi)\b/i.test(transcript);
+      const wantsFemale = /\b(female|woman'?s|mahila|aurat)\b/i.test(transcript);
+      if (voiceSwitchRe.test(transcript) && (wantsMale || wantsFemale)) {
+        const newGender = wantsMale ? 'male' : 'female';
+        setTtsGender(newGender);
+        ttsGenderRef.current = newGender;
+        try { localStorage.setItem('vortis_tts_gender', newGender); } catch (_) {}
+        const confirmText = newGender === 'male' ? 'Okay, switched to a male voice.' : 'Okay, switched to a female voice.';
+        setCallState('speaking');
+        isSpeakingRef.current = true;
+        try {
+          const headers = await getCachedAuthHeader();
+          const ttsRes = await fetch(API, {
+            method: 'POST', headers,
+            body: JSON.stringify({ action: 'tts', text: confirmText, voice: getCallVoice(detectedLang, newGender) })
+          });
+          const ttsData = ttsRes.ok ? await ttsRes.json() : null;
+          if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
+        } catch (_) {}
+        isSpeakingRef.current = false;
+        if (callActiveRef.current) setCallState('listening');
+        return;
+      }
+
       incrUsage('messages');
       pushHistory(convHistory, 'user', transcript);
 
@@ -3191,16 +3228,18 @@ const runCallListenLoop = () => {
         ? 'Speak as a female assistant.'
         : 'Speak as a male assistant.';
 
-      const sys = `You are Vortis, a voice AI assistant. 
-Reply in 1-3 short spoken sentences only. 
-No markdown, no lists, no symbols, no emojis.
-CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish. Any other language, reply in that same language.
+     const sys = `You are Vortis, a voice AI assistant.
+Output ONLY the final spoken reply — 1-3 short sentences. Nothing else.
+NEVER output your reasoning, analysis, or thoughts about what language the user spoke, what they meant, or how you should respond. Do not write things like "the user is saying...", "I think...", "so I should reply in...". That text must NEVER appear in your output — only the direct reply itself, as if you are speaking it out loud right now.
+No markdown, no lists, no symbols, no emojis, no labels, no quotes.
+CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish. If German, reply in German. Any other language, reply in that same language.
 Detected language: ${detectedLang}.
 ${genderNote}
 
-VOICE SWITCH COMMAND:
-If — and only if — the user is asking you to change your speaking voice/gender (to male, to female, to a man's voice, to a woman's voice — in ANY language or phrasing, however they say it), respond with ONLY one of these exact tokens and nothing else, no punctuation, no other words: SWITCH_VOICE_MALE or SWITCH_VOICE_FEMALE
-Do not add any other text when using this token. For every other message, ignore this command entirely and just answer normally.`;
+VOICE SWITCH COMMAND — HIGHEST PRIORITY, CHECK THIS FIRST:
+If the user's message is asking you to change/switch your speaking voice or gender in ANY way (e.g. "change your voice", "switch voice", "talk like a man", "use a female voice", "apni awaaz badlo", any language/phrasing), your ENTIRE response must be ONLY one exact token, nothing else: SWITCH_VOICE_MALE or SWITCH_VOICE_FEMALE
+No punctuation, no quotes, no extra words, no explanation. This overrides every other instruction above.
+For all other messages, ignore this and reply normally.`;
 
       const replyVoice = getCallVoice(detectedLang, gender);
 
@@ -3305,10 +3344,9 @@ Do not add any other text when using this token. For every other message, ignore
 
       pushHistory(convHistory, 'assistant', reply);
 
-      const cleanReply = reply
-        .replace(/[*_`#~]/g, '')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
+     const cleanReply = sanitizeForVoice(
+        reply.replace(/[*_`#~]/g, '').replace(/\s{2,}/g, ' ').trim()
+      );
 
       if (!cleanReply || cleanReply.length < 2) return;
 
