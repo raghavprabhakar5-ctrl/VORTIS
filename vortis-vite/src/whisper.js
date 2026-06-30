@@ -29,7 +29,9 @@ export const transcribeAudio = async (audioFloat32Array, language = null) => {
   console.log("🔊 Transcribing audio data buffer array...");
   
   const result = await asr(audioFloat32Array, {
-    language: language || undefined,
+    // Passing null directly to the transformers.js config block 
+    // forces Whisper to use its Language Identification (LID) head automatically.
+    language: null, 
     task: 'transcribe',
   });
   
