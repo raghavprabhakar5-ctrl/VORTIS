@@ -3,6 +3,10 @@ import { pipeline, env } from '@huggingface/transformers';
 env.allowRemoteModels = true;
 env.allowLocalModels = false;
 
+// CRITICAL: Tells the internal ONNX runtime engine to skip checking for 
+// quantization properties that cause the "Missing required scale" crash.
+env.backends.onnx.quantized = false;
+
 let transcriber = null;
 
 export const loadWhisper = async (onProgress) => {
@@ -11,7 +15,7 @@ export const loadWhisper = async (onProgress) => {
     'automatic-speech-recognition',
     'Xenova/whisper-small',
     {
-      quantized: true,
+      quantized: false, // 💡 CHANGED TO FALSE: Bypasses the broken qdq_actions matrix bug
       progress_callback: onProgress,
     }
   );
