@@ -3,8 +3,8 @@ import { pipeline, env } from '@huggingface/transformers';
 env.allowRemoteModels = true;
 env.allowLocalModels = false;
 
-// Ensure v3 configuration avoids quantization glitches
-env.backends.onnx.quantized = false;
+// Re-enable quantization for v3's optimized layout
+env.backends.onnx.quantized = true;
 
 let transcriber = null;
 
@@ -15,9 +15,12 @@ export const loadWhisper = async (onProgress) => {
   
   transcriber = await pipeline(
     'automatic-speech-recognition',
-    'onnx-community/whisper-small', // ✨ FIX: Changed from Xenova to the official v3 repo matching your library
+    'onnx-community/whisper-small', 
     {
-      quantized: false, 
+      // Using 'q4' ensures we pull down the highly compressed, 
+      // bug-free version (~200MB instead of 900MB)
+      quantized: true,
+      dtype: 'q4', 
       progress_callback: onProgress,
     }
   );
