@@ -3297,10 +3297,7 @@ For all other messages, ignore this and reply normally.`;
   }
 };
 
-// ── Replaces runCallListenLoop: Whisper-based, real silence detection ──
-const SPEECH_RMS_THRESHOLD = 0.018;   // tweak: lower = more sensitive mic pickup
-const SILENCE_MS_TO_END = 900;        // pause length that means "they stopped talking"
-const MIN_SPEECH_MS = 280;            // ignore tiny blips/coughs
+// ── VOICE PIPELINE DESIGN INTEGRATION ──
 
 const runCallListenLoop = async () => {
   if (!callActiveRef.current) return;
@@ -3308,7 +3305,6 @@ const runCallListenLoop = async () => {
   // 1. Safe Model Pre-Loading Stage
   try {
     setCallState('loading');
-    // Ensure whisper-tiny is configured inside your whisper.js file
     await loadWhisper((p) => { /* optional progress tracking */ });
   } catch (e) {
     console.error('Whisper failed to load:', e);
@@ -3321,14 +3317,18 @@ const runCallListenLoop = async () => {
 
   // 2. High-Performance VAD Engine Initialisation
   try {
-    // If a previous VAD instance exists, safely clean it up first
+    // If a previous VAD instance exists, cleanly destroy it first
     if (callProcessorRef.current && typeof callProcessorRef.current.destroy === 'function') {
-      callProcessorRef.current.destroy();
+      await callProcessorRef.current.destroy();
     }
 
     console.log("🎙️ Initializing high-performance VAD context...");
 
     const vad = await MicVAD.new({
+      // ✨ FIXES THE 404 ERRORS: Route binaries to official CDN servers natively
+      baseAssetPath: "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@latest/dist/",
+      onnxWASMBasePath: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/",
+
       onSpeechStart: () => {
         if (!callActiveRef.current || isSpeakingRef.current || callUtteranceBusyRef.current) return;
         console.log("🎙️ VAD picked up voice natively!");
@@ -3343,8 +3343,6 @@ const runCallListenLoop = async () => {
         setCallState('transcribing');
 
         try {
-          // ✨ NO MORE MANUAL DOWNSAMPLING OR FLATTENING CHUNKS!
-          // The 'audio' argument here is already a perfectly compiled 16kHz Float32Array.
           console.log("Sending clean audio chunks to Whisper transcription...");
           const text = await transcribeAudio(audio);
           console.log("Whisper Transcript Result:", text);
@@ -3359,17 +3357,16 @@ const runCallListenLoop = async () => {
           if (callActiveRef.current && !isSpeakingRef.current) setCallState('listening');
         }
       },
-      // Optimized sensitivity configurations
       positiveSpeechThreshold: 0.5,
       negativeSpeechThreshold: 0.35,
       minSpeechFrames: 3,
-      redemptionFrames: 25, // Keeps tracking smooth mid-sentence
+      redemptionFrames: 25, 
     });
 
-    // Fire up the optimized WebAudio engine worker
+    // Start streaming mic input safely via WebAudio worker context loops
     vad.start();
     
-    // Store the VAD instance directly into your clean-up reference pointer
+    // Assign the running engine instance to your processor reference tracker
     callProcessorRef.current = vad;
     setCallState('listening');
 
@@ -3379,7 +3376,8 @@ const runCallListenLoop = async () => {
     setCallState('idle');
   }
 };
-// ═══════ VOICE CALL — final merged version ═══════
+
+// ═══════ VOICE CALL LIFECYCLE CONTROLLERS ═══════
 
 const getRecogLang = () => {
   try { return localStorage.getItem('vortis_recog_lang') || navigator.language || 'en-US'; }
@@ -3393,9 +3391,6 @@ const base64ToArrayBuffer = (base64) => {
   return bytes.buffer;
 };
 
-// Decodes an mp3-base64 TTS response and schedules it to play immediately
-// after whatever's already queued — this is what makes multi-sentence
-// replies sound like one continuous voice instead of stutter-gap-stutter.
 const scheduleAudioBuffer = async (base64Audio) => {
   if (!callAudioCtxOutRef.current) {
     callAudioCtxOutRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -3421,7 +3416,6 @@ const scheduleAudioBuffer = async (base64Audio) => {
   return new Promise((resolve) => { src.onended = resolve; });
 };
 
-// Stops everything currently playing/scheduled — used for barge-in and hangup.
 const stopCallPlayback = () => {
   callActiveSourcesRef.current.forEach(s => { try { s.stop(); } catch (_) {} });
   callActiveSourcesRef.current = [];
@@ -3430,20 +3424,17 @@ const stopCallPlayback = () => {
 };
 
 const startVoiceCall = async () => {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
-
+  // ✨ CLEANUP: Removed the browser SpeechRecognition requirement check 
+  // since transcription runs locally on Whisper Tiny now.
   setShowVoiceCall(true);
-  setCallState('idle'); // shows "Connecting"
+  setCallState('idle'); 
   setCallPaused(false);
   callActiveRef.current = true;
   callFinalTranscriptRef.current = '';
 
-  // Explicitly request mic permission FIRST — this is the actual blocking step.
-  // Until the user grants access, stay on "Connecting".
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(t => t.stop()); // we don't need the raw stream, SpeechRecognition opens its own
+    stream.getTracks().forEach(t => t.stop()); // Verification pass completes, clear hook
   } catch (e) {
     console.error('Mic permission denied:', e);
     showToast('Microphone access denied', 'var(--red)');
@@ -3452,7 +3443,7 @@ const startVoiceCall = async () => {
     return;
   }
 
-  if (!callActiveRef.current) return; // user may have hung up while permission dialog was open
+  if (!callActiveRef.current) return;
 
   runCallListenLoop();
   setCallDuration(0);
@@ -3463,7 +3454,13 @@ const endVoiceCall = () => {
   callActiveRef.current = false;
   clearInterval(callTimerRef.current);
 
-  try { callProcessorRef.current?.disconnect(); } catch (_) {}
+  // ✨ FIXES TEARDOWN CRASH: Use destroy() instead of disconnect() for VAD instances
+  try {
+    if (callProcessorRef.current && typeof callProcessorRef.current.destroy === 'function') {
+      callProcessorRef.current.destroy();
+    }
+  } catch (_) {}
+  
   try { callSourceRef.current?.disconnect(); } catch (_) {}
   callProcessorRef.current = null;
   callSourceRef.current = null;
@@ -3489,6 +3486,7 @@ const endVoiceCall = () => {
   setShowVoiceCall(false);
   setCallDuration(0);
 };
+
 const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 
 const doSearch = async (query) => {
