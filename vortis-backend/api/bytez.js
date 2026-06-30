@@ -801,7 +801,7 @@ export default async function handler(req, res) {
             ...sanitizeHistory(history, 8),
           ],
           max_tokens:  800,
-          temperature: 0.7,
+          temperature: body.temperature ?? 0.4,
           stream:      false,
         }),
       },

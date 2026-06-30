@@ -3243,14 +3243,15 @@ For all other messages, ignore this and reply normally.`;
 
       const replyVoice = getCallVoice(detectedLang, gender);
 
-      const res = await fetch(API, {
+     const res = await fetch(API, {
         method: 'POST',
         headers: await getAuthHeader(),
         body: JSON.stringify({
           action: 'chat',
           prompt: sys,
-          history: convHistory.current.slice(-8), // ← cap voice history, fixes growing latency
-          isVoiceCall: true
+          history: convHistory.current.slice(-8),
+          isVoiceCall: true,
+          temperature: 0.4
         })
       });
 
@@ -3342,12 +3343,11 @@ For all other messages, ignore this and reply normally.`;
       const reply = trimmedFull;
       if (!reply) return;
 
-      pushHistory(convHistory, 'assistant', reply);
-
-     const cleanReply = sanitizeForVoice(
+      const cleanReply = sanitizeForVoice(
         reply.replace(/[*_`#~]/g, '').replace(/\s{2,}/g, ' ').trim()
       );
 
+      pushHistory(convHistory, 'assistant', cleanReply); // push the CLEAN version only
       if (!cleanReply || cleanReply.length < 2) return;
 
       setCallState('speaking');
@@ -3384,7 +3384,21 @@ For all other messages, ignore this and reply normally.`;
   };
   try { recog.start(); } catch (e) {
     if (callActiveRef.current) setTimeout(() => { try { runCallListenLoop(); } catch (_) {} }, 500);
+    return;
   }
+
+  // Watchdog — if neither onresult nor onend fires within 12s, force a restart
+  const watchdog = setTimeout(() => {
+    if (callActiveRef.current && callRecogRef.current === recog) {
+      try { recog.stop(); } catch (_) {}
+      try { recog.abort(); } catch (_) {}
+      safeRestart();
+    }
+  }, 12000);
+  const clearWatchdog = () => clearTimeout(watchdog);
+  recog.addEventListener('result', clearWatchdog, { once: true });
+  recog.addEventListener('end', clearWatchdog, { once: true });
+  recog.addEventListener('error', clearWatchdog, { once: true });
 };
 // ═══════ VOICE CALL — final merged version ═══════
 
