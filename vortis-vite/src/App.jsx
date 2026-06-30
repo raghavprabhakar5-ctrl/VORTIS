@@ -8,8 +8,9 @@ import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
 import { loadWhisper, transcribeAudio } from './whisper';
+import { MicVAD } from '@ricky0123/vad-web';
 import { pipeline } from '@xenova/transformers';
- import { franc } from 'franc-min';
+import { franc } from 'franc-min';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import './index.css';
