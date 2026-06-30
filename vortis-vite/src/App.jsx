@@ -3465,108 +3465,53 @@ const stopCallPlayback = () => {
   isSpeakingRef.current = false;
 };
 
-const vadRef = useRef(null);
-
 const startVoiceCall = async () => {
-  setShowVoiceCall(true);
-  setCallState('idle');
-  callActiveRef.current = true;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
 
-  // 1. Double-check microphone availability
+  setShowVoiceCall(true);
+  setCallState('idle'); // shows "Connecting"
+  setCallPaused(false);
+  callActiveRef.current = true;
+  callFinalTranscriptRef.current = '';
+
+  // Explicitly request mic permission FIRST — this is the actual blocking step.
+  // Until the user grants access, stay on "Connecting".
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    stream.getTracks().forEach(t => t.stop());
+    stream.getTracks().forEach(t => t.stop()); // we don't need the raw stream, SpeechRecognition opens its own
   } catch (e) {
+    console.error('Mic permission denied:', e);
     showToast('Microphone access denied', 'var(--red)');
     setShowVoiceCall(false);
     callActiveRef.current = false;
     return;
   }
 
-  // 2. Initialize the Voice Pipeline with cross-origin handlers
-  try {
-    vadRef.current = await startVoicePipeline({
-      onTranscript: async (transcript) => {
-        if (!transcript || !transcript.trim() || !callActiveRef.current) return;
-        
-        setCallState('thinking');
-        
-        try {
-          // Fetch user authentication token required by backend auth layer
-          const currentUser = admin.auth().currentUser;
-          if (!currentUser) {
-            showToast('User not authenticated', 'var(--red)');
-            return;
-          }
-          const token = await currentUser.getIdToken(true);
+  if (!callActiveRef.current) return; // user may have hung up while permission dialog was open
 
-          // Complete request format matching backend expectations exactly
-          const response = await fetch('https://vortis-backend.vercel.app/api/bytez', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-              action: 'chat',
-              prompt: transcript,
-              history: [], // Pass conversation history here if tracked
-              isVoiceCall: true
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP network error: ${response.status}`);
-          }
-
-          // Parse the generated reply
-          const data = await response.json();
-          
-          // Trigger the text-to-speech engine if a valid text response is present
-          if (data && data.text) {
-            setCallState('speaking');
-            // Connect to your local browser TTS or backend audio player here
-          } else {
-            setCallState('idle');
-          }
-
-        } catch (error) {
-          console.error("Voice handler payload failed:", error);
-          setCallState('idle');
-        }
-      },
-      onStateChange: (state) => {
-        setCallState(state === 'listening' ? 'listening' : state === 'transcribing' ? 'thinking' : 'idle');
-      },
-    });
-
-    // 3. Kick off session performance timer
-    setCallDuration(0);
-    callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
-
-  } catch (pipelineError) {
-    console.error("Failed to initialize voice framework component:", pipelineError);
-    setShowVoiceCall(false);
-    callActiveRef.current = false;
-  }
+  runCallListenLoop();
+  setCallDuration(0);
+  callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 };
 
 const endVoiceCall = () => {
   callActiveRef.current = false;
-  
-  if (vadRef.current) {
-    if (typeof vadRef.current.destroy === 'function') {
-      vadRef.current.destroy();
-    }
-    vadRef.current = null;
+  clearInterval(callTimerRef.current);
+  try { callRecogRef.current?.stop(); } catch (_) {}
+  clearTimeout(callSilenceTORef.current);
+  stopCallPlayback();
+  try { callAudioCtxOutRef.current?.close(); } catch (_) {}
+  callAudioCtxOutRef.current = null;
+
+  if (callDuration > 0) {
+    addMsg('system', `Voice call ended · ${fmtDuration(callDuration)}`, false);
   }
-  
-  if (callTimerRef.current) {
-    clearInterval(callTimerRef.current);
-  }
-  
+
   setCallState('idle');
+  setCallPaused(false);
   setShowVoiceCall(false);
+  setCallDuration(0);
 };
 
 const fmtDuration = (s) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
