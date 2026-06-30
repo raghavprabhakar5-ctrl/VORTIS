@@ -3227,6 +3227,7 @@ callRecogRef.current = recog;
           if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
         } catch (_) {}
         isSpeakingRef.current = false;
+        callBusyRef.current = false;
         if (callActiveRef.current) setCallState('listening');
         return;
       }
