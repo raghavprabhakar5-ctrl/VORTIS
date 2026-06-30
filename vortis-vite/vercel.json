@@ -3,7 +3,7 @@
     { "source": "/privacy", "destination": "/index.html" },
     { "source": "/terms", "destination": "/index.html" },
     {
-      "source": "/((?!api|_vercel|static|assets).*)" ,
+      "source": "/((?!api|_vercel|static|assets|models).*)" ,
       "destination": "/index.html"
     }
   ],
