@@ -3,7 +3,7 @@ import { pipeline, env } from '@huggingface/transformers';
 env.allowRemoteModels = true;
 env.allowLocalModels = false;
 
-// Re-enable quantization for v3's optimized layout
+// 1. MUST BE TRUE so it looks for the compressed files your browser likes
 env.backends.onnx.quantized = true;
 
 let transcriber = null;
@@ -11,15 +11,14 @@ let transcriber = null;
 export const loadWhisper = async (onProgress) => {
   if (transcriber) return transcriber;
   
-  console.log("📥 Loading official v3 Whisper Model...");
+  console.log("📥 Loading official fast v3 Whisper-Small...");
   
   transcriber = await pipeline(
     'automatic-speech-recognition',
     'onnx-community/whisper-small', 
     {
-      // Using 'q4' ensures we pull down the highly compressed, 
-      // bug-free version (~200MB instead of 900MB)
       quantized: true,
+      // 2. Explicitly use q4 or q8 so the file sizes drop to ~200MB instead of 900MB!
       dtype: 'q4', 
       progress_callback: onProgress,
     }
