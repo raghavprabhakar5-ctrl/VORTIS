@@ -2041,6 +2041,7 @@ export default function VortisAI() {
   const callActiveSourcesRef = useRef([]);        // currently scheduled/playing buffer sources
   const callTtsQueueRef = useRef(Promise.resolve()); // serializes sentence playback order
   const callFinalTranscriptRef = useRef('');
+  const callBusyRef = useRef(false);
   const callSilenceMsRef = useRef(1400);
   const callSilenceTORef = useRef(null);
   const [callPaused, setCallPaused] = useState(false);
@@ -3112,14 +3113,18 @@ const runCallListenLoop = () => {
 
   try { recog.maxAlternatives = 3; } catch (_) {}
 
- callRecogRef.current = recog;
+callRecogRef.current = recog;
 
   recog.onstart = () => {
-    if (callActiveRef.current) setCallState('listening');
+    // Don't override the UI if we're mid-processing (thinking/speaking) —
+    // the background mic restart happens before that finishes.
+    if (callActiveRef.current && !isSpeakingRef.current && !callBusyRef.current) {
+      setCallState('listening');
+    }
   };
 
   let restarted = false;
-  
+
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
@@ -3192,6 +3197,7 @@ const runCallListenLoop = () => {
     const detectedLang = detectSpokenLang(transcript);
     callDetectedLangRef.current = detectedLang;
 
+    callBusyRef.current = true;
     setCallState('thinking');
     safeRestart();
 
@@ -3340,7 +3346,8 @@ For all other messages, ignore this and reply normally.`;
           const ttsData = ttsRes.ok ? await ttsRes.json() : null;
           if (ttsData?.audio?.length > 100) await scheduleAudioBuffer(ttsData.audio);
         } catch (_) {}
-        isSpeakingRef.current = false;
+       isSpeakingRef.current = false;
+        callBusyRef.current = false;
         if (callActiveRef.current) setCallState('listening');
         return;
       }
@@ -3378,12 +3385,14 @@ For all other messages, ignore this and reply normally.`;
         console.error('TTS failed:', e.message);
       }
 
-      isSpeakingRef.current = false;
+     isSpeakingRef.current = false;
+      callBusyRef.current = false;
       if (callActiveRef.current) setCallState('listening');
 
     } catch (err) {
       console.error('Voice call error:', err);
       isSpeakingRef.current = false;
+      callBusyRef.current = false;
       if (callActiveRef.current) setCallState('listening');
     }
   };
