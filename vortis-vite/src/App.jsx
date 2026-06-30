@@ -3112,9 +3112,14 @@ const runCallListenLoop = () => {
 
   try { recog.maxAlternatives = 3; } catch (_) {}
 
-  callRecogRef.current = recog;
+ callRecogRef.current = recog;
+
+  recog.onstart = () => {
+    if (callActiveRef.current) setCallState('listening');
+  };
 
   let restarted = false;
+  
   const safeRestart = () => {
     if (restarted) return;
     restarted = true;
@@ -3455,16 +3460,30 @@ const startVoiceCall = async () => {
   if (!SR) { showToast('Voice not supported on this browser', 'var(--red)'); return; }
 
   setShowVoiceCall(true);
-  setCallState('idle');
+  setCallState('idle'); // shows "Connecting"
   setCallPaused(false);
   callActiveRef.current = true;
   callFinalTranscriptRef.current = '';
 
-  setTimeout(() => { try { runCallListenLoop(); } catch (e) { console.error('Voice call start failed:', e); } }, 250);
+  // Explicitly request mic permission FIRST — this is the actual blocking step.
+  // Until the user grants access, stay on "Connecting".
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach(t => t.stop()); // we don't need the raw stream, SpeechRecognition opens its own
+  } catch (e) {
+    console.error('Mic permission denied:', e);
+    showToast('Microphone access denied', 'var(--red)');
+    setShowVoiceCall(false);
+    callActiveRef.current = false;
+    return;
+  }
+
+  if (!callActiveRef.current) return; // user may have hung up while permission dialog was open
+
+  runCallListenLoop();
   setCallDuration(0);
   callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 };
-
 
 const endVoiceCall = () => {
   callActiveRef.current = false;
