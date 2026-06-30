@@ -6,22 +6,32 @@ env.backends.onnx.quantized = true;
 
 let transcriber = null;
 
+// Ensure this is exported
 export const loadWhisper = async (onProgress) => {
   if (transcriber) return transcriber;
   
-  console.log("📥 Loading hyper-fast Whisper Tiny Model...");
-  
+  console.log("📥 Loading fast Whisper model...");
   transcriber = await pipeline(
     'automatic-speech-recognition',
-    // ✨ CHANGE THIS LINE: Switch from whisper-small to whisper-tiny
-    'onnx-community/whisper-tiny', 
+    'onnx-community/whisper-tiny', // Using tiny to avoid browser lagging
     {
       quantized: true,
-      dtype: 'q4', // Keeps it incredibly small and lightweight
+      dtype: 'q4',
       progress_callback: onProgress,
     }
   );
-  
-  console.log("✅ Whisper Tiny Loaded Successfully!");
   return transcriber;
+};
+
+// ✨ CRITICAL: This must have 'export' right here so App.jsx can find it!
+export const transcribeAudio = async (audioFloat32Array, language = null) => {
+  const asr = await loadWhisper();
+  console.log("🔊 Transcribing audio data buffer array...");
+  
+  const result = await asr(audioFloat32Array, {
+    language: language || undefined,
+    task: 'transcribe',
+  });
+  
+  return result?.text?.trim() || '';
 };

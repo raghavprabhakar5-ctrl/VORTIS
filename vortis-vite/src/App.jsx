@@ -3004,12 +3004,6 @@ const detectSpokenLang = (text) => {
     'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte',
                'men','tack','hej','ja','nej','bra','var','vad','när','hur','vem'],
 
-    'de-DE': ['ich','du','er','sie','wir','ihr','die','der','das','ein','eine','und',
-               'ist','nicht','den','von','mit','auf','auch','aber','oder','wenn','dann',
-               'wie','was','wer','wo','schon','noch','nur','ja','nein','danke','bitte',
-               'hallo','guten','morgen','abend','haben','sein','werden','kann','will',
-               'muss','sehr','mehr','hier','jetzt','immer','als','bei','nach','über',
-               'sprechen','deutsch','kannst','sprichst'],
 
     'ru-RU': ['и','в','не','на','что','это','по','но','как','да','нет','спасибо','привет'],
 
