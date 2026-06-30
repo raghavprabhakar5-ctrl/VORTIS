@@ -3310,8 +3310,11 @@ const MIN_SPEECH_MS = 280;            // ignore tiny blips/coughs
 const runCallListenLoop = async () => {
   if (!callActiveRef.current) return;
 
+  // 1. Safe Model Pre-Loading Stage
   try {
-    await loadWhisper((p) => { /* optional: surface model-load progress */ });
+    setCallState('loading');
+    // Ensure whisper-tiny is configured inside your whisper.js file
+    await loadWhisper((p) => { /* optional progress tracking */ });
   } catch (e) {
     console.error('Whisper failed to load:', e);
     showToast('Voice model failed to load', 'var(--red)');
@@ -3321,103 +3324,62 @@ const runCallListenLoop = async () => {
 
   if (!callActiveRef.current) return;
 
+  // 2. High-Performance VAD Engine Initialisation
   try {
-    if (!callMicStreamRef.current) {
-      callMicStreamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
+    // If a previous VAD instance exists, safely clean it up first
+    if (callProcessorRef.current && typeof callProcessorRef.current.destroy === 'function') {
+      callProcessorRef.current.destroy();
     }
-    if (!callAudioCtxInRef.current) {
-      callAudioCtxInRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    const ctx = callAudioCtxInRef.current;
-    if (ctx.state === 'suspended') await ctx.resume();
 
-    const source = ctx.createMediaStreamSource(callMicStreamRef.current);
-    const processor = ctx.createScriptProcessor(4096, 1, 1);
-    const silentGain = ctx.createGain();
-    silentGain.gain.value = 0; // mute loopback
+    console.log("🎙️ Initializing high-performance VAD context...");
 
-    source.connect(processor);
-    processor.connect(silentGain);
-    silentGain.connect(ctx.destination);
+    const vad = await MicVAD.new({
+      onSpeechStart: () => {
+        if (!callActiveRef.current || isSpeakingRef.current || callUtteranceBusyRef.current) return;
+        console.log("🎙️ VAD picked up voice natively!");
+        setCallState('listening');
+      },
+      onSpeechEnd: async (audio) => {
+        if (!callActiveRef.current) return;
+        if (isSpeakingRef.current || callUtteranceBusyRef.current) return;
 
-    callSourceRef.current = source;
-    callProcessorRef.current = processor;
-    callRecordedRef.current = [];
-    callSpeakingNowRef.current = false;
-    callSilenceStartRef2.current = null;
-    callSpeechStartRef.current = null;
+        console.log(`🤫 Silence detected. VAD processing chunk size: ${audio.length} samples`);
+        callUtteranceBusyRef.current = true;
+        setCallState('transcribing');
 
+        try {
+          // ✨ NO MORE MANUAL DOWNSAMPLING OR FLATTENING CHUNKS!
+          // The 'audio' argument here is already a perfectly compiled 16kHz Float32Array.
+          console.log("Sending clean audio chunks to Whisper transcription...");
+          const text = await transcribeAudio(audio);
+          console.log("Whisper Transcript Result:", text);
+          
+          if (text && text.trim().length > 1) {
+            await processUserUtterance(text);
+          }
+        } catch (err) {
+          console.error('Whisper transcribe failed:', err);
+        } finally {
+          callUtteranceBusyRef.current = false;
+          if (callActiveRef.current && !isSpeakingRef.current) setCallState('listening');
+        }
+      },
+      // Optimized sensitivity configurations
+      positiveSpeechThreshold: 0.5,
+      negativeSpeechThreshold: 0.35,
+      minSpeechFrames: 3,
+      redemptionFrames: 25, // Keeps tracking smooth mid-sentence
+    });
+
+    // Fire up the optimized WebAudio engine worker
+    vad.start();
+    
+    // Store the VAD instance directly into your clean-up reference pointer
+    callProcessorRef.current = vad;
     setCallState('listening');
 
-    processor.onaudioprocess = (e) => {
-      const input = e.inputBuffer.getChannelData(0);
-      const output = e.outputBuffer.getChannelData(0);
-      
-      // CRITICAL FIX: You MUST copy input to output or modern browsers 
-      // will freeze/stop executing this loop entirely after a few iterations.
-      output.set(input);
-
-      if (!callActiveRef.current) return;
-      if (isSpeakingRef.current || callUtteranceBusyRef.current) return;
-
-      let sum = 0;
-      for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
-      const rms = Math.sqrt(sum / input.length);
-      const now = Date.now();
-
-      // OPTIONAL DEBUGGING: Uncomment this line to see your real volume in the console!
-      // console.log("Live Volume (RMS):", rms.toFixed(4), "Target:", SPEECH_RMS_THRESHOLD);
-
-      if (rms > SPEECH_RMS_THRESHOLD) {
-        if (!callSpeakingNowRef.current) {
-          console.log("🎙️ Mic picked up voice! (RMS above threshold)");
-          callSpeakingNowRef.current = true;
-          callSpeechStartRef.current = now;
-          setCallState('listening');
-        }
-        callSilenceStartRef2.current = null;
-        callRecordedRef.current.push(new Float32Array(input));
-      } else if (callSpeakingNowRef.current) {
-        callRecordedRef.current.push(new Float32Array(input)); // keep trailing silence
-        if (callSilenceStartRef2.current === null) callSilenceStartRef2.current = now;
-
-        if (now - callSilenceStartRef2.current > SILENCE_MS_TO_END) {
-          const speechMs = now - (callSpeechStartRef.current || now);
-          const chunks = callRecordedRef.current;
-          
-          console.log(`🤫 Silence detected. Speech duration: ${speechMs}ms. Processing...`);
-          
-          callRecordedRef.current = [];
-          callSpeakingNowRef.current = false;
-          callSilenceStartRef2.current = null;
-
-          if (speechMs > MIN_SPEECH_MS && chunks.length) {
-            const merged = flattenChunks(chunks);
-            const pcm16k = downsampleTo16k(merged, ctx.sampleRate);
-            callUtteranceBusyRef.current = true;
-            (async () => {
-              try {
-                console.log("Sending audio chunks to Whisper transcription...");
-                const text = await transcribeAudio(pcm16k);
-                console.log("Whisper Transcript Result:", text);
-                if (text && text.trim().length > 1) {
-                  await processUserUtterance(text);
-                }
-              } catch (err) {
-                console.error('Whisper transcribe failed:', err);
-              } finally {
-                callUtteranceBusyRef.current = false;
-                if (callActiveRef.current && !isSpeakingRef.current) setCallState('listening');
-              }
-            })();
-          }
-        }
-      }
-    };
   } catch (e) {
-    console.error('Mic/AudioContext setup failed:', e);
+    console.error('VAD Engine initialization failed:', e);
     showToast('Microphone error', 'var(--red)');
     setCallState('idle');
   }
