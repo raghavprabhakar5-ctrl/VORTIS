@@ -638,11 +638,20 @@ export default async function handler(req, res) {
   } else {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
   }
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-App-Key');
+  
+  // New Header Rules
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization, X-App-Key, x-api-key, x-client-time');
   res.setHeader('Access-Control-Max-Age', '86400');
 
-  if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+  // New Preflight check
+  if (req.method === 'OPTIONS') { 
+    res.writeHead(200); 
+    res.end(); 
+    return; 
+  }
+  
   if (req.method !== 'POST')    return res.status(405).json({ error: 'Method not allowed' });
 
   if (!allowedOrigins.includes('*') && !allowedOrigins.includes(origin)) {
