@@ -1,45 +1,26 @@
 import { MicVAD } from '@ricky0123/vad-web';
-import { loadWhisper, transcribeAudio } from './whisper';
+import { transcribeAudio } from './whisper';
 
 export const startVoicePipeline = async ({ onTranscript, onStateChange }) => {
-  try {
-    // 1. Force the model to load FIRST while UI shows loading
-    onStateChange?.('loading');
-    console.log("⏳ Pipeline: Pre-loading Whisper engine...");
-    await loadWhisper(); 
+  // Preload the model first so first utterance isn't slow
+  onStateChange?.('loading');
+  await transcribeAudio(new Float32Array(1), null).catch(() => {}); // warm up
+  onStateChange?.('listening');
 
-    // 2. ONLY start the microphone after the model is 100% ready
-    console.log("🎙️ Pipeline: Model ready. Initializing microphone...");
-    onStateChange?.('listening');
+  const vad = await MicVAD.new({
+    onSpeechStart: () => onStateChange?.('listening'),
+    onSpeechEnd: async (audio) => {
+      onStateChange?.('transcribing');
+      const text = await transcribeAudio(audio);
+      if (text) onTranscript(text);
+      onStateChange?.('listening');
+    },
+    positiveSpeechThreshold: 0.6,
+    negativeSpeechThreshold: 0.4,
+    minSpeechFrames: 4,
+    redemptionFrames: 16, // patience before deciding the person stopped — raise if it cuts off too early
+  });
 
-    const vad = await MicVAD.new({
-      onSpeechStart: () => {
-        onStateChange?.('listening');
-      },
-      onSpeechEnd: async (audio) => {
-        onStateChange?.('transcribing');
-        try {
-          const text = await transcribeAudio(audio);
-          if (text && text.trim().length > 1) {
-            onTranscript(text);
-          }
-        } catch (err) {
-          console.error("❌ Transcription error:", err);
-        } finally {
-          onStateChange?.('listening');
-        }
-      },
-      positiveSpeechThreshold: 0.5,
-      negativeSpeechThreshold: 0.35,
-      minSpeechFrames: 3,
-      redemptionFrames: 25,
-    });
-
-    vad.start();
-    return vad;
-  } catch (err) {
-    console.error("❌ Critical Pipeline Failure:", err);
-    onStateChange?.('idle');
-    throw err;
-  }
+  vad.start();
+  return vad;
 };
