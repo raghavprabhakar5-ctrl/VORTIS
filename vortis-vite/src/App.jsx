@@ -2096,48 +2096,6 @@ export default function VortisAI() {
   const auth = getAuth();
   const db = getFirestore();
 
- useEffect(() => {
-  console.log('Checking for redirect result...');
-  getRedirectResult(auth).then(async (result) => {
-    console.log('Redirect result:', result);
-    if (!result) { console.log('No pending redirect result'); return; }
-    const u = result.user;
-    let displayName = u.displayName;
-    if (displayName) {
-      displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
-      displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
-    }
-    if (!displayName || displayName.trim() === '') displayName = u.email?.split('@')[0] || 'User';
-    try { await updateProfile(u, { displayName }); } catch(_) {}
-
-    const p = { name: displayName, email: u.email, avatar: u.photoURL || '', provider: 'google' };
-    userUidRef.current = u.uid;
-    setProfile(p);
-    try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
-
-    try {
-      const userSnap = await getDoc(doc(db, 'users', u.uid));
-      if (userSnap.exists()) {
-        const data = userSnap.data();
-        if (data.tier) setTier(data.tier); else setTier('free');
-        if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-      } else {
-        setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-        await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0, vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
-      }
-    } catch(_) {}
-
-    setShowLogin(false);
-    addMemory(`User's name is ${displayName.split(' ')[0]}`);
-    await loadChats(u.uid);
-    loadMemories();
-    startNewChat();
-  }).catch((e) => {
-    console.error('Redirect result error:', e.code, e.message);
-    setAuthError('Login failed. Please try again.');
-  });
-}, []);
-
   useEffect(() => {
     if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
     styleEl.current.textContent = makeStyles(isDark);
@@ -2265,8 +2223,52 @@ export default function VortisAI() {
       }
       else { setAuthLoading(false); return; }
 
-      await signInWithRedirect(auth, authProvider);
-      return;
+      const result = await signInWithPopup(auth, authProvider);
+      const u = result.user;
+      let displayName = u.displayName;
+      if (displayName) {
+        displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
+        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
+      }
+
+      if (provider === 'github') {
+        const tokenResp = result._tokenResponse;
+        const realName = tokenResp?.displayName || tokenResp?.fullName || tokenResp?.name;
+        if (realName && realName.trim() && !/^[a-z0-9_-]+$/i.test(realName.trim())) {
+          displayName = realName.trim();
+        } else {
+          const rawUsername = tokenResp?.screenName || u.displayName || u.email?.split('@')[0] || '';
+          displayName = cleanGitHubName(rawUsername) || 'User';
+        }
+      } else if (!displayName || displayName.trim() === '') {
+        displayName = u.email?.split('@')[0] || 'User';
+      }
+
+      try { await updateProfile(u, { displayName }); } catch(_) {}
+
+      const p = { name: displayName, email: u.email, avatar: u.photoURL || '', provider };
+      userUidRef.current = u.uid;
+      setProfile(p);
+      try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
+
+      try {
+        const userSnap = await getDoc(doc(db, 'users', u.uid));
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          if (data.tier) setTier(data.tier); else setTier('free');
+          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
+        } else {
+          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
+          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0, vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
+        }
+      } catch(_) {}
+
+      setShowLogin(false);
+      addMemory(`User's name is ${displayName.split(' ')[0]}`);
+      await loadChats(u.uid);
+      loadMemories();
+      startNewChat();
+      
       let displayName = u.displayName;
       if (displayName) {
         displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
