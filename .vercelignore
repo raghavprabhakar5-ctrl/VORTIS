@@ -4,4 +4,3 @@ vortis-backend/
 .git/
 **/dist/
 **/.cache/
-vortis-vite/public/models/
