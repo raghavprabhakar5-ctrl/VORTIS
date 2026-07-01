@@ -2269,49 +2269,6 @@ export default function VortisAI() {
       loadMemories();
       startNewChat();
       
-      let displayName = u.displayName;
-      if (displayName) {
-        displayName = displayName.replace(/\d+/g, '').replace(/[-_]/g, ' ').trim().split(/\s+/)[0];
-        displayName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
-      }
-
-      if (provider === 'github') {
-        const tokenResp = result._tokenResponse;
-        const realName = tokenResp?.displayName || tokenResp?.fullName || tokenResp?.name;
-        if (realName && realName.trim() && !/^[a-z0-9_-]+$/i.test(realName.trim())) {
-          displayName = realName.trim();
-        } else {
-          const rawUsername = tokenResp?.screenName || u.displayName || u.email?.split('@')[0] || '';
-          displayName = cleanGitHubName(rawUsername) || 'User';
-        }
-      } else if (!displayName || displayName.trim() === '') {
-        displayName = u.email?.split('@')[0] || 'User';
-      }
-
-      try { await updateProfile(u, { displayName }); } catch(_) {}
-
-      const p = { name: displayName, email: u.email, avatar: u.photoURL || '', provider };
-      userUidRef.current = u.uid;
-      setProfile(p);
-      try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
-
-      try {
-        const userSnap = await getDoc(doc(db, 'users', u.uid));
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          if (data.tier) setTier(data.tier); else setTier('free');
-          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-        } else {
-          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0, vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
-        }
-      } catch(_) {}
-
-      setShowLogin(false);
-      addMemory(`User's name is ${displayName.split(' ')[0]}`);
-      await loadChats(u.uid);
-      loadMemories();
-      startNewChat();
     } catch (e) {
       console.error('Firebase auth error:', e.code, e.message);
       const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in failed.' :
