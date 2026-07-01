@@ -2096,9 +2096,11 @@ export default function VortisAI() {
   const auth = getAuth();
   const db = getFirestore();
 
-  useEffect(() => {
+ useEffect(() => {
+  console.log('Checking for redirect result...');
   getRedirectResult(auth).then(async (result) => {
-    if (!result) return;
+    console.log('Redirect result:', result);
+    if (!result) { console.log('No pending redirect result'); return; }
     const u = result.user;
     let displayName = u.displayName;
     if (displayName) {
