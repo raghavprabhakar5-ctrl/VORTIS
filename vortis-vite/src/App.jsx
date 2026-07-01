@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Analytics } from '@vercel/analytics/react';
-import { getAuth, signInWithRedirect, getRedirectResult, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
+import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
@@ -2268,7 +2268,7 @@ export default function VortisAI() {
       await loadChats(u.uid);
       loadMemories();
       startNewChat();
-      
+
     } catch (e) {
       console.error('Firebase auth error:', e.code, e.message);
       const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in failed.' :
