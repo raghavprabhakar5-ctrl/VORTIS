@@ -1,6 +1,5 @@
 ﻿node_modules/
 **/node_modules/
-vortis-backend/
 .git/
 **/dist/
 **/.cache/
