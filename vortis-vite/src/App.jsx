@@ -3502,7 +3502,6 @@ const startVoiceCall = async () => {
     });
   } catch (pipelineError) {
     console.error('Failed to start voice pipeline:', pipelineError);
-    showToast('Voice pipeline failed to load', 'var(--red)');
     setShowVoiceCall(false);
     callActiveRef.current = false;
     return;
