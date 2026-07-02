@@ -3480,7 +3480,6 @@ const startVoiceCall = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     stream.getTracks().forEach(t => t.stop());
   } catch (e) {
-    showToast('Microphone access denied', 'var(--red)');
     setShowVoiceCall(false);
     callActiveRef.current = false;
     return;
