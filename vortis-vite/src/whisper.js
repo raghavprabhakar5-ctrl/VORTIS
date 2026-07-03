@@ -9,14 +9,14 @@ let transcriber = null;
 export const loadWhisper = async (onProgress) => {
   if (transcriber) return transcriber;
   transcriber = await pipeline(
-    'automatic-speech-recognition',
-    'whisper-small',
-    {
-      quantized: true,
-      local_files_only: true,
-      progress_callback: onProgress,
-    }
-  );
+  'automatic-speech-recognition',
+  'whisper-small',
+  {
+    dtype: 'q8',
+    local_files_only: true,
+    progress_callback: onProgress,
+  }
+);
   return transcriber;
 };
 
