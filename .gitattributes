@@ -1,0 +1,1 @@
+vortis-vite/public/models/whisper-small/onnx/decoder_model_merged_quantized.onnx filter=lfs diff=lfs merge=lfs -text
