@@ -2146,6 +2146,7 @@ function FAQ() {
 // ══════════════════════════════════════════════════════════════════
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
+  const [showPicker, setShowPicker] = useState(false);
   return (
     <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center" }}>
       <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124,58,237,0.07), transparent)", pointerEvents: "none" }} />
@@ -2160,30 +2161,36 @@ function CTA({ onLogin }) {
             Join 50,000+ professionals who use Vortis every day. Free to start.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => onLogin('google')} style={{
-  padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-  background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-  border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-  position: "relative",
-  boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
-  transition: "all 0.25s",
-}}
-onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
-onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
->
-  <span style={{
-    position: "absolute", inset: -3, borderRadius: 99,
-    border: "3px solid #c4b5fd",
-    animation: "radarPing 1.6s ease-out infinite",
-    pointerEvents: "none",
-  }} />
-  <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
-  <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
-</button>
- 
+            <button onClick={() => setShowPicker(true)} style={{
+              padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
+              background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+              position: "relative",
+              boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
+              transition: "all 0.25s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
+            >
+              <span style={{
+                position: "absolute", inset: -3, borderRadius: 99,
+                border: "3px solid #c4b5fd",
+                animation: "radarPing 1.6s ease-out infinite",
+                pointerEvents: "none",
+              }} />
+              <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
+              <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
+            </button>
           </div>
         </div>
       </div>
+      {showPicker && (
+        <AuthPicker
+          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
+          authLoading={false}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </section>
   );
 }
