@@ -3468,13 +3468,13 @@ const stopCallPlayback = () => {
 };
 
 const vadRef = useRef(null);
- 
+
 const startVoiceCall = async () => {
   setShowVoiceCall(true);
   setCallState('idle');
   setCallPaused(false);
   callActiveRef.current = true;
- 
+
   // 1. Confirm mic permission first
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -3484,9 +3484,9 @@ const startVoiceCall = async () => {
     callActiveRef.current = false;
     return;
   }
- 
+
   if (!callActiveRef.current) return; // user hung up while permission dialog was open
- 
+
   // 2. Start VAD + local Whisper pipeline
   try {
     vadRef.current = await startVoicePipeline({
@@ -3499,6 +3499,7 @@ const startVoiceCall = async () => {
         if (state === 'listening') setCallState('listening');
         else if (state === 'transcribing') setCallState('thinking');
       },
+      isBusy: () => callBusyRef.current || isSpeakingRef.current, // ← prevents overlapping turns from stomping call state
     });
   } catch (pipelineError) {
     console.error('Failed to start voice pipeline:', pipelineError);
@@ -3506,7 +3507,7 @@ const startVoiceCall = async () => {
     callActiveRef.current = false;
     return;
   }
- 
+
   setCallDuration(0);
   callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 };
