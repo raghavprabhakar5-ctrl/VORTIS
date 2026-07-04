@@ -13,6 +13,7 @@
     "@andresaya/edge-tts": "^1.8.0",
     "@fontsource/geist-mono": "^5.2.8",
     "@fontsource/geist-sans": "^5.2.5",
+    "@huggingface/hub": "^2.13.2",
     "@huggingface/transformers": "^4.2.0",
     "@radix-ui/react-dialog": "^1.1.16",
     "@ricky0123/vad-web": "^0.0.30",
