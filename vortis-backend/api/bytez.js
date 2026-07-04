@@ -2,7 +2,7 @@ export const config = {
   maxDuration: 60,
   api: {
     bodyParser: {
-      sizeLimit: '2mb',
+      sizeLimit: '5mb',
     },
   },
 };
@@ -43,6 +43,7 @@ const RATE_LIMITS = {
   vision:  { window: 60000, max: 5  },
   tts:     { window: 60000, max: 20 },
   execute: { window: 60000, max: 15 },
+  transcribe: { window: 60000, max: 40 },
   nvidia_global: { window: 60000, max: 35 }, 
 };
 
@@ -665,7 +666,7 @@ export default async function handler(req, res) {
     const action = sanitizeString(body.action || '', 20);
 
     if (!action) return res.status(400).json({ error: 'Missing action' });
-    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
+    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
     const prompt  = sanitizeString(body.prompt  || '', 15000);
@@ -1181,6 +1182,39 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
         return res.status(200).json({ success: false, description: 'Vision service unavailable.' });
       }
     }
+
+
+
+    // ╔══════════════════════════════════════╗
+// ║  TRANSCRIBE (Voice call STT)         ║
+// ╚══════════════════════════════════════╝
+if (action === 'transcribe') {
+  const audioBase64 = body.audio || '';
+  const language = sanitizeString(body.language || '', 10);
+  if (!audioBase64) return res.status(400).json({ error: 'Missing audio data' });
+
+  try {
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    if (audioBuffer.length < 100) return res.status(400).json({ error: 'Audio too short' });
+    if (audioBuffer.length > 4 * 1024 * 1024) return res.status(400).json({ error: 'Audio too large' });
+
+    const audioFile = new File([audioBuffer], 'audio.wav', { type: 'audio/wav' });
+
+    const transcription = await groq.audio.transcriptions.create({
+      file: audioFile,
+      model: 'whisper-large-v3-turbo',
+      ...(language ? { language } : {}),
+      response_format: 'json',
+    });
+
+    const text = (transcription?.text || '').trim();
+    return res.status(200).json({ text });
+
+  } catch (error) {
+    console.error('TRANSCRIBE ERROR:', error.message);
+    return res.status(500).json({ error: 'Transcription failed', text: '' });
+  }
+}
 
 // ╔══════════════════════════════════════╗
 // ║  IMAGE GENERATION                    ║
