@@ -9,7 +9,7 @@ export const loadWhisper = async (onProgress) => {
   if (transcriber) return transcriber;
   transcriber = await pipeline(
     'automatic-speech-recognition',
-    'Raghav098/whisper-small-vortis',
+    'Xenova/whisper-small',
     {
       dtype: 'q8',
       progress_callback: onProgress,
