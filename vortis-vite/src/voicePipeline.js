@@ -3,30 +3,38 @@ import { transcribeAudio } from './whisper';
 
 export const startVoicePipeline = async ({ onTranscript, onStateChange, isBusy }) => {
   onStateChange?.('loading');
-  await transcribeAudio(new Float32Array(1), null).catch(() => {}); // warm up
+  try {
+    await transcribeAudio(new Float32Array(1), null);
+  } catch (e) {
+    console.error('Whisper warm-up failed:', e);
+  }
   onStateChange?.('listening');
 
-  const vad = await MicVAD.new({
-    baseAssetPath: '/',
-    onnxWASMBasePath: '/',
-    onSpeechStart: () => {
-      if (isBusy?.()) return; // ignore mic input while a turn is already processing
-      onStateChange?.('listening');
-    },
-    onSpeechEnd: async (audio) => {
-      if (isBusy?.()) return; // ← the actual guard: drop this segment entirely
-      onStateChange?.('transcribing');
-      const text = await transcribeAudio(audio);
-      if (text) {
-        await onTranscript(text); // ← now awaited
-      }
-      if (!isBusy?.()) onStateChange?.('listening');
-    },
-    positiveSpeechThreshold: 0.6,
-    negativeSpeechThreshold: 0.4,
-    minSpeechFrames: 4,
-    redemptionFrames: 16,
-  });
+  let vad;
+  try {
+    vad = await MicVAD.new({
+      baseAssetPath: '/vad/',
+      onnxWASMBasePath: '/vad/',
+      onSpeechStart: () => {
+        if (isBusy?.()) return;
+        onStateChange?.('listening');
+      },
+      onSpeechEnd: async (audio) => {
+        if (isBusy?.()) return;
+        onStateChange?.('transcribing');
+        const text = await transcribeAudio(audio);
+        if (text) await onTranscript(text);
+        if (!isBusy?.()) onStateChange?.('listening');
+      },
+      positiveSpeechThreshold: 0.6,
+      negativeSpeechThreshold: 0.4,
+      minSpeechFrames: 4,
+      redemptionFrames: 16,
+    });
+  } catch (e) {
+    console.error('MicVAD.new failed:', e);
+    throw e; // let startVoiceCall's catch block handle showing an error
+  }
 
   vad.start();
   return vad;
