@@ -1,10 +1,10 @@
+import './fetchPatch.js'; 
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { initializeApp } from 'firebase/app';
 import App from "./App.jsx";
 import Privacy from "./Privacy.jsx";
 import Terms from "./Terms.jsx";
-import './fetchPatch.js'; 
 import NotFound from "./NotFound.jsx";
 import "./index.css";
 
