@@ -57,6 +57,104 @@ body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 .shimmer-text{background:linear-gradient(90deg,#fff 0%,#a855f7 25%,#fff 50%,#06b6d4 75%,#fff 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 4s linear infinite}
 .gradient-border{position:relative}
 .gradient-border::before{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(135deg,rgba(124,58,237,.6),rgba(168,85,247,.4),rgba(6,182,212,.6));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+
+/* ─── NEW: easing tokens ─────────────────────────────────────── */
+:root{
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  --ease-out-quint:cubic-bezier(.22,1,.36,1);
+  --ease-in-out-quart:cubic-bezier(.76,0,.24,1);
+  --ease-soft:cubic-bezier(.4,0,.2,1);
+  --ease-back:cubic-bezier(.68,-.55,.27,1.55);
+}
+
+/* ─── NEW: 35+ keyframes for life-like motion ───────────────── */
+@keyframes auroraDrift{0%{transform:translate(-15%,10%) rotate(0deg) scale(1.2)}33%{transform:translate(20%,-15%) rotate(120deg) scale(1.4)}66%{transform:translate(-10%,20%) rotate(240deg) scale(.9)}100%{transform:translate(-15%,10%) rotate(360deg) scale(1.2)}}
+@keyframes auroraDrift2{0%{transform:translate(20%,-10%) rotate(0deg) scale(1)}50%{transform:translate(-20%,15%) rotate(180deg) scale(1.3)}100%{transform:translate(20%,-10%) rotate(360deg) scale(1)}}
+@keyframes liquidMorph{0%,100%{border-radius:60% 40% 30% 70% / 60% 30% 70% 40%;transform:rotate(0deg)}25%{border-radius:40% 60% 70% 30% / 50% 60% 30% 60%;transform:rotate(8deg)}50%{border-radius:30% 70% 60% 40% / 40% 50% 60% 50%;transform:rotate(-6deg)}75%{border-radius:70% 30% 40% 60% / 60% 40% 60% 40%;transform:rotate(4deg)}}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.04);opacity:1}}
+@keyframes breatheSlow{0%,100%{transform:scale(1) translateY(0);opacity:.7}50%{transform:scale(1.08) translateY(-8px);opacity:1}}
+@keyframes drift3d{0%{transform:translateY(0) translateX(0) rotateX(0deg) rotateY(0deg)}25%{transform:translateY(-20px) translateX(10px) rotateX(5deg) rotateY(-3deg)}50%{transform:translateY(0) translateX(-15px) rotateX(-3deg) rotateY(5deg)}75%{transform:translateY(15px) translateX(8px) rotateX(2deg) rotateY(-2deg)}100%{transform:translateY(0) translateX(0) rotateX(0deg) rotateY(0deg)}}
+@keyframes shimmerSlide{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes orbit{from{transform:rotate(0deg) translateX(60px) rotate(0deg)}to{transform:rotate(360deg) translateX(60px) rotate(-360deg)}}
+@keyframes orbitRev{from{transform:rotate(360deg) translateX(80px) rotate(-360deg)}to{transform:rotate(0deg) translateX(80px) rotate(0deg)}}
+@keyframes glowPulse{0%,100%{box-shadow:0 0 20px rgba(139,92,246,.3),0 0 40px rgba(124,58,237,.15)}50%{box-shadow:0 0 40px rgba(139,92,246,.6),0 0 80px rgba(124,58,237,.3),0 0 120px rgba(124,58,237,.15)}}
+@keyframes gradientFlow{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes textReveal{from{opacity:0;transform:translateY(40px) rotateX(-30deg);filter:blur(8px)}to{opacity:1;transform:translateY(0) rotateX(0deg);filter:blur(0)}}
+@keyframes borderRotate{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes sparkBurst{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--dx),var(--dy)) scale(0);opacity:0}}
+@keyframes ringExpand{0%{transform:scale(.6);opacity:.8;border-width:3px}100%{transform:scale(2.2);opacity:0;border-width:1px}}
+@keyframes flipIn{from{opacity:0;transform:perspective(800px) rotateY(-90deg)}to{opacity:1;transform:perspective(800px) rotateY(0deg)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+@keyframes slideUpStagger{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes wobble{0%,100%{transform:rotate(0deg)}25%{transform:rotate(-3deg)}75%{transform:rotate(3deg)}}
+@keyframes glowSweep{0%{transform:translateX(-150%) skewX(-20deg)}100%{transform:translateX(250%) skewX(-20deg)}}
+@keyframes floatY{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes pulseRing{0%{transform:scale(.8);opacity:.8}100%{transform:scale(1.6);opacity:0}}
+@keyframes conicSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes typingBounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+@keyframes shimmerText{0%{background-position:-200% center}100%{background-position:200% center}}
+@keyframes neonFlicker{0%,100%{opacity:1;filter:drop-shadow(0 0 8px currentColor)}45%{opacity:.85;filter:drop-shadow(0 0 12px currentColor)}50%{opacity:.7;filter:drop-shadow(0 0 4px currentColor)}55%{opacity:.85;filter:drop-shadow(0 0 12px currentColor)}}
+@keyframes scrollHint{0%,100%{transform:translateY(0);opacity:.4}50%{transform:translateY(8px);opacity:1}}
+@keyframes tiltSway{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(1deg)}}
+@keyframes barRise{from{height:0;opacity:0}to{opacity:1}}
+@keyframes countGlow{0%,100%{text-shadow:0 0 20px rgba(139,92,246,.5)}50%{text-shadow:0 0 35px rgba(139,92,246,.9),0 0 60px rgba(124,58,237,.4)}}
+@keyframes liftHover{from{transform:translateY(0)}to{transform:translateY(-6px)}}
+@keyframes magneticPull{from{transform:translate(0,0)}to{transform:translate(var(--mx),var(--my))}}
+@keyframes marqueeTilt{0%,100%{transform:translateX(0) skewX(0deg)}50%{transform:translateX(-25%) skewX(-3deg)}}
+@keyframes vortexSpin{from{transform:rotate(0deg) scale(1)}to{transform:rotate(720deg) scale(.3)}}
+@keyframes plasmaFlow{0%,100%{background-position:0% 50%;filter:hue-rotate(0deg)}50%{background-position:100% 50%;filter:hue-rotate(30deg)}}
+@keyframes glassShine{0%{transform:translateX(-100%) translateY(-100%)}50%{transform:translateX(100%) translateY(0%)}100%{transform:translateX(200%) translateY(100%)}}
+@keyframes dotBlink{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes auroraText{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+@keyframes liquidPulse{0%,100%{border-radius:50% 50% 50% 50%;transform:scale(1)}33%{border-radius:60% 40% 50% 60%;transform:scale(1.05)}66%{border-radius:40% 60% 60% 50%;transform:scale(.97)}}
+@keyframes colorCycle{0%{filter:hue-rotate(0deg)}100%{filter:hue-rotate(360deg)}}
+@keyframes softBounce{0%,100%{transform:translateY(0)}25%{transform:translateY(-12px)}50%{transform:translateY(0)}75%{transform:translateY(-4px)}}
+@keyframes scanGlow{0%{transform:translateY(-100%);opacity:0}50%{opacity:1}100%{transform:translateY(100%);opacity:0}}
+@keyframes orbit3D{from{transform:rotateY(0deg) translateZ(60px) rotateY(0deg)}to{transform:rotateY(360deg) translateZ(60px) rotateY(-360deg)}}
+@keyframes revealMask{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes popIn{0%{opacity:0;transform:scale(.5) rotate(-15deg)}60%{opacity:1;transform:scale(1.1) rotate(5deg)}100%{opacity:1;transform:scale(1) rotate(0deg)}}
+@keyframes float3D{0%{transform:translateY(0) rotateX(0deg) rotateY(0deg)}50%{transform:translateY(-15px) rotateX(8deg) rotateY(-5deg)}100%{transform:translateY(0) rotateX(0deg) rotateY(0deg)}}
+
+/* ─── NEW: utility classes ───────────────────────────────────── */
+.tilt-card{transform-style:preserve-3d;transition:transform .4s var(--ease-out-quint);will-change:transform}
+.magnetic{transition:transform .35s var(--ease-spring);will-change:transform}
+.reveal-up{opacity:0;transform:translateY(40px);transition:opacity .9s var(--ease-out-quint),transform .9s var(--ease-out-quint)}
+.reveal-up.in{opacity:1;transform:translateY(0)}
+.reveal-scale{opacity:0;transform:scale(.92);transition:opacity .8s var(--ease-out-quint),transform .8s var(--ease-back)}
+.reveal-scale.in{opacity:1;transform:scale(1)}
+.reveal-flip{opacity:0;transform:perspective(1000px) rotateY(-25deg);transform-origin:left center;transition:all 1s var(--ease-out-quint)}
+.reveal-flip.in{opacity:1;transform:perspective(1000px) rotateY(0deg)}
+.link-underline{position:relative}
+.link-underline::after{content:'';position:absolute;left:0;bottom:-4px;width:100%;height:1px;background:linear-gradient(90deg,#7C3AED,#06B6D4);transform:scaleX(0);transform-origin:right center;transition:transform .4s var(--ease-out-quint)}
+.link-underline:hover::after{transform:scaleX(1);transform-origin:left center}
+.shine-overlay{position:relative;overflow:hidden}
+.shine-overlay::before{content:'';position:absolute;top:0;left:0;width:60%;height:100%;background:linear-gradient(120deg,transparent,rgba(255,255,255,.14),transparent);transform:translateX(-150%) skewX(-20deg);pointer-events:none;z-index:1}
+.shine-overlay:hover::before{animation:glowSweep 1.1s ease}
+.glass-card{backdrop-filter:blur(16px) saturate(1.4);-webkit-backdrop-filter:blur(16px) saturate(1.4)}
+.holo-border{position:relative}
+.holo-border::before{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:conic-gradient(from 0deg,#7C3AED,#a855f7,#06B6D4,#7C3AED);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;animation:conicSpin 6s linear infinite;opacity:.7}
+.aurora-text{background:linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4,#7C3AED);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:auroraText 5s linear infinite}
+.sparkline-glow{filter:drop-shadow(0 0 6px rgba(139,92,246,.6))}
+
+/* Scroll progress bar */
+.scroll-progress{position:fixed;top:0;left:0;height:2px;background:linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4);z-index:200;box-shadow:0 0 12px rgba(168,85,247,.7);transition:width .15s linear;will-change:width}
+
+/* Cursor — plasma orb replacement */
+.cursor-plasma{position:fixed;left:0;top:0;pointer-events:none;z-index:99999;will-change:transform;mix-blend-mode:screen}
+.cursor-plasma .plasma-core{width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,#e9d5ff 25%,#a855f7 55%,#7C3AED 80%,transparent 100%);box-shadow:0 0 12px #a855f7,0 0 28px #7C3AED,0 0 50px rgba(124,58,237,.6);transform:translate(-50%,-50%)}
+.cursor-plasma .plasma-ring{position:absolute;left:0;top:0;width:42px;height:42px;border-radius:50%;border:1.5px solid rgba(168,85,247,.55);transform:translate(-50%,-50%);box-shadow:inset 0 0 14px rgba(124,58,237,.18)}
+.cursor-plasma .plasma-aura{position:absolute;left:0;top:0;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(124,58,237,.14) 0%,rgba(168,85,247,.06) 40%,transparent 70%);transform:translate(-50%,-50%);filter:blur(4px)}
+.cursor-plasma .plasma-conic{position:absolute;left:0;top:0;width:80px;height:80px;border-radius:50%;background:conic-gradient(from 0deg,transparent,rgba(168,85,247,.35),transparent 50%,rgba(6,182,212,.25),transparent);transform:translate(-50%,-50%);animation:conicSpin 4s linear infinite;opacity:.7;filter:blur(2px)}
+.cursor-spark{position:fixed;left:0;top:0;width:4px;height:4px;border-radius:50%;background:#fff;pointer-events:none;z-index:99998;box-shadow:0 0 8px #a855f7;will-change:transform,opacity}
+.cursor-ripple{position:fixed;left:0;top:0;border-radius:50%;border:2px solid rgba(168,85,247,.6);pointer-events:none;z-index:99997;will-change:transform,opacity}
+
+/* Cursor state classes triggered by hovering interactive elements */
+body.cursor-hover .cursor-plasma .plasma-core{transform:translate(-50%,-50%) scale(2.2);background:radial-gradient(circle at 35% 30%,#fff 0%,#a855f7 30%,#7C3AED 70%,transparent 100%)}
+body.cursor-hover .cursor-plasma .plasma-ring{transform:translate(-50%,-50%) scale(.6);border-color:rgba(6,182,212,.7)}
+body.cursor-press .cursor-plasma .plasma-core{transform:translate(-50%,-50%) scale(.7)}
+
+@media(hover:none){.cursor-plasma,.cursor-plasma *,.cursor-spark,.cursor-ripple{display:none!important}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01s!important;transition-duration:.01s!important}}
 `;
 
 function StyleInjector() {
@@ -96,6 +194,211 @@ function useCountUp(target, duration = 2000, start = false) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+//  UTILITY COMPONENTS — magnetic buttons, tilt cards, scroll reveal,
+//  scroll progress bar, section glow, spark field, marquee 3D
+// ══════════════════════════════════════════════════════════════════
+
+// Mouse-aware hook (returns ref + mouse position relative to center, -1..1)
+function useMouseTilt(strength = 12) {
+  const ref = useRef(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0, mx: 0, my: 0, active: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = (e.clientX - cx) / (r.width / 2);
+      const dy = (e.clientY - cy) / (r.height / 2);
+      setTilt({ x: dy * -strength, y: dx * strength, mx: dx, my: dy, active: true });
+    };
+    const onLeave = () => setTilt({ x: 0, y: 0, mx: 0, my: 0, active: false });
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [strength]);
+  return [ref, tilt];
+}
+
+// Magnetic button — pulls toward cursor like metal
+function Magnetic({ children, strength = 0.35, as = "button", style, ...rest }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      setPos({ x: (e.clientX - cx) * strength, y: (e.clientY - cy) * strength });
+    };
+    const onLeave = () => setPos({ x: 0, y: 0 });
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [strength]);
+  const Tag = as;
+  return (
+    <Tag
+      ref={ref}
+      style={{
+        transform: `translate3d(${pos.x}px, ${pos.y}px, 0)`,
+        transition: "transform .35s cubic-bezier(.34,1.56,.64,1), box-shadow .4s cubic-bezier(.22,1,.36,1), background .3s ease, border-color .3s ease",
+        willChange: "transform",
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+// Tilt card — 3D tilt + glare that follows mouse
+function TiltCard({ children, style, max = 12, glare = true, className = "", onMouseEnter, onMouseLeave, ...rest }) {
+  const [ref, tilt] = useMouseTilt(max);
+  return (
+    <div
+      ref={ref}
+      className={`tilt-card ${className}`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      style={{
+        transform: `perspective(900px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) translateZ(0)`,
+        transition: tilt.active ? "transform .15s ease-out" : "transform .6s cubic-bezier(.22,1,.36,1)",
+        transformStyle: "preserve-3d",
+        position: "relative",
+        ...style,
+      }}
+      {...rest}
+    >
+      {children}
+      {glare && tilt.active && (
+        <div
+          style={{
+            position: "absolute", inset: 0, borderRadius: "inherit", pointerEvents: "none",
+            background: `radial-gradient(circle at ${(tilt.mx + 1) * 50}% ${(tilt.my + 1) * 50}%, rgba(255,255,255,.18), transparent 55%)`,
+            mixBlendMode: "screen", transition: "opacity .2s ease",
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Scroll reveal — fades children in when scrolled into view
+function ScrollReveal({ children, variant = "up", delay = 0, threshold = 0.15, style, className = "" }) {
+  const [ref, inView] = useInView(threshold);
+  const variantClass = variant === "scale" ? "reveal-scale" : variant === "flip" ? "reveal-flip" : "reveal-up";
+  return (
+    <div
+      ref={ref}
+      className={`${variantClass} ${inView ? "in" : ""} ${className}`}
+      style={{ transitionDelay: `${delay}s`, ...style }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// Scroll progress bar — fixed at top, fills as user scrolls
+function ScrollProgress() {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const h = document.documentElement;
+      const scrolled = h.scrollTop / (h.scrollHeight - h.clientHeight);
+      setW(Math.min(Math.max(scrolled, 0), 1) * 100);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  return <div className="scroll-progress" style={{ width: `${w}%` }} />;
+}
+
+// Section glow — soft radial backdrop that breathes
+function SectionGlow({ color = "rgba(124,58,237,0.08)", size = "70% 60%", style }) {
+  return (
+    <div
+      style={{
+        position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden",
+        background: `radial-gradient(ellipse ${size} at 50% 50%, ${color}, transparent)`,
+        animation: "breatheSlow 9s ease-in-out infinite",
+        ...style,
+      }}
+    />
+  );
+}
+
+// Spark field — animated dots inside a container (use absolute positioning context)
+function SparkField({ count = 18, color = "rgba(168,85,247," }) {
+  const dots = useRef(
+    Array.from({ length: count }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      s: Math.random() * 2 + 1,
+      d: Math.random() * 12 + 8,
+      delay: Math.random() * 6,
+    }))
+  ).current;
+  return (
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", borderRadius: "inherit" }}>
+      {dots.map(d => (
+        <div key={d.id} style={{
+          position: "absolute", left: `${d.x}%`, top: `${d.y}%`,
+          width: d.s, height: d.s, borderRadius: "50%",
+          background: `${color}0.9)`,
+          boxShadow: `0 0 ${d.s * 4}px ${color}0.7)`,
+          animation: `float ${d.d}s ease-in-out ${d.delay}s infinite, dotBlink 3s ease-in-out ${d.delay}s infinite`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+// Marquee 3D — content scrolls with subtle 3D skew
+function Marquee3D({ children, duration = 35, reverse = false, style }) {
+  return (
+    <div style={{ overflow: "hidden", perspective: "1000px", ...style }}>
+      <div
+        style={{
+          display: "flex", width: "max-content",
+          animation: `${reverse ? "marquee-r" : "marquee-l"} ${duration}s linear infinite`,
+          transformStyle: "preserve-3d",
+        }}
+      >
+        {children}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Floating orb — generic ambient blob
+function FloatingOrb({ size = 380, color = "rgba(124,58,237,0.06)", blur = 120, anim = "auroraDrift", duration = 28, delay = 0, style }) {
+  return (
+    <div
+      style={{
+        position: "absolute", borderRadius: "50%", width: size, height: size,
+        background: color, filter: `blur(${blur}px)`,
+        animation: `${anim} ${duration}s ease-in-out ${delay}s infinite`,
+        willChange: "transform", ...style,
+      }}
+    />
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  VORTIS LOGO
 // ══════════════════════════════════════════════════════════════════
 export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
@@ -108,88 +411,197 @@ export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
   );
 }
 // ══════════════════════════════════════════════════════════════════
-//  CURSOR ORB
+//  AURORA CURSOR — plasma orb with spring trail, sparks & ripples
 // ══════════════════════════════════════════════════════════════════
 
-function CursorOrb() {
-  const dotRef = useRef(null);
+function AuroraCursor() {
+  const plasmaRef = useRef(null);     // wraps core+ring+conic+aura (transform target)
+  const coreRef = useRef(null);
   const ringRef = useRef(null);
-  const glowRef = useRef(null);
+  const auraRef = useRef(null);
+  const conicRef = useRef(null);
+  const sparksLayerRef = useRef(null);
+  const ripplesLayerRef = useRef(null);
 
-  // Raw target position (updates instantly on mousemove)
+  // Target position from mouse
   const target = useRef({ x: -300, y: -300 });
-  // Current rendered position (eased toward target every frame)
-  const current = useRef({ x: -300, y: -300 });
-  // Separate, slower-trailing position for the big glow
-  const glowCurrent = useRef({ x: -300, y: -300 });
+  // Eased positions for different layers (parallax depth)
+  const corePos = useRef({ x: -300, y: -300 });
+  const ringPos = useRef({ x: -300, y: -300 });
+  const auraPos = useRef({ x: -300, y: -300 });
 
   const visible = useRef(false);
-  const clicking = useRef(false);
   const rafId = useRef(null);
+  const lastSparkAt = useRef(0);
+
+  // Sparks pool — reused DOM nodes
+  const SPARK_COUNT = 14;
+  const sparkRefs = useRef([]);
+  const sparkState = useRef(
+    Array.from({ length: SPARK_COUNT }, () => ({ active: false, x: 0, y: 0, dx: 0, dy: 0, born: 0, life: 0 }))
+  );
+
+  const spawnSpark = (x, y) => {
+    const now = performance.now();
+    if (now - lastSparkAt.current < 28) return; // throttle
+    lastSparkAt.current = now;
+    const pool = sparkState.current;
+    for (let i = 0; i < SPARK_COUNT; i++) {
+      if (!pool[i].active) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 18 + Math.random() * 32;
+        pool[i] = {
+          active: true,
+          x, y,
+          dx: Math.cos(angle) * dist,
+          dy: Math.sin(angle) * dist,
+          born: now,
+          life: 500 + Math.random() * 300,
+        };
+        const el = sparkRefs.current[i];
+        if (el) {
+          el.style.opacity = "1";
+          el.style.transform = `translate3d(${x - 2}px, ${y - 2}px, 0) scale(1)`;
+        }
+        break;
+      }
+    }
+  };
+
+  const spawnRipple = (x, y) => {
+    if (!ripplesLayerRef.current) return;
+    const r = document.createElement("div");
+    r.className = "cursor-ripple";
+    r.style.width = "20px";
+    r.style.height = "20px";
+    r.style.marginLeft = "-10px";
+    r.style.marginTop = "-10px";
+    r.style.transform = `translate3d(${x}px, ${y}px, 0) scale(0.4)`;
+    r.style.opacity = "0.9";
+    ripplesLayerRef.current.appendChild(r);
+    // animate
+    requestAnimationFrame(() => {
+      r.style.transition = "transform .65s cubic-bezier(.22,1,.36,1), opacity .65s ease-out";
+      r.style.transform = `translate3d(${x}px, ${y}px, 0) scale(3)`;
+      r.style.opacity = "0";
+    });
+    setTimeout(() => { if (r.parentNode) r.parentNode.removeChild(r); }, 720);
+  };
 
   useEffect(() => {
+    // Detect touch / no-hover device — bail entirely
+    if (window.matchMedia && window.matchMedia("(hover: none)").matches) return;
+
     const move = (e) => {
       target.current.x = e.clientX;
       target.current.y = e.clientY;
       if (!visible.current) {
         visible.current = true;
-        if (dotRef.current) dotRef.current.style.opacity = "1";
-        if (ringRef.current) ringRef.current.style.opacity = "1";
-        if (glowRef.current) glowRef.current.style.opacity = "1";
-        // snap instantly on first move so it doesn't glide in from corner
-        current.current.x = e.clientX;
-        current.current.y = e.clientY;
-        glowCurrent.current.x = e.clientX;
-        glowCurrent.current.y = e.clientY;
+        if (plasmaRef.current) plasmaRef.current.style.opacity = "1";
+        if (auraRef.current) auraRef.current.style.opacity = "1";
+        // snap on first move
+        corePos.current.x = e.clientX;
+        corePos.current.y = e.clientY;
+        ringPos.current.x = e.clientX;
+        ringPos.current.y = e.clientY;
+        auraPos.current.x = e.clientX;
+        auraPos.current.y = e.clientY;
       }
+      // spark trail
+      spawnSpark(e.clientX, e.clientY);
     };
+
     const leave = () => {
       visible.current = false;
-      if (dotRef.current) dotRef.current.style.opacity = "0";
-      if (ringRef.current) ringRef.current.style.opacity = "0";
-      if (glowRef.current) glowRef.current.style.opacity = "0";
+      if (plasmaRef.current) plasmaRef.current.style.opacity = "0";
+      if (auraRef.current) auraRef.current.style.opacity = "0";
     };
-    const down = () => {
-      clicking.current = true;
-      if (ringRef.current) ringRef.current.style.transform =
-        `translate3d(${current.current.x - 14}px, ${current.current.y - 14}px, 0) scale(0.75)`;
+
+    const down = (e) => {
+      document.body.classList.add("cursor-press");
+      spawnRipple(e.clientX, e.clientY);
+      // burst of sparks
+      for (let i = 0; i < 8; i++) spawnSpark(e.clientX, e.clientY);
     };
-    const up = () => { clicking.current = false; };
+    const up = () => { document.body.classList.remove("cursor-press"); };
+
+    // Hover state over interactive elements (a, button, [data-cursor])
+    const hoverEnter = () => document.body.classList.add("cursor-hover");
+    const hoverLeave = () => document.body.classList.remove("cursor-hover");
+
+    const attachHover = () => {
+      const els = document.querySelectorAll("a, button, [data-cursor='hover'], input, textarea, select, [role='button']");
+      els.forEach(el => {
+        el.addEventListener("mouseenter", hoverEnter, { passive: true });
+        el.addEventListener("mouseleave", hoverLeave, { passive: true });
+      });
+      return els;
+    };
+    // initial attach + re-attach on DOM mutations (since sections render over time)
+    let hoveredEls = attachHover();
+    const obs = new MutationObserver(() => {
+      hoveredEls.forEach(el => {
+        el.removeEventListener("mouseenter", hoverEnter);
+        el.removeEventListener("mouseleave", hoverLeave);
+      });
+      hoveredEls = attachHover();
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
 
     window.addEventListener("mousemove", move, { passive: true });
     window.addEventListener("mouseleave", leave);
     window.addEventListener("mousedown", down);
     window.addEventListener("mouseup", up);
 
-    // Animation loop: lerp current -> target every frame (GPU transforms only)
-    const DOT_EASE = 0.35;   // dot follows fast/tight
-    const RING_EASE = 0.18;  // ring trails a bit behind, gives nice "pull" feel
-    const GLOW_EASE = 0.08;  // glow trails slowest, soft ambient feel
+    // Spring constants — organic feel
+    const CORE_EASE = 0.32;
+    const RING_EASE = 0.18;
+    const AURA_EASE = 0.085;
 
     const tick = () => {
-      // dot (tight follow)
-      current.current.x += (target.current.x - current.current.x) * DOT_EASE;
-      current.current.y += (target.current.y - current.current.y) * DOT_EASE;
+      // lerp each layer toward target
+      corePos.current.x += (target.current.x - corePos.current.x) * CORE_EASE;
+      corePos.current.y += (target.current.y - corePos.current.y) * CORE_EASE;
+      ringPos.current.x += (target.current.x - ringPos.current.x) * RING_EASE;
+      ringPos.current.y += (target.current.y - ringPos.current.y) * RING_EASE;
+      auraPos.current.x += (target.current.x - auraPos.current.x) * AURA_EASE;
+      auraPos.current.y += (target.current.y - auraPos.current.y) * AURA_EASE;
 
-      // glow (loose follow)
-      glowCurrent.current.x += (target.current.x - glowCurrent.current.x) * GLOW_EASE;
-      glowCurrent.current.y += (target.current.y - glowCurrent.current.y) * GLOW_EASE;
+      if (coreRef.current) {
+        coreRef.current.style.transform = `translate3d(${corePos.current.x}px, ${corePos.current.y}px, 0)`;
+      }
+      if (ringRef.current) {
+        ringRef.current.style.transform = `translate3d(${ringPos.current.x}px, ${ringPos.current.y}px, 0)`;
+      }
+      if (conicRef.current) {
+        // conic rotates around the ring pos
+        conicRef.current.style.transform = `translate3d(${ringPos.current.x}px, ${ringPos.current.y}px, 0)`;
+      }
+      if (auraRef.current) {
+        auraRef.current.style.transform = `translate3d(${auraPos.current.x}px, ${auraPos.current.y}px, 0)`;
+      }
 
-      if (dotRef.current) {
-        const s = clicking.current ? 0.7 : 1;
-        dotRef.current.style.transform =
-          `translate3d(${current.current.x - 7}px, ${current.current.y - 7}px, 0) scale(${s})`;
-      }
-      if (ringRef.current && !clicking.current) {
-        // ring eases toward target a touch slower than the dot
-        const rx = current.current.x + (target.current.x - current.current.x) * RING_EASE;
-        const ry = current.current.y + (target.current.y - current.current.y) * RING_EASE;
-        ringRef.current.style.transform =
-          `translate3d(${rx - 16}px, ${ry - 16}px, 0) scale(1)`;
-      }
-      if (glowRef.current) {
-        glowRef.current.style.transform =
-          `translate3d(${glowCurrent.current.x - 220}px, ${glowCurrent.current.y - 220}px, 0)`;
+      // animate sparks
+      const now = performance.now();
+      const pool = sparkState.current;
+      for (let i = 0; i < SPARK_COUNT; i++) {
+        const s = pool[i];
+        if (!s.active) continue;
+        const t = (now - s.born) / s.life;
+        if (t >= 1) {
+          s.active = false;
+          const el = sparkRefs.current[i];
+          if (el) el.style.opacity = "0";
+        } else {
+          const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+          const x = s.x + s.dx * ease;
+          const y = s.y + s.dy * ease + (t * t * 30); // slight gravity
+          const el = sparkRefs.current[i];
+          if (el) {
+            el.style.opacity = String(1 - t);
+            el.style.transform = `translate3d(${x - 2}px, ${y - 2}px, 0) scale(${1 - t * 0.6})`;
+          }
+        }
       }
 
       rafId.current = requestAnimationFrame(tick);
@@ -201,49 +613,67 @@ function CursorOrb() {
       window.removeEventListener("mouseleave", leave);
       window.removeEventListener("mousedown", down);
       window.removeEventListener("mouseup", up);
+      hoveredEls.forEach(el => {
+        el.removeEventListener("mouseenter", hoverEnter);
+        el.removeEventListener("mouseleave", hoverLeave);
+      });
+      obs.disconnect();
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
   }, []);
 
   return (
     <>
-      {/* Soft ambient glow — trails slowest */}
+      {/* Aura — large soft ambient halo, slowest trail */}
       <div
-        ref={glowRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 9998,
-          left: 0, top: 0, width: 440, height: 440,
-          borderRadius: "50%", opacity: 0,
-          background: "radial-gradient(circle, rgba(124,58,237,0.10) 0%, rgba(168,85,247,0.04) 45%, transparent 72%)",
-          transition: "opacity 0.4s ease",
-          willChange: "transform",
-        }}
-      />
-      {/* Outer ring — trails slightly behind dot, gives depth */}
+        ref={auraRef}
+        className="cursor-plasma"
+        style={{ opacity: 0, transition: "opacity 0.4s ease" }}
+      >
+        <div className="plasma-aura" />
+      </div>
+
+      {/* Conic ring — rotating rainbow gradient halo */}
+      <div
+        ref={conicRef}
+        className="cursor-plasma"
+        style={{ opacity: 1 }}
+      >
+        <div className="plasma-conic" />
+      </div>
+
+      {/* Outer ring — slight trail */}
       <div
         ref={ringRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 9999,
-          left: 0, top: 0, width: 32, height: 32,
-          borderRadius: "50%", opacity: 0,
-          border: "1.5px solid rgba(168,85,247,0.55)",
-          transition: "opacity 0.3s ease, transform 0.18s ease",
-          willChange: "transform",
-        }}
-      />
-      {/* Core dot — tight, immediate follow */}
+        className="cursor-plasma"
+        style={{ opacity: 1 }}
+      >
+        <div className="plasma-ring" />
+      </div>
+
+      {/* Core — tight follow, bright */}
       <div
-        ref={dotRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 10000,
-          left: 0, top: 0, width: 14, height: 14,
-          borderRadius: "50%", opacity: 0,
-          background: "#a855f7",
-          boxShadow: "0 0 10px rgba(168,85,247,0.8), 0 0 22px rgba(124,58,237,0.45)",
-          transition: "opacity 0.3s ease, transform 0.08s ease-out",
-          willChange: "transform",
-        }}
-      />
+        ref={coreRef}
+        className="cursor-plasma"
+        style={{ opacity: 1 }}
+      >
+        <div className="plasma-core" />
+      </div>
+
+      {/* Sparks layer */}
+      <div ref={sparksLayerRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 99998 }}>
+        {Array.from({ length: SPARK_COUNT }).map((_, i) => (
+          <div
+            key={i}
+            ref={el => (sparkRefs.current[i] = el)}
+            className="cursor-spark"
+            style={{ opacity: 0 }}
+          />
+        ))}
+      </div>
+
+      {/* Ripples layer (dynamic children) */}
+      <div ref={ripplesLayerRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 99997 }} />
     </>
   );
 }
@@ -252,17 +682,23 @@ function CursorOrb() {
 // ══════════════════════════════════════════════════════════════════
 function FloatingParticles() {
   const particles = useRef(
-    Array.from({ length: 40 }, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      size: Math.random() * 3 + 1,
-      duration: Math.random() * 20 + 15,
-      delay: Math.random() * 10,
-      color: ["rgba(124,58,237,", "rgba(168,85,247,", "rgba(6,182,212,", "rgba(99,102,241,"][Math.floor(Math.random() * 4)],
-      dx: (Math.random() - 0.5) * 200,
-      dy: (Math.random() - 0.5) * 200,
-    }))
+    Array.from({ length: 60 }, (_, i) => {
+      const palette = ["rgba(124,58,237,", "rgba(168,85,247,", "rgba(6,182,212,", "rgba(99,102,241,", "rgba(196,181,253,"];
+      const anims = ["float", "drift3d", "float3D", "softBounce"];
+      return {
+        id: i,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: Math.random() * 3 + 0.8,
+        duration: Math.random() * 22 + 12,
+        delay: Math.random() * 12,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        anim: anims[Math.floor(Math.random() * anims.length)],
+        dx: (Math.random() - 0.5) * 240,
+        dy: (Math.random() - 0.5) * 240,
+        blinkDur: Math.random() * 4 + 2,
+      };
+    })
   ).current;
 
   return (
@@ -273,10 +709,11 @@ function FloatingParticles() {
           left: `${p.x}%`, top: `${p.y}%`,
           width: p.size, height: p.size,
           borderRadius: "50%",
-          background: `${p.color}0.7)`,
-          boxShadow: `0 0 ${p.size * 3}px ${p.color}0.4)`,
-          animation: `float ${p.duration}s ease-in-out ${p.delay}s infinite`,
-          opacity: 0.6,
+          background: `${p.color}0.85)`,
+          boxShadow: `0 0 ${p.size * 4}px ${p.color}0.55), 0 0 ${p.size * 8}px ${p.color}0.25)`,
+          animation: `${p.anim} ${p.duration}s ease-in-out ${p.delay}s infinite, dotBlink ${p.blinkDur}s ease-in-out ${p.delay}s infinite`,
+          opacity: 0.7,
+          willChange: "transform, opacity",
         }} />
       ))}
     </div>
@@ -284,30 +721,36 @@ function FloatingParticles() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  COSMIC BACKGROUND
+//  COSMIC BACKGROUND — aurora drifts + breathing grid
 // ══════════════════════════════════════════════════════════════════
 function CosmicBg() {
   return (
     <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-      {[
-        { a: "orb1 28s ease-in-out infinite", t: "5%", l: "10%", w: 700, c: "rgba(124,58,237,0.06)", b: 120 },
-        { a: "orb2 35s ease-in-out infinite 5s", t: "40%", r: "5%", w: 600, c: "rgba(168,85,247,0.05)", b: 140 },
-        { a: "orb3 40s ease-in-out infinite 12s", bt: "10%", l: "30%", w: 520, c: "rgba(6,182,212,0.035)", b: 110 },
-        { a: "orb4 32s ease-in-out infinite 8s", t: "60%", l: "5%", w: 450, c: "rgba(99,102,241,0.04)", b: 130 },
-        { a: "orb1 45s ease-in-out infinite 20s", t: "20%", r: "20%", w: 380, c: "rgba(6,182,212,0.03)", b: 100 },
-      ].map((o, i) => (
-        <div key={i} style={{
-          position: "absolute", borderRadius: "50%", width: o.w, height: o.w,
-          top: o.t, left: o.l, right: o.r, bottom: o.bt,
-          background: o.c, filter: `blur(${o.b}px)`,
-          animation: o.a, willChange: "transform",
-        }} />
-      ))}
+      {/* Aurora drifting blobs — softer, more varied motion */}
+      <FloatingOrb size={720} color="rgba(124,58,237,0.07)" blur={130} anim="auroraDrift" duration={32} style={{ top: "5%", left: "5%" }} />
+      <FloatingOrb size={620} color="rgba(168,85,247,0.055)" blur={150} anim="auroraDrift2" duration={38} delay={5} style={{ top: "40%", right: "5%" }} />
+      <FloatingOrb size={540} color="rgba(6,182,212,0.04)" blur={120} anim="auroraDrift" duration={42} delay={12} style={{ bottom: "10%", left: "30%" }} />
+      <FloatingOrb size={460} color="rgba(99,102,241,0.045)" blur={140} anim="auroraDrift2" duration={34} delay={8} style={{ top: "60%", left: "5%" }} />
+      <FloatingOrb size={380} color="rgba(6,182,212,0.035)" blur={110} anim="auroraDrift" duration={46} delay={20} style={{ top: "20%", right: "20%" }} />
+
+      {/* Subtle star grid that breathes */}
       <div style={{
-        position: "absolute", inset: 0, opacity: 0.018,
-        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
-        backgroundSize: "55px 55px", animation: "gridFade 8s ease-in-out infinite",
+        position: "absolute", inset: 0, opacity: 0.02,
+        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.85) 1px, transparent 1px)",
+        backgroundSize: "55px 55px", animation: "gridFade 8s ease-in-out infinite, breathe 12s ease-in-out infinite",
       }} />
+
+      {/* Diagonal scan line that occasionally sweeps */}
+      <div style={{
+        position: "absolute", inset: 0, overflow: "hidden", opacity: 0.4,
+      }}>
+        <div style={{
+          position: "absolute", top: 0, left: 0, width: "100%", height: "200%",
+          background: "linear-gradient(180deg, transparent 0%, rgba(168,85,247,0.05) 50%, transparent 100%)",
+          animation: "scanGlow 14s ease-in-out 4s infinite",
+        }} />
+      </div>
+
       <div style={{
         position: "absolute", inset: 0,
         background: "linear-gradient(180deg, transparent 0%, rgba(3,3,10,0.3) 100%)",
@@ -341,48 +784,53 @@ function Nav({ onLogin }) {
       position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "0 32px", height: 60,
-      background: scrolled ? "rgba(3,3,10,0.92)" : "transparent",
-      backdropFilter: scrolled ? "blur(24px)" : "none",
-      borderBottom: scrolled ? "1px solid rgba(255,255,255,0.06)" : "none",
-      transition: "all 0.4s ease",
+      background: scrolled ? "rgba(3,3,10,0.85)" : "transparent",
+      backdropFilter: scrolled ? "blur(24px) saturate(1.4)" : "none",
+      WebkitBackdropFilter: scrolled ? "blur(24px) saturate(1.4)" : "none",
+      borderBottom: scrolled ? "1px solid rgba(255,255,255,0.07)" : "none",
+      transition: "all 0.5s cubic-bezier(.22,1,.36,1)",
     }}>
-      <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", animation: "slideInLeft 0.7s ease both" }}>
-        <VortisLogo size={30} color="#8b5cf6" />
+      <a href="#" className="magnetic" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", animation: "slideInLeft 0.8s cubic-bezier(.22,1,.36,1) both" }}>
+        <div style={{ animation: "float 6s ease-in-out infinite, breathe 8s ease-in-out infinite", filter: "drop-shadow(0 0 8px rgba(139,92,246,.5))" }}>
+          <VortisLogo size={30} color="#8b5cf6" />
+        </div>
         <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 18, letterSpacing: "0.1em", color: "#fff" }}>VORTIS</span>
-        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a855f7", letterSpacing: "0.08em" }}>AI</span>
+        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a855f7", letterSpacing: "0.08em", animation: "pulse 2.5s ease-in-out infinite" }}>AI</span>
       </a>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 32, animation: "fadeIn 0.9s 0.2s ease both" }}>
-        {NAV_LINKS.map(l => (
-          <a key={l.label} href={l.href} style={{
-            fontSize: 13.5, fontWeight: 500, color: "rgba(255,255,255,0.5)",
-            textDecoration: "none", transition: "color 0.2s", position: "relative",
+      <div style={{ display: "flex", alignItems: "center", gap: 32, animation: "fadeIn 1s 0.25s ease both" }}>
+        {NAV_LINKS.map((l, i) => (
+          <a key={l.label} href={l.href} className="link-underline" style={{
+            fontSize: 13.5, fontWeight: 500, color: "rgba(255,255,255,0.55)",
+            textDecoration: "none", transition: "color 0.3s ease, transform 0.3s cubic-bezier(.34,1.56,.64,1)",
+            position: "relative", display: "inline-block",
+            animation: `slideUpStagger 0.6s ${0.3 + i * 0.07}s cubic-bezier(.22,1,.36,1) both`,
           }}
-          onMouseEnter={e => e.target.style.color = "#fff"}
-          onMouseLeave={e => e.target.style.color = "rgba(255,255,255,0.5)"}
+          onMouseEnter={e => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "rgba(255,255,255,0.55)"; e.currentTarget.style.transform = "translateY(0)"; }}
           >{l.label}</a>
         ))}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, animation: "slideInRight 0.7s ease both" }}>
-        <button onClick={() => setShowPicker(true)} style={{
-          padding: "8px 22px", borderRadius: 99, fontSize: 13, fontWeight: 700,
+      <div style={{ display: "flex", alignItems: "center", gap: 10, animation: "slideInRight 0.8s cubic-bezier(.22,1,.36,1) both" }}>
+        <Magnetic strength={0.4} onClick={() => setShowPicker(true)} className="shine-overlay" style={{
+          padding: "9px 24px", borderRadius: 99, fontSize: 13, fontWeight: 700,
           background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
           border: "none", cursor: "pointer", position: "relative",
-          boxShadow: "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)",
-          transition: "all 0.2s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05) translateY(-1px)"; e.currentTarget.style.boxShadow = "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.25)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)"; }}
-        >
+          boxShadow: "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15), inset 0 1px 0 rgba(255,255,255,0.2)",
+          overflow: "hidden",
+        }}>
           <span style={{
             position: "absolute", inset: -3, borderRadius: 99,
-            border: "3px solid #c4b5fd",
-            animation: "radarPing 1.6s ease-out infinite",
+            border: "2px solid rgba(196,181,253,0.6)",
+            animation: "pulseRing 1.8s ease-out infinite",
             pointerEvents: "none",
           }} />
-          <span style={{ position: "relative", zIndex: 1 }}>Sign In →</span>
-        </button>
+          <span style={{ position: "relative", zIndex: 1, display: "inline-flex", alignItems: "center", gap: 6 }}>
+            Sign In
+            <ArrowRight size={13} style={{ transition: "transform .3s cubic-bezier(.34,1.56,.64,1)" }} />
+          </span>
+        </Magnetic>
       </div>
 
       {showPicker && (
@@ -399,161 +847,6 @@ function Nav({ onLogin }) {
 // ══════════════════════════════════════════════════════════════════
 //  HERO
 // ══════════════════════════════════════════════════════════════════
-
-function AuthPicker({ onLogin, authLoading, onClose }) {
-  const providers = [
-    { id: 'google', label: 'Continue with Google', color: '#4285F4', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-    )},
-    { id: 'github', label: 'Continue with GitHub', color: '#ffffff', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
-        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
-      </svg>
-    )},
-    { id: 'facebook', label: 'Continue with Facebook', color: '#1877F2', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-      </svg>
-    )},
-  ];
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 999,
-        background: "rgba(3,3,10,0.75)",
-        backdropFilter: "blur(12px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "fadeIn 0.25s ease",
-        padding: 20,
-      }}
-    >
-      <style>{`
-        @keyframes pickerIn {
-          from { opacity: 0; transform: scale(0.92) translateY(16px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        @keyframes borderGlow {
-          0%,100% { box-shadow: 0 0 0 1px rgba(124,58,237,0.4), 0 30px 90px rgba(124,58,237,0.18), 0 0 60px rgba(124,58,237,0.12); }
-          50%     { box-shadow: 0 0 0 1px rgba(168,85,247,0.6), 0 30px 90px rgba(124,58,237,0.28), 0 0 80px rgba(168,85,247,0.2); }
-        }
-        @keyframes iconPop {
-          from { opacity: 0; transform: scale(0.5) rotate(-10deg); }
-          to   { opacity: 1; transform: scale(1) rotate(0deg); }
-        }
-        .ap-row {
-          opacity: 0;
-          animation: pickerIn 0.4s ease forwards;
-        }
-      `}</style>
-
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 460, borderRadius: 24, padding: 40,
-          background: "linear-gradient(165deg, rgba(20,16,40,0.97), rgba(8,8,18,0.99))",
-          border: "1px solid rgba(255,255,255,0.1)",
-          position: "relative", overflow: "hidden",
-          animation: "pickerIn 0.32s cubic-bezier(.2,.9,.3,1.3) forwards, borderGlow 4s ease-in-out infinite",
-        }}
-      >
-        <div style={{
-          position: "absolute", top: -80, right: -80, width: 220, height: 220,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(124,58,237,0.35), transparent 70%)",
-          filter: "blur(20px)", pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", bottom: -100, left: -60, width: 200, height: 200,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(6,182,212,0.18), transparent 70%)",
-          filter: "blur(30px)", pointerEvents: "none",
-        }} />
-
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: 16, margin: "0 auto 20px",
-            background: "rgba(139,92,246,0.12)",
-            border: "1px solid rgba(139,92,246,0.35)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
-            animation: "iconPop 0.45s 0.05s cubic-bezier(.2,.9,.3,1.4) both",
-          }}>
-            <VortisLogo size={28} color="#8b5cf6" />
-          </div>
-
-          <h3 style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 26,
-            color: "#fff", margin: "0 0 8px", textAlign: "center", letterSpacing: "-0.02em",
-          }}>
-            Get started
-          </h3>
-          <p style={{ fontSize: 14.5, color: "rgba(255,255,255,0.45)", textAlign: "center", margin: "0 0 30px" }}>
-            Choose how you'd like to sign in
-          </p>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {providers.map((p, i) => (
-              <button
-                key={p.id}
-                disabled={authLoading}
-                onClick={() => onLogin(p.id)}
-                className="ap-row"
-                style={{
-                  animationDelay: `${0.08 + i * 0.07}s`,
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "16px 20px", borderRadius: 14, width: "100%",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#fff", fontSize: 15.5, fontWeight: 600,
-                  cursor: authLoading ? "not-allowed" : "pointer",
-                  opacity: authLoading ? 0.5 : undefined,
-                  transition: "background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s",
-                  position: "relative",
-                }}
-                onMouseEnter={e => {
-                  if (authLoading) return;
-                  e.currentTarget.style.background = "rgba(255,255,255,0.09)";
-                  e.currentTarget.style.borderColor = `${p.color}66`;
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = `0 8px 24px ${p.color}26`;
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                {p.icon}
-                {p.label}
-                <ArrowRight size={16} style={{ marginLeft: "auto", opacity: 0.35 }} />
-              </button>
-            ))}
-          </div>
-
-          <button onClick={onClose} style={{
-            marginTop: 22, width: "100%", padding: "12px", background: "none",
-            border: "none", color: "rgba(255,255,255,0.35)", fontSize: 14, cursor: "pointer",
-            transition: "color 0.15s",
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.65)"}
-          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const CYCLE_WORDS = [
   "INTELLIGENCE",
   "REASONING",
@@ -694,6 +987,21 @@ function HeroVisual() {
 export function Hero({ onLogin, authLoading, authError }) {
   const [wordIdx, setWordIdx] = useState(0);
   const [showPicker, setShowPicker] = useState(false);
+  const heroRef = useRef(null);
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const onMove = (e) => {
+      if (!heroRef.current) return;
+      const r = heroRef.current.getBoundingClientRect();
+      const dx = (e.clientX - r.left - r.width / 2) / r.width;
+      const dy = (e.clientY - r.top - r.height / 2) / r.height;
+      setParallax({ x: dx, y: dy });
+    };
+    const el = heroRef.current;
+    if (el) el.addEventListener("mousemove", onMove);
+    return () => { if (el) el.removeEventListener("mousemove", onMove); };
+  }, []);
 
 function AuthPicker({ onLogin, authLoading, onClose }) {
   const providers = [
@@ -855,7 +1163,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
   }, []);
 
   return (
-    <section className="hero-grid" style={{
+    <section ref={heroRef} className="hero-grid" style={{
       minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr",
       alignItems: "center", gap: 60,
       padding: "100px 80px 80px", position: "relative", zIndex: 1,
@@ -863,50 +1171,78 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
     }}>
       <style>{`@media(max-width:900px){.hero-grid{grid-template-columns:1fr!important;padding:100px 24px 60px!important}.hero-visual{display:none!important}}`}</style>
 
+      {/* Aurora backdrop local to hero */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden", zIndex: -1 }}>
+        <div style={{
+          position: "absolute", top: "10%", left: "10%", width: 500, height: 500, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(124,58,237,0.18), transparent 70%)",
+          filter: "blur(60px)",
+          transform: `translate3d(${parallax.x * 30}px, ${parallax.y * 30}px, 0)`,
+          transition: "transform .6s cubic-bezier(.22,1,.36,1)",
+        }} />
+        <div style={{
+          position: "absolute", bottom: "10%", right: "5%", width: 460, height: 460, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(6,182,212,0.12), transparent 70%)",
+          filter: "blur(60px)",
+          transform: `translate3d(${parallax.x * -25}px, ${parallax.y * -25}px, 0)`,
+          transition: "transform .6s cubic-bezier(.22,1,.36,1)",
+        }} />
+      </div>
+
       <div className="hero-left">
         {/* Badge */}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.08)", marginBottom: 28, animation: "fadeUp 0.6s ease both" }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s ease-in-out infinite" }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 16px", borderRadius: 99,
+          border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.08)",
+          marginBottom: 28, animation: "fadeUp 0.7s cubic-bezier(.22,1,.36,1) both",
+          backdropFilter: "blur(10px)",
+          position: "relative", overflow: "hidden",
+        }}>
+          <div style={{
+            position: "absolute", inset: 0, background: "linear-gradient(120deg, transparent, rgba(168,85,247,0.18), transparent)",
+            transform: "translateX(-100%)", animation: "glowSweep 3.5s ease-in-out infinite",
+          }} />
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 8px #a855f7", animation: "pulse 2s ease-in-out infinite" }} />
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.95)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
        {/* Headline */}
 <h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
-  <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
+  <span style={{ display: "block", color: "#fff", animation: "textReveal 0.9s 0.1s cubic-bezier(.22,1,.36,1) both" }}>THE</span>
 
-  <span style={{ display: "block" }}>
+  <span style={{ display: "block", minHeight: "1.1em" }}>
     <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
   </span>
 
-  <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
+  <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "textReveal 0.9s 0.4s cubic-bezier(.22,1,.36,1) both" }}>YOU DESERVE.</span>
 </h1>
         {/* Description Sub-headline */}
-        <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
+        <p style={{ fontSize: 17, color: "rgba(255,255,255,0.55)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.8s 0.5s cubic-bezier(.22,1,.36,1) both" }}>
           Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
         </p>
         
 
        {/* CTA */}
-<div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-  <button
-    onClick={() => setShowPicker(true)}
+<div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.8s 0.65s cubic-bezier(.22,1,.36,1) both" }}>
+  <Magnetic
+    strength={0.35}
+    onClick={() => !authLoading && setShowPicker(true)}
     disabled={authLoading}
+    className="shine-overlay"
     style={{
       padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
       background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
       border: "none", cursor: authLoading ? "not-allowed" : "pointer",
       display: "flex", alignItems: "center", gap: 8, position: "relative",
-      boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
-      transition: "all 0.25s", opacity: authLoading ? 0.85 : 1,
+      boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,0.25)",
+      overflow: "hidden", opacity: authLoading ? 0.85 : 1,
     }}
-    onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
-    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
   >
     {!authLoading && (
       <span style={{
         position: "absolute", inset: -3, borderRadius: 99,
-        border: "3px solid #c4b5fd",
-        animation: "radarPing 1.6s ease-out infinite",
+        border: "2px solid rgba(196,181,253,0.7)",
+        animation: "pulseRing 1.8s ease-out infinite",
         pointerEvents: "none",
       }} />
     )}
@@ -915,22 +1251,29 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
         <path d="M21 12a9 9 0 1 1-6.219-8.56" />
       </svg>
     ) : (
-      <Zap size={16} style={{ position: "relative", zIndex: 1 }} />
+      <Zap size={16} style={{ position: "relative", zIndex: 1, filter: "drop-shadow(0 0 4px rgba(255,255,255,0.6))" }} />
     )}
     <span style={{ position: "relative", zIndex: 1 }}>
       {authLoading ? "Signing in…" : "Start Free"}
     </span>
-  </button>
+  </Magnetic>
 
-  <a href="#capabilities" style={{
+  <a href="#capabilities" className="shine-overlay" style={{
     padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
-    border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
+    border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.75)",
     background: "rgba(255,255,255,0.04)", textDecoration: "none",
-    display: "inline-flex", alignItems: "center", gap: 8, transition: "all 0.2s",
+    display: "inline-flex", alignItems: "center", gap: 8,
+    transition: "all 0.35s cubic-bezier(.22,1,.36,1)",
+    backdropFilter: "blur(10px)",
+    overflow: "hidden",
+    transform: `translate3d(${parallax.x * 8}px, ${parallax.y * 8}px, 0)`,
   }}
-  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"; e.currentTarget.style.color = "#fff"; }}
-  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
-  >Watch Demo</a>
+  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.55)"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(139,92,246,0.08)"; e.currentTarget.style.transform = `translate3d(${parallax.x * 8}px, ${parallax.y * 8}px, 0) translateY(-2px)`; }}
+  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)"; e.currentTarget.style.color = "rgba(255,255,255,0.75)"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.transform = `translate3d(${parallax.x * 8}px, ${parallax.y * 8}px, 0)`; }}
+  >
+    <Sparkles size={15} style={{ color: "#a855f7" }} />
+    Watch Demo
+  </a>
 </div>
 
 {showPicker && (
@@ -941,17 +1284,22 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
   />
 )}
         {/* Stats */}
-        <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.7s 0.8s ease both" }}>
+        <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.8s 0.8s cubic-bezier(.22,1,.36,1) both", alignItems: "center" }}>
           {[["50K+", "Users"], ["99.9%", "Uptime"], ["4.9★", "Rating"]].map(([n, l]) => (
-            <div key={l}>
-              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 24, background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{n}</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{l}</div>
+            <div key={l} style={{ position: "relative" }}>
+              <div style={{
+                fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 24,
+                background: "linear-gradient(135deg,#a855f7,#7C3AED)",
+                WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+                animation: "countGlow 4s ease-in-out infinite",
+              }}>{n}</div>
+              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>{l}</div>
             </div>
           ))}
-          <div style={{ width: 1, background: "rgba(255,255,255,0.08)" }} />
+          <div style={{ width: 1, height: 32, background: "linear-gradient(180deg, transparent, rgba(255,255,255,0.15), transparent)" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>All systems operational</span>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 8px #10b981", animation: "pulse 2s ease-in-out infinite" }} />
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>All systems operational</span>
           </div>
         </div>
 
@@ -962,25 +1310,49 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
         )}
       </div>
 
-      {/* Right: visual */}
-      <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
-        <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
-        <HeroVisual />
+      {/* Right: visual with parallax */}
+      <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative", perspective: "1000px" }}>
+        <div style={{
+          position: "absolute", width: 460, height: 460, borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(124,58,237,0.18), transparent 70%)",
+          filter: "blur(40px)",
+          transform: `translate3d(${parallax.x * -20}px, ${parallax.y * -20}px, 0)`,
+          transition: "transform .5s cubic-bezier(.22,1,.36,1)",
+        }} />
+        {/* Rotating orbit ring behind visual */}
+        <div style={{
+          position: "absolute", width: 480, height: 480, borderRadius: "50%",
+          border: "1px dashed rgba(168,85,247,0.18)",
+          animation: "borderRotate 60s linear infinite",
+          transform: `translate3d(${parallax.x * 15}px, ${parallax.y * 15}px, 0)`,
+        }}>
+          <div style={{ position: "absolute", top: -5, left: "50%", width: 10, height: 10, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 12px #a855f7", transform: "translateX(-50%)" }} />
+          <div style={{ position: "absolute", bottom: -4, right: "30%", width: 8, height: 8, borderRadius: "50%", background: "#06B6D4", boxShadow: "0 0 10px #06B6D4" }} />
+        </div>
+        <div style={{
+          transform: `rotateY(${parallax.x * 6}deg) rotateX(${parallax.y * -6}deg) translateZ(0)`,
+          transition: "transform .3s cubic-bezier(.22,1,.36,1)",
+          transformStyle: "preserve-3d",
+        }}>
+          <HeroVisual />
+        </div>
         {/* Floating badges */}
         {[
-          { text: "Web Search", icon: "🌐", top: "5%", right: "-5%", delay: "0s" },
-          { text: "Image Gen", icon: "🎨", bottom: "15%", left: "-8%", delay: "1.2s" },
-          { text: "Vision AI", icon: "👁️", top: "40%", right: "-12%", delay: "0.6s" },
+          { text: "Web Search", icon: "🌐", top: "5%", right: "-5%", delay: "0s", depth: 30 },
+          { text: "Image Gen", icon: "🎨", bottom: "15%", left: "-8%", delay: "1.2s", depth: -25 },
+          { text: "Vision AI", icon: "👁️", top: "40%", right: "-12%", delay: "0.6s", depth: 20 },
         ].map(b => (
           <div key={b.text} style={{
             position: "absolute", top: b.top, right: b.right, bottom: b.bottom, left: b.left,
             display: "flex", alignItems: "center", gap: 7, padding: "8px 14px",
             borderRadius: 99, background: "rgba(10,10,20,0.85)", backdropFilter: "blur(16px)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.85)",
-            animation: `float 4s ease-in-out ${b.delay} infinite`,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.9)",
+            animation: `float 4s ease-in-out ${b.delay} infinite, breathe 5s ease-in-out ${b.delay} infinite`,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06)",
             whiteSpace: "nowrap",
+            transform: `translate3d(${parallax.x * b.depth}px, ${parallax.y * b.depth}px, 0)`,
+            transition: "transform .4s cubic-bezier(.22,1,.36,1)",
           }}>
             <span>{b.icon}</span>{b.text}
           </div>
@@ -988,7 +1360,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
       </div>
 
       {/* Scroll indicator */}
-      <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.2)", animation: "float 2.5s ease-in-out infinite" }}>
+      <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.25)", animation: "scrollHint 2.5s ease-in-out infinite" }}>
         <span style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace" }}>Scroll</span>
         <ChevronDown size={16} />
       </div>
@@ -1177,37 +1549,47 @@ function BentoGrid() {
           const Icon = f.icon;
           const isLarge = f.size === "large" && i < 2;
           return (
-            <div key={f.title} style={{
-              gridColumn: isLarge ? "span 2" : "span 1",
-              borderRadius: 18, padding: "28px 30px",
-              background: "rgba(255,255,255,0.025)",
-              border: "1px solid rgba(255,255,255,0.06)",
-              position: "relative", overflow: "hidden",
-              cursor: "default", transition: "all 0.3s",
-              opacity: inView ? 1 : 0,
-              transform: inView ? "translateY(0) scale(1)" : "translateY(30px) scale(0.96)",
-              transitionDelay: `${i * 0.06 + 0.15}s`,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = `rgba(${f.color},0.4)`;
-              e.currentTarget.style.background = `rgba(${f.color},0.07)`;
-              e.currentTarget.style.transform = "translateY(-4px) scale(1.01)";
-              e.currentTarget.style.boxShadow = `0 20px 60px rgba(${f.color},0.15)`;
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
-              e.currentTarget.style.background = "rgba(255,255,255,0.025)";
-              e.currentTarget.style.transform = "translateY(0) scale(1)";
-              e.currentTarget.style.boxShadow = "none";
-            }}
+            <TiltCard
+              key={f.title}
+              max={10}
+              style={{
+                gridColumn: isLarge ? "span 2" : "span 1",
+                borderRadius: 18, padding: "28px 30px",
+                background: "rgba(255,255,255,0.025)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                position: "relative", overflow: "hidden",
+                cursor: "default",
+                opacity: inView ? 1 : 0,
+                transition: "opacity 0.7s cubic-bezier(.22,1,.36,1), background 0.3s, border-color 0.3s, box-shadow 0.3s",
+                transitionDelay: `${i * 0.06 + 0.15}s`,
+              }}
+              className="shine-overlay"
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = `rgba(${f.color},0.4)`;
+                e.currentTarget.style.background = `rgba(${f.color},0.07)`;
+                e.currentTarget.style.boxShadow = `0 20px 60px rgba(${f.color},0.15)`;
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)";
+                e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
             >
-              <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 50% at 0% 0%, rgba(${f.color},0.08), transparent)`, pointerEvents: "none" }} />
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: `rgba(${f.color},0.15)`, border: `1px solid rgba(${f.color},0.3)`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-                <Icon size={20} style={{ color: `rgb(${f.color})` }} />
+              <SparkField count={6} color={`rgba(${f.color},`} />
+              <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse 60% 50% at 0% 0%, rgba(${f.color},0.1), transparent)`, pointerEvents: "none" }} />
+              <div style={{
+                width: 44, height: 44, borderRadius: 12, background: `rgba(${f.color},0.15)`,
+                border: `1px solid rgba(${f.color},0.3)`, display: "flex", alignItems: "center",
+                justifyContent: "center", marginBottom: 16,
+                boxShadow: `0 0 20px rgba(${f.color},0.15)`,
+                animation: `breathe 6s ease-in-out ${i * 0.4}s infinite`,
+                position: "relative", zIndex: 1,
+              }}>
+                <Icon size={20} style={{ color: `rgb(${f.color})`, filter: `drop-shadow(0 0 4px rgba(${f.color},0.6))` }} />
               </div>
-              <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17, margin: "0 0 8px", color: "#fff" }}>{f.title}</h3>
-              <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.45)", lineHeight: 1.65, margin: 0 }}>{f.desc}</p>
-            </div>
+              <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17, margin: "0 0 8px", color: "#fff", position: "relative", zIndex: 1 }}>{f.title}</h3>
+              <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.5)", lineHeight: 1.65, margin: 0, position: "relative", zIndex: 1 }}>{f.desc}</p>
+            </TiltCard>
           );
         })}
       </div>
@@ -2028,39 +2410,90 @@ function Pricing() {
           {PLANS.map((plan, idx) => {
             const PlanIcon = plan.icon;
             return (
-              <div key={plan.name} style={{ borderRadius: 24, padding: "36px 30px", position: "relative", border: plan.popular ? `1px solid rgba(${plan.colorStr},0.6)` : "1px solid rgba(255,255,255,0.07)", background: plan.popular ? `rgba(${plan.colorStr},0.07)` : "rgba(255,255,255,0.02)", animation: `${plan.glowAnim} 3s ease-in-out infinite`, display: "flex", flexDirection: "column", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : `translateY(${idx === 1 ? 80 : 0}px)`, transition: `all 0.75s ${idx * 0.12 + 0.3}s ease` }}>
+              <TiltCard
+                key={plan.name}
+                max={8}
+                glare={plan.popular}
+                style={{
+                  borderRadius: 24, padding: "36px 30px", position: "relative",
+                  border: plan.popular ? `1px solid rgba(${plan.colorStr},0.6)` : "1px solid rgba(255,255,255,0.07)",
+                  background: plan.popular ? `rgba(${plan.colorStr},0.07)` : "rgba(255,255,255,0.02)",
+                  animation: `${plan.glowAnim} 3s ease-in-out infinite, floatY ${8 + idx}s ease-in-out ${idx * 0.5}s infinite`,
+                  display: "flex", flexDirection: "column",
+                  opacity: inView ? 1 : 0,
+                  transition: "opacity 0.75s cubic-bezier(.22,1,.36,1), background 0.3s, border-color 0.3s, box-shadow 0.3s",
+                  transitionDelay: `${idx * 0.12 + 0.3}s`,
+                }}
+                className="shine-overlay"
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = `0 30px 80px rgba(${plan.colorStr},0.25)`;
+                  e.currentTarget.style.borderColor = `rgba(${plan.colorStr},0.7)`;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.borderColor = plan.popular ? `rgba(${plan.colorStr},0.6)` : "rgba(255,255,255,0.07)";
+                }}
+              >
                 {plan.popular && (
                   <>
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "24px 24px 0 0", background: `linear-gradient(90deg, transparent, ${plan.color}, transparent)` }} />
-                    <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(135deg,${plan.color},#a855f7)`, padding: "4px 18px", borderRadius: 99, fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", boxShadow: `0 4px 16px rgba(${plan.colorStr},0.5)` }}>{plan.badge}</div>
+                    <div style={{
+                      position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)",
+                      background: `linear-gradient(135deg,${plan.color},#a855f7)`, padding: "4px 18px", borderRadius: 99,
+                      fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap",
+                      boxShadow: `0 4px 16px rgba(${plan.colorStr},0.5)`,
+                      animation: "breathe 3s ease-in-out infinite",
+                    }}>{plan.badge}</div>
                   </>
                 )}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
                   <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 20, margin: 0, color: "#fff" }}>{plan.name}</h3>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: plan.iconBg, border: `1px solid ${plan.iconBorder}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <PlanIcon size={18} style={{ color: plan.color }} />
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, background: plan.iconBg,
+                    border: `1px solid ${plan.iconBorder}`, display: "flex", alignItems: "center",
+                    justifyContent: "center",
+                    animation: "breathe 5s ease-in-out infinite",
+                  }}>
+                    <PlanIcon size={18} style={{ color: plan.color, filter: `drop-shadow(0 0 4px ${plan.color})` }} />
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginBottom: 26 }}>
-                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 46, color: "#fff", lineHeight: 1 }}>{plan.prices[billing]}</span>
+                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 46, color: "#fff", lineHeight: 1, transition: "color 0.3s" }}>{plan.prices[billing]}</span>
                   <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", paddingBottom: 5 }}>{BILLING_LABELS[billing]}</span>
                 </div>
                 <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", flex: 1, display: "flex", flexDirection: "column", gap: 11 }}>
-                  {plan.features.map(f => (
-                    <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "rgba(255,255,255,0.7)" }}>
-                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: `rgba(${plan.colorStr},0.18)`, border: `1px solid rgba(${plan.colorStr},0.4)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {plan.features.map((f, fi) => (
+                    <li key={f} style={{
+                      display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "rgba(255,255,255,0.7)",
+                      animation: `slideUpStagger 0.5s ${0.5 + fi * 0.05}s cubic-bezier(.22,1,.36,1) both`,
+                    }}>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: "50%",
+                        background: `rgba(${plan.colorStr},0.18)`, border: `1px solid rgba(${plan.colorStr},0.4)`,
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}>
                         <Check size={11} style={{ color: plan.color }} />
                       </div>
                       {f}
                     </li>
                   ))}
                 </ul>
-                <button style={{ width: "100%", padding: "14px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", background: plan.popular ? `linear-gradient(135deg,${plan.color},#7C3AED)` : "rgba(255,255,255,0.06)", color: "#fff", border: plan.popular ? "none" : "1px solid rgba(255,255,255,0.1)", boxShadow: plan.popular ? `0 0 24px rgba(${plan.colorStr},0.4)` : "none", transition: "all 0.2s" }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}>
-                  Get Started →
-                </button>
-              </div>
+                <Magnetic
+                  strength={0.25}
+                  style={{
+                    width: "100%", padding: "14px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                    background: plan.popular ? `linear-gradient(135deg,${plan.color},#7C3AED)` : "rgba(255,255,255,0.06)",
+                    color: "#fff", border: plan.popular ? "none" : "1px solid rgba(255,255,255,0.1)",
+                    boxShadow: plan.popular ? `0 0 24px rgba(${plan.colorStr},0.4)` : "none",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    overflow: "hidden",
+                  }}
+                  className="shine-overlay"
+                >
+                  Get Started
+                  <ArrowRight size={14} style={{ transition: "transform .3s cubic-bezier(.34,1.56,.64,1)" }} />
+                </Magnetic>
+              </TiltCard>
             );
           })}
         </div>
@@ -2092,30 +2525,48 @@ const FAQS = [
 function FaqItem({ faq, index, inView }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{
-      borderBottom: "1px solid rgba(255,255,255,0.06)",
-      opacity: inView ? 1 : 0,
-      transform: inView ? "translateX(0)" : `translateX(${index % 2 === 0 ? -40 : 40}px)`,
-      transition: `all 0.6s ${index * 0.07}s ease`,
-    }}>
+    <div
+      style={{
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        opacity: inView ? 1 : 0,
+        transform: inView ? "translateX(0)" : `translateX(${index % 2 === 0 ? -40 : 40}px)`,
+        transition: `all 0.7s ${index * 0.08}s cubic-bezier(.22,1,.36,1), background 0.3s, padding 0.3s`,
+      }}
+      onMouseEnter={e => { if (!open) e.currentTarget.style.background = "rgba(139,92,246,0.03)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+    >
       <button onClick={() => setOpen(!open)} style={{
         width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "20px 4px", background: "none", border: "none", cursor: "pointer", textAlign: "left",
       }}>
-        <span style={{ fontSize: 15, fontWeight: 500, color: open ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 0.2s" }}>{faq.q}</span>
+        <span style={{
+          fontSize: 15, fontWeight: 500,
+          color: open ? "#fff" : "rgba(255,255,255,0.7)",
+          transition: "color 0.3s, transform 0.3s cubic-bezier(.22,1,.36,1)",
+          transform: open ? "translateX(4px)" : "translateX(0)",
+        }}>{faq.q}</span>
         <div style={{
           width: 30, height: 30, borderRadius: "50%", flexShrink: 0, marginLeft: 16,
           border: `1px solid ${open ? "rgba(139,92,246,0.6)" : "rgba(255,255,255,0.1)"}`,
           background: open ? "rgba(139,92,246,0.15)" : "transparent",
           display: "flex", alignItems: "center", justifyContent: "center",
-          transform: open ? "rotate(45deg)" : "rotate(0deg)", transition: "all 0.28s",
-          boxShadow: open ? "0 0 12px rgba(139,92,246,0.3)" : "none",
+          transform: open ? "rotate(135deg) scale(1.1)" : "rotate(0deg) scale(1)",
+          transition: "all 0.4s cubic-bezier(.34,1.56,.64,1)",
+          boxShadow: open ? "0 0 16px rgba(139,92,246,0.4)" : "none",
         }}>
           <Plus size={14} style={{ color: open ? "#a855f7" : "rgba(255,255,255,0.4)" }} />
         </div>
       </button>
-      <div style={{ maxHeight: open ? 220 : 0, overflow: "hidden", transition: "max-height 0.38s ease" }}>
-        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)", lineHeight: 1.75, paddingBottom: 22, paddingRight: 48, margin: 0 }}>{faq.a}</p>
+      <div style={{
+        maxHeight: open ? 220 : 0, overflow: "hidden",
+        transition: "max-height 0.5s cubic-bezier(.22,1,.36,1), opacity 0.4s ease",
+        opacity: open ? 1 : 0,
+      }}>
+        <p style={{
+          fontSize: 14, color: "rgba(255,255,255,0.5)", lineHeight: 1.75,
+          paddingBottom: 22, paddingRight: 48, margin: 0,
+          animation: open ? "slideUpStagger 0.4s 0.1s cubic-bezier(.22,1,.36,1) both" : "none",
+        }}>{faq.a}</p>
       </div>
     </div>
   );
@@ -2146,51 +2597,56 @@ function FAQ() {
 // ══════════════════════════════════════════════════════════════════
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
-  const [showPicker, setShowPicker] = useState(false);
   return (
-    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center" }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124,58,237,0.07), transparent)", pointerEvents: "none" }} />
+    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center", overflow: "hidden" }}>
+      <SectionGlow color="rgba(124,58,237,0.1)" size="60% 70%" />
+      {/* Aurora drift blobs */}
+      <FloatingOrb size={500} color="rgba(124,58,237,0.12)" blur={80} anim="auroraDrift" duration={28} style={{ top: "-10%", left: "10%" }} />
+      <FloatingOrb size={420} color="rgba(6,182,212,0.08)" blur={90} anim="auroraDrift2" duration={32} delay={6} style={{ bottom: "-5%", right: "10%" }} />
+
       <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
-        <div style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)", transition: "all 0.8s ease" }}>
-          <div style={{ fontSize: 52, marginBottom: 20 }}>✦</div>
+        <div style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)", transition: "all 0.9s cubic-bezier(.22,1,.36,1)" }}>
+          <div style={{
+            fontSize: 52, marginBottom: 20,
+            animation: "breathe 4s ease-in-out infinite, tiltSway 6s ease-in-out infinite",
+            filter: "drop-shadow(0 0 16px rgba(168,85,247,0.7))",
+            color: "#a855f7",
+          }}>✦</div>
           <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(32px,6vw,62px)", margin: "0 0 20px", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
             Start thinking{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>faster.</span>
+            <span className="aurora-text">faster.</span>
           </h2>
-          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 40 }}>
+          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.5)", lineHeight: 1.7, marginBottom: 40 }}>
             Join 50,000+ professionals who use Vortis every day. Free to start.
           </p>
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => setShowPicker(true)} style={{
-              padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-              background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-              position: "relative",
-              boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
-              transition: "all 0.25s",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
+            <Magnetic
+              strength={0.4}
+              onClick={() => onLogin('google')}
+              className="shine-overlay"
+              style={{
+                padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
+                background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+                border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+                position: "relative", overflow: "hidden",
+                boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,0.25)",
+                transition: "box-shadow 0.4s cubic-bezier(.22,1,.36,1)",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 90px rgba(124,58,237,0.75), 0 24px 60px rgba(124,58,237,0.45), inset 0 1px 0 rgba(255,255,255,0.3)"; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,0.25)"; }}
             >
               <span style={{
                 position: "absolute", inset: -3, borderRadius: 99,
-                border: "3px solid #c4b5fd",
-                animation: "radarPing 1.6s ease-out infinite",
+                border: "2px solid rgba(196,181,253,0.7)",
+                animation: "pulseRing 1.8s ease-out infinite",
                 pointerEvents: "none",
               }} />
-              <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
+              <Zap size={18} style={{ position: "relative", zIndex: 1, filter: "drop-shadow(0 0 4px rgba(255,255,255,0.6))" }} />
               <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
-            </button>
+            </Magnetic>
           </div>
         </div>
       </div>
-      {showPicker && (
-        <AuthPicker
-          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-          authLoading={false}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
     </section>
   );
 }
@@ -2255,9 +2711,10 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
   return (
     <div style={{ background: "#03030a", color: "#ffffff", minHeight: "100vh", fontFamily: "'Inter',sans-serif", overflowX: "hidden", position: "relative" }}>
       <StyleInjector />
+      <ScrollProgress />
       <CosmicBg />
       <FloatingParticles />
-      <CursorOrb />
+      <AuroraCursor />
       <Nav onLogin={onLogin} />
       <main style={{ position: "relative", zIndex: 1 }}>
         <div style={{ maxWidth: 1440, margin: "0 auto" }}>
