@@ -7,14 +7,13 @@ let transcriber = null;
 
 export const loadWhisper = async (onProgress) => {
   if (transcriber) return transcriber;
-  transcriber = await pipeline(
-    'automatic-speech-recognition',
-    'Xenova/whisper-small',
-    {
-      dtype: 'q8',
-      progress_callback: onProgress,
-    }
-  );
+ transcriber = await pipeline(
+  'automatic-speech-recognition',
+  'Xenova/whisper-small',
+  {
+    progress_callback: onProgress,
+  }
+);
   return transcriber;
 };
 
