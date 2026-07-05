@@ -867,6 +867,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
         {/* Badge */}
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.08)", marginBottom: 28, animation: "fadeUp 0.6s ease both" }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s ease-in-out infinite" }} />
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
        {/* Headline */}
@@ -986,19 +987,23 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
       borderRadius: 99, 
       background: "rgba(10,10,20,0.85)", 
       backdropFilter: "blur(16px)",
-      border: "1px solid rgba(255,255,255,0.1)",
+      // Added the custom color to the border with low opacity for a cool glow effect
+      border: `1px solid rgba(${b.color}, 0.3)`,
       fontSize: 12, 
       fontWeight: 600, 
       color: "rgba(255,255,255,0.85)",
       animation: `float 4s ease-in-out ${b.delay} infinite`,
-      boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+      // Added a slight glow using the custom color
+      boxShadow: `0 8px 32px rgba(${b.color}, 0.15)`,
       whiteSpace: "nowrap",
     }}>
-      {/* FIX: Changed {b.icon} to <b.Icon /> 
-        You can also pass size or color props here if your icon library supports it, 
-        e.g., <b.Icon size={16} color={`rgb(${b.color})`} />
-      */}
-      <span><b.Icon size={16} /></span>
+      <span style={{ display: "flex", alignItems: "center", color: `rgb(${b.color})` }}>
+        {/* If your icon library supports the color prop directly, you can do: */}
+        {/* <b.Icon size={16} color={`rgb(${b.color})`} /> */}
+        
+        {/* If the icon inherits the parent's text color, this will work automatically: */}
+        <b.Icon size={16} />
+      </span>
       {b.text}
     </div>
   ))}
