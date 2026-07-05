@@ -867,7 +867,6 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
         {/* Badge */}
         <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.08)", marginBottom: 28, animation: "fadeUp 0.6s ease both" }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s ease-in-out infinite" }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
         </div>
 
        {/* Headline */}
