@@ -962,29 +962,47 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
       </div>
 
       {/* Right: visual */}
-      <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
-        <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
-        <HeroVisual />
-        {/* Floating badges */}
-        {[
-           { text: "Web Search", Icon: Globe, top: "5%", right: "-5%", delay: "0s", color: "6,182,212" },
-           { text: "Image Gen", Icon: ImageIcon, bottom: "15%", left: "-8%", delay: "1.2s", color: "168,85,247" },
-           { text: "Vision AI", Icon: Eye, top: "40%", right: "-12%", delay: "0.6s", color: "124,58,237" },
-        ].map(b => (
-          <div key={b.text} style={{
-            position: "absolute", top: b.top, right: b.right, bottom: b.bottom, left: b.left,
-            display: "flex", alignItems: "center", gap: 7, padding: "8px 14px",
-            borderRadius: 99, background: "rgba(10,10,20,0.85)", backdropFilter: "blur(16px)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.85)",
-            animation: `float 4s ease-in-out ${b.delay} infinite`,
-            boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-            whiteSpace: "nowrap",
-          }}>
-            <span>{b.icon}</span>{b.text}
-          </div>
-        ))}
-      </div>
+<div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
+  <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
+  
+  <HeroVisual />
+  
+  {/* Floating badges */}
+  {[
+     { text: "Web Search", Icon: Globe, top: "5%", right: "-5%", delay: "0s", color: "6,182,212" },
+     { text: "Image Gen", Icon: ImageIcon, bottom: "15%", left: "-8%", delay: "1.2s", color: "168,85,247" },
+     { text: "Vision AI", Icon: Eye, top: "40%", right: "-12%", delay: "0.6s", color: "124,58,237" },
+  ].map((b) => (
+    <div key={b.text} style={{
+      position: "absolute", 
+      top: b.top, 
+      right: b.right, 
+      bottom: b.bottom, 
+      left: b.left,
+      display: "flex", 
+      alignItems: "center", 
+      gap: 7, 
+      padding: "8px 14px",
+      borderRadius: 99, 
+      background: "rgba(10,10,20,0.85)", 
+      backdropFilter: "blur(16px)",
+      border: "1px solid rgba(255,255,255,0.1)",
+      fontSize: 12, 
+      fontWeight: 600, 
+      color: "rgba(255,255,255,0.85)",
+      animation: `float 4s ease-in-out ${b.delay} infinite`,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+      whiteSpace: "nowrap",
+    }}>
+      {/* FIX: Changed {b.icon} to <b.Icon /> 
+        You can also pass size or color props here if your icon library supports it, 
+        e.g., <b.Icon size={16} color={`rgb(${b.color})`} />
+      */}
+      <span><b.Icon size={16} /></span>
+      {b.text}
+    </div>
+  ))}
+</div>
 
       {/* Scroll indicator */}
       <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.2)", animation: "float 2.5s ease-in-out infinite" }}>
