@@ -4874,7 +4874,7 @@ return (
     `}</style>
  
     {/* AICore — Three.js particle sphere + orbital rings (replaces VoiceParticleSphere) */}
-    <div style={{ position: 'relative', width: 300, height: 300 }}>
+    <div style={{ position: 'relative', width: 500, height: 500 }}>
   <AICore
     isConnected={callState !== 'idle'}
     isSpeaking={callState === 'speaking'}
