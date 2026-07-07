@@ -3096,7 +3096,6 @@ const detectSpokenLang = (text) => {
     'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte',
                'men','tack','hej','ja','nej','bra','var','vad','när','hur','vem'],
 
-
     'ru-RU': ['и','в','не','на','что','это','по','но','как','да','нет','спасибо','привет'],
 
     'vi-VN': ['và','của','là','có','trong','không','được','cho','này','cảm','ơn','xin','chào'],
@@ -4875,7 +4874,7 @@ return (
     `}</style>
  
     {/* AICore — Three.js particle sphere + orbital rings (replaces VoiceParticleSphere) */}
-    <div style={{ position: 'relative', width: 620, height: 620 }}>
+    <div style={{ position: 'relative', width: 420, height: 420 }}>
       <AICore
         isConnected={callState !== 'idle'}
         isSpeaking={callState === 'speaking'}

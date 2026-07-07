@@ -12,6 +12,15 @@ const _blendColor = new THREE.Color()
 const _ringColor = new THREE.Color()
 const _scaleVec = new THREE.Vector3()
 
+// ── SIZING CONSTANTS ──────────────────────────────────────────────
+// Camera pulled in from z=5 → z=4.2, fov 42 → 45.
+// At z=4.2 / fov=45 the visible height at z=0 is:
+//   2 × 4.2 × tan(22.5°) ≈ 3.477 world units
+// Shell radius is unchanged (1.85) so the invR calc below stays valid.
+// Rings are now INSIDE the shell so they can never clip the canvas.
+const SHELL_RADIUS = 1.85
+const SHELL_INV_R   = 1 / SHELL_RADIUS // 0.5405
+
 function ParticleShell({ isConnected, isSpeaking }) {
   const ref = useRef(null)
   const volRef = useRef(0)
@@ -25,7 +34,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
     for (let i = 0; i < COUNT; i++) {
       const phi = Math.acos(1 - (2 * (i + 0.5)) / COUNT)
       const theta = Math.PI * (1 + Math.sqrt(5)) * i
-      const r = 1.85 // bigger shell — fills more of the 420px wrapper
+      const r = SHELL_RADIUS
 
       const px = r * Math.sin(phi) * Math.cos(theta)
       const py = r * Math.sin(phi) * Math.sin(theta)
@@ -83,12 +92,12 @@ function ParticleShell({ isConnected, isSpeaking }) {
         const ox = original[ix]
         const oy = original[ix + 1]
         const oz = original[ix + 2]
-        const invR = 0.5405 // 1 / 1.85
 
-        posArr[ix] = ox + ox * invR * wave
-        posArr[ix + 1] = oy + oy * invR * wave
-        posArr[ix + 2] = oz + oz * invR * wave
+        posArr[ix]     = ox + ox * SHELL_INV_R * wave
+        posArr[ix + 1] = oy + oy * SHELL_INV_R * wave
+        posArr[ix + 2] = oz + oz * SHELL_INV_R * wave
       }
+      geo.attributes.position.array = posArr
       geo.attributes.position.needsUpdate = true
     }
   })
@@ -103,7 +112,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.025}
+        size={0.04}            /* was 0.025 — bigger, more readable dots */
         transparent
         opacity={0.3}
         sizeAttenuation
@@ -172,7 +181,10 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    const targetScale = !isConnected ? 0.62 : isSpeaking ? 1.0 : 0.86
+    // ── NEW SCALES ──────────────────────────────────────────────
+    // Old: 0.62 / 0.86 / 1.0  → disconnected sphere only filled ~60% of the box.
+    // New: 0.82 / 0.92 / 1.0  → disconnected fills ~87%, idle ~92%, speaking ~97%.
+    const targetScale = !isConnected ? 0.82 : isSpeaking ? 1.0 : 0.92
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -180,13 +192,15 @@ function AIOrb({ isConnected, isSpeaking }) {
 
   return (
     <group ref={groupRef}>
-      {/* Single particle shell (was 3) */}
+      {/* Particle shell — outermost visual element */}
       <ParticleShell isConnected={isConnected} isSpeaking={isSpeaking} />
 
-      {/* Two rings (was 3) — enough for depth */}
+      {/* Rings — INSIDE the shell so they can never clip the canvas edges.
+          (Old radii were 2.1 and 2.42 — both bigger than the shell, which is
+          why the outer ring was getting cut off.) */}
       <OrbitalRing
-        radius={2.1}
-        tube={0.007}
+        radius={1.55}
+        tube={0.008}
         tilt={Math.PI * 0.1}
         rotSpeed={0.16}
         isConnected={isConnected}
@@ -194,8 +208,8 @@ function AIOrb({ isConnected, isSpeaking }) {
         phase={0}
       />
       <OrbitalRing
-        radius={2.42}
-        tube={0.0045}
+        radius={1.72}
+        tube={0.005}
         tilt={Math.PI * 0.42}
         rotSpeed={-0.1}
         isConnected={isConnected}
@@ -214,16 +228,18 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 5], fov: 42 }}
+        /* Camera pulled in: z=5 → z=4.2, fov=42 → 45.
+           This makes everything ~18% bigger at the same canvas size. */
+        camera={{ position: [0, 0, 4.2], fov: 45 }}
         gl={{
-          antialias: false, // ← OFF: biggest GPU memory saving
-          powerPreference: 'default', // ← Not 'high-performance' (lets GPU throttle)
+          antialias: false,        // OFF: biggest GPU memory saving
+          powerPreference: 'default',
           alpha: true,
-          depth: false, // ← OFF: not needed (additive blending only)
-          stencil: false, // ← OFF: not used
-          precision: 'lowp' // ← Low precision: halves GPU memory
+          depth: false,            // not needed (additive blending only)
+          stencil: false,
+          precision: 'lowp'
         }}
-        dpr={Math.min(window.devicePixelRatio, 1.5)} // ← Cap at 1.5x (was uncapped)
+        dpr={Math.min(window.devicePixelRatio, 1.5)}
         frameloop="always"
       >
         <AIOrb isConnected={isConnected} isSpeaking={isSpeaking} />
