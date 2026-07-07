@@ -93,6 +93,102 @@ const VortisAvatar = ({ size = 28, animating = false }) => (
   </div>
 );
 
+const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
+  const canvasRef = React.useRef(null);
+  const stateRef = React.useRef(state);
+  React.useEffect(() => { stateRef.current = state; }, [state]);
+ 
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    ctx.scale(dpr, dpr);
+ 
+    // ── build the sphere once — golden-angle spiral gives an even,
+    //    non-clumpy point distribution over the surface ──
+    const COUNT = 700;
+    const golden = Math.PI * (3 - Math.sqrt(5));
+    const particles = [];
+    for (let i = 0; i < COUNT; i++) {
+      const y = 1 - (i / (COUNT - 1)) * 2;
+      const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
+      const theta = golden * i;
+      particles.push({
+        x: Math.cos(theta) * radiusAtY,
+        y,
+        z: Math.sin(theta) * radiusAtY,
+        phase: Math.random() * Math.PI * 2,
+        tSpeed: 0.5 + Math.random() * 1.5,
+        baseSize: 0.6 + Math.random() * 1.3,
+      });
+    }
+ 
+    const cx = size / 2, cy = size / 2;
+    const R = size * 0.37;
+ 
+    // rotation speed + twinkle intensity react to call state
+    const speedMap    = { idle: 0.00016, listening: 0.00032, thinking: 0.00065, speaking: 0.0005 };
+    const twinkleMap   = { idle: 1,      listening: 1.5,      thinking: 2,       speaking: 2.4    };
+ 
+    let rotation = 0;
+    let raf;
+    const t0 = performance.now();
+ 
+    const draw = (now) => {
+      const dt = now - t0;
+      const st = stateRef.current;
+      rotation += speedMap[st] || speedMap.idle;
+      const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
+      const tw = twinkleMap[st] || 1;
+ 
+      ctx.clearRect(0, 0, size, size);
+ 
+      // depth-sort so far-side particles are painted first
+      const proj = particles
+        .map(p => {
+          const xr = p.x * cosR - p.z * sinR;
+          const zr = p.x * sinR + p.z * cosR;
+          return { p, xr, zr };
+        })
+        .sort((a, b) => a.zr - b.zr);
+ 
+      proj.forEach(({ p, xr, zr }) => {
+        const px = cx + xr * R;
+        const py = cy + p.y * R;
+        const depthFade = 0.3 + (zr + 1) * 0.35;                 // dimmer on the far side
+        const twinkle = 0.5 + 0.5 * Math.sin(dt * 0.0022 * p.tSpeed * tw + p.phase);
+        const alpha = Math.min(1, depthFade * (0.35 + 0.65 * twinkle));
+        const r = p.baseSize * (0.7 + (zr + 1) * 0.35) * (st === 'speaking' ? 1.15 : 1);
+ 
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(0.4, r), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(199,184,255,${alpha.toFixed(2)})`;
+        ctx.fill();
+      });
+ 
+      // faint tilted ring arc crossing the sphere, like the reference image
+      ctx.save();
+      ctx.strokeStyle = 'rgba(139,92,246,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, R * 1.08, R * 0.3, rotation * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+ 
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [size]); // particles + loop set up once per mount
+ 
+  return <canvas ref={canvasRef} style={{ display: 'block' }} />;
+};
+ 
+
 const ImageGeneratingPlaceholder = () => {
   const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
   const anims = ['pb1','pb2','pb3','pb4','pb5'];
@@ -183,6 +279,7 @@ const makeStyles = (isDark) => `
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(99,102,241,.3)}50%{box-shadow:0 0 40px rgba(99,102,241,.6)}}
 @keyframes borderPulse{0%,100%{border-color:rgba(99,102,241,.3)}50%{border-color:rgba(99,102,241,.7)}}
+@keyframes drShimmer{0%{background-position:0% 0}100%{background-position:250% 0}}
 @keyframes typingDot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 html{-webkit-text-size-adjust:100%;height:100%}
 *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -1183,41 +1280,95 @@ const MsgContent = ({ text, onRetryImage }) => {
   if (!text) return null;
   const t = text.trim();
 
-  const DeepResearchProgress = ({ data }) => {
-  const { topic, queries, doneIdx, foundCounts, stage } = data;
+  const AnimatedDots = () => {
+  const [n, setN] = React.useState(1);
+  React.useEffect(() => {
+    const t = setInterval(() => setN(v => (v % 3) + 1), 450);
+    return () => clearInterval(t);
+  }, []);
+  return <span style={{ display: 'inline-block', width: 14 }}>{'.'.repeat(n)}</span>;
+};
+ 
+const fmtTime = (s) => (s < 60 ? `${Math.max(0, s)}s` : `${Math.floor(s / 60)}m ${s % 60}s`);
+ 
+// ticks once a second so "~Xs left" counts down live without waiting
+// on the next actual search result to trigger a re-render
+const useElapsed = (startTime) => {
+  const [elapsed, setElapsed] = React.useState(() => Math.max(0, Math.floor((Date.now() - startTime) / 1000)));
+  React.useEffect(() => {
+    const t = setInterval(() => setElapsed(Math.max(0, Math.floor((Date.now() - startTime) / 1000))), 1000);
+    return () => clearInterval(t);
+  }, [startTime]);
+  return elapsed;
+};
+ 
+const DeepResearchProgress = ({ data }) => {
+  const { topic, queries, doneIdx, foundCounts, stage, startTime, estSeconds } = data;
+  const safeStart = startTime || Date.now();
+  const safeEst = estSeconds || (queries.length * 8 + 20);
+  const elapsed = useElapsed(safeStart);
+ 
+  const totalSteps = queries.length + 1; // +1 = the "writing report" phase
+  const completedSteps = stage === 'writing' ? queries.length : Math.max(0, doneIdx + 1);
+  const pct = Math.min(97, Math.round((completedSteps / totalSteps) * 100)); // never claim 100% until swapped for the final report
+  const remaining = safeEst - elapsed;
+ 
   return (
     <div style={{ border: '1px solid var(--border2)', borderRadius: 12, padding: '14px 16px', background: 'var(--bg2)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <Search size={13} color="var(--indigo)"/>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--indigo)', fontFamily: 'JetBrains Mono,monospace', letterSpacing: '.03em' }}>
-          Deep research: {topic}
+      {/* header row: topic + live time estimate, like ChatGPT's "~53s" */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--indigo)', flexShrink: 0, animation: 'pulse 1.4s ease-in-out infinite' }} />
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--indigo)', fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.03em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Deep research: {topic}
+          </span>
+        </div>
+        <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: "'JetBrains Mono',monospace", flexShrink: 0, whiteSpace: 'nowrap' }}>
+          {remaining > 2 ? `~${fmtTime(remaining)} left` : 'Almost done…'}
         </span>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+ 
+      {/* overall progress bar */}
+      <div style={{ height: 4, borderRadius: 3, background: 'var(--bg4)', overflow: 'hidden', marginBottom: 13 }}>
+        <div style={{
+          height: '100%', width: `${pct}%`, borderRadius: 3,
+          background: 'linear-gradient(90deg,#4f46e5,#7c3aed,#a78bfa,#4f46e5)',
+          backgroundSize: '250% 100%',
+          animation: 'drShimmer 1.8s linear infinite',
+          transition: 'width .6s ease',
+        }} />
+      </div>
+ 
+      {/* step list — same idea as ChatGPT's plan checklist */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         {queries.map((q, i) => {
           const done = i <= doneIdx;
-          const isActive = i === doneIdx + 1;
+          const isActive = i === doneIdx + 1 && stage !== 'writing';
           return (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: done ? 'var(--text2)' : 'var(--text4)' }}>
-              {done ? <Check size={12} color="var(--green)"/> : isActive ? <Loader size={12} color="var(--indigo)" style={{ animation: 'spin 1s linear infinite' }}/> : <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1px solid var(--border2)' }}/>}
-              <span>Searching "{q}"</span>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: done ? 'var(--text2)' : isActive ? 'var(--text1)' : 'var(--text4)', transition: 'color .3s' }}>
+              {done
+                ? <Check size={12} color="var(--green)" style={{ animation: 'scaleIn .25s ease' }} />
+                : isActive
+                  ? <Loader size={12} color="var(--indigo)" style={{ animation: 'spin 1s linear infinite' }} />
+                  : <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1px solid var(--border2)', flexShrink: 0 }} />}
+              <span>Searching "{q}"{isActive && <AnimatedDots />}</span>
               {done && foundCounts[i] !== undefined && (
-                <span style={{ color: 'var(--text4)', fontFamily: 'JetBrains Mono,monospace', fontSize: 11 }}>· {foundCounts[i]} found</span>
+                <span style={{ color: 'var(--text4)', fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>· {foundCounts[i]} found</span>
               )}
             </div>
           );
         })}
-        {stage === 'writing' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text2)' }}>
-            <Loader size={12} color="var(--indigo)" style={{ animation: 'spin 1s linear infinite' }}/>
-            <span>Writing report…</span>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: stage === 'writing' ? 'var(--text1)' : 'var(--text4)' }}>
+          {stage === 'writing'
+            ? <Loader size={12} color="var(--violet)" style={{ animation: 'spin 1s linear infinite' }} />
+            : <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1px solid var(--border2)', flexShrink: 0 }} />}
+          <span>Writing report{stage === 'writing' && <AnimatedDots />}</span>
+        </div>
       </div>
     </div>
   );
 };
-
+ 
   // ── Special states ──
   const clean = t
     .replace(/^GENERATE_IMAGE:.*$/gm, '')
@@ -4175,17 +4326,23 @@ setProcessingStatus('');
   };
 
   const runDeepResearch = async (topic) => {
-    setProcessingStatus('searching');
-    const queries = buildDeepQueries(topic);
-
-    const progressMsg = addMsg('vortis', `__DEEP_PROGRESS__${JSON.stringify({ topic, queries, doneIdx: -1, foundCounts: [] })}`, false);
-    const progressId = progressMsg.id;
-
-    const updateProgress = (doneIdx, foundCounts, stage) => {
-      setMessages(prev => prev.map(m => m.id === progressId
-        ? { ...m, text: `__DEEP_PROGRESS__${JSON.stringify({ topic, queries, doneIdx, foundCounts, stage: stage || '' })}` }
-        : m));
-    };
+  setProcessingStatus('searching');
+  const queries = buildDeepQueries(topic);
+ 
+  // rough estimate: ~8s per web search + ~20s for the model to read
+  // everything and write the report. Good enough for a "~Xs left" label —
+  // it doesn't need to be exact, just give the user a sense of scale.
+  const startTime = Date.now();
+  const estSeconds = queries.length * 8 + 20;
+ 
+  const progressMsg = addMsg('vortis', `__DEEP_PROGRESS__${JSON.stringify({ topic, queries, doneIdx: -1, foundCounts: [], startTime, estSeconds })}`, false);
+  const progressId = progressMsg.id;
+ 
+  const updateProgress = (doneIdx, foundCounts, stage) => {
+    setMessages(prev => prev.map(m => m.id === progressId
+      ? { ...m, text: `__DEEP_PROGRESS__${JSON.stringify({ topic, queries, doneIdx, foundCounts, stage: stage || '', startTime, estSeconds })}` }
+      : m));
+  };
 
     const stripHtml = (s) => (s||'').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
 
@@ -4801,9 +4958,7 @@ return (
       </div>
     )}
 
-    {/* ── MOVED OUT: voice call now renders regardless of messages.length, so it
-         stays visible after the user has already chatted ── */}
-    {showVoiceCall && (
+   {showVoiceCall && (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
     background: 'radial-gradient(ellipse at 50% 30%, #1a1040 0%, #0c0820 40%, #050510 100%)',
@@ -4812,136 +4967,15 @@ return (
   }}>
     <style>{`
       @keyframes overlayIn{from{opacity:0}to{opacity:1}}
-      @keyframes ringPulse{0%,100%{transform:scale(1);opacity:.35}50%{transform:scale(1.15);opacity:.08}}
-      @keyframes ringPulse2{0%,100%{transform:scale(1);opacity:.2}50%{transform:scale(1.22);opacity:.04}}
-      @keyframes barBreathe{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(.4)}}
-      @keyframes barListen{0%,100%{transform:scaleY(.3)}25%{transform:scaleY(.8)}50%{transform:scaleY(.45)}75%{transform:scaleY(.95)}}
-      @keyframes barSpeak{0%,100%{transform:scaleY(.5)}15%{transform:scaleY(1)}30%{transform:scaleY(.6)}45%{transform:scaleY(1)}60%{transform:scaleY(.7)}75%{transform:scaleY(.95)}90%{transform:scaleY(.55)}}
-      @keyframes barThink{0%,100%{transform:scaleY(.2)}50%{transform:scaleY(.35)}}
       @keyframes dotPulse{0%,80%,100%{opacity:.3}40%{opacity:1}}
-      @keyframes glowBreath{0%,100%{opacity:.5}50%{opacity:.9}}
       @keyframes endBtnPulse{0%,100%{box-shadow:0 8px 30px rgba(239,68,68,.45)}50%{box-shadow:0 8px 45px rgba(239,68,68,.7)}}
       @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
-
-    {/* Ambient glow */}
-    <div style={{
-      position: 'absolute', top: '18%', left: '50%', transform: 'translateX(-50%)',
-      width: 500, height: 500, borderRadius: '50%',
-      background: 'radial-gradient(circle, rgba(99,102,241,.12) 0%, transparent 70%)',
-      pointerEvents: 'none',
-      animation: callState !== 'idle' ? 'glowBreath 3s ease-in-out infinite' : 'none'
-    }}/>
-
-    {/* Glow rings */}
-    <div style={{
-      position: 'absolute', width: 280, height: 280, borderRadius: '50%',
-      border: '1.5px solid rgba(139,92,246,.15)',
-      animation: callState === 'speaking'
-        ? 'ringPulse 1.6s ease-in-out infinite'
-        : callState === 'listening'
-        ? 'ringPulse 2.2s ease-in-out infinite'
-        : 'ringPulse 3.5s ease-in-out infinite',
-      pointerEvents: 'none'
-    }}/>
-    <div style={{
-      position: 'absolute', width: 340, height: 340, borderRadius: '50%',
-      border: '1px solid rgba(99,102,241,.08)',
-      animation: callState === 'speaking'
-        ? 'ringPulse2 2s ease-in-out infinite'
-        : 'ringPulse2 2.8s ease-in-out infinite',
-      pointerEvents: 'none'
-    }}/>
-    <div style={{
-      position: 'absolute', width: 400, height: 400, borderRadius: '50%',
-      border: '0.5px solid rgba(99,102,241,.04)',
-      animation: callState === 'speaking'
-        ? 'ringPulse2 2.6s ease-in-out infinite .3s'
-        : 'ringPulse2 3.5s ease-in-out infinite .3s',
-      pointerEvents: 'none'
-    }}/>
-
-    {/* Central orb */}
-    <div style={{
-      width: 200, height: 200, borderRadius: '50%',
-      background: callState === 'thinking'
-        ? 'linear-gradient(135deg, #4338a0, #5b4fc7)'
-        : callState === 'speaking'
-        ? 'linear-gradient(135deg, #6366f1, #8b5cf6, #c084fc)'
-        : callState === 'listening'
-        ? 'linear-gradient(135deg, #4f46e5, #7c3aed, #a78bfa)'
-        : 'linear-gradient(135deg, #3730a3, #5b21b6)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: callState === 'speaking'
-        ? '0 0 80px rgba(139,92,246,.5), 0 0 160px rgba(99,102,241,.2), inset 0 0 40px rgba(255,255,255,.05)'
-        : callState === 'listening'
-        ? '0 0 60px rgba(139,92,246,.35), 0 0 120px rgba(99,102,241,.15), inset 0 0 30px rgba(255,255,255,.03)'
-        : callState === 'thinking'
-        ? '0 0 40px rgba(99,102,241,.2), inset 0 0 20px rgba(255,255,255,.02)'
-        : '0 0 30px rgba(99,102,241,.15)',
-      transition: 'all .5s cubic-bezier(.4,0,.2,1)',
-      position: 'relative'
-    }}>
-      {/* Sound wave bars */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 3, height: 80, overflow: 'hidden'
-      }}>
-        {Array.from({ length: 28 }, (_, i) => {
-          const centerDist = Math.abs(i - 13.5) / 13.5;
-          const delay = (i * 0.04).toFixed(2);
-          const animName = callState === 'speaking'
-            ? 'barSpeak'
-            : callState === 'listening'
-            ? 'barListen'
-            : callState === 'thinking'
-            ? 'barThink'
-            : 'barBreathe';
-          const duration = callState === 'speaking'
-            ? (0.5 + centerDist * 0.4).toFixed(2)
-            : callState === 'listening'
-            ? (0.6 + centerDist * 0.5).toFixed(2)
-            : callState === 'thinking'
-            ? '1.2'
-            : '2.5';
-          const barOpacity = callState === 'thinking' ? 0.5 : callState === 'idle' ? 0.35 : 0.9;
-          const bright = (0.5 + (1 - centerDist * 0.6) * 0.5).toFixed(2);
-          const dim = (0.2 + (1 - centerDist * 0.6) * 0.3).toFixed(2);
-
-          return (
-            <div key={i} style={{
-              width: 3, height: '100%',
-              borderRadius: 2,
-              background: `linear-gradient(to top, rgba(255,255,255,${bright}), rgba(255,255,255,${dim}))`,
-              transformOrigin: 'center',
-              transform: 'scaleY(0.25)',
-              animation: `${animName} ${duration}s ease-in-out infinite`,
-              animationDelay: `${delay}s`,
-              opacity: barOpacity,
-              transition: 'opacity .4s'
-            }}/>
-          );
-        })}
-      </div>
-
-      {/* Thinking spinner */}
-      {callState === 'thinking' && (
-        <div style={{
-          position: 'absolute', inset: 0, borderRadius: '50%',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(67,56,160,.4)',
-          animation: 'overlayIn .2s ease'
-        }}>
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
-            stroke="rgba(255,255,255,.8)" strokeWidth="2.5" strokeLinecap="round"
-            style={{ animation: 'spin 1s linear infinite' }}>
-            <path d="M12 2a10 10 0 0 1 10 10"/>
-          </svg>
-        </div>
-      )}
-    </div>
-
+ 
+    {/* Particle sphere — replaces the old ambient glow / rings / orb / bars */}
+    <VoiceParticleSphere state={callState} size={280}/>
+ 
     {/* State label + dots */}
     <div style={{
       marginTop: 32, display: 'flex', alignItems: 'center', gap: 8,
@@ -4971,7 +5005,7 @@ return (
         </span>
       )}
     </div>
-
+ 
     {/* Controls */}
     <div style={{
       display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
@@ -5010,7 +5044,7 @@ return (
           : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
         }
       </button>
-
+ 
       {/* End call */}
       <button
         onClick={endVoiceCall}
@@ -5027,11 +5061,11 @@ return (
       >
         <X size={28} color="white"/>
       </button>
-
+ 
       {/* Spacer for balance */}
       <div style={{ width: 58, height: 58 }}/>
     </div>
-
+ 
     {/* Hint */}
     <p style={{
       marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
@@ -5041,7 +5075,7 @@ return (
       {callPaused ? 'Tap play to resume' : 'Pause  ·  End call'}
     </p>
   </div>
-)}    
+)}
         {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (
