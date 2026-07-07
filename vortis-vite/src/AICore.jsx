@@ -2,16 +2,15 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
-// Boosted color brightness so the dots pop off the dark background
-const IDLE_COLOR  = new THREE.Color('#818cf8') // Bright neon indigo
-const ACTIVE_COLOR = new THREE.Color('#c084fc') // Bright neon violet
+const IDLE_COLOR  = new THREE.Color('#818cf8')
+const ACTIVE_COLOR = new THREE.Color('#c084fc')
 const _blendColor = new THREE.Color()
 const _scaleVec = new THREE.Vector3()
 
 function ParticleShell({ isConnected, isSpeaking }) {
   const ref = useRef(null)
   const volRef = useRef(0)
-  const COUNT = 2500 // 💡 TRIPLED: Makes the sphere look dense, full, and highly visible
+  const COUNT = 2500 
 
   const { positions, original, seeds } = useMemo(() => {
     const pos = new Float32Array(COUNT * 3)
@@ -99,11 +98,11 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.055}                     // 💡 Sharp, clean dot sizing
+        size={0.055}                     
         transparent
         opacity={0.8}
         sizeAttenuation={true}
-        blending={THREE.AdditiveBlending} // 💡 Vibrant glowing effect
+        blending={THREE.AdditiveBlending} 
         depthWrite={false}
         vertexColors={false}
         color={IDLE_COLOR}
@@ -118,8 +117,8 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    // Balanced scale multipliers for a standard viewport
-    const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.4 : 1.2
+    // 💡 INCREASED SCALE: Boosted scale variables for a much grander presence
+    const targetScale = !isConnected ? 1.4 : isSpeaking ? 1.9 : 1.65
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -140,7 +139,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 5], fov: 45 }} // 💡 Fixed: Safe camera distance prevents flat clipping
+        camera={{ position: [0, 0, 5.5], fov: 36 }} // 💡 OPTICAL ZOOM: Lowered fov pulls the camera frame in tight and huge
         gl={{
           antialias: true,
           alpha: true,

@@ -4873,18 +4873,18 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-    {/* AICore Layout Container — Placed absolutely so buttons stay perfectly in place */}
+    {/* AICore Layout Container — Expanded box size to host the larger orb cleanly */}
 <div style={{ 
   position: 'absolute', 
-  top: '32%',                   // Positions the center of the sphere perfectly in the upper viewport
+  top: '34%',                   // Slightly lowered to sit perfectly balanced in the upper layout area
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: 480,                   // Nice big safe render box
-  height: 480, 
+  width: 580,                   // 💡 Made wider for the massive scale boost
+  height: 580,                  // 💡 Made taller
   display: 'flex', 
   alignItems: 'center', 
   justifyContent: 'center',
-  pointerEvents: 'none'         // Ensures you can tap through it safely if needed
+  pointerEvents: 'none'         
 }}>
   <AICore
     isConnected={callState !== 'idle'}
@@ -4892,8 +4892,8 @@ return (
   />
 </div>
 
-{/* Put an empty spacing block right below it where it used to be so your 'LISTENING' text flows naturally */}
-<div style={{ height: 360 }} />
+{/* Height spacer to let 'LISTENING/THINKING' text sit naturally underneath */}
+<div style={{ height: 380 }} />
 
     {/* State label + dots */}
     <div style={{
