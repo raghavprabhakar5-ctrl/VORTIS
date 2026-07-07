@@ -4873,19 +4873,27 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-   {/* AICore Layout Container — natural flex flow, no absolute positioning */}
+    {/* AICore Layout Container */}
 <div style={{ 
-  width: 460,
-  height: 460,
-  position: 'relative',
-  pointerEvents: 'none',
-  flexShrink: 0
+  position: 'absolute', 
+  top: '35%',                   
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 500,                   
+  height: 500,                  
+  display: 'flex', 
+  alignItems: 'center', 
+  justifyContent: 'center',
+  pointerEvents: 'none'         
 }}>
   <AICore
     isConnected={callState !== 'idle'}
     isSpeaking={callState === 'speaking'}
   />
 </div>
+
+{/* Height spacer */}
+<div style={{ height: 360 }} />
 
     {/* State label + dots */}
     <div style={{
