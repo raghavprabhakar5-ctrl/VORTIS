@@ -4,10 +4,7 @@ import * as THREE from 'three'
 
 const IDLE_COLOR  = new THREE.Color('#6366f1') // indigo (resting)
 const ACTIVE_COLOR = new THREE.Color('#8b5cf6') // violet (speaking)
-const RING_COLOR  = new THREE.Color('#6366f1') // indigo
-const RING_GLOW   = new THREE.Color('#c7d2fe') // pale indigo glow
 const _blendColor = new THREE.Color()
-const _ringColor = new THREE.Color()
 const _scaleVec = new THREE.Vector3()
 
 function ParticleShell({ isConnected, isSpeaking }) {
@@ -101,7 +98,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.018}
+        size={0.022} // Slightly larger particle points for better visibility
         transparent
         opacity={0.3}
         sizeAttenuation
@@ -114,53 +111,24 @@ function ParticleShell({ isConnected, isSpeaking }) {
   )
 }
 
-function OrbitalRing({
-  radius,
-  tube,
-  tilt,
-  rotSpeed,
-  isConnected,
-  isSpeaking,
-  phase = 0
-}) {
-  const ref = useRef(null)
-  const matRef = useRef(null)
-  const volRef = useRef(0)
+// Fixed: Added back the missing AIOrb wrapper with ring-less scaling logic
+function AIOrb({ isConnected, isSpeaking }) {
+  const groupRef = useRef(null)
 
   useFrame((_, delta) => {
-    if (!ref.current || !matRef.current) return
+    if (!groupRef.current) return
 
-    ref.current.rotation.y += delta * rotSpeed
-
-    const t = performance.now() * 0.001 + phase
-    let targetVol = 0
-    if (isSpeaking) {
-      targetVol = Math.abs(Math.sin(t * 8)) * 0.55 + 0.15
-    } else if (isConnected) {
-      targetVol = Math.abs(Math.sin(t * 1.4)) * 0.1
-    }
-    volRef.current += (targetVol - volRef.current) * 0.1
-    const vol = volRef.current
-
-    _ringColor.lerpColors(RING_COLOR, RING_GLOW, vol)
-    matRef.current.color.copy(_ringColor)
-
-    const targetOp = isConnected ? 0.12 + vol * 0.6 : 0.03
-    matRef.current.opacity += (targetOp - matRef.current.opacity) * 0.09
+    // Cleaned sizing targets optimized for a 400px-450px HTML frame
+    const targetScale = !isConnected ? 0.7 : isSpeaking ? 1.25 : 1.05
+    _scaleVec.set(targetScale, targetScale, targetScale)
+    groupRef.current.scale.lerp(_scaleVec, delta * 3)
+    groupRef.current.rotation.y += delta * 0.03
   })
 
   return (
-    <mesh ref={ref} rotation={[tilt, 0, 0]}>
-      <torusGeometry args={[radius, tube, 2, 48]} />
-      <meshBasicMaterial
-        ref={matRef}
-        color={RING_COLOR}
-        transparent
-        opacity={0.06}
-        blending={THREE.AdditiveBlending}
-        depthWrite={false}
-      />
-    </mesh>
+    <group ref={groupRef}>
+      <ParticleShell isConnected={isConnected} isSpeaking={isSpeaking} />
+    </group>
   )
 }
 
@@ -174,14 +142,13 @@ export default function AICore({
         style={{ width: '100%', height: '100%' }}
         camera={{ position: [0, 0, 3], fov: 42 }}
         gl={{
-          antialias: false, // ← OFF: biggest GPU memory saving
-          powerPreference: 'default', // ← Not 'high-performance' (lets GPU throttle)
+          antialias: true, // Switched to true to fix device context rendering failures
+          powerPreference: 'default',
           alpha: true,
-          depth: false, // ← OFF: not needed (additive blending only)
-          stencil: false, // ← OFF: not used
-          precision: 'lowp' // ← Low precision: halves GPU memory
+          depth: true,    // Restored depth context initialization stability
+          stencil: false
         }}
-        dpr={Math.min(window.devicePixelRatio, 1.5)} // ← Cap at 1.5x (was uncapped)
+        dpr={Math.min(window.devicePixelRatio, 1.5)}
         frameloop="always"
       >
         <AIOrb isConnected={isConnected} isSpeaking={isSpeaking} />
