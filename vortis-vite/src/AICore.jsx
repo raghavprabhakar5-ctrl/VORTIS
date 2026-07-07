@@ -164,46 +164,6 @@ function OrbitalRing({
   )
 }
 
-function AIOrb({ isConnected, isSpeaking }) {
-  const groupRef = useRef(null)
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return
-
-   const targetScale = !isConnected ? 0.8 : isSpeaking ? 1.4 : 1.2
-    _scaleVec.set(targetScale, targetScale, targetScale)
-    groupRef.current.scale.lerp(_scaleVec, delta * 3)
-    groupRef.current.rotation.y += delta * 0.03
-  })
-
-  return (
-    <group ref={groupRef}>
-      {/* Single particle shell (was 3) */}
-      <ParticleShell isConnected={isConnected} isSpeaking={isSpeaking} />
-
-      {/* Two rings (was 3) — enough for depth */}
-      <OrbitalRing
-        radius={1.5}
-        tube={0.005}
-        tilt={Math.PI * 0.1}
-        rotSpeed={0.16}
-        isConnected={isConnected}
-        isSpeaking={isSpeaking}
-        phase={0}
-      />
-      <OrbitalRing
-        radius={1.72}
-        tube={0.003}
-        tilt={Math.PI * 0.42}
-        rotSpeed={-0.1}
-        isConnected={isConnected}
-        isSpeaking={isSpeaking}
-        phase={1.5}
-      />
-    </group>
-  )
-}
-
 export default function AICore({
   isConnected = false,
   isSpeaking = false
