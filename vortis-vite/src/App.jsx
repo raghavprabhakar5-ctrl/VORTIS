@@ -97,7 +97,7 @@ const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
   const canvasRef = React.useRef(null);
   const stateRef = React.useRef(state);
   React.useEffect(() => { stateRef.current = state; }, [state]);
- 
+
   React.useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -107,7 +107,7 @@ const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
     canvas.style.width = size + 'px';
     canvas.style.height = size + 'px';
     ctx.scale(dpr, dpr);
- 
+
     // ── offscreen canvas for the glow pass — drawing the halo here and
     //    blurring the WHOLE composited image once per frame is cheap.
     //    (Blurring each dot individually via ctx.shadowBlur would be
@@ -118,34 +118,60 @@ const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
     glowCanvas.height = size * dpr;
     const gctx = glowCanvas.getContext('2d');
     gctx.scale(dpr, dpr);
- 
-    // ── build the sphere once — golden-angle spiral gives an even,
-    //    non-clumpy point distribution over the surface ──
-    const COUNT = 650;
-    const golden = Math.PI * (3 - Math.sqrt(5));
+
+    // ── build a WIREFRAME sphere: dots placed along latitude rings
+    //    (parallels) and longitude great circles (meridians), so the
+    //    grid "lines" stay visible as the sphere rotates. This matches
+    //    the reference look — a white particle / glowing dot ball. ──
     const particles = [];
-    for (let i = 0; i < COUNT; i++) {
-      const y = 1 - (i / (COUNT - 1)) * 2;
-      const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
-      const theta = golden * i;
-      particles.push({
-        x: Math.cos(theta) * radiusAtY,
-        y,
-        z: Math.sin(theta) * radiusAtY,
-        phase: Math.random() * Math.PI * 2,
-        tSpeed: 0.5 + Math.random() * 1.5,
-        baseSize: 0.7 + Math.random() * 1.2,
-      });
+    const LAT_RINGS = 18;   // parallels (skip exact poles to avoid crowding)
+    const LON_RINGS = 24;    // meridians
+    const STEPS_LAT = 90;    // dots per parallel
+    const STEPS_LON = 48;    // dots per meridian (pole-to-pole)
+
+    // parallels (horizontal rings)
+    for (let i = 1; i < LAT_RINGS; i++) {
+      const lat = -Math.PI / 2 + (i / LAT_RINGS) * Math.PI;
+      const r = Math.cos(lat);
+      const y = Math.sin(lat);
+      for (let j = 0; j < STEPS_LAT; j++) {
+        const lon = (j / STEPS_LAT) * Math.PI * 2;
+        particles.push({
+          x: r * Math.cos(lon),
+          y,
+          z: r * Math.sin(lon),
+          phase: Math.random() * Math.PI * 2,
+          tSpeed: 0.5 + Math.random() * 1.5,
+          baseSize: 0.75 + Math.random() * 0.55,
+        });
+      }
     }
- 
+    // meridians (vertical great circles)
+    for (let i = 0; i < LON_RINGS; i++) {
+      const lon = (i / LON_RINGS) * Math.PI * 2;
+      for (let j = 1; j < STEPS_LON; j++) {
+        const lat = -Math.PI / 2 + (j / STEPS_LON) * Math.PI;
+        const r = Math.cos(lat);
+        const y = Math.sin(lat);
+        particles.push({
+          x: r * Math.cos(lon),
+          y,
+          z: r * Math.sin(lon),
+          phase: Math.random() * Math.PI * 2,
+          tSpeed: 0.5 + Math.random() * 1.5,
+          baseSize: 0.75 + Math.random() * 0.55,
+        });
+      }
+    }
+
     const cx = size / 2, cy = size / 2;
-    const R = size * 0.36;
- 
-    const speedMap  = { idle: 0.00014, listening: 0.0003,  thinking: 0.0006,  speaking: 0.00045 };
-    const twinkleMap = { idle: 1,      listening: 1.4,     thinking: 1.8,     speaking: 2.2      };
+    const R = size * 0.4;
+
+    const speedMap   = { idle: 0.00012, listening: 0.00028, thinking: 0.0005,  speaking: 0.0004 };
+    const twinkleMap = { idle: 0.6,     listening: 1.0,      thinking: 1.4,     speaking: 1.8      };
     // heartbeat period per state — faster "pulse" the more active the call is
-    const beatPeriod = { idle: 1.7,    listening: 1.15,    thinking: 0.85,    speaking: 0.7       };
- 
+    const beatPeriod = { idle: 1.8,     listening: 1.2,      thinking: 0.9,     speaking: 0.7      };
+
     // classic lub-dub double-pulse shape, returns roughly 0..1.5
     const heartbeat = (t, period) => {
       const ph = (((t / 1000) % period) + period) % period / period;
@@ -153,25 +179,25 @@ const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
       const dub = 0.55 * Math.exp(-Math.pow((ph - 0.30) / 0.07, 2));
       return lub + dub;
     };
- 
+
     let rotation = 0;
     let raf;
     const t0 = performance.now();
- 
+
     const draw = (now) => {
       const dt = now - t0;
       const st = stateRef.current;
       rotation += speedMap[st] || speedMap.idle;
       const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
       const tw = twinkleMap[st] || 1;
- 
+
       const beat = heartbeat(dt, beatPeriod[st] || beatPeriod.idle); // 0..~1.5
-      const beatScale = 1 + 0.045 * beat;      // whole sphere breathes slightly on each beat
-      const glowBoost = 0.45 + 0.75 * beat;    // halo brightens sharply on each beat
- 
+      const beatScale = 1 + 0.035 * beat;      // whole sphere breathes slightly on each beat
+      const glowBoost = 0.4 + 0.6 * beat;      // halo brightens on each beat
+
       ctx.clearRect(0, 0, size, size);
       gctx.clearRect(0, 0, size, size);
- 
+
       const proj = particles
         .map(p => {
           const xr = p.x * cosR - p.z * sinR;
@@ -179,65 +205,53 @@ const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
           return { p, xr, zr };
         })
         .sort((a, b) => a.zr - b.zr);
- 
-      // ── glow pass: bigger, softer, low-alpha circles onto the offscreen canvas ──
+
+      // ── glow pass: bigger, softer, low-alpha white halos onto the offscreen canvas ──
       gctx.globalCompositeOperation = 'lighter'; // additive — overlapping dots bloom brighter, like real light
       proj.forEach(({ p, xr, zr }) => {
         const px = cx + xr * R * beatScale;
         const py = cy + p.y * R * beatScale;
-        const depthFade = 0.3 + (zr + 1) * 0.35;
+        const depthFade = 0.35 + (zr + 1) * 0.325;
         const twinkle = 0.5 + 0.5 * Math.sin(dt * 0.0022 * p.tSpeed * tw + p.phase);
-        const alpha = Math.min(0.9, depthFade * (0.3 + 0.7 * twinkle) * glowBoost * 0.5);
-        const r = p.baseSize * (0.8 + (zr + 1) * 0.4) * 3.2; // glow halo is a few× the core size
- 
+        const alpha = Math.min(0.85, depthFade * (0.3 + 0.7 * twinkle) * glowBoost * 0.45);
+        const r = p.baseSize * (0.8 + (zr + 1) * 0.4) * 3; // glow halo is a few× the core size
+
         gctx.beginPath();
         gctx.arc(px, py, Math.max(0.8, r), 0, Math.PI * 2);
-        gctx.fillStyle = `rgba(167,139,250,${alpha.toFixed(2)})`;
+        gctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
         gctx.fill();
       });
- 
+
       // composite the glow layer with one blur pass — this is the expensive
       // op, and it only happens ONCE per frame, not per particle
       ctx.save();
-      ctx.filter = 'blur(6px)';
+      ctx.filter = 'blur(5px)';
       ctx.drawImage(glowCanvas, 0, 0, size, size);
       ctx.restore();
- 
-      // ── crisp core pass: small sharp dots on top, no blur ──
+
+      // ── crisp core pass: small sharp white dots on top, no blur ──
       proj.forEach(({ p, xr, zr }) => {
         const px = cx + xr * R * beatScale;
         const py = cy + p.y * R * beatScale;
-        const depthFade = 0.3 + (zr + 1) * 0.35;
+        const depthFade = 0.35 + (zr + 1) * 0.325;
         const twinkle = 0.5 + 0.5 * Math.sin(dt * 0.0022 * p.tSpeed * tw + p.phase);
-        const alpha = Math.min(1, depthFade * (0.4 + 0.6 * twinkle) * (0.8 + 0.2 * beat));
+        const alpha = Math.min(1, depthFade * (0.45 + 0.55 * twinkle) * (0.8 + 0.2 * beat));
         const r = p.baseSize * (0.7 + (zr + 1) * 0.35);
- 
+
         ctx.beginPath();
         ctx.arc(px, py, Math.max(0.4, r), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(230,222,255,${alpha.toFixed(2)})`;
+        ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
         ctx.fill();
       });
- 
-      // faint tilted ring arc crossing the sphere — glow pass too, on top
-      ctx.save();
-      ctx.strokeStyle = `rgba(139,92,246,${(0.35 + 0.25 * beat).toFixed(2)})`;
-      ctx.lineWidth = 1;
-      ctx.shadowColor = 'rgba(139,92,246,0.6)';
-      ctx.shadowBlur = 5; // one shadowBlur call for a single stroke is cheap — fine
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, R * 1.08 * beatScale, R * 0.3 * beatScale, rotation * 0.7, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
- 
+
       raf = requestAnimationFrame(draw);
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [size]);
- 
+
   return <canvas ref={canvasRef} style={{ display: 'block' }} />;
 };
- 
 
 const ImageGeneratingPlaceholder = () => {
   const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
