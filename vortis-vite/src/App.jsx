@@ -12,6 +12,7 @@ import { transcribeAudio } from './whisper';
 import { franc } from 'franc-min';
 import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
+import AICore from './AICore';
 import './index.css';
 import {
   Mic, MicOff, Volume2, X, Settings,
@@ -93,165 +94,7 @@ const VortisAvatar = ({ size = 28, animating = false }) => (
   </div>
 );
 
-const VoiceParticleSphere = ({ state = 'idle', size = 280 }) => {
-  const canvasRef = React.useRef(null);
-  const stateRef = React.useRef(state);
-  React.useEffect(() => { stateRef.current = state; }, [state]);
-
-  React.useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = size * dpr;
-    canvas.height = size * dpr;
-    canvas.style.width = size + 'px';
-    canvas.style.height = size + 'px';
-    ctx.scale(dpr, dpr);
-
-    // ── offscreen canvas for the glow pass — drawing the halo here and
-    //    blurring the WHOLE composited image once per frame is cheap.
-    //    (Blurring each dot individually via ctx.shadowBlur would be
-    //    ~700 blur ops/frame instead of 1 — that's the part that
-    //    actually tanks performance, not the glow effect itself.) ──
-    const glowCanvas = document.createElement('canvas');
-    glowCanvas.width = size * dpr;
-    glowCanvas.height = size * dpr;
-    const gctx = glowCanvas.getContext('2d');
-    gctx.scale(dpr, dpr);
-
-    // ── build a WIREFRAME sphere: dots placed along latitude rings
-    //    (parallels) and longitude great circles (meridians), so the
-    //    grid "lines" stay visible as the sphere rotates. This matches
-    //    the reference look — a white particle / glowing dot ball. ──
-    const particles = [];
-    const LAT_RINGS = 18;   // parallels (skip exact poles to avoid crowding)
-    const LON_RINGS = 24;    // meridians
-    const STEPS_LAT = 90;    // dots per parallel
-    const STEPS_LON = 48;    // dots per meridian (pole-to-pole)
-
-    // parallels (horizontal rings)
-    for (let i = 1; i < LAT_RINGS; i++) {
-      const lat = -Math.PI / 2 + (i / LAT_RINGS) * Math.PI;
-      const r = Math.cos(lat);
-      const y = Math.sin(lat);
-      for (let j = 0; j < STEPS_LAT; j++) {
-        const lon = (j / STEPS_LAT) * Math.PI * 2;
-        particles.push({
-          x: r * Math.cos(lon),
-          y,
-          z: r * Math.sin(lon),
-          phase: Math.random() * Math.PI * 2,
-          tSpeed: 0.5 + Math.random() * 1.5,
-          baseSize: 0.75 + Math.random() * 0.55,
-        });
-      }
-    }
-    // meridians (vertical great circles)
-    for (let i = 0; i < LON_RINGS; i++) {
-      const lon = (i / LON_RINGS) * Math.PI * 2;
-      for (let j = 1; j < STEPS_LON; j++) {
-        const lat = -Math.PI / 2 + (j / STEPS_LON) * Math.PI;
-        const r = Math.cos(lat);
-        const y = Math.sin(lat);
-        particles.push({
-          x: r * Math.cos(lon),
-          y,
-          z: r * Math.sin(lon),
-          phase: Math.random() * Math.PI * 2,
-          tSpeed: 0.5 + Math.random() * 1.5,
-          baseSize: 0.75 + Math.random() * 0.55,
-        });
-      }
-    }
-
-    const cx = size / 2, cy = size / 2;
-    const R = size * 0.4;
-
-    const speedMap   = { idle: 0.00012, listening: 0.00028, thinking: 0.0005,  speaking: 0.0004 };
-    const twinkleMap = { idle: 0.6,     listening: 1.0,      thinking: 1.4,     speaking: 1.8      };
-    // heartbeat period per state — faster "pulse" the more active the call is
-    const beatPeriod = { idle: 1.8,     listening: 1.2,      thinking: 0.9,     speaking: 0.7      };
-
-    // classic lub-dub double-pulse shape, returns roughly 0..1.5
-    const heartbeat = (t, period) => {
-      const ph = (((t / 1000) % period) + period) % period / period;
-      const lub = Math.exp(-Math.pow((ph - 0.10) / 0.045, 2));
-      const dub = 0.55 * Math.exp(-Math.pow((ph - 0.30) / 0.07, 2));
-      return lub + dub;
-    };
-
-    let rotation = 0;
-    let raf;
-    const t0 = performance.now();
-
-    const draw = (now) => {
-      const dt = now - t0;
-      const st = stateRef.current;
-      rotation += speedMap[st] || speedMap.idle;
-      const cosR = Math.cos(rotation), sinR = Math.sin(rotation);
-      const tw = twinkleMap[st] || 1;
-
-      const beat = heartbeat(dt, beatPeriod[st] || beatPeriod.idle); // 0..~1.5
-      const beatScale = 1 + 0.035 * beat;      // whole sphere breathes slightly on each beat
-      const glowBoost = 0.4 + 0.6 * beat;      // halo brightens on each beat
-
-      ctx.clearRect(0, 0, size, size);
-      gctx.clearRect(0, 0, size, size);
-
-      const proj = particles
-        .map(p => {
-          const xr = p.x * cosR - p.z * sinR;
-          const zr = p.x * sinR + p.z * cosR;
-          return { p, xr, zr };
-        })
-        .sort((a, b) => a.zr - b.zr);
-
-      // ── glow pass: bigger, softer, low-alpha white halos onto the offscreen canvas ──
-      gctx.globalCompositeOperation = 'lighter'; // additive — overlapping dots bloom brighter, like real light
-      proj.forEach(({ p, xr, zr }) => {
-        const px = cx + xr * R * beatScale;
-        const py = cy + p.y * R * beatScale;
-        const depthFade = 0.35 + (zr + 1) * 0.325;
-        const twinkle = 0.5 + 0.5 * Math.sin(dt * 0.0022 * p.tSpeed * tw + p.phase);
-        const alpha = Math.min(0.85, depthFade * (0.3 + 0.7 * twinkle) * glowBoost * 0.45);
-        const r = p.baseSize * (0.8 + (zr + 1) * 0.4) * 3; // glow halo is a few× the core size
-
-        gctx.beginPath();
-        gctx.arc(px, py, Math.max(0.8, r), 0, Math.PI * 2);
-        gctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
-        gctx.fill();
-      });
-
-      // composite the glow layer with one blur pass — this is the expensive
-      // op, and it only happens ONCE per frame, not per particle
-      ctx.save();
-      ctx.filter = 'blur(5px)';
-      ctx.drawImage(glowCanvas, 0, 0, size, size);
-      ctx.restore();
-
-      // ── crisp core pass: small sharp white dots on top, no blur ──
-      proj.forEach(({ p, xr, zr }) => {
-        const px = cx + xr * R * beatScale;
-        const py = cy + p.y * R * beatScale;
-        const depthFade = 0.35 + (zr + 1) * 0.325;
-        const twinkle = 0.5 + 0.5 * Math.sin(dt * 0.0022 * p.tSpeed * tw + p.phase);
-        const alpha = Math.min(1, depthFade * (0.45 + 0.55 * twinkle) * (0.8 + 0.2 * beat));
-        const r = p.baseSize * (0.7 + (zr + 1) * 0.35);
-
-        ctx.beginPath();
-        ctx.arc(px, py, Math.max(0.4, r), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
-        ctx.fill();
-      });
-
-      raf = requestAnimationFrame(draw);
-    };
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, [size]);
-
-  return <canvas ref={canvasRef} style={{ display: 'block' }} />;
-};
+ 
 
 const ImageGeneratingPlaceholder = () => {
   const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
@@ -5037,8 +4880,13 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-    {/* Particle sphere — replaces the old ambient glow / rings / orb / bars */}
-    <VoiceParticleSphere state={callState} size={280}/>
+    {/* AICore — Three.js particle sphere + orbital rings (replaces VoiceParticleSphere) */}
+    <div style={{ position: 'relative', width: 280, height: 280 }}>
+      <AICore
+        isConnected={callState !== 'idle'}
+        isSpeaking={callState === 'speaking'}
+      />
+    </div>
  
     {/* State label + dots */}
     <div style={{
