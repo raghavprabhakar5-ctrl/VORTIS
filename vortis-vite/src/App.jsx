@@ -4873,16 +4873,18 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-    {/* AICore Layout Wrapper — Keeps layout perfectly proportioned */}
+    {/* AICore Layout Container — Placed absolutely so buttons stay perfectly in place */}
 <div style={{ 
-  position: 'relative', 
-  width: '350px', 
-  height: '350px', 
-  aspectRatio: '1 / 1', // 💡 Forces the container to stay a perfect square
+  position: 'absolute', 
+  top: '32%',                   // Positions the center of the sphere perfectly in the upper viewport
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 480,                   // Nice big safe render box
+  height: 480, 
   display: 'flex', 
   alignItems: 'center', 
   justifyContent: 'center',
-  margin: '0 auto'      // Centers it horizontally on the screen
+  pointerEvents: 'none'         // Ensures you can tap through it safely if needed
 }}>
   <AICore
     isConnected={callState !== 'idle'}
@@ -4890,6 +4892,8 @@ return (
   />
 </div>
 
+{/* Put an empty spacing block right below it where it used to be so your 'LISTENING' text flows naturally */}
+<div style={{ height: 360 }} />
 
     {/* State label + dots */}
     <div style={{
