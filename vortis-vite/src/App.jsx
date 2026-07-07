@@ -4873,8 +4873,15 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-    {/* AICore — Three.js particle sphere + orbital rings (replaces VoiceParticleSphere) */}
-    <div style={{ position: 'relative', width: 450, height: 450 }}>
+    {/* AICore — Properly sized to prevent screen clipping */}
+<div style={{ 
+  position: 'relative', 
+  width: 340, 
+  height: 340, 
+  display: 'flex', 
+  alignItems: 'center', 
+  justifyContent: 'center' 
+}}>
   <AICore
     isConnected={callState !== 'idle'}
     isSpeaking={callState === 'speaking'}

@@ -139,7 +139,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 3], fov: 42 }}
+        camera={{ position: [0, 0, 2.1], fov: 42 }} // 💡 Changed from 3 to 2.1 to zoom in close
         gl={{
           antialias: true,
           alpha: true,
@@ -147,7 +147,7 @@ export default function AICore({
           stencil: false,
           powerPreference: 'high-performance'
         }}
-        dpr={[1, 2]} // Forces sharp resolution scaling on high-res displays
+        dpr={[1, 2]} 
         frameloop="always"
       >
         <AIOrb isConnected={isConnected} isSpeaking={isSpeaking} />
