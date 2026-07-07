@@ -170,7 +170,7 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    const targetScale = !isConnected ? 0.44 : isSpeaking ? 0.72 : 0.62
+   const targetScale = !isConnected ? 0.8 : isSpeaking ? 1.4 : 1.2
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -212,7 +212,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 5], fov: 42 }}
+        camera={{ position: [0, 0, 3], fov: 42 }}
         gl={{
           antialias: false, // ← OFF: biggest GPU memory saving
           powerPreference: 'default', // ← Not 'high-performance' (lets GPU throttle)
