@@ -4874,13 +4874,14 @@ return (
     `}</style>
  
     {/* AICore — Three.js particle sphere + orbital rings (replaces VoiceParticleSphere) */}
-    <div style={{ position: 'relative', width: 420, height: 420 }}>
-      <AICore
-        isConnected={callState !== 'idle'}
-        isSpeaking={callState === 'speaking'}
-      />
-    </div>
- 
+    <div style={{ position: 'relative', width: 300, height: 300 }}>
+  <AICore
+    isConnected={callState !== 'idle'}
+    isSpeaking={callState === 'speaking'}
+  />
+</div>
+
+
     {/* State label + dots */}
     <div style={{
       marginTop: 32, display: 'flex', alignItems: 'center', gap: 8,
