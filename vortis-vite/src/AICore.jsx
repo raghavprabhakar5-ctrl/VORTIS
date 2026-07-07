@@ -2,32 +2,13 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
-// Theme colors — match :root variables in App.jsx
-const IDLE_COLOR   = new THREE.Color('#6366f1') // indigo (resting)
+const IDLE_COLOR  = new THREE.Color('#6366f1') // indigo (resting)
 const ACTIVE_COLOR = new THREE.Color('#8b5cf6') // violet (speaking)
-const _blendColor  = new THREE.Color()
-const _scaleVec    = new THREE.Vector3()
-
-// ── FINAL TUNED SIZE ──────────────────────────────────────────────
-// Shell radius 1.55, camera at z=4.5, fov=42°
-//   → visible height at z=0 = 2 × 4.5 × tan(21°) ≈ 3.455 world units
-//   → shell diameter = 3.1
-//
-// Fill at each state:
-//   disconnected (scale 0.92):  1.55 × 2 × 0.92 / 3.455 = 83%
-//   idle / listening (scale 1.0): 1.55 × 2 / 3.455 = 90%
-//   speaking (scale 1.0):         90%
-//   speaking PEAK PULSE (radius ×1.12): 1.55 × 1.12 × 2 / 3.455 = 101%
-//      → only 1% clip at the absolute loudest micro-instant of speech.
-//        Invisible in practice.
-//
-// ⚠️  THE SPHERE WILL ONLY LOOK BIG IF THE WRAPPER DIV IN App.jsx IS BIG.
-//     AICore fills 100% of its parent — make the parent big.
-//     Recommended wrapper: 480 × 480 (see App.jsx change below).
-const SHELL_RADIUS = 1.55
-const SHELL_INV_R  = 1 / SHELL_RADIUS
-const CAM_Z        = 4.5
-const DOT_SIZE     = 0.05
+const RING_COLOR  = new THREE.Color('#6366f1') // indigo
+const RING_GLOW   = new THREE.Color('#c7d2fe') // pale indigo glow
+const _blendColor = new THREE.Color()
+const _ringColor = new THREE.Color()
+const _scaleVec = new THREE.Vector3()
 
 function ParticleShell({ isConnected, isSpeaking }) {
   const ref = useRef(null)
@@ -35,27 +16,27 @@ function ParticleShell({ isConnected, isSpeaking }) {
   const COUNT = 900
 
   const { positions, original, seeds } = useMemo(() => {
-    const pos  = new Float32Array(COUNT * 3)
+    const pos = new Float32Array(COUNT * 3)
     const orig = new Float32Array(COUNT * 3)
-    const s    = new Float32Array(COUNT * 2)
+    const s = new Float32Array(COUNT * 2)
 
     for (let i = 0; i < COUNT; i++) {
-      const phi   = Math.acos(1 - (2 * (i + 0.5)) / COUNT)
+      const phi = Math.acos(1 - (2 * (i + 0.5)) / COUNT)
       const theta = Math.PI * (1 + Math.sqrt(5)) * i
-      const r     = SHELL_RADIUS
+      const r = 1.3
 
       const px = r * Math.sin(phi) * Math.cos(theta)
       const py = r * Math.sin(phi) * Math.sin(theta)
       const pz = r * Math.cos(phi)
 
-      pos[i * 3]     = px
+      pos[i * 3] = px
       pos[i * 3 + 1] = py
       pos[i * 3 + 2] = pz
-      orig[i * 3]     = px
+      orig[i * 3] = px
       orig[i * 3 + 1] = py
       orig[i * 3 + 2] = pz
 
-      s[i * 2]     = Math.random() * Math.PI * 2
+      s[i * 2] = Math.random() * Math.PI * 2
       s[i * 2 + 1] = 0.5 + Math.random() * 0.8
     }
     return { positions: pos, original: orig, seeds: s }
@@ -91,8 +72,8 @@ function ParticleShell({ isConnected, isSpeaking }) {
     if (vol > 0.002) {
       const posArr = geo.attributes.position.array
       for (let i = 0; i < COUNT; i++) {
-        const ix     = i * 3
-        const phase  = seeds[i * 2]
+        const ix = i * 3
+        const phase = seeds[i * 2]
         const weight = seeds[i * 2 + 1]
 
         const wave = Math.sin(t * 7 + phase) * vol * weight * 0.2
@@ -100,10 +81,11 @@ function ParticleShell({ isConnected, isSpeaking }) {
         const ox = original[ix]
         const oy = original[ix + 1]
         const oz = original[ix + 2]
+        const invR = 0.7692 // 1 / 1.3
 
-        posArr[ix]     = ox + ox * SHELL_INV_R * wave
-        posArr[ix + 1] = oy + oy * SHELL_INV_R * wave
-        posArr[ix + 2] = oz + oz * SHELL_INV_R * wave
+        posArr[ix] = ox + ox * invR * wave
+        posArr[ix + 1] = oy + oy * invR * wave
+        posArr[ix + 2] = oz + oz * invR * wave
       }
       geo.attributes.position.needsUpdate = true
     }
@@ -119,7 +101,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={DOT_SIZE}
+        size={0.018}
         transparent
         opacity={0.3}
         sizeAttenuation
@@ -132,15 +114,63 @@ function ParticleShell({ isConnected, isSpeaking }) {
   )
 }
 
+function OrbitalRing({
+  radius,
+  tube,
+  tilt,
+  rotSpeed,
+  isConnected,
+  isSpeaking,
+  phase = 0
+}) {
+  const ref = useRef(null)
+  const matRef = useRef(null)
+  const volRef = useRef(0)
+
+  useFrame((_, delta) => {
+    if (!ref.current || !matRef.current) return
+
+    ref.current.rotation.y += delta * rotSpeed
+
+    const t = performance.now() * 0.001 + phase
+    let targetVol = 0
+    if (isSpeaking) {
+      targetVol = Math.abs(Math.sin(t * 8)) * 0.55 + 0.15
+    } else if (isConnected) {
+      targetVol = Math.abs(Math.sin(t * 1.4)) * 0.1
+    }
+    volRef.current += (targetVol - volRef.current) * 0.1
+    const vol = volRef.current
+
+    _ringColor.lerpColors(RING_COLOR, RING_GLOW, vol)
+    matRef.current.color.copy(_ringColor)
+
+    const targetOp = isConnected ? 0.12 + vol * 0.6 : 0.03
+    matRef.current.opacity += (targetOp - matRef.current.opacity) * 0.09
+  })
+
+  return (
+    <mesh ref={ref} rotation={[tilt, 0, 0]}>
+      <torusGeometry args={[radius, tube, 2, 48]} />
+      <meshBasicMaterial
+        ref={matRef}
+        color={RING_COLOR}
+        transparent
+        opacity={0.06}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
+      />
+    </mesh>
+  )
+}
+
 function AIOrb({ isConnected, isSpeaking }) {
   const groupRef = useRef(null)
 
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    // Scales kept close to 1.0 — sphere stays big in every state.
-    // Old version had 0.62 for disconnected which made it tiny.
-    const targetScale = !isConnected ? 0.92 : 1.0
+    const targetScale = !isConnected ? 0.44 : isSpeaking ? 0.72 : 0.62
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -148,7 +178,28 @@ function AIOrb({ isConnected, isSpeaking }) {
 
   return (
     <group ref={groupRef}>
+      {/* Single particle shell (was 3) */}
       <ParticleShell isConnected={isConnected} isSpeaking={isSpeaking} />
+
+      {/* Two rings (was 3) — enough for depth */}
+      <OrbitalRing
+        radius={1.5}
+        tube={0.005}
+        tilt={Math.PI * 0.1}
+        rotSpeed={0.16}
+        isConnected={isConnected}
+        isSpeaking={isSpeaking}
+        phase={0}
+      />
+      <OrbitalRing
+        radius={1.72}
+        tube={0.003}
+        tilt={Math.PI * 0.42}
+        rotSpeed={-0.1}
+        isConnected={isConnected}
+        isSpeaking={isSpeaking}
+        phase={1.5}
+      />
     </group>
   )
 }
@@ -161,16 +212,16 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, CAM_Z], fov: 42 }}
+        camera={{ position: [0, 0, 5], fov: 42 }}
         gl={{
-          antialias: false,
-          powerPreference: 'default',
+          antialias: false, // ← OFF: biggest GPU memory saving
+          powerPreference: 'default', // ← Not 'high-performance' (lets GPU throttle)
           alpha: true,
-          depth: false,
-          stencil: false,
-          precision: 'lowp'
+          depth: false, // ← OFF: not needed (additive blending only)
+          stencil: false, // ← OFF: not used
+          precision: 'lowp' // ← Low precision: halves GPU memory
         }}
-        dpr={Math.min(window.devicePixelRatio, 1.5)}
+        dpr={Math.min(window.devicePixelRatio, 1.5)} // ← Cap at 1.5x (was uncapped)
         frameloop="always"
       >
         <AIOrb isConnected={isConnected} isSpeaking={isSpeaking} />
