@@ -98,7 +98,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.055}                     
+        size={0.05}                     
         transparent
         opacity={0.8}
         sizeAttenuation={true}
@@ -117,8 +117,8 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    // 💡 INCREASED SCALE: Boosted scale variables for a much grander presence
-    const targetScale = !isConnected ? 1.4 : isSpeaking ? 1.9 : 1.65
+    // 💡 ADJUSTED SCALES: Lowered slightly so it stays perfectly circular inside the container bounds
+    const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.35 : 1.15
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -139,7 +139,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 5.5], fov: 36 }} // 💡 OPTICAL ZOOM: Lowered fov pulls the camera frame in tight and huge
+        camera={{ position: [0, 0, 4.2], fov: 40 }} // 💡 FIXED CAMERA FRAME: Perfectly frames the large sphere without truncation
         gl={{
           antialias: true,
           alpha: true,

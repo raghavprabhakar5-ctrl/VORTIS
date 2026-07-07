@@ -4873,14 +4873,14 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-    {/* AICore Layout Container — Expanded box size to host the larger orb cleanly */}
+    {/* AICore Layout Container */}
 <div style={{ 
   position: 'absolute', 
-  top: '34%',                   // Slightly lowered to sit perfectly balanced in the upper layout area
+  top: '35%',                   
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: 580,                   // 💡 Made wider for the massive scale boost
-  height: 580,                  // 💡 Made taller
+  width: 500,                   
+  height: 500,                  
   display: 'flex', 
   alignItems: 'center', 
   justifyContent: 'center',
@@ -4892,8 +4892,8 @@ return (
   />
 </div>
 
-{/* Height spacer to let 'LISTENING/THINKING' text sit naturally underneath */}
-<div style={{ height: 380 }} />
+{/* Height spacer */}
+<div style={{ height: 360 }} />
 
     {/* State label + dots */}
     <div style={{
