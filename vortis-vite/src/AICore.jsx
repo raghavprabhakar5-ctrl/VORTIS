@@ -63,7 +63,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
 
     _blendColor.lerpColors(IDLE_COLOR, ACTIVE_COLOR, Math.min(vol * 2, 1))
     mat.color.copy(_blendColor)
-    const targetOp = isConnected ? 0.65 + vol * 0.3 : 0.2
+    const targetOp = isConnected ? 0.85 + vol * 0.15 : 0.4
     mat.opacity += (targetOp - mat.opacity) * 0.07
 
     if (vol > 0.002) {
@@ -98,11 +98,11 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.022} // Slightly larger particle points for better visibility
+        size={0.045}                    // Bigger dots
         transparent
-        opacity={0.3}
-        sizeAttenuation
-        blending={THREE.AdditiveBlending}
+        opacity={0.8}                    // Higher visibility opacity
+        sizeAttenuation={true}
+        blending={THREE.NormalBlending}  // Solid rendering (not blurry/transparent)
         depthWrite={false}
         vertexColors={false}
         color={IDLE_COLOR}
@@ -111,15 +111,14 @@ function ParticleShell({ isConnected, isSpeaking }) {
   )
 }
 
-// Fixed: Added back the missing AIOrb wrapper with ring-less scaling logic
 function AIOrb({ isConnected, isSpeaking }) {
   const groupRef = useRef(null)
 
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    // Cleaned sizing targets optimized for a 400px-450px HTML frame
-    const targetScale = !isConnected ? 0.7 : isSpeaking ? 1.25 : 1.05
+    // Adjusted size scales so it sits comfortably inside the wrapper
+    const targetScale = !isConnected ? 0.7 : isSpeaking ? 1.2 : 1.0
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -142,13 +141,13 @@ export default function AICore({
         style={{ width: '100%', height: '100%' }}
         camera={{ position: [0, 0, 3], fov: 42 }}
         gl={{
-          antialias: true, // Switched to true to fix device context rendering failures
-          powerPreference: 'default',
+          antialias: true,
           alpha: true,
-          depth: true,    // Restored depth context initialization stability
-          stencil: false
+          depth: true,
+          stencil: false,
+          powerPreference: 'high-performance'
         }}
-        dpr={Math.min(window.devicePixelRatio, 1.5)}
+        dpr={[1, 2]} // Forces sharp resolution scaling on high-res displays
         frameloop="always"
       >
         <AIOrb isConnected={isConnected} isSpeaking={isSpeaking} />
