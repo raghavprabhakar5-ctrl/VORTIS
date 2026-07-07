@@ -103,9 +103,9 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.025}
+        size={0.05}
         transparent
-        opacity={0.3}
+        opacity={0.6}
         sizeAttenuation
         blending={THREE.AdditiveBlending}
         depthWrite={false}
@@ -147,7 +147,7 @@ function OrbitalRing({
     _ringColor.lerpColors(RING_COLOR, RING_GLOW, vol)
     matRef.current.color.copy(_ringColor)
 
-    const targetOp = isConnected ? 0.12 + vol * 0.6 : 0.03
+    const targetOp = isConnected ? 0.25 + vol * 0.6 : 0.08
     matRef.current.opacity += (targetOp - matRef.current.opacity) * 0.09
   })
 
@@ -158,7 +158,7 @@ function OrbitalRing({
         ref={matRef}
         color={RING_COLOR}
         transparent
-        opacity={0.06}
+        opacity={0.15}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
       />
@@ -172,7 +172,7 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    const targetScale = !isConnected ? 0.62 : isSpeaking ? 1.0 : 0.86
+    const targetScale = !isConnected ? 0.78 : isSpeaking ? 1.05 : 0.92
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -186,7 +186,7 @@ function AIOrb({ isConnected, isSpeaking }) {
       {/* Two rings (was 3) — enough for depth */}
       <OrbitalRing
         radius={2.1}
-        tube={0.007}
+        tube={0.012}
         tilt={Math.PI * 0.1}
         rotSpeed={0.16}
         isConnected={isConnected}
@@ -195,7 +195,7 @@ function AIOrb({ isConnected, isSpeaking }) {
       />
       <OrbitalRing
         radius={2.42}
-        tube={0.0045}
+        tube={0.008}
         tilt={Math.PI * 0.42}
         rotSpeed={-0.1}
         isConnected={isConnected}
@@ -214,7 +214,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 5], fov: 42 }}
+        camera={{ position: [0, 0, 4], fov: 45 }}
         gl={{
           antialias: false, // ← OFF: biggest GPU memory saving
           powerPreference: 'default', // ← Not 'high-performance' (lets GPU throttle)
