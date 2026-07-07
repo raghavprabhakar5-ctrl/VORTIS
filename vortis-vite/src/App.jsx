@@ -1183,6 +1183,41 @@ const MsgContent = ({ text, onRetryImage }) => {
   if (!text) return null;
   const t = text.trim();
 
+  const DeepResearchProgress = ({ data }) => {
+  const { topic, queries, doneIdx, foundCounts, stage } = data;
+  return (
+    <div style={{ border: '1px solid var(--border2)', borderRadius: 12, padding: '14px 16px', background: 'var(--bg2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <Search size={13} color="var(--indigo)"/>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--indigo)', fontFamily: 'JetBrains Mono,monospace', letterSpacing: '.03em' }}>
+          Deep research: {topic}
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {queries.map((q, i) => {
+          const done = i <= doneIdx;
+          const isActive = i === doneIdx + 1;
+          return (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: done ? 'var(--text2)' : 'var(--text4)' }}>
+              {done ? <Check size={12} color="var(--green)"/> : isActive ? <Loader size={12} color="var(--indigo)" style={{ animation: 'spin 1s linear infinite' }}/> : <div style={{ width: 12, height: 12, borderRadius: '50%', border: '1px solid var(--border2)' }}/>}
+              <span>Searching "{q}"</span>
+              {done && foundCounts[i] !== undefined && (
+                <span style={{ color: 'var(--text4)', fontFamily: 'JetBrains Mono,monospace', fontSize: 11 }}>· {foundCounts[i]} found</span>
+              )}
+            </div>
+          );
+        })}
+        {stage === 'writing' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--text2)' }}>
+            <Loader size={12} color="var(--indigo)" style={{ animation: 'spin 1s linear infinite' }}/>
+            <span>Writing report…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
   // ── Special states ──
   const clean = t
     .replace(/^GENERATE_IMAGE:.*$/gm, '')
@@ -1206,6 +1241,13 @@ const MsgContent = ({ text, onRetryImage }) => {
   );
 
   if (t.startsWith('__IMG_B64__')) return <AIImageCard src={t.slice(11)} onRetry={onRetryImage}/>;
+
+  if (t.startsWith('__DEEP_PROGRESS__')) {
+    try {
+      const data = JSON.parse(t.slice('__DEEP_PROGRESS__'.length));
+      return <DeepResearchProgress data={data}/>;
+    } catch(_) { return null; }
+  }
 
   // ── Search results HTML — keep dangerouslySetInnerHTML ──
   if (clean.startsWith('<') && (clean.includes('vsr-') || clean.includes('vsr-wrap'))) {
@@ -1273,6 +1315,7 @@ const MsgContent = ({ text, onRetryImage }) => {
               {children}
             </blockquote>
           ),
+
 
         code: ({node, inline, className, children, ...props}) => {
   const match = /language-(\w+)/.exec(className || '');
@@ -2400,7 +2443,7 @@ export default function VortisAI() {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: 'You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. Never use ** **  this is making of title, No quotes, no punctuation.',
+        prompt: `You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. Never use ** **  this is making of title, Never output refusals, apologies, or safety messages such as "I can't help with that" or "I'm sorry." If the user's message is offensive, harmful, irrelevant, or has no clear topic, still generate a neutral, generic conversation name that best describes the message, such as General Discussion, Random Question, or New Conversation. No quotes, no punctuation.`,
         history: [{ role: 'user', content: firstUserMsg }]
       })
     });
@@ -4118,12 +4161,158 @@ return {
 
 setProcessingStatus('');
 
+// ── DEEP RESEARCH: runs multiple searches, shows live progress, then a
+  //    sources table + a synthesized multi-paragraph report ──
+  const buildDeepQueries = (topic) => {
+    const t = topic.trim();
+    const variants = [
+      t,
+      `${t} latest news`,
+      `${t} analysis`,
+      `${t} statistics data`,
+    ];
+    return [...new Set(variants.map(v => v.trim()))].slice(0, 4);
+  };
+
+  const runDeepResearch = async (topic) => {
+    setProcessingStatus('searching');
+    const queries = buildDeepQueries(topic);
+
+    const progressMsg = addMsg('vortis', `__DEEP_PROGRESS__${JSON.stringify({ topic, queries, doneIdx: -1, foundCounts: [] })}`, false);
+    const progressId = progressMsg.id;
+
+    const updateProgress = (doneIdx, foundCounts, stage) => {
+      setMessages(prev => prev.map(m => m.id === progressId
+        ? { ...m, text: `__DEEP_PROGRESS__${JSON.stringify({ topic, queries, doneIdx, foundCounts, stage: stage || '' })}` }
+        : m));
+    };
+
+    const stripHtml = (s) => (s||'').replace(/<[^>]*>/g,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').replace(/&#39;/g,"'").replace(/&quot;/g,'"').replace(/\s+/g,' ').trim();
+
+    let allResults = [];
+    const foundCounts = [];
+    for (let i = 0; i < queries.length; i++) {
+      let sr;
+      try { sr = await doSearch(queries[i]); } catch(_) { sr = { success: false, results: [] }; }
+      const results = sr.results || [];
+      foundCounts.push(results.length);
+      allResults = allResults.concat(results);
+      updateProgress(i, [...foundCounts]);
+    }
+
+    // Normalize + dedupe (max 3 per domain, then by title)
+    const normalized = allResults.map(r => {
+      let source = stripHtml(r.source || '');
+      if (!source || source === 'AI' || source === 'Web') {
+        try { source = new URL(r.link || r.url || '').hostname.replace('www.', '') || 'Web'; } catch(_) { source = 'Web'; }
+      }
+      let rawUrl = r.link || r.url || r.href || '';
+      if (rawUrl && !rawUrl.startsWith('http')) rawUrl = 'https://' + rawUrl;
+      return { title: stripHtml(r.title), snippet: stripHtml(r.snippet), source, date: r.date || '', url: rawUrl };
+    }).filter(r => r.title?.trim().length > 8 && r.snippet?.trim().length > 15);
+
+    const seenTitles = new Set();
+    const domainCounts = {};
+    const deduped = [];
+    for (const r of normalized) {
+      const titleKey = r.title.toLowerCase().slice(0, 60);
+      if (seenTitles.has(titleKey)) continue;
+      const domain = r.source.toLowerCase().replace('www.', '');
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      if (domainCounts[domain] > 3) continue;
+      seenTitles.add(titleKey);
+      deduped.push(r);
+    }
+    const sources = deduped.slice(0, 20);
+
+    if (!sources.length) {
+      setMessages(prev => prev.map(m => m.id === progressId
+        ? { ...m, text: `Couldn't find enough reliable sources on "${topic}" — try a narrower topic.` }
+        : m));
+      setIsProcessing(false); setProcessingStatus('');
+      return;
+    }
+
+    updateProgress(queries.length - 1, foundCounts, 'writing');
+    setProcessingStatus('thinking');
+
+    const context = sources.slice(0, 12).map((r, i) =>
+      `[${i+1}] ${r.title}\n${r.snippet.slice(0, 300)}\nSource: ${r.source}${r.date ? ' | ' + r.date : ''}`
+    ).join('\n\n');
+
+    let report = '';
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({
+          action: 'chat',
+          prompt: `You are writing a deep research report on "${topic}" using ONLY the sources below. Write 4-6 thorough, well-structured paragraphs. Use **bold** for key facts/names/numbers. Reference sources naturally by name (e.g. "according to Reuters") — never invent facts not in these sources. Do not add a references list at the end, that's handled separately.\n\nSOURCES:\n${context}`,
+          history: []
+        })
+      });
+      if (res.ok) {
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          for (const line of dec.decode(value, { stream: true }).split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]' || !raw) continue;
+            try { const p = JSON.parse(raw); if (p.content) report += p.content; } catch(_) {}
+          }
+        }
+      }
+    } catch(_) {}
+
+    report = report.trim() || "Here's what I found, but I couldn't put together a written summary — check the sources below.";
+
+    const rows = sources.map((r, i) => `
+      <tr>
+        <td class="vsr-dt-num">${i+1}</td>
+        <td class="vsr-dt-src"><img class="vsr-fav-img" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</td>
+        <td class="vsr-dt-title"><a href="${r.url || '#'}" target="_blank" rel="noopener noreferrer">${r.title}</a></td>
+        <td class="vsr-dt-date">${r.date || '—'}</td>
+      </tr>`).join('');
+
+    const finalHTML = `<style>
+.vsr-deep-abox{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;margin-bottom:10px}
+.vsr-deep-label{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;color:var(--indigo);letter-spacing:.07em;margin-bottom:9px;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+.vsr-deep-text{font-size:13.5px;color:var(--text1);line-height:1.8}
+.vsr-deep-text strong{font-weight:700;color:var(--text1)}
+.vsr-deep-table-wrap{border:1px solid var(--border2);border-radius:12px;overflow:hidden}
+.vsr-deep-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.vsr-deep-table thead{background:rgba(99,102,241,.1)}
+.vsr-deep-table th{padding:8px 10px;text-align:left;color:var(--text1);font-weight:700;font-size:11px;letter-spacing:.03em;border-bottom:1px solid var(--border)}
+.vsr-deep-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
+.vsr-deep-table tr:last-child td{border-bottom:none}
+.vsr-dt-num{color:var(--text4);font-family:'JetBrains Mono',monospace;width:24px}
+.vsr-dt-src{display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--text2)}
+.vsr-dt-title a{color:var(--indigo);text-decoration:none}
+.vsr-dt-title a:hover{text-decoration:underline}
+.vsr-dt-date{white-space:nowrap;color:var(--text3);font-family:'JetBrains Mono',monospace;font-size:11px}
+</style>
+<div class="vsr-deep-abox">
+  <div class="vsr-deep-label">✦ Deep research · ${queries.length} searches · ${sources.length} sources</div>
+  <div class="vsr-deep-text">${report.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\n\n/g,'<br/><br/>').replace(/\n/g,'<br/>')}</div>
+</div>
+<div class="vsr-deep-table-wrap">
+  <table class="vsr-deep-table">
+    <thead><tr><th>#</th><th>Source</th><th>Title</th><th>Date</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</div>`;
+
+    setMessages(prev => prev.map(m => m.id === progressId ? { ...m, text: finalHTML } : m));
+    setIsProcessing(false);
+    setProcessingStatus('');
+  };
+
 const finalText = ft.trim();
 if (finalText) {
-  const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
- const chips = clean.map((r) =>
- `<a class="vsr-chip" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;"><img class="vsr-favicon" src="https://www.google.com/s2/favicons?domain=${r.source}&sz=32" alt="" />${r.source}</a>`
-  ).join('');
+ const dotColors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ec4899','#ef4444'];
  const cards = clean.map((r, i) => `
     <a class="vsr-card" href="${r.url || '#'}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;color:inherit;display:block;">
       <div class="vsr-card-top">
@@ -4180,7 +4369,6 @@ if (finalText) {
   <div class="vsr-abox">
     <div class="vsr-alabel">✦ Vortis summary</div>
     <div class="vsr-atext">${finalText.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/\n\n/g,'<br/><br/>').replace(/\n/g,'<br/>')}</div>
-    <div class="vsr-chips">${chips}</div>
   </div>
 </div>`;
   pushHistory(convHistory, 'assistant', finalText);
@@ -4193,7 +4381,7 @@ setIsProcessing(false);
 setProcessingStatus('');
 };
 
-  const handleCmd = async (cmd) => {
+ const handleCmd = async (cmd) => {
     if (!cmd.trim()) return;
     if (!canDo('messages')) { hitLimit(); return; }
     setIsStreaming(false);
@@ -4204,9 +4392,14 @@ setProcessingStatus('');
     setIsProcessing(true);
     setShowAITimeout(false);
     setShowSettings(false);
-    await getAI(cmd, lastMethod === 'voice');
+    if (researchMode === 'deep') {
+      await runDeepResearch(cmd);
+    } else {
+      await getAI(cmd, lastMethod === 'voice');
+    }
     setIsProcessing(false);
   };
+
   useEffect(() => { handleCmdRef.current = handleCmd; });
   useEffect(() => {
   window.__vortisSend = (text) => { setInput(text); setTimeout(() => textareaRef.current?.focus(), 50); };
