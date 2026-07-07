@@ -4873,14 +4873,16 @@ return (
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
  
-    {/* AICore — Properly sized to prevent screen clipping */}
+    {/* AICore Layout Wrapper — Keeps layout perfectly proportioned */}
 <div style={{ 
   position: 'relative', 
-  width: 340, 
-  height: 340, 
+  width: '350px', 
+  height: '350px', 
+  aspectRatio: '1 / 1', // 💡 Forces the container to stay a perfect square
   display: 'flex', 
   alignItems: 'center', 
-  justifyContent: 'center' 
+  justifyContent: 'center',
+  margin: '0 auto'      // Centers it horizontally on the screen
 }}>
   <AICore
     isConnected={callState !== 'idle'}

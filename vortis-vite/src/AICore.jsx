@@ -139,7 +139,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 2.1], fov: 42 }} // 💡 Changed from 3 to 2.1 to zoom in close
+        camera={{ position: [0, 0, 5.5], fov: 20 }} // 💡 Telephoto trick: Moves back and zooms in to keep it perfectly round
         gl={{
           antialias: true,
           alpha: true,
