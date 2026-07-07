@@ -460,7 +460,47 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   return false;
 }
 
-// ── SERPER ────────────────────────────────────────────────────
+// ── TAVILY (primary search provider) ────────────────────────────
+async function fetchTavily(query) {
+  const key = process.env.TAVILY_API_KEY;
+  if (!key) return [];
+  try {
+    const res = await fetchWithTimeout(
+      'https://api.tavily.com/search',
+      {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          api_key:         key,
+          query,
+          search_depth:    'basic',
+          max_results:     10,
+          include_answer:  false,
+          include_images:  false,
+        }),
+      },
+      8000
+    );
+    if (!res.ok) {
+      console.log(`Tavily HTTP ${res.status}`);
+      return [];
+    }
+    const data = await res.json();
+    const results = (data.results || []).map(r => ({
+      title:   r.title   || '',
+      snippet: r.content || '',
+      link:    r.url     || '#',
+      source:  (() => { try { return new URL(r.url).hostname.replace('www.', ''); } catch { return 'Web'; } })(),
+      date:    r.published_date ? r.published_date.split('T')[0] : new Date().toISOString().split('T')[0],
+    }));
+    return results.filter(r => r.title.length > 3).slice(0, 10);
+  } catch (e) {
+    console.error('Tavily failed:', e.message);
+    return [];
+  }
+}
+
+// ── SERPER (now the fallback, only used if Tavily is unavailable/empty) ──
 async function fetchSerper(query) {
   const key = process.env.SERPER_API_KEY;
   if (!key) return [];
@@ -495,6 +535,18 @@ async function fetchSerper(query) {
     console.error('Serper failed:', e.message);
     return [];
   }
+}
+
+// ── UNIFIED WEB SEARCH — Tavily primary, Serper as fallback ──────
+async function fetchWebResults(query) {
+  try {
+    const tavilyResults = await fetchTavily(query);
+    if (tavilyResults.length > 0) return tavilyResults;
+    console.log('Tavily returned no results — falling back to Serper');
+  } catch (e) {
+    console.log('Tavily threw — falling back to Serper:', e.message);
+  }
+  return fetchSerper(query);
 }
 
 // ── ESPN ──────────────────────────────────────────────────────
@@ -906,13 +958,13 @@ export default async function handler(req, res) {
               const sq        = buildSearchQuery(lastUserMsg);
               const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
               const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
-              const [serperResult, espnResult] = await Promise.allSettled([
-                fetchSerper(sq),
+              const [webResult, espnResult] = await Promise.allSettled([
+                fetchWebResults(sq),
                 (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
               ]);
               let allRes = [
-                ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
-                ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
+                ...(espnResult.status === 'fulfilled' ? espnResult.value : []),
+                ...(webResult.status  === 'fulfilled' ? webResult.value  : []),
               ];
               allRes = cleanResults(allRes, sq);
               allRes = deduplicate(allRes);
@@ -1012,14 +1064,14 @@ REFUSAL RULES: Never respond with only "I can't help with that" — always expla
       const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/.test(low);
       const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/.test(low);
 
-      const [serperResult, espnResult] = await Promise.allSettled([
-        fetchSerper(searchQuery),
+      const [webResult, espnResult] = await Promise.allSettled([
+        fetchWebResults(searchQuery),
         (isSports && !isCricket) ? fetchESPN(searchQuery) : Promise.resolve([]),
       ]);
 
       let allResults = [
-        ...(espnResult.status  === 'fulfilled' ? espnResult.value  : []),
-        ...(serperResult.status === 'fulfilled' ? serperResult.value : []),
+        ...(espnResult.status === 'fulfilled' ? espnResult.value : []),
+        ...(webResult.status  === 'fulfilled' ? webResult.value  : []),
       ];
       allResults = cleanResults(allResults, searchQuery);
       allResults = deduplicate(allResults);
