@@ -3,21 +3,48 @@ import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
 // Theme colors — match :root variables in App.jsx
-//   --indigo:#6366f1  --violet:#8b5cf6  --cyan:#06b6d4
 const IDLE_COLOR   = new THREE.Color('#6366f1') // indigo (resting)
 const ACTIVE_COLOR = new THREE.Color('#8b5cf6') // violet (speaking)
 const _blendColor  = new THREE.Color()
 const _scaleVec    = new THREE.Vector3()
 
-// ── SIZING CONSTANTS ──────────────────────────────────────────────
-// Camera at z=4.6, fov=42  →  visible height at z=0 ≈ 3.54 world units.
-// Shell radius = 1.7  →  diameter = 3.4.
-// At scale 1.0 (speaking): 3.4 / 3.54 ≈ 96% of viewport  (no clipping).
-// At scale 0.9 (idle):     3.06 / 3.54 ≈ 86%.
-// At scale 0.78 (disconnected): 2.65 / 3.54 ≈ 75%.
-// Rings are GONE — user requested removal.
-const SHELL_RADIUS = 1.7
-const SHELL_INV_R  = 1 / SHELL_RADIUS
+// ═════════════════════════════════════════════════════════════════
+//  👇 PICK A SIZE — change this number (1–6) and refresh the page
+// ═════════════════════════════════════════════════════════════════
+const SIZE = 6
+// ═════════════════════════════════════════════════════════════════
+//
+//  SIZE    R       Z      Dot     Resting   Peak     Description
+//  ────   ─────  ──────  ──────   ───────   ────     ────────────────────────────
+//   1     1.20    4.6    0.050     68%      77%     Small — lots of breathing room
+//   2     1.40    4.6    0.050     79%      90%     Medium — comfortable
+//   3     1.55    4.6    0.045     88%      99%     Large — biggest with NO clipping  ← start here
+//   4     1.70    4.4    0.045    100%     113%     X-Large — fills box, tiny clip at peak pulse
+//   5     1.85    4.4    0.040    109%     124%     XX-Large — dramatic, edges clip when speaking
+//   6     2.00    4.2    0.040    124%     140%     MAX — dots fly off screen at peak (very dramatic)
+//
+//  How to use:
+//    1. Set SIZE = 3 (the "no clipping" sweet spot), check it out
+//    2. If still too small → try 4, then 5
+//    3. If 4 has too much edge clipping when speaking → fall back to 3
+//    4. If 3 is too big (rare) → try 2
+//
+//  NOTE: "Peak %" is how full the sphere gets at the loudest moment of
+//  speaking. Over 100% means dots will briefly leave the canvas during
+//  the pulse — this is OK if you like the effect, bad if you hate clipping.
+// ═════════════════════════════════════════════════════════════════
+
+const SIZES = {
+  1: { R: 1.20, Z: 4.6, dot: 0.050 },
+  2: { R: 1.40, Z: 4.6, dot: 0.050 },
+  3: { R: 1.55, Z: 4.6, dot: 0.045 },
+  4: { R: 1.70, Z: 4.4, dot: 0.045 },
+  5: { R: 1.85, Z: 4.4, dot: 0.040 },
+  6: { R: 2.00, Z: 4.2, dot: 0.040 },
+}
+
+const { R: SHELL_RADIUS, Z: CAM_Z, dot: DOT_SIZE } = SIZES[SIZE]
+const SHELL_INV_R = 1 / SHELL_RADIUS
 
 function ParticleShell({ isConnected, isSpeaking }) {
   const ref = useRef(null)
@@ -109,7 +136,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.045}            /* bigger, more readable dots */
+        size={DOT_SIZE}
         transparent
         opacity={0.3}
         sizeAttenuation
@@ -128,8 +155,9 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    // Resting scales — sphere stays inside the viewport at every state.
-    const targetScale = !isConnected ? 0.78 : isSpeaking ? 1.0 : 0.9
+    // Scales pulled closer to 1.0 across the board so the sphere
+    // stays big in every state (disconnected state was 0.78 before — too small).
+    const targetScale = !isConnected ? 0.88 : isSpeaking ? 1.0 : 0.96
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -137,7 +165,6 @@ function AIOrb({ isConnected, isSpeaking }) {
 
   return (
     <group ref={groupRef}>
-      {/* Particle shell only — rings removed per request */}
       <ParticleShell isConnected={isConnected} isSpeaking={isSpeaking} />
     </group>
   )
@@ -151,9 +178,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        /* Camera tuned so the shell (r=1.7) fills ~96% of viewport at scale 1.0.
-           No rings to clip anymore. */
-        camera={{ position: [0, 0, 4.6], fov: 42 }}
+        camera={{ position: [0, 0, CAM_Z], fov: 42 }}
         gl={{
           antialias: false,
           powerPreference: 'default',
