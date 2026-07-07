@@ -2,10 +2,12 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
-const IDLE_COLOR = new THREE.Color('#39ff14')
-const ACTIVE_COLOR = new THREE.Color('#00ffff')
-const RING_COLOR = new THREE.Color('#39ff14')
-const RING_GLOW = new THREE.Color('#ccffb3')
+// Theme colors — match :root variables in App.jsx
+//   --indigo:#6366f1  --violet:#8b5cf6  --cyan:#06b6d4
+const IDLE_COLOR  = new THREE.Color('#6366f1') // indigo (resting)
+const ACTIVE_COLOR = new THREE.Color('#8b5cf6') // violet (speaking)
+const RING_COLOR  = new THREE.Color('#6366f1') // indigo
+const RING_GLOW   = new THREE.Color('#c7d2fe') // pale indigo glow
 const _blendColor = new THREE.Color()
 const _ringColor = new THREE.Color()
 const _scaleVec = new THREE.Vector3()
@@ -23,7 +25,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
     for (let i = 0; i < COUNT; i++) {
       const phi = Math.acos(1 - (2 * (i + 0.5)) / COUNT)
       const theta = Math.PI * (1 + Math.sqrt(5)) * i
-      const r = 1.3
+      const r = 1.85 // bigger shell — fills more of the 420px wrapper
 
       const px = r * Math.sin(phi) * Math.cos(theta)
       const py = r * Math.sin(phi) * Math.sin(theta)
@@ -81,7 +83,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         const ox = original[ix]
         const oy = original[ix + 1]
         const oz = original[ix + 2]
-        const invR = 0.7692 // 1 / 1.3
+        const invR = 0.5405 // 1 / 1.85
 
         posArr[ix] = ox + ox * invR * wave
         posArr[ix + 1] = oy + oy * invR * wave
@@ -101,7 +103,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.018}
+        size={0.025}
         transparent
         opacity={0.3}
         sizeAttenuation
@@ -170,7 +172,7 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    const targetScale = !isConnected ? 0.44 : isSpeaking ? 0.72 : 0.62
+    const targetScale = !isConnected ? 0.62 : isSpeaking ? 1.0 : 0.86
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -183,8 +185,8 @@ function AIOrb({ isConnected, isSpeaking }) {
 
       {/* Two rings (was 3) — enough for depth */}
       <OrbitalRing
-        radius={1.5}
-        tube={0.005}
+        radius={2.1}
+        tube={0.007}
         tilt={Math.PI * 0.1}
         rotSpeed={0.16}
         isConnected={isConnected}
@@ -192,8 +194,8 @@ function AIOrb({ isConnected, isSpeaking }) {
         phase={0}
       />
       <OrbitalRing
-        radius={1.72}
-        tube={0.003}
+        radius={2.42}
+        tube={0.0045}
         tilt={Math.PI * 0.42}
         rotSpeed={-0.1}
         isConnected={isConnected}
