@@ -3096,12 +3096,6 @@ const detectSpokenLang = (text) => {
     'sv-SE': ['och','det','att','en','av','på','är','som','för','den','med','inte',
                'men','tack','hej','ja','nej','bra','var','vad','när','hur','vem'],
 
-    'de-DE': ['ich','du','er','sie','wir','ihr','die','der','das','ein','eine','und',
-               'ist','nicht','den','von','mit','auf','auch','aber','oder','wenn','dann',
-               'wie','was','wer','wo','schon','noch','nur','ja','nein','danke','bitte',
-               'hallo','guten','morgen','abend','haben','sein','werden','kann','will',
-               'muss','sehr','mehr','hier','jetzt','immer','als','bei','nach','über',
-               'sprechen','deutsch','kannst','sprichst'],
 
     'ru-RU': ['и','в','не','на','что','это','по','но','как','да','нет','спасибо','привет'],
 
@@ -4869,7 +4863,7 @@ return (
   <div style={{
     position: 'fixed', inset: 0, zIndex: 999,
     background: 'radial-gradient(ellipse at 50% 30%, #1a1040 0%, #0c0820 40%, #050510 100%)',
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
     animation: 'overlayIn .3s cubic-bezier(.4,0,.2,1)'
   }}>
     <style>{`
@@ -4879,77 +4873,67 @@ return (
       @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
-
-    {/* Sphere + label centered in the space above the controls */}
-    <div style={{
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: '100%',
-      minHeight: 0,
-    }}>
-      <div style={{ position: 'relative', width: 420, height: 420, maxWidth: '80vw', maxHeight: '55vh' }}>
-        <AICore
-          isConnected={callState !== 'idle'}
-          isSpeaking={callState === 'speaking'}
-        />
-      </div>
-
-      {/* State label + dots */}
-      <div style={{
-        marginTop: 32, display: 'flex', alignItems: 'center', gap: 8,
-        animation: 'fadeUp .4s ease'
-      }}>
-        <p style={{
-          color: callState === 'thinking' ? 'rgba(196,181,253,.7)' : 'rgba(255,255,255,.85)',
-          fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif",
-          fontSize: 14, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase',
-          margin: 0, transition: 'color .3s'
-        }}>
-          {callState === 'listening' && 'Listening'}
-          {callState === 'thinking' && 'Thinking'}
-          {callState === 'speaking' && 'Speaking'}
-          {callState === 'idle' && (callPaused ? 'Paused' : 'Connecting')}
-        </p>
-        {callState !== 'idle' && (
-          <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
-            {[0,1,2].map(d => (
-              <span key={d} style={{
-                width: 4, height: 4, borderRadius: '50%',
-                background: 'rgba(196,181,253,.6)',
-                animation: 'dotPulse 1.4s ease-in-out infinite',
-                animationDelay: `${d * 0.2}s`
-              }}/>
-            ))}
-          </span>
-        )}
-      </div>
+ 
+    {/* AICore — Three.js particle sphere + orbital rings (replaces VoiceParticleSphere) */}
+    <div style={{ position: 'relative', width: 620, height: 620 }}>
+      <AICore
+        isConnected={callState !== 'idle'}
+        isSpeaking={callState === 'speaking'}
+      />
     </div>
-
-    {/* Controls — pinned to a fixed distance from the bottom */}
+ 
+    {/* State label + dots */}
     <div style={{
-      display: 'flex', gap: 24, alignItems: 'center',
-      marginBottom: 64,
+      marginTop: 32, display: 'flex', alignItems: 'center', gap: 8,
+      animation: 'fadeUp .4s ease'
+    }}>
+      <p style={{
+        color: callState === 'thinking' ? 'rgba(196,181,253,.7)' : 'rgba(255,255,255,.85)',
+        fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif",
+        fontSize: 14, fontWeight: 500, letterSpacing: '.06em', textTransform: 'uppercase',
+        margin: 0, transition: 'color .3s'
+      }}>
+        {callState === 'listening' && 'Listening'}
+        {callState === 'thinking' && 'Thinking'}
+        {callState === 'speaking' && 'Speaking'}
+        {callState === 'idle' && (callPaused ? 'Paused' : 'Connecting')}
+      </p>
+      {callState !== 'idle' && (
+        <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+          {[0,1,2].map(d => (
+            <span key={d} style={{
+              width: 4, height: 4, borderRadius: '50%',
+              background: 'rgba(196,181,253,.6)',
+              animation: 'dotPulse 1.4s ease-in-out infinite',
+              animationDelay: `${d * 0.2}s`
+            }}/>
+          ))}
+        </span>
+      )}
+    </div>
+ 
+    {/* Controls */}
+    <div style={{
+      display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
       animation: 'fadeUp .5s ease .2s both'
     }}>
       {/* Pause / Resume */}
       <button
-        onClick={() => {
-          if (callPaused) {
-            setCallPaused(false);
-            callActiveRef.current = true;
-            runCallListenLoop();
-          } else {
-            setCallPaused(true);
-            callActiveRef.current = false;
-            try { callRecogRef.current?.stop(); } catch(_) {}
-            if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
-            stopCallPlayback();
-            setCallState('idle');
-          }
-        }}
+       onClick={() => {
+  if (callPaused) {
+    setCallPaused(false);
+    callActiveRef.current = true;
+    runCallListenLoop();
+  } else {
+    setCallPaused(true);
+    callActiveRef.current = false;
+    try { callRecogRef.current?.stop(); } catch(_) {}
+    if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+    stopCallPlayback();
+    setCallState('idle');
+  }
+}}
+   
         style={{
           width: 58, height: 58, borderRadius: '50%',
           background: 'rgba(255,255,255,.08)',
@@ -4966,7 +4950,7 @@ return (
           : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
         }
       </button>
-
+ 
       {/* End call */}
       <button
         onClick={endVoiceCall}
@@ -4983,14 +4967,14 @@ return (
       >
         <X size={28} color="white"/>
       </button>
-
+ 
       {/* Spacer for balance */}
       <div style={{ width: 58, height: 58 }}/>
     </div>
-
+ 
     {/* Hint */}
     <p style={{
-      marginBottom: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
+      marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
       fontFamily: "'Inter',system-ui,sans-serif", letterSpacing: '.04em',
       animation: 'fadeUp .5s ease .3s both'
     }}>
