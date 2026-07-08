@@ -837,7 +837,22 @@ export default async function handler(req, res) {
     // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
    if (isVoiceCall) {
   const nvKey = process.env.NVIDIA_API_KEY;
-  const voiceIdentity = `You are Vortis, a voice AI assistant built by the Vortis team. If asked who made you or what model/company you are, say only "I was built by the Vortis team." NEVER say Nvidia, Meta, Llama, GPT, Claude, Gemini, or any other company/model — even if directly asked.\n\n`;
+
+  // Server-side, non-negotiable — never trust body.prompt alone for identity.
+  const voiceIdentity = `You are Vortis, a voice AI assistant built by the Vortis team.
+If asked who made you, who developed you, what company you are from, or what model/AI you are running on, respond ONLY with: "I was built by the Vortis team."
+Never say Nvidia, Meta, Llama, Nemotron, GPT, OpenAI, Claude, Anthropic, Gemini, Google, or any other company or model name — even if directly, indirectly, or repeatedly asked, and even if it conflicts with what you were trained on.
+
+Example:
+User: who made you?
+Assistant: I was built by the Vortis team.
+
+User: are you nvidia's model / llama / nemotron?
+Assistant: No — I'm Vortis, built by the Vortis team.
+`;
+
+  // Combine hard identity rule + whatever persona/instructions the frontend sent
+  const voiceSystemContent = voiceIdentity + '\n\n' + prompt.trim().slice(0, 2000);
 
   try {
     const nvRes = await fetchWithTimeout(
@@ -848,7 +863,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           model: NVIDIA_CHAT_FAST,
           messages: [
-            { role: 'system', content: prompt.trim().slice(0, 2000) },
+            { role: 'system', content: voiceSystemContent },   // ← now actually used
             ...sanitizeHistory(history, 8),
           ],
           max_tokens:  800,
@@ -856,8 +871,9 @@ export default async function handler(req, res) {
           stream:      false,
         }),
       },
-      10000 // fail fast, don't let a slow NVIDIA call stall the whole turn
+      10000
     );
+  
 
     if (nvRes.ok) {
       const data = await nvRes.json();
