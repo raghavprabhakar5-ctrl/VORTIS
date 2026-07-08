@@ -2,15 +2,33 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 
-const IDLE_COLOR  = new THREE.Color('#818cf8')
-const ACTIVE_COLOR = new THREE.Color('#c084fc')
-const _blendColor = new THREE.Color()
-const _scaleVec = new THREE.Vector3()
+const IDLE_COLOR   = new THREE.Color('#818cf8')
+const ACTIVE_COLOR  = new THREE.Color('#c084fc')
+const _blendColor   = new THREE.Color()
+const _scaleVec     = new THREE.Vector3()
+
+// ── Soft circular sprite so points render as smooth glowing dots
+//    instead of hard-edged squares ──
+const _dotTexture = (() => {
+  const size = 64
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const ctx = canvas.getContext('2d')
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  grad.addColorStop(0, 'rgba(255,255,255,1)')
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.9)')
+  grad.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.needsUpdate = true
+  return tex
+})()
 
 function ParticleShell({ isConnected, isSpeaking }) {
   const ref = useRef(null)
   const volRef = useRef(0)
-  const COUNT = 2500 
+  const COUNT = 2500
 
   const { positions, original, seeds } = useMemo(() => {
     const pos = new Float32Array(COUNT * 3)
@@ -73,7 +91,9 @@ function ParticleShell({ isConnected, isSpeaking }) {
         const phase = seeds[i * 2]
         const weight = seeds[i * 2 + 1]
 
-        const wave = Math.sin(t * 7 + phase) * vol * weight * 0.2
+        // Reduced from 0.2 -> 0.11 so peak-volume displacement never
+        // pushes particles outside the camera's visible frustum
+        const wave = Math.sin(t * 7 + phase) * vol * weight * 0.11
 
         const ox = original[ix]
         const oy = original[ix + 1]
@@ -98,11 +118,12 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.05}                     
+        size={0.055}
+        map={_dotTexture}
         transparent
         opacity={0.8}
         sizeAttenuation={true}
-        blending={THREE.AdditiveBlending} 
+        blending={THREE.AdditiveBlending}
         depthWrite={false}
         vertexColors={false}
         color={IDLE_COLOR}
@@ -117,8 +138,9 @@ function AIOrb({ isConnected, isSpeaking }) {
   useFrame((_, delta) => {
     if (!groupRef.current) return
 
-    // 💡 ADJUSTED SCALES: Lowered slightly so it stays perfectly circular inside the container bounds
-    const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.3 : 1.15
+    // Kept within the camera's visible frustum (fov=45, z=4.2) at all
+    // three states so nothing clips, even at peak speaking volume
+    const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.2 : 1.1
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -136,14 +158,16 @@ export default function AICore({
   isSpeaking = false
 }) {
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      pointerEvents: 'none'
-    }}>
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        pointerEvents: 'none'
+      }}
+    >
       <Canvas
         style={{ width: '100%', height: '100%' }}
         camera={{ position: [0, 0, 4.2], fov: 45 }}
@@ -154,7 +178,7 @@ export default function AICore({
           stencil: false,
           powerPreference: 'high-performance'
         }}
-        dpr={[1, 2]} 
+        dpr={[1, 2]}
         frameloop="always"
       >
         <AIOrb isConnected={isConnected} isSpeaking={isSpeaking} />
