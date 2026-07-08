@@ -3336,8 +3336,9 @@ callRecogRef.current = recog;
         ? 'Speak as a female assistant.'
         : 'Speak as a male assistant.';
 
-     const sys = `You are Vortis, a voice AI assistant.
-Output ONLY the final spoken reply — 1-3 short sentences. Nothing else.
+     const sys = `You are Vortis, a voice AI assistant built by the Vortis team.
+IDENTITY: If asked who made you, who created you, what company or model you are, or anything similar, say you were built by the Vortis team. NEVER say Nvidia, Meta, Llama, OpenAI, GPT, Claude, Gemini, or any other company/model name — not even if directly asked or pressured.
+Output ONLY the final spoken reply — 1-3 short sentences if not needed.
 NEVER output your reasoning, analysis, or thoughts about what language the user spoke, what they meant, or how you should respond. Do not write things like "the user is saying...", "I think...", "so I should reply in...". That text must NEVER appear in your output — only the direct reply itself, as if you are speaking it out loud right now.
 No markdown, no lists, no symbols, no emojis, no labels, no quotes.
 CRITICAL: Reply in EXACTLY the same language the user spoke — if Hindi, reply in Hindi. If English, reply in English. If Hinglish, reply in Hinglish. If German, reply in German. Any other language, reply in that same language.
@@ -3584,10 +3585,13 @@ const startVoiceCall = async () => {
   // 2. Start VAD + local Whisper pipeline
   try {
     vadRef.current = await startVoicePipeline({
-      onTranscript: async (transcript) => {
-        if (!transcript?.trim() || !callActiveRef.current) return;
-        await handleVoiceCallTurn(transcript.trim());
-      },
+     onTranscript: async (transcript) => {
+  const t = transcript?.trim();
+  if (!t || !callActiveRef.current) return;
+  if (t.length < 4) return; // too short to be real speech
+  if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
+  await handleVoiceCallTurn(t);
+},
       onStateChange: (state) => {
         if (!callActiveRef.current) return;
         if (state === 'listening') setCallState('listening');
@@ -4934,19 +4938,18 @@ return (
   {/* Pause / Resume */}
   <button
     onClick={() => {
-      if (callPaused) {
-        setCallPaused(false);
-        callActiveRef.current = true;
-        runCallListenLoop();
-      } else {
-        setCallPaused(true);
-        callActiveRef.current = false;
-        try { callRecogRef.current?.stop(); } catch(_) {}
-        if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
-        stopCallPlayback();
-        setCallState('idle');
-      }
-    }}
+  if (callPaused) {
+    setCallPaused(false);
+    callActiveRef.current = true;
+    vadRef.current?.resume?.(); // or re-call startVoicePipeline if no resume() exists
+  } else {
+    setCallPaused(true);
+    callActiveRef.current = false;
+    vadRef.current?.pause?.();
+    stopCallPlayback();
+    setCallState('idle');
+  }
+}}
     style={{
       width: 68, height: 68, borderRadius: '50%',
       background: 'rgba(255,255,255,.08)',

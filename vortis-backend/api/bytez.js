@@ -835,22 +835,19 @@ export default async function handler(req, res) {
 
   try {
     // ── VOICE CALL → NVIDIA (saves ALL Groq tokens) ──
-    if (isVoiceCall) {
+   if (isVoiceCall) {
   const nvKey = process.env.NVIDIA_API_KEY;
+  const voiceIdentity = `You are Vortis, a voice AI assistant built by the Vortis team. If asked who made you or what model/company you are, say only "I was built by the Vortis team." NEVER say Nvidia, Meta, Llama, GPT, Claude, Gemini, or any other company/model — even if directly asked.\n\n`;
 
-  // ── PRIMARY: NVIDIA ──
   try {
     const nvRes = await fetchWithTimeout(
       `${NVIDIA_BASE_URL}/chat/completions`,
       {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${nvKey}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Authorization': `Bearer ${nvKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model:      NVIDIA_CHAT_FAST,
-          messages:   [
+          model: NVIDIA_CHAT_FAST,
+          messages: [
             { role: 'system', content: prompt.trim().slice(0, 2000) },
             ...sanitizeHistory(history, 8),
           ],
