@@ -4959,8 +4959,8 @@ return (
     title={callPaused ? 'Resume' : 'Pause'}
   >
     {callPaused
-      ? <Play size={24} color="white" fill="white" style={{ marginLeft: 2 }}/>
-      : <Pause size={24} color="white" fill="white"/>
+      ? <Play size={20} color="white" fill="white" style={{ marginLeft: 2 }}/>
+      : <Pause size={20} color="white" fill="white"/>
     }
   </button>
 

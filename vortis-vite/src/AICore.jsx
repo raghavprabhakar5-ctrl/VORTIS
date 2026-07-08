@@ -15,12 +15,12 @@ const _dotTexture = (() => {
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = size
   const ctx = canvas.getContext('2d')
- const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-grad.addColorStop(0,    'rgba(255,255,255,0.9)')
-grad.addColorStop(0.25, 'rgba(255,255,255,0.55)') // soft, blurred core
-grad.addColorStop(0.5,  'rgba(255,255,255,0.28)') // gradual falloff
-grad.addColorStop(0.75, 'rgba(255,255,255,0.1)')  // wide soft halo
-grad.addColorStop(1,    'rgba(255,255,255,0)')
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  grad.addColorStop(0,    'rgba(255,255,255,1)')
+  grad.addColorStop(0.18, 'rgba(255,255,255,1)')   // solid, sharp core
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)') // quick falloff
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.12)') // thin glow halo
+  grad.addColorStop(1,    'rgba(255,255,255,0)')
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, size, size)
   const tex = new THREE.CanvasTexture(canvas)
@@ -121,7 +121,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.08}
+        size={0.062}
         map={_dotTexture}
         transparent
         opacity={0.85}
