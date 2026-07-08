@@ -7,21 +7,26 @@ const ACTIVE_COLOR  = new THREE.Color('#c084fc')
 const _blendColor   = new THREE.Color()
 const _scaleVec     = new THREE.Vector3()
 
-// ── Soft circular sprite so points render as smooth glowing dots
-//    instead of hard-edged squares ──
+// ── Sharp dot sprite: solid bright core with a tight, controlled
+//    falloff — reads as a crisp point with a hint of glow instead
+//    of a soft, uniformly blurred puff ──
 const _dotTexture = (() => {
-  const size = 64
+  const size = 128
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = size
   const ctx = canvas.getContext('2d')
   const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-  grad.addColorStop(0, 'rgba(255,255,255,1)')
-  grad.addColorStop(0.4, 'rgba(255,255,255,0.9)')
-  grad.addColorStop(1, 'rgba(255,255,255,0)')
+  grad.addColorStop(0,    'rgba(255,255,255,1)')
+  grad.addColorStop(0.18, 'rgba(255,255,255,1)')   // solid, sharp core
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.55)') // quick falloff
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.12)') // thin glow halo
+  grad.addColorStop(1,    'rgba(255,255,255,0)')
   ctx.fillStyle = grad
   ctx.fillRect(0, 0, size, size)
   const tex = new THREE.CanvasTexture(canvas)
   tex.needsUpdate = true
+  tex.minFilter = THREE.LinearFilter
+  tex.magFilter = THREE.LinearFilter
   return tex
 })()
 
@@ -81,7 +86,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
 
     _blendColor.lerpColors(IDLE_COLOR, ACTIVE_COLOR, Math.min(vol * 2, 1))
     mat.color.copy(_blendColor)
-    const targetOp = isConnected ? 0.90 + vol * 0.1 : 0.5
+    const targetOp = isConnected ? 0.95 + vol * 0.05 : 0.6
     mat.opacity += (targetOp - mat.opacity) * 0.07
 
     if (vol > 0.002) {
@@ -91,8 +96,6 @@ function ParticleShell({ isConnected, isSpeaking }) {
         const phase = seeds[i * 2]
         const weight = seeds[i * 2 + 1]
 
-        // Reduced from 0.2 -> 0.11 so peak-volume displacement never
-        // pushes particles outside the camera's visible frustum
         const wave = Math.sin(t * 7 + phase) * vol * weight * 0.11
 
         const ox = original[ix]
@@ -118,10 +121,10 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.055}
+        size={0.045}
         map={_dotTexture}
         transparent
-        opacity={0.8}
+        opacity={0.85}
         sizeAttenuation={true}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
@@ -137,9 +140,6 @@ function AIOrb({ isConnected, isSpeaking }) {
 
   useFrame((_, delta) => {
     if (!groupRef.current) return
-
-    // Kept within the camera's visible frustum (fov=45, z=4.2) at all
-    // three states so nothing clips, even at peak speaking volume
     const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.2 : 1.1
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
@@ -169,7 +169,15 @@ export default function AICore({
       }}
     >
       <Canvas
-        style={{ width: '100%', height: '100%' }}
+        style={{
+          width: '100%',
+          height: '100%',
+          // subtle outer glow so the sphere reads as luminous
+          // rather than adding blur to the points themselves
+          filter: isSpeaking
+            ? 'drop-shadow(0 0 22px rgba(192,132,252,0.55)) drop-shadow(0 0 8px rgba(192,132,252,0.4))'
+            : 'drop-shadow(0 0 14px rgba(129,140,248,0.35))'
+        }}
         camera={{ position: [0, 0, 4.2], fov: 45 }}
         gl={{
           antialias: true,

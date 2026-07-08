@@ -25,7 +25,7 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem, PhoneOff
+  Gem, PhoneOff, Play, Pause   
 } from 'lucide-react';
 
 
@@ -4927,7 +4927,8 @@ return (
  
     {/* Controls */}
     <div style={{
-      display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
+      display: 'flex', gap: 28, marginTop: 48, alignItems: 'center',
+      justifyContent: 'center',
       animation: 'fadeUp .5s ease .2s both'
     }}>
       {/* Pause / Resume */}
@@ -4959,8 +4960,8 @@ return (
         title={callPaused ? 'Resume' : 'Pause'}
       >
         {callPaused
-          ? <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><polygon points="6,3 20,12 6,21"/></svg>
-          : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
+          ? <Play size={22} color="white" fill="white" style={{ marginLeft: 2 }}/>
+          : <Pause size={22} color="white" fill="white"/>
         }
       </button>
  
@@ -4978,11 +4979,8 @@ return (
         }}
         title="End call"
       >
-        <X size={28} color="white"/>
+        <PhoneOff size={26} color="white"/>
       </button>
- 
-      {/* Spacer for balance */}
-      <div style={{ width: 58, height: 58 }}/>
     </div>
  
     {/* Hint */}
