@@ -4926,63 +4926,63 @@ return (
     </div>
  
     {/* Controls */}
-    <div style={{
-      display: 'flex', gap: 28, marginTop: 48, alignItems: 'center',
-      justifyContent: 'center',
-      animation: 'fadeUp .5s ease .2s both'
-    }}>
-      {/* Pause / Resume */}
-      <button
-       onClick={() => {
-  if (callPaused) {
-    setCallPaused(false);
-    callActiveRef.current = true;
-    runCallListenLoop();
-  } else {
-    setCallPaused(true);
-    callActiveRef.current = false;
-    try { callRecogRef.current?.stop(); } catch(_) {}
-    if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
-    stopCallPlayback();
-    setCallState('idle');
-  }
-}}
-   
-        style={{
-          width: 58, height: 58, borderRadius: '50%',
-          background: 'rgba(255,255,255,.08)',
-          border: '1.5px solid rgba(255,255,255,.18)',
-          cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 24px rgba(0,0,0,.25)',
-          transition: 'all .25s cubic-bezier(.4,0,.2,1)'
-        }}
-        title={callPaused ? 'Resume' : 'Pause'}
-      >
-        {callPaused
-          ? <Play size={22} color="white" fill="white" style={{ marginLeft: 2 }}/>
-          : <Pause size={22} color="white" fill="white"/>
-        }
-      </button>
- 
-      {/* End call */}
-      <button
-        onClick={endVoiceCall}
-        style={{
-          width: 68, height: 68, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-          border: 'none', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 8px 30px rgba(239,68,68,.45)',
-          transition: 'all .25s cubic-bezier(.4,0,.2,1)',
-          animation: callState === 'speaking' ? 'endBtnPulse 2s ease-in-out infinite' : 'none'
-        }}
-        title="End call"
-      >
-        <PhoneOff size={26} color="white"/>
-      </button>
-    </div>
- 
+<div style={{
+  display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
+  justifyContent: 'center',
+  animation: 'fadeUp .5s ease .2s both'
+}}>
+  {/* Pause / Resume */}
+  <button
+    onClick={() => {
+      if (callPaused) {
+        setCallPaused(false);
+        callActiveRef.current = true;
+        runCallListenLoop();
+      } else {
+        setCallPaused(true);
+        callActiveRef.current = false;
+        try { callRecogRef.current?.stop(); } catch(_) {}
+        if (callSilenceTORef.current) { clearTimeout(callSilenceTORef.current); callSilenceTORef.current = null; }
+        stopCallPlayback();
+        setCallState('idle');
+      }
+    }}
+    style={{
+      width: 68, height: 68, borderRadius: '50%',
+      background: 'rgba(255,255,255,.08)',
+      border: '1.5px solid rgba(255,255,255,.18)',
+      cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 4px 24px rgba(0,0,0,.25)',
+      transition: 'all .25s cubic-bezier(.4,0,.2,1)'
+    }}
+    title={callPaused ? 'Resume' : 'Pause'}
+  >
+    {callPaused
+      ? <Play size={24} color="white" fill="white" style={{ marginLeft: 2 }}/>
+      : <Pause size={24} color="white" fill="white"/>
+    }
+  </button>
+
+  {/* End call */}
+  <button
+    onClick={endVoiceCall}
+    style={{
+      width: 68, height: 68, borderRadius: '50%',
+      background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+      border: 'none', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 8px 30px rgba(239,68,68,.45)',
+      transition: 'all .25s cubic-bezier(.4,0,.2,1)',
+      animation: callState === 'speaking' ? 'endBtnPulse 2s ease-in-out infinite' : 'none'
+    }}
+    title="End call"
+  >
+    <PhoneOff size={28} color="white"/>
+  </button>
+</div>
+
+
     {/* Hint */}
     <p style={{
       marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',

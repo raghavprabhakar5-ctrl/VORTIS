@@ -121,7 +121,7 @@ function ParticleShell({ isConnected, isSpeaking }) {
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.045}
+        size={0.062}
         map={_dotTexture}
         transparent
         opacity={0.85}
