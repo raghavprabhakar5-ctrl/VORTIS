@@ -4879,8 +4879,8 @@ return (
   top: '35%',                   
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: 900,   // was 700
-  height: 900,  // was 700
+  width: '90vmin',
+  height: '90vmin',
   display: 'flex', 
   alignItems: 'center', 
   justifyContent: 'center',
