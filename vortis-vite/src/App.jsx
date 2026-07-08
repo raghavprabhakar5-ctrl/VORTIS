@@ -4876,11 +4876,11 @@ return (
     {/* AICore Layout Container */}
 <div style={{ 
   position: 'absolute', 
-  top: '35%',                   
+  top: '38%',                   
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: '90vmin',
-  height: '90vmin',
+  width: 700,
+  height: 700,
   display: 'flex', 
   alignItems: 'center', 
   justifyContent: 'center',
