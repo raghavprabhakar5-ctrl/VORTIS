@@ -118,7 +118,7 @@ function AIOrb({ isConnected, isSpeaking }) {
     if (!groupRef.current) return
 
     // 💡 ADJUSTED SCALES: Lowered slightly so it stays perfectly circular inside the container bounds
-    const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.35 : 1.15
+    const targetScale = !isConnected ? 1.0 : isSpeaking ? 1.25 : 1.1 
     _scaleVec.set(targetScale, targetScale, targetScale)
     groupRef.current.scale.lerp(_scaleVec, delta * 3)
     groupRef.current.rotation.y += delta * 0.03
@@ -139,7 +139,7 @@ export default function AICore({
     <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 4.2], fov: 40 }} // 💡 FIXED CAMERA FRAME: Perfectly frames the large sphere without truncation
+        camera={{ position: [0, 0, 4.2], fov: 60 }}
         gl={{
           antialias: true,
           alpha: true,
