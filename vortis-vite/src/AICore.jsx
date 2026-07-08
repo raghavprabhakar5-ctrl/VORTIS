@@ -136,10 +136,17 @@ export default function AICore({
   isSpeaking = false
 }) {
   return (
-    <div className="absolute inset-0 flex items-center justify-center z-0 pointer-events-none">
+    <div style={{
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      pointerEvents: 'none'
+    }}>
       <Canvas
         style={{ width: '100%', height: '100%' }}
-        camera={{ position: [0, 0, 4.2], fov: 60 }}
+        camera={{ position: [0, 0, 4.2], fov: 45 }}
         gl={{
           antialias: true,
           alpha: true,
