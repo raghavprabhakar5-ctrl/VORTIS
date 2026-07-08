@@ -4879,8 +4879,8 @@ return (
   top: '38%',                   
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: 1200,   // this is what actually makes it look bigger on screen
-  height: 1200,
+  width: 800,   // this is what actually makes it look bigger on screen
+  height: 800,
   display: 'flex', 
   alignItems: 'center', 
   justifyContent: 'center',
