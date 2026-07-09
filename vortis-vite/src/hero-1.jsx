@@ -439,120 +439,149 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  SCROLL MANIFESTO — words ignite behind a rainy glass window
+//  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
 // ══════════════════════════════════════════════════════════════════
-const MANIFESTO = [
-  { t: "Most" }, { t: "AI" }, { t: "tools" }, { t: "answer." },
-  { t: "Vortis", hot: true }, { t: "thinks.", hot: true },
-  { t: "It" }, { t: "remembers" }, { t: "your" }, { t: "context," },
-  { t: "searches" }, { t: "the" }, { t: "live" }, { t: "web," },
-  { t: "sees" }, { t: "what" }, { t: "you" }, { t: "see," },
-  { t: "and" }, { t: "builds" }, { t: "what" }, { t: "you" },
-  { t: "imagine.", hot: true },
-];
-
-function ScrollManifesto() {
-  const wrapRef = useRef(null);
-  const [progress, setProgress] = useState(0);
+function NeuralField() {
+  const canvasRef = useRef(null);
+  const [ref, inView] = useInView(0.15);
 
   useEffect(() => {
-    let raf;
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (!wrapRef.current) return;
-        const r = wrapRef.current.getBoundingClientRect();
-        const total = r.height - window.innerHeight;
-        setProgress(Math.min(1, Math.max(0, -r.top / (total || 1))));
-      });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf, W, H;
+    const mouse = { x: -9999, y: -9999 };
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+    const resize = () => {
+      W = canvas.offsetWidth; H = canvas.offsetHeight;
+      canvas.width = W * DPR; canvas.height = H * DPR;
+      ctx.scale(DPR, DPR);
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
+    resize();
+    window.addEventListener("resize", resize);
+
+    // Particles
+    const N = 70;
+    const pts = Array.from({ length: N }, () => ({
+      x: Math.random() * 1600, y: Math.random() * 500,
+      vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
+      r: Math.random() * 1.8 + 0.8,
+      hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
+    }));
+
+    const onMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+    };
+    const onLeave = () => { mouse.x = -9999; mouse.y = -9999; };
+    canvas.addEventListener("mousemove", onMove);
+    canvas.addEventListener("mouseleave", onLeave);
+
+    const LINK_DIST = 130;
+    const MOUSE_DIST = 180;
+
+    const tick = () => {
+      ctx.clearRect(0, 0, W, H);
+
+      for (const p of pts) {
+        // Gentle drift
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+
+        // Pull softly toward cursor
+        const dx = mouse.x - p.x, dy = mouse.y - p.y;
+        const md = Math.hypot(dx, dy);
+        if (md < MOUSE_DIST) {
+          p.x += dx * 0.012;
+          p.y += dy * 0.012;
+        }
+      }
+
+      // Links between close particles
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const a = pts[i], b = pts[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < LINK_DIST) {
+            // Lines near the mouse glow brighter
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+            const mdist = Math.hypot(mouse.x - mx, mouse.y - my);
+            const boost = mdist < MOUSE_DIST ? (1 - mdist / MOUSE_DIST) * 0.5 : 0;
+            const alpha = (1 - d / LINK_DIST) * 0.22 + boost;
+            ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
+            ctx.lineWidth = boost > 0.1 ? 1.2 : 0.6;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Links from cursor to nearby particles
+      for (const p of pts) {
+        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
+        if (d < MOUSE_DIST) {
+          ctx.strokeStyle = `rgba(6,182,212,${(1 - d / MOUSE_DIST) * 0.5})`;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        }
+      }
+
+      // Particles on top
+      for (const p of pts) {
+        ctx.fillStyle = `rgba(${p.hue},0.9)`;
+        ctx.shadowColor = `rgba(${p.hue},0.8)`;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      canvas.removeEventListener("mousemove", onMove);
+      canvas.removeEventListener("mouseleave", onLeave);
+    };
   }, []);
 
   return (
-    <section ref={wrapRef} style={{ height: "200vh", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-      <style>{`
-        @keyframes dropSlide{
-          0%{transform:translateY(-10px) translateX(0) scaleY(1);opacity:0}
-          8%{opacity:.9}
-          45%{transform:translateY(38vh) translateX(6px) scaleY(1.6)}
-          100%{transform:translateY(105vh) translateX(-4px) scaleY(1.3);opacity:0}
-        }
-        @keyframes dropSit{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.85;transform:scale(1.15)}}
-      `}</style>
+    <section ref={ref} style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}>
+      <div style={{ position: "relative", height: 480, maxWidth: 1300, margin: "0 auto" }}>
+        <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }} />
 
-      <div style={{ position: "sticky", top: 0, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-        {/* Ambient glow intensifies with progress */}
+        {/* Centered copy floating over the field */}
         <div style={{
-          position: "absolute", width: 800, height: 800, borderRadius: "50%",
-          background: `radial-gradient(circle, rgba(124,58,237,${0.04 + progress * 0.08}), transparent 65%)`,
-          filter: "blur(60px)", transition: "background .3s ease",
-        }} />
-
-        {/* ── Rain on glass ── */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(115deg, rgba(255,255,255,0.025) 0%, transparent 35%, rgba(255,255,255,0.015) 70%)", backdropFilter: "blur(1.5px)" }} />
-          {Array.from({ length: 16 }, (_, i) => ({
-            left: (i * 6.3 + (i % 3) * 2.1) % 98,
-            dur: 5 + (i % 5) * 1.6,
-            delay: (i * 0.9) % 8,
-            size: 3 + (i % 3) * 2,
-          })).map((d, i) => (
-            <div key={`s${i}`} style={{
-              position: "absolute", left: `${d.left}%`, top: 0,
-              width: d.size, height: d.size * 2.4, borderRadius: "45% 45% 60% 60%",
-              background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(168,85,247,.25) 55%, rgba(6,182,212,.15))",
-              boxShadow: "0 0 6px rgba(168,85,247,.25)",
-              animation: `dropSlide ${d.dur}s ${d.delay}s linear infinite`,
-            }} />
-          ))}
-          {Array.from({ length: 26 }, (_, i) => ({
-            left: (i * 11.7 + (i % 7) * 3) % 97,
-            top: (i * 17.3 + (i % 5) * 7) % 95,
-            size: 2 + (i % 4) * 1.5,
-            dur: 3 + (i % 4),
-            delay: (i * 0.55) % 4,
-          })).map((d, i) => (
-            <div key={`c${i}`} style={{
-              position: "absolute", left: `${d.left}%`, top: `${d.top}%`,
-              width: d.size, height: d.size, borderRadius: "50%",
-              background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,.5), rgba(139,92,246,.2))",
-              animation: `dropSit ${d.dur}s ${d.delay}s ease-in-out infinite`,
-            }} />
-          ))}
-        </div>
-
-        {/* Igniting words */}
-        <p style={{
-          maxWidth: 900, padding: "0 40px", margin: 0, textAlign: "center",
-          fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800,
-          fontSize: "clamp(28px,4.6vw,54px)", lineHeight: 1.35, letterSpacing: "-0.02em",
-          position: "relative",
+          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", pointerEvents: "none",
+          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
+          transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
         }}>
-          {MANIFESTO.map((w, i) => {
-            const start = i / MANIFESTO.length;
-            const lit = Math.min(1, Math.max(0, (progress - start * 0.85) * 8));
-            return (
-              <span key={i} style={{
-                display: "inline-block", marginRight: "0.35em",
-                color: w.hot ? "transparent" : `rgba(255,255,255,${0.12 + lit * 0.88})`,
-                background: w.hot ? "linear-gradient(90deg,#a855f7,#06B6D4)" : "none",
-                WebkitBackgroundClip: w.hot ? "text" : undefined,
-                opacity: w.hot ? 0.15 + lit * 0.85 : 1,
-                transform: `translateY(${(1 - lit) * 14}px)`,
-                filter: `blur(${(1 - lit) * 4}px)`,
-                textShadow: w.hot && lit > 0.9 ? "0 0 40px rgba(168,85,247,0.45)" : "none",
-                transition: "color .15s linear, opacity .15s linear, transform .2s ease-out, filter .2s ease-out",
-              }}>{w.t}</span>
-            );
-          })}
-        </p>
-
-        {/* Progress hint */}
-        <div style={{ position: "absolute", bottom: 40, left: "50%", transform: "translateX(-50%)", width: 120, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#7C3AED,#06b6d4)", borderRadius: 2 }} />
+          <h2 style={{
+            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
+            fontSize: "clamp(30px,5vw,58px)", margin: "0 0 14px", letterSpacing: "-0.03em",
+            textAlign: "center", textShadow: "0 0 60px rgba(3,3,10,0.9)",
+          }}>
+            One mind.{" "}
+            <span style={{ background: "linear-gradient(90deg,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+              A billion connections.
+            </span>
+          </h2>
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.45)", margin: 0, textAlign: "center", maxWidth: 460, lineHeight: 1.7, textShadow: "0 0 30px rgba(3,3,10,0.9)" }}>
+            Move your cursor through the network — this is how Vortis connects your world.
+          </p>
         </div>
       </div>
     </section>
@@ -2566,7 +2595,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         </div>
         <Logos />
         <BentoGrid />
-        <ScrollManifesto /> 
+        <NeuralField /> 
         <HowItWorks />
         <Showcase />
         <DashboardPreview /> 
