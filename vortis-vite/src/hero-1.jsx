@@ -14,7 +14,7 @@ import {
 const STYLES = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-html{scroll-behavior:smooth;overflow-x:hidden}
+html{scroll-behavior:smooth;overflow-x:clip}
 body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 
 @keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(80px,-60px) scale(1.2)}66%{transform:translate(-30px,70px) scale(.9)}}
@@ -474,7 +474,7 @@ function ScrollManifesto() {
 
   return (
     // Tall wrapper creates the scroll distance; inner block stays pinned
-    <section ref={wrapRef} style={{ height: "280vh", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+    <section ref={wrapRef} style={{ height: "200vh", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
       <div style={{
         position: "sticky", top: 0, height: "100vh",
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -1289,149 +1289,159 @@ function Logos() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  FEATURES — CINEMATIC HORIZONTAL GALLERY (drop-in for BentoGrid)
-//  Pins fullscreen; vertical scroll drives horizontal glide
+//  FEATURES — LIVE TILES (drop-in for BentoGrid)
+//  Every card contains a perpetual micro-animation
 // ══════════════════════════════════════════════════════════════════
-const GALLERY_FEATURES = [
-  { icon: Globe, color: "6,182,212", num: "01", title: "Live Web Search", desc: "Real-time results from across the internet with source attribution and smart summarization.", tag: "SEARCH ENGINE INSIDE" },
-  { icon: ImageIcon, color: "168,85,247", num: "02", title: "Image Generation", desc: "Create stunning visuals in any style — photorealistic, anime, oil painting, cyberpunk.", tag: "TEXT TO MASTERPIECE" },
-  { icon: Code2, color: "124,58,237", num: "03", title: "Code Mastery", desc: "Write, debug, explain, and refactor across all languages with principal-level quality.", tag: "SHIP FASTER" },
-  { icon: Eye, color: "99,102,241", num: "04", title: "Vision AI", desc: "Analyze images, read text, extract data — your eyes for any visual content.", tag: "SEE EVERYTHING" },
-  { icon: Brain, color: "168,85,247", num: "05", title: "Persistent Memory", desc: "Vortis remembers your preferences, projects, and context across every conversation.", tag: "NEVER REPEAT YOURSELF" },
-  { icon: Microscope, color: "6,182,212", num: "06", title: "Deep Research", desc: "Autonomous agents synthesize 50+ sources into comprehensive reports in minutes.", tag: "A TEAM ON DEMAND" },
-  { icon: FileText, color: "124,58,237", num: "07", title: "Document Analysis", desc: "Chat with PDFs, CSVs, Word docs — extract insights from any file instantly.", tag: "TALK TO YOUR FILES" },
-];
-
 function BentoGrid() {
-  const wrapRef = useRef(null);
-  const trackRef = useRef(null);
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    let raf;
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (!wrapRef.current) return;
-        const r = wrapRef.current.getBoundingClientRect();
-        const total = r.height - window.innerHeight;
-        setProgress(Math.min(1, Math.max(0, -r.top / (total || 1))));
-      });
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => { window.removeEventListener("scroll", onScroll); cancelAnimationFrame(raf); };
-  }, []);
-
-  // How far the track slides: total width minus one viewport
-  const slide = trackRef.current
-    ? Math.max(0, trackRef.current.scrollWidth - window.innerWidth)
-    : 0;
-
-  const tilt = (e) => {
-    const el = e.currentTarget;
-    const r = el.getBoundingClientRect();
-    const dx = (e.clientX - r.left - r.width / 2) / (r.width / 2);
-    const dy = (e.clientY - r.top - r.height / 2) / (r.height / 2);
-    el.style.transform = `perspective(900px) rotateX(${dy * -6}deg) rotateY(${dx * 8}deg) translateY(-6px)`;
-  };
-  const untilt = (e) => { e.currentTarget.style.transform = "perspective(900px) rotateX(0) rotateY(0) translateY(0)"; };
+  const [ref, inView] = useInView(0.08);
 
   return (
-    // Tall wrapper = scroll runway. 350vh ≈ comfortable glide speed
-    <section ref={wrapRef} style={{ height: "350vh", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-      <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+    <section ref={ref} style={{ padding: "90px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
+      <style>{`
+        @keyframes tileIn{0%{opacity:0;transform:translateY(36px) scale(.95)}60%{opacity:1;transform:translateY(-5px) scale(1.01)}100%{opacity:1;transform:translateY(0) scale(1)}}
+        @keyframes radarSweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+        @keyframes blipPop{0%,70%,100%{opacity:0;transform:scale(.4)}75%,90%{opacity:1;transform:scale(1)}}
+        @keyframes typeBar{0%{width:0}60%{width:var(--w)}100%{width:var(--w)}}
+        @keyframes caretB{0%,100%{opacity:1}50%{opacity:0}}
+        @keyframes scanY{0%,100%{top:8%}50%{top:88%}}
+        @keyframes boxBlink{0%,60%,100%{opacity:0}70%,90%{opacity:1}}
+        @keyframes blobMorph{0%,100%{border-radius:58% 42% 40% 60%/55% 48% 52% 45%;transform:rotate(0) scale(1)}33%{border-radius:40% 60% 55% 45%/45% 55% 45% 55%;transform:rotate(8deg) scale(1.08)}66%{border-radius:52% 48% 62% 38%/40% 60% 40% 60%;transform:rotate(-6deg) scale(.94)}}
+        @keyframes nodePulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.5);opacity:1}}
+        @keyframes linkGlow{0%,100%{opacity:.15}50%{opacity:.6}}
+        @keyframes barFill{0%{transform:scaleX(0)}55%{transform:scaleX(1)}85%{transform:scaleX(1)}100%{transform:scaleX(0)}}
+        .lt-card{transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease}
+        .lt-card:hover{transform:translateY(-6px)}
+        @media(max-width:900px){.lt-grid{grid-template-columns:1fr!important}}
+      `}</style>
 
-        {/* Header stays pinned top-left */}
-        <div style={{ position: "absolute", top: 70, left: "max(40px, 6vw)", zIndex: 3 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 14 }}>
-            <Sparkles size={11} color="#a855f7" />
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Capabilities</span>
-          </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(26px,3.6vw,42px)", margin: 0, letterSpacing: "-0.03em" }}>
-            One platform.{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Infinite capability.</span>
-          </h2>
+      <div style={{ textAlign: "center", marginBottom: 56 }}>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity .6s ease" }}>
+          <Sparkles size={11} color="#a855f7" />
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Everything you need</span>
         </div>
+        <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all .8s .1s ease" }}>
+          It's not static.{" "}
+          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>It's alive.</span>
+        </h2>
+      </div>
 
-        {/* The gliding track */}
-        <div ref={trackRef} style={{
-          display: "flex", gap: 28, alignItems: "center",
-          padding: "0 max(40px, 6vw)", width: "max-content",
-          transform: `translateX(${-progress * slide}px)`,
-          willChange: "transform", marginTop: 60,
-        }}>
-          {GALLERY_FEATURES.map((f, i) => {
-            const Icon = f.icon;
-            // Each card's own reveal window as it approaches center
-            const cardP = Math.min(1, Math.max(0, progress * GALLERY_FEATURES.length - i + 0.9));
-            return (
-              <div key={f.num}
-                onMouseMove={tilt} onMouseLeave={untilt}
-                style={{
-                  width: "min(560px, 78vw)", height: "min(420px, 56vh)", flexShrink: 0,
-                  borderRadius: 28, padding: "44px 48px", position: "relative", overflow: "hidden",
-                  background: "linear-gradient(160deg, rgba(255,255,255,0.05), rgba(255,255,255,0.015))",
-                  border: `1px solid rgba(${f.color},0.25)`,
-                  boxShadow: `0 40px 90px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08)`,
-                  backdropFilter: "blur(10px)",
-                  opacity: 0.35 + cardP * 0.65,
-                  scale: `${0.92 + cardP * 0.08}`,
-                  transition: "transform .25s ease-out, opacity .3s, scale .3s",
-                  display: "flex", flexDirection: "column", justifyContent: "flex-end",
-                }}>
-                {/* Ghost number — huge, behind everything, drifts with parallax */}
-                <span style={{
-                  position: "absolute", top: -30, right: 10,
-                  fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
-                  fontSize: 220, lineHeight: 1, color: `rgba(${f.color},0.10)`,
-                  transform: `translateX(${(1 - cardP) * 60}px)`,
-                  transition: "transform .3s ease-out", userSelect: "none",
-                }}>{f.num}</span>
-
-                {/* Corner glow */}
-                <div style={{ position: "absolute", top: -80, left: -80, width: 260, height: 260, borderRadius: "50%", background: `radial-gradient(circle, rgba(${f.color},0.22), transparent 70%)`, filter: "blur(30px)" }} />
-
-                {/* Icon chip */}
-                <div style={{
-                  position: "absolute", top: 40, left: 48,
-                  width: 58, height: 58, borderRadius: 16,
-                  background: `rgba(${f.color},0.15)`, border: `1px solid rgba(${f.color},0.4)`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  boxShadow: `0 0 34px rgba(${f.color},0.3)`,
-                  transform: `translateY(${(1 - cardP) * 24}px)`,
-                  transition: "transform .35s ease-out",
-                }}>
-                  <Icon size={26} style={{ color: `rgb(${f.color})` }} />
-                </div>
-
-                {/* Copy */}
-                <div style={{ position: "relative" }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.18em", color: `rgb(${f.color})`, fontFamily: "'JetBrains Mono',monospace", marginBottom: 12 }}>{f.tag}</div>
-                  <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 32, margin: "0 0 12px", color: "#fff", letterSpacing: "-0.02em" }}>{f.title}</h3>
-                  <p style={{ fontSize: 15, color: "rgba(255,255,255,0.5)", lineHeight: 1.7, margin: 0, maxWidth: 400 }}>{f.desc}</p>
-                </div>
+      <div className="lt-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+        {[
+          // ── 1. WEB SEARCH: radar sweep with popping blips ──
+          {
+            color: "6,182,212", icon: Globe, title: "Live Web Search",
+            desc: "Real-time results from across the internet, with sources.",
+            visual: (
+              <div style={{ position: "relative", width: 110, height: 110, margin: "0 auto" }}>
+                {[110, 78, 46].map(s => (
+                  <div key={s} style={{ position: "absolute", top: "50%", left: "50%", width: s, height: s, marginLeft: -s / 2, marginTop: -s / 2, borderRadius: "50%", border: "1px solid rgba(6,182,212,0.25)" }} />
+                ))}
+                <div style={{ position: "absolute", inset: 0, borderRadius: "50%", animation: "radarSweep 3s linear infinite", background: "conic-gradient(from 0deg, rgba(6,182,212,0.5), transparent 70deg)" }} />
+                {[[20, 30], [72, 22], [60, 74], [30, 62]].map(([x, y], i) => (
+                  <div key={i} style={{ position: "absolute", left: x, top: y, width: 6, height: 6, borderRadius: "50%", background: "#06b6d4", boxShadow: "0 0 10px #06b6d4", animation: `blipPop 3s ${i * 0.75}s linear infinite` }} />
+                ))}
               </div>
-            );
-          })}
-
-          {/* End cap — invites continuing */}
-          <div style={{ width: 320, flexShrink: 0, textAlign: "center" }}>
-            <div style={{ fontSize: 44, marginBottom: 12 }}>✦</div>
-            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 22, color: "#fff" }}>And it's all yours.</div>
-            <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.35)", marginTop: 6 }}>Keep scrolling ↓</div>
-          </div>
-        </div>
-
-        {/* Progress rail bottom */}
-        <div style={{ position: "absolute", bottom: 46, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 14 }}>
-          <span style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "rgba(255,255,255,0.3)" }}>
-            {String(Math.min(GALLERY_FEATURES.length, Math.floor(progress * GALLERY_FEATURES.length) + 1)).padStart(2, "0")} / {String(GALLERY_FEATURES.length).padStart(2, "0")}
-          </span>
-          <div style={{ width: 160, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#7C3AED,#06b6d4)", borderRadius: 2 }} />
-          </div>
-        </div>
+            ),
+          },
+          // ── 2. CODE: lines typing themselves forever ──
+          {
+            color: "124,58,237", icon: Code2, title: "Code Mastery",
+            desc: "Writes, debugs and refactors like a principal engineer.",
+            visual: (
+              <div style={{ width: "82%", margin: "14px auto 0", fontFamily: "'JetBrains Mono',monospace" }}>
+                {[["78%", "rgba(196,181,253,.8)"], ["55%", "rgba(6,182,212,.7)"], ["88%", "rgba(255,255,255,.4)"], ["42%", "rgba(251,191,36,.7)"]].map(([w, c], i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <span style={{ fontSize: 10, color: "rgba(255,255,255,.2)", width: 12 }}>{i + 1}</span>
+                    <div style={{ "--w": w, height: 7, borderRadius: 4, background: c, animation: `typeBar 4s ${i * 0.5}s ease-in-out infinite`, width: 0 }} />
+                  </div>
+                ))}
+                <span style={{ display: "inline-block", width: 7, height: 13, background: "#a855f7", marginLeft: 20, animation: "caretB .8s step-end infinite" }} />
+              </div>
+            ),
+          },
+          // ── 3. VISION: scan line + detection boxes ──
+          {
+            color: "99,102,241", icon: Eye, title: "Vision AI",
+            desc: "Reads screenshots, photos and charts like you do.",
+            visual: (
+              <div style={{ position: "relative", width: "80%", height: 110, margin: "0 auto", borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(30,17,69,0.6))", border: "1px solid rgba(99,102,241,0.25)", overflow: "hidden" }}>
+                <div style={{ position: "absolute", left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, #818cf8, transparent)", boxShadow: "0 0 14px #6366f1", animation: "scanY 3.2s ease-in-out infinite" }} />
+                {[[12, 16, 34, 24, 0], [58, 52, 40, 30, 1.1], [20, 60, 28, 22, 2.2]].map(([x, y, w, h, d], i) => (
+                  <div key={i} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: w, height: h, border: "1.5px solid rgba(129,140,248,.9)", borderRadius: 4, animation: `boxBlink 3.2s ${d}s linear infinite` }} />
+                ))}
+              </div>
+            ),
+          },
+          // ── 4. IMAGE GEN: morphing gradient blob ──
+          {
+            color: "168,85,247", icon: ImageIcon, title: "Image Generation",
+            desc: "Photorealistic to anime — imagined in seconds.",
+            visual: (
+              <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
+                <div style={{ width: 100, height: 100, background: "linear-gradient(135deg,#a855f7,#7C3AED 45%,#06b6d4)", animation: "blobMorph 7s ease-in-out infinite", boxShadow: "0 0 44px rgba(168,85,247,.4)", filter: "saturate(1.2)" }} />
+              </div>
+            ),
+          },
+          // ── 5. MEMORY: pulsing neural nodes ──
+          {
+            color: "251,191,36", icon: Brain, title: "Persistent Memory",
+            desc: "Knows your projects, style and context — always.",
+            visual: (
+              <div style={{ position: "relative", width: 130, height: 110, margin: "0 auto" }}>
+                <svg width="130" height="110" style={{ position: "absolute" }}>
+                  {[[65, 20, 22, 62], [65, 20, 108, 62], [22, 62, 65, 95], [108, 62, 65, 95], [22, 62, 108, 62]].map(([x1, y1, x2, y2], i) => (
+                    <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(251,191,36,.5)" strokeWidth="1" style={{ animation: `linkGlow 2.6s ${i * 0.4}s ease-in-out infinite` }} />
+                  ))}
+                </svg>
+                {[[65, 20], [22, 62], [108, 62], [65, 95]].map(([x, y], i) => (
+                  <div key={i} style={{ position: "absolute", left: x - 6, top: y - 6, width: 12, height: 12, borderRadius: "50%", background: "#fbbf24", boxShadow: "0 0 12px rgba(251,191,36,.7)", animation: `nodePulse 2.6s ${i * 0.5}s ease-in-out infinite` }} />
+                ))}
+              </div>
+            ),
+          },
+          // ── 6. DEEP RESEARCH: report writing itself ──
+          {
+            color: "6,182,212", icon: Microscope, title: "Deep Research",
+            desc: "50+ sources synthesized into reports in minutes.",
+            visual: (
+              <div style={{ width: "78%", margin: "10px auto 0" }}>
+                {["92%", "70%", "84%", "58%"].map((w, i) => (
+                  <div key={i} style={{ marginBottom: 12 }}>
+                    <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: w, borderRadius: 3, background: "linear-gradient(90deg,#06b6d4,#a855f7)", transformOrigin: "0 50%", animation: `barFill 5s ${i * 0.6}s ease-in-out infinite` }} />
+                    </div>
+                  </div>
+                ))}
+                <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "rgba(6,182,212,.8)" }}>SYNTHESIZING 47 SOURCES…</div>
+              </div>
+            ),
+          },
+        ].map((f, i) => {
+          const Icon = f.icon;
+          return (
+            <div key={f.title} className="lt-card" style={{
+              borderRadius: 20, padding: "26px 26px 30px", minHeight: 300,
+              background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)",
+              position: "relative", overflow: "hidden",
+              animation: inView ? `tileIn .8s ${i * 0.09 + 0.15}s cubic-bezier(.2,.9,.3,1.2) both` : "none",
+              opacity: inView ? undefined : 0,
+            }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${f.color},0.5)`; e.currentTarget.style.boxShadow = `0 24px 60px rgba(${f.color},0.18)`; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.boxShadow = "none"; }}
+            >
+              {/* Living visual */}
+              <div style={{ height: 140, display: "flex", flexDirection: "column", justifyContent: "center", marginBottom: 18 }}>{f.visual}</div>
+              {/* Copy */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <div style={{ width: 32, height: 32, borderRadius: 9, background: `rgba(${f.color},0.15)`, border: `1px solid rgba(${f.color},0.35)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Icon size={15} style={{ color: `rgb(${f.color})` }} />
+                </div>
+                <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17, margin: 0, color: "#fff" }}>{f.title}</h3>
+              </div>
+              <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.45)", lineHeight: 1.65, margin: 0 }}>{f.desc}</p>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
