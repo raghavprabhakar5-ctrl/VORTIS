@@ -1291,13 +1291,11 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         <Logos />
         <SpotlightFeatures />
         <HowItWorks />
-        <Showcase />
         <DashboardPreview />
         <Testimonials />
         <Pricing />
         <FAQ />
         <CTA onLogin={onLogin} />
-        <Footer />
       </main>
     </div>
   );
