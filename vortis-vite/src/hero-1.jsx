@@ -321,76 +321,13 @@ function NeuralField() {
     window.addEventListener("resize", resize);
 
     // Particles
-   const LINK_DIST = 165;
-    const MOUSE_DIST = 210;
-
-    const tick = () => {
-      ctx.clearRect(0, 0, W, H);
-
-      for (const p of pts) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0 || p.y > H) p.vy *= -1;
-
-        const dx = mouse.x - p.x, dy = mouse.y - p.y;
-        const md = Math.hypot(dx, dy);
-        if (md < MOUSE_DIST) {
-          p.x += dx * 0.01;
-          p.y += dy * 0.01;
-        }
-      }
-
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const a = pts[i], b = pts[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < LINK_DIST) {
-            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            const mdist = Math.hypot(mouse.x - mx, mouse.y - my);
-            const boost = mdist < MOUSE_DIST ? (1 - mdist / MOUSE_DIST) * 0.45 : 0;
-            const alpha = Math.pow(1 - d / LINK_DIST, 1.6) * 0.35 + boost;
-            const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-            grad.addColorStop(0, `rgba(${a.hue},${alpha})`);
-            grad.addColorStop(1, `rgba(${b.hue},${alpha})`);
-            ctx.strokeStyle = grad;
-            ctx.lineWidth = boost > 0.08 ? 1.1 : 0.5;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      for (const p of pts) {
-        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
-        if (d < MOUSE_DIST) {
-          ctx.strokeStyle = `rgba(6,182,212,${(1 - d / MOUSE_DIST) * 0.4})`;
-          ctx.lineWidth = 0.7;
-          ctx.beginPath();
-          ctx.moveTo(mouse.x, mouse.y);
-          ctx.lineTo(p.x, p.y);
-          ctx.stroke();
-        }
-      }
-
-      for (const p of pts) {
-        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
-        glow.addColorStop(0, `rgba(${p.hue},0.9)`);
-        glow.addColorStop(1, `rgba(${p.hue},0)`);
-        ctx.fillStyle = glow;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = `rgba(${p.hue},1)`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      raf = requestAnimationFrame(tick);
-    };
+    const N = 70;
+    const pts = Array.from({ length: N }, () => ({
+      x: Math.random() * 1600, y: Math.random() * 500,
+      vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
+      r: Math.random() * 1.8 + 0.8,
+      hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
+    }));
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -401,7 +338,74 @@ function NeuralField() {
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
 
+    const LINK_DIST = 130;
+    const MOUSE_DIST = 180;
 
+    const tick = () => {
+      ctx.clearRect(0, 0, W, H);
+
+      for (const p of pts) {
+        // Gentle drift
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+
+        // Pull softly toward cursor
+        const dx = mouse.x - p.x, dy = mouse.y - p.y;
+        const md = Math.hypot(dx, dy);
+        if (md < MOUSE_DIST) {
+          p.x += dx * 0.012;
+          p.y += dy * 0.012;
+        }
+      }
+
+      // Links between close particles
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const a = pts[i], b = pts[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < LINK_DIST) {
+            // Lines near the mouse glow brighter
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+            const mdist = Math.hypot(mouse.x - mx, mouse.y - my);
+            const boost = mdist < MOUSE_DIST ? (1 - mdist / MOUSE_DIST) * 0.5 : 0;
+            const alpha = (1 - d / LINK_DIST) * 0.22 + boost;
+            ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
+            ctx.lineWidth = boost > 0.1 ? 1.2 : 0.6;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Links from cursor to nearby particles
+      for (const p of pts) {
+        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
+        if (d < MOUSE_DIST) {
+          ctx.strokeStyle = `rgba(6,182,212,${(1 - d / MOUSE_DIST) * 0.5})`;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        }
+      }
+
+      // Particles on top
+      for (const p of pts) {
+        ctx.fillStyle = `rgba(${p.hue},0.9)`;
+        ctx.shadowColor = `rgba(${p.hue},0.8)`;
+        ctx.shadowBlur = 6;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
     raf = requestAnimationFrame(tick);
 
     return () => {
