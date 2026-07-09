@@ -107,147 +107,6 @@ export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
     </svg>
   );
 }
-// ══════════════════════════════════════════════════════════════════
-//  CURSOR ORB
-// ══════════════════════════════════════════════════════════════════
-
-function CursorOrb() {
-  const dotRef = useRef(null);
-  const ringRef = useRef(null);
-  const glowRef = useRef(null);
-
-  // Raw target position (updates instantly on mousemove)
-  const target = useRef({ x: -300, y: -300 });
-  // Current rendered position (eased toward target every frame)
-  const current = useRef({ x: -300, y: -300 });
-  // Separate, slower-trailing position for the big glow
-  const glowCurrent = useRef({ x: -300, y: -300 });
-
-  const visible = useRef(false);
-  const clicking = useRef(false);
-  const rafId = useRef(null);
-
-  useEffect(() => {
-    const move = (e) => {
-      target.current.x = e.clientX;
-      target.current.y = e.clientY;
-      if (!visible.current) {
-        visible.current = true;
-        if (dotRef.current) dotRef.current.style.opacity = "1";
-        if (ringRef.current) ringRef.current.style.opacity = "1";
-        if (glowRef.current) glowRef.current.style.opacity = "1";
-        // snap instantly on first move so it doesn't glide in from corner
-        current.current.x = e.clientX;
-        current.current.y = e.clientY;
-        glowCurrent.current.x = e.clientX;
-        glowCurrent.current.y = e.clientY;
-      }
-    };
-    const leave = () => {
-      visible.current = false;
-      if (dotRef.current) dotRef.current.style.opacity = "0";
-      if (ringRef.current) ringRef.current.style.opacity = "0";
-      if (glowRef.current) glowRef.current.style.opacity = "0";
-    };
-    const down = () => {
-      clicking.current = true;
-      if (ringRef.current) ringRef.current.style.transform =
-        `translate3d(${current.current.x - 14}px, ${current.current.y - 14}px, 0) scale(0.75)`;
-    };
-    const up = () => { clicking.current = false; };
-
-    window.addEventListener("mousemove", move, { passive: true });
-    window.addEventListener("mouseleave", leave);
-    window.addEventListener("mousedown", down);
-    window.addEventListener("mouseup", up);
-
-    // Animation loop: lerp current -> target every frame (GPU transforms only)
-    const DOT_EASE = 0.35;   // dot follows fast/tight
-    const RING_EASE = 0.18;  // ring trails a bit behind, gives nice "pull" feel
-    const GLOW_EASE = 0.08;  // glow trails slowest, soft ambient feel
-
-    const tick = () => {
-      // dot (tight follow)
-      current.current.x += (target.current.x - current.current.x) * DOT_EASE;
-      current.current.y += (target.current.y - current.current.y) * DOT_EASE;
-
-      // glow (loose follow)
-      glowCurrent.current.x += (target.current.x - glowCurrent.current.x) * GLOW_EASE;
-      glowCurrent.current.y += (target.current.y - glowCurrent.current.y) * GLOW_EASE;
-
-      if (dotRef.current) {
-        const s = clicking.current ? 0.7 : 1;
-        dotRef.current.style.transform =
-          `translate3d(${current.current.x - 7}px, ${current.current.y - 7}px, 0) scale(${s})`;
-      }
-      if (ringRef.current && !clicking.current) {
-        // ring eases toward target a touch slower than the dot
-        const rx = current.current.x + (target.current.x - current.current.x) * RING_EASE;
-        const ry = current.current.y + (target.current.y - current.current.y) * RING_EASE;
-        ringRef.current.style.transform =
-          `translate3d(${rx - 16}px, ${ry - 16}px, 0) scale(1)`;
-      }
-      if (glowRef.current) {
-        glowRef.current.style.transform =
-          `translate3d(${glowCurrent.current.x - 220}px, ${glowCurrent.current.y - 220}px, 0)`;
-      }
-
-      rafId.current = requestAnimationFrame(tick);
-    };
-    rafId.current = requestAnimationFrame(tick);
-
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseleave", leave);
-      window.removeEventListener("mousedown", down);
-      window.removeEventListener("mouseup", up);
-      if (rafId.current) cancelAnimationFrame(rafId.current);
-    };
-  }, []);
-
-  return (
-    <>
-      {/* Soft ambient glow — trails slowest */}
-      <div
-        ref={glowRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 9998,
-          left: 0, top: 0, width: 440, height: 440,
-          borderRadius: "50%", opacity: 0,
-          background: "radial-gradient(circle, rgba(124,58,237,0.10) 0%, rgba(168,85,247,0.04) 45%, transparent 72%)",
-          transition: "opacity 0.4s ease",
-          willChange: "transform",
-        }}
-      />
-      {/* Outer ring — trails slightly behind dot, gives depth */}
-      <div
-        ref={ringRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 9999,
-          left: 0, top: 0, width: 32, height: 32,
-          borderRadius: "50%", opacity: 0,
-          border: "1.5px solid rgba(168,85,247,0.55)",
-          transition: "opacity 0.3s ease, transform 0.18s ease",
-          willChange: "transform",
-        }}
-      />
-      {/* Core dot — tight, immediate follow */}
-      <div
-        ref={dotRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 10000,
-          left: 0, top: 0, width: 14, height: 14,
-          borderRadius: "50%", opacity: 0,
-          background: "#a855f7",
-          boxShadow: "0 0 10px rgba(168,85,247,0.8), 0 0 22px rgba(124,58,237,0.45)",
-          transition: "opacity 0.3s ease, transform 0.08s ease-out",
-          willChange: "transform",
-        }}
-      />
-    </>
-  );
-}
-
 
 // ══════════════════════════════════════════════════════════════════
 //  AMBIENT SPOTLIGHT — no visible cursor element, just a faint
@@ -462,13 +321,76 @@ function NeuralField() {
     window.addEventListener("resize", resize);
 
     // Particles
-    const N = 70;
-    const pts = Array.from({ length: N }, () => ({
-      x: Math.random() * 1600, y: Math.random() * 500,
-      vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
-      r: Math.random() * 1.8 + 0.8,
-      hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
-    }));
+   const LINK_DIST = 165;
+    const MOUSE_DIST = 210;
+
+    const tick = () => {
+      ctx.clearRect(0, 0, W, H);
+
+      for (const p of pts) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+
+        const dx = mouse.x - p.x, dy = mouse.y - p.y;
+        const md = Math.hypot(dx, dy);
+        if (md < MOUSE_DIST) {
+          p.x += dx * 0.01;
+          p.y += dy * 0.01;
+        }
+      }
+
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const a = pts[i], b = pts[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < LINK_DIST) {
+            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+            const mdist = Math.hypot(mouse.x - mx, mouse.y - my);
+            const boost = mdist < MOUSE_DIST ? (1 - mdist / MOUSE_DIST) * 0.45 : 0;
+            const alpha = Math.pow(1 - d / LINK_DIST, 1.6) * 0.35 + boost;
+            const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+            grad.addColorStop(0, `rgba(${a.hue},${alpha})`);
+            grad.addColorStop(1, `rgba(${b.hue},${alpha})`);
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = boost > 0.08 ? 1.1 : 0.5;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      for (const p of pts) {
+        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
+        if (d < MOUSE_DIST) {
+          ctx.strokeStyle = `rgba(6,182,212,${(1 - d / MOUSE_DIST) * 0.4})`;
+          ctx.lineWidth = 0.7;
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        }
+      }
+
+      for (const p of pts) {
+        const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+        glow.addColorStop(0, `rgba(${p.hue},0.9)`);
+        glow.addColorStop(1, `rgba(${p.hue},0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r * 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = `rgba(${p.hue},1)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
@@ -2587,7 +2509,6 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
       <StyleInjector />
       <CosmicBg />
       <FloatingParticles />
-      <CursorOrb />
       <Nav onLogin={onLogin} />
       <main style={{ position: "relative", zIndex: 1 }}>
         <div style={{ maxWidth: 1440, margin: "0 auto" }}>
