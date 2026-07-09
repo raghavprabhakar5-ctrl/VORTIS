@@ -401,9 +401,6 @@ function NeuralField() {
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
 
-    const LINK_DIST = 130;
-    const MOUSE_DIST = 180;
-
     const tick = () => {
       ctx.clearRect(0, 0, W, H);
 
