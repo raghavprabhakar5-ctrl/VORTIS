@@ -439,7 +439,7 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  SCROLL MANIFESTO — page pins, words ignite one by one as you scroll
+//  SCROLL MANIFESTO — words ignite behind a rainy glass window
 // ══════════════════════════════════════════════════════════════════
 const MANIFESTO = [
   { t: "Most" }, { t: "AI" }, { t: "tools" }, { t: "answer." },
@@ -463,8 +463,7 @@ function ScrollManifesto() {
         if (!wrapRef.current) return;
         const r = wrapRef.current.getBoundingClientRect();
         const total = r.height - window.innerHeight;
-        const p = Math.min(1, Math.max(0, -r.top / (total || 1)));
-        setProgress(p);
+        setProgress(Math.min(1, Math.max(0, -r.top / (total || 1))));
       });
     };
     onScroll();
@@ -473,20 +472,59 @@ function ScrollManifesto() {
   }, []);
 
   return (
-    // Tall wrapper creates the scroll distance; inner block stays pinned
     <section ref={wrapRef} style={{ height: "200vh", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-      <div style={{
-        position: "sticky", top: 0, height: "100vh",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
-      }}>
-        {/* Ambient glow that intensifies with progress */}
+      <style>{`
+        @keyframes dropSlide{
+          0%{transform:translateY(-10px) translateX(0) scaleY(1);opacity:0}
+          8%{opacity:.9}
+          45%{transform:translateY(38vh) translateX(6px) scaleY(1.6)}
+          100%{transform:translateY(105vh) translateX(-4px) scaleY(1.3);opacity:0}
+        }
+        @keyframes dropSit{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.85;transform:scale(1.15)}}
+      `}</style>
+
+      <div style={{ position: "sticky", top: 0, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        {/* Ambient glow intensifies with progress */}
         <div style={{
           position: "absolute", width: 800, height: 800, borderRadius: "50%",
           background: `radial-gradient(circle, rgba(124,58,237,${0.04 + progress * 0.08}), transparent 65%)`,
           filter: "blur(60px)", transition: "background .3s ease",
         }} />
 
+        {/* ── Rain on glass ── */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(115deg, rgba(255,255,255,0.025) 0%, transparent 35%, rgba(255,255,255,0.015) 70%)", backdropFilter: "blur(1.5px)" }} />
+          {Array.from({ length: 16 }, (_, i) => ({
+            left: (i * 6.3 + (i % 3) * 2.1) % 98,
+            dur: 5 + (i % 5) * 1.6,
+            delay: (i * 0.9) % 8,
+            size: 3 + (i % 3) * 2,
+          })).map((d, i) => (
+            <div key={`s${i}`} style={{
+              position: "absolute", left: `${d.left}%`, top: 0,
+              width: d.size, height: d.size * 2.4, borderRadius: "45% 45% 60% 60%",
+              background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,.55), rgba(168,85,247,.25) 55%, rgba(6,182,212,.15))",
+              boxShadow: "0 0 6px rgba(168,85,247,.25)",
+              animation: `dropSlide ${d.dur}s ${d.delay}s linear infinite`,
+            }} />
+          ))}
+          {Array.from({ length: 26 }, (_, i) => ({
+            left: (i * 11.7 + (i % 7) * 3) % 97,
+            top: (i * 17.3 + (i % 5) * 7) % 95,
+            size: 2 + (i % 4) * 1.5,
+            dur: 3 + (i % 4),
+            delay: (i * 0.55) % 4,
+          })).map((d, i) => (
+            <div key={`c${i}`} style={{
+              position: "absolute", left: `${d.left}%`, top: `${d.top}%`,
+              width: d.size, height: d.size, borderRadius: "50%",
+              background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,.5), rgba(139,92,246,.2))",
+              animation: `dropSit ${d.dur}s ${d.delay}s ease-in-out infinite`,
+            }} />
+          ))}
+        </div>
+
+        {/* Igniting words */}
         <p style={{
           maxWidth: 900, padding: "0 40px", margin: 0, textAlign: "center",
           fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800,
@@ -494,7 +532,6 @@ function ScrollManifesto() {
           position: "relative",
         }}>
           {MANIFESTO.map((w, i) => {
-            // Each word gets its own ignition window within the scroll
             const start = i / MANIFESTO.length;
             const lit = Math.min(1, Math.max(0, (progress - start * 0.85) * 8));
             return (
@@ -514,10 +551,7 @@ function ScrollManifesto() {
         </p>
 
         {/* Progress hint */}
-        <div style={{
-          position: "absolute", bottom: 40, left: "50%", transform: "translateX(-50%)",
-          width: 120, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden",
-        }}>
+        <div style={{ position: "absolute", bottom: 40, left: "50%", transform: "translateX(-50%)", width: 120, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
           <div style={{ height: "100%", width: `${progress * 100}%`, background: "linear-gradient(90deg,#7C3AED,#06b6d4)", borderRadius: 2 }} />
         </div>
       </div>
@@ -1289,19 +1323,146 @@ function Logos() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  FEATURES — LIVE TILES (drop-in for BentoGrid)
-//  Every card contains a perpetual micro-animation
+//  FEATURES — LIVE TILES
 // ══════════════════════════════════════════════════════════════════
+
+// Real code typing itself character-by-character, then rewriting
+function CodeTileVisual() {
+  const CODE = [
+    "const ai = new Vortis();",
+    "await ai.think({",
+    "  goal: 'ship faster',",
+    "});  // done in 0.4s ✓",
+  ];
+  const total = CODE.join("\n").length;
+  const [chars, setChars] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setChars(c => (c >= total + 18 ? 0 : c + 1)), 65);
+    return () => clearInterval(id);
+  }, [total]);
+
+  let remaining = Math.min(chars, total);
+  return (
+    <div style={{ width: "88%", margin: "0 auto", background: "rgba(0,0,0,.35)", border: "1px solid rgba(124,58,237,.25)", borderRadius: 10, padding: "10px 12px", fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, lineHeight: 1.75, minHeight: 108 }}>
+      <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
+        {["#ef4444", "#f59e0b", "#10b981"].map(c => <span key={c} style={{ width: 7, height: 7, borderRadius: "50%", background: c, opacity: .6 }} />)}
+      </div>
+      {CODE.map((line, i) => {
+        const shown = line.slice(0, Math.max(0, remaining));
+        const isTyping = remaining > 0 && remaining < line.length;
+        remaining -= line.length + 1;
+        const colors = ["#c4b5fd", "#e2e8f0", "#67e8f9", "#86efac"];
+        return (
+          <div key={i} style={{ color: colors[i], whiteSpace: "pre", minHeight: 20 }}>
+            {shown}
+            {isTyping && <span style={{ display: "inline-block", width: 6, height: 12, background: "#a855f7", verticalAlign: "middle", animation: "caretB .7s step-end infinite" }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// A live search: query types itself, results slide in, then re-searches
+function SearchTileVisual() {
+  const QUERY = "best GPU for AI 2026";
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setPhase(p => (p >= QUERY.length + 14 ? 0 : p + 1)), 130);
+    return () => clearInterval(id);
+  }, []);
+  const typed = QUERY.slice(0, Math.min(phase, QUERY.length));
+  const showResults = phase > QUERY.length + 2;
+
+  return (
+    <div style={{ width: "88%", margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 9, background: "rgba(0,0,0,.35)", border: `1px solid rgba(6,182,212,${showResults ? ".5" : ".25"})`, marginBottom: 8, transition: "border-color .3s" }}>
+        <Globe size={12} color="#06b6d4" />
+        <span style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", color: "rgba(255,255,255,.75)" }}>
+          {typed}
+          {!showResults && <span style={{ display: "inline-block", width: 6, height: 11, background: "#06b6d4", marginLeft: 2, verticalAlign: "middle", animation: "caretB .7s step-end infinite" }} />}
+        </span>
+      </div>
+      {[["nvidia.com", "82%"], ["tomshardware.com", "64%"], ["reddit.com/r/ML", "48%"]].map(([src, w], i) => (
+        <div key={src} style={{
+          display: "flex", alignItems: "center", gap: 8, padding: "6px 10px",
+          borderRadius: 8, background: "rgba(6,182,212,.06)", border: "1px solid rgba(6,182,212,.15)",
+          marginBottom: 5, opacity: showResults ? 1 : 0,
+          transform: showResults ? "translateX(0)" : "translateX(-14px)",
+          transition: `all .4s ${i * 0.12}s cubic-bezier(.2,.9,.3,1.2)`,
+        }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4" }} />
+          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.6)", fontFamily: "'JetBrains Mono',monospace", flex: 1 }}>{src}</span>
+          <div style={{ width: 42, height: 4, borderRadius: 2, background: "rgba(255,255,255,.08)" }}>
+            <div style={{ width: showResults ? w : 0, height: "100%", borderRadius: 2, background: "#06b6d4", transition: `width .6s ${0.3 + i * 0.12}s ease` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function BentoGrid() {
   const [ref, inView] = useInView(0.08);
+
+  const tiles = [
+    { color: "6,182,212", icon: Globe, title: "Live Web Search", desc: "Real-time results from across the internet, with sources.", visual: <SearchTileVisual /> },
+    { color: "124,58,237", icon: Code2, title: "Code Mastery", desc: "Writes, debugs and refactors like a principal engineer.", visual: <CodeTileVisual /> },
+    {
+      color: "99,102,241", icon: Eye, title: "Vision AI", desc: "Reads screenshots, photos and charts like you do.",
+      visual: (
+        <div style={{ position: "relative", width: "80%", height: 110, margin: "0 auto", borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(30,17,69,0.6))", border: "1px solid rgba(99,102,241,0.25)", overflow: "hidden" }}>
+          <div style={{ position: "absolute", left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, #818cf8, transparent)", boxShadow: "0 0 14px #6366f1", animation: "scanY 3.2s ease-in-out infinite" }} />
+          {[[12, 16, 34, 24, 0], [58, 52, 40, 30, 1.1], [20, 60, 28, 22, 2.2]].map(([x, y, w, h, d], i) => (
+            <div key={i} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: w, height: h, border: "1.5px solid rgba(129,140,248,.9)", borderRadius: 4, animation: `boxBlink 3.2s ${d}s linear infinite` }} />
+          ))}
+        </div>
+      ),
+    },
+    {
+      color: "168,85,247", icon: ImageIcon, title: "Image Generation", desc: "Photorealistic to anime — imagined in seconds.",
+      visual: (
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
+          <div style={{ width: 100, height: 100, background: "linear-gradient(135deg,#a855f7,#7C3AED 45%,#06b6d4)", animation: "blobMorph 7s ease-in-out infinite", boxShadow: "0 0 44px rgba(168,85,247,.4)", filter: "saturate(1.2)" }} />
+        </div>
+      ),
+    },
+    {
+      color: "251,191,36", icon: Brain, title: "Persistent Memory", desc: "Knows your projects, style and context — always.",
+      visual: (
+        <div style={{ position: "relative", width: 130, height: 110, margin: "0 auto" }}>
+          <svg width="130" height="110" style={{ position: "absolute" }}>
+            {[[65, 20, 22, 62], [65, 20, 108, 62], [22, 62, 65, 95], [108, 62, 65, 95], [22, 62, 108, 62]].map(([x1, y1, x2, y2], i) => (
+              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(251,191,36,.5)" strokeWidth="1" style={{ animation: `linkGlow 2.6s ${i * 0.4}s ease-in-out infinite` }} />
+            ))}
+          </svg>
+          {[[65, 20], [22, 62], [108, 62], [65, 95]].map(([x, y], i) => (
+            <div key={i} style={{ position: "absolute", left: x - 6, top: y - 6, width: 12, height: 12, borderRadius: "50%", background: "#fbbf24", boxShadow: "0 0 12px rgba(251,191,36,.7)", animation: `nodePulse 2.6s ${i * 0.5}s ease-in-out infinite` }} />
+          ))}
+        </div>
+      ),
+    },
+    {
+      color: "6,182,212", icon: Microscope, title: "Deep Research", desc: "50+ sources synthesized into reports in minutes.",
+      visual: (
+        <div style={{ width: "78%", margin: "10px auto 0" }}>
+          {["92%", "70%", "84%", "58%"].map((w, i) => (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: w, borderRadius: 3, background: "linear-gradient(90deg,#06b6d4,#a855f7)", transformOrigin: "0 50%", animation: `barFill 5s ${i * 0.6}s ease-in-out infinite` }} />
+              </div>
+            </div>
+          ))}
+          <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "rgba(6,182,212,.8)" }}>SYNTHESIZING 47 SOURCES…</div>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <section ref={ref} style={{ padding: "90px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
       <style>{`
         @keyframes tileIn{0%{opacity:0;transform:translateY(36px) scale(.95)}60%{opacity:1;transform:translateY(-5px) scale(1.01)}100%{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes radarSweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-        @keyframes blipPop{0%,70%,100%{opacity:0;transform:scale(.4)}75%,90%{opacity:1;transform:scale(1)}}
-        @keyframes typeBar{0%{width:0}60%{width:var(--w)}100%{width:var(--w)}}
         @keyframes caretB{0%,100%{opacity:1}50%{opacity:0}}
         @keyframes scanY{0%,100%{top:8%}50%{top:88%}}
         @keyframes boxBlink{0%,60%,100%{opacity:0}70%,90%{opacity:1}}
@@ -1320,103 +1481,13 @@ function BentoGrid() {
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Everything you need</span>
         </div>
         <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all .8s .1s ease" }}>
-          It's not static.{" "}
-          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>It's alive.</span>
+          Watch it{" "}
+          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>think.</span>
         </h2>
       </div>
 
       <div className="lt-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-        {[
-          // ── 1. WEB SEARCH: radar sweep with popping blips ──
-          {
-            color: "6,182,212", icon: Globe, title: "Live Web Search",
-            desc: "Real-time results from across the internet, with sources.",
-            visual: (
-              <div style={{ position: "relative", width: 110, height: 110, margin: "0 auto" }}>
-                {[110, 78, 46].map(s => (
-                  <div key={s} style={{ position: "absolute", top: "50%", left: "50%", width: s, height: s, marginLeft: -s / 2, marginTop: -s / 2, borderRadius: "50%", border: "1px solid rgba(6,182,212,0.25)" }} />
-                ))}
-                <div style={{ position: "absolute", inset: 0, borderRadius: "50%", animation: "radarSweep 3s linear infinite", background: "conic-gradient(from 0deg, rgba(6,182,212,0.5), transparent 70deg)" }} />
-                {[[20, 30], [72, 22], [60, 74], [30, 62]].map(([x, y], i) => (
-                  <div key={i} style={{ position: "absolute", left: x, top: y, width: 6, height: 6, borderRadius: "50%", background: "#06b6d4", boxShadow: "0 0 10px #06b6d4", animation: `blipPop 3s ${i * 0.75}s linear infinite` }} />
-                ))}
-              </div>
-            ),
-          },
-          // ── 2. CODE: lines typing themselves forever ──
-          {
-            color: "124,58,237", icon: Code2, title: "Code Mastery",
-            desc: "Writes, debugs and refactors like a principal engineer.",
-            visual: (
-              <div style={{ width: "82%", margin: "14px auto 0", fontFamily: "'JetBrains Mono',monospace" }}>
-                {[["78%", "rgba(196,181,253,.8)"], ["55%", "rgba(6,182,212,.7)"], ["88%", "rgba(255,255,255,.4)"], ["42%", "rgba(251,191,36,.7)"]].map(([w, c], i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <span style={{ fontSize: 10, color: "rgba(255,255,255,.2)", width: 12 }}>{i + 1}</span>
-                    <div style={{ "--w": w, height: 7, borderRadius: 4, background: c, animation: `typeBar 4s ${i * 0.5}s ease-in-out infinite`, width: 0 }} />
-                  </div>
-                ))}
-                <span style={{ display: "inline-block", width: 7, height: 13, background: "#a855f7", marginLeft: 20, animation: "caretB .8s step-end infinite" }} />
-              </div>
-            ),
-          },
-          // ── 3. VISION: scan line + detection boxes ──
-          {
-            color: "99,102,241", icon: Eye, title: "Vision AI",
-            desc: "Reads screenshots, photos and charts like you do.",
-            visual: (
-              <div style={{ position: "relative", width: "80%", height: 110, margin: "0 auto", borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(30,17,69,0.6))", border: "1px solid rgba(99,102,241,0.25)", overflow: "hidden" }}>
-                <div style={{ position: "absolute", left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, #818cf8, transparent)", boxShadow: "0 0 14px #6366f1", animation: "scanY 3.2s ease-in-out infinite" }} />
-                {[[12, 16, 34, 24, 0], [58, 52, 40, 30, 1.1], [20, 60, 28, 22, 2.2]].map(([x, y, w, h, d], i) => (
-                  <div key={i} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: w, height: h, border: "1.5px solid rgba(129,140,248,.9)", borderRadius: 4, animation: `boxBlink 3.2s ${d}s linear infinite` }} />
-                ))}
-              </div>
-            ),
-          },
-          // ── 4. IMAGE GEN: morphing gradient blob ──
-          {
-            color: "168,85,247", icon: ImageIcon, title: "Image Generation",
-            desc: "Photorealistic to anime — imagined in seconds.",
-            visual: (
-              <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
-                <div style={{ width: 100, height: 100, background: "linear-gradient(135deg,#a855f7,#7C3AED 45%,#06b6d4)", animation: "blobMorph 7s ease-in-out infinite", boxShadow: "0 0 44px rgba(168,85,247,.4)", filter: "saturate(1.2)" }} />
-              </div>
-            ),
-          },
-          // ── 5. MEMORY: pulsing neural nodes ──
-          {
-            color: "251,191,36", icon: Brain, title: "Persistent Memory",
-            desc: "Knows your projects, style and context — always.",
-            visual: (
-              <div style={{ position: "relative", width: 130, height: 110, margin: "0 auto" }}>
-                <svg width="130" height="110" style={{ position: "absolute" }}>
-                  {[[65, 20, 22, 62], [65, 20, 108, 62], [22, 62, 65, 95], [108, 62, 65, 95], [22, 62, 108, 62]].map(([x1, y1, x2, y2], i) => (
-                    <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(251,191,36,.5)" strokeWidth="1" style={{ animation: `linkGlow 2.6s ${i * 0.4}s ease-in-out infinite` }} />
-                  ))}
-                </svg>
-                {[[65, 20], [22, 62], [108, 62], [65, 95]].map(([x, y], i) => (
-                  <div key={i} style={{ position: "absolute", left: x - 6, top: y - 6, width: 12, height: 12, borderRadius: "50%", background: "#fbbf24", boxShadow: "0 0 12px rgba(251,191,36,.7)", animation: `nodePulse 2.6s ${i * 0.5}s ease-in-out infinite` }} />
-                ))}
-              </div>
-            ),
-          },
-          // ── 6. DEEP RESEARCH: report writing itself ──
-          {
-            color: "6,182,212", icon: Microscope, title: "Deep Research",
-            desc: "50+ sources synthesized into reports in minutes.",
-            visual: (
-              <div style={{ width: "78%", margin: "10px auto 0" }}>
-                {["92%", "70%", "84%", "58%"].map((w, i) => (
-                  <div key={i} style={{ marginBottom: 12 }}>
-                    <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: w, borderRadius: 3, background: "linear-gradient(90deg,#06b6d4,#a855f7)", transformOrigin: "0 50%", animation: `barFill 5s ${i * 0.6}s ease-in-out infinite` }} />
-                    </div>
-                  </div>
-                ))}
-                <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "rgba(6,182,212,.8)" }}>SYNTHESIZING 47 SOURCES…</div>
-              </div>
-            ),
-          },
-        ].map((f, i) => {
+        {tiles.map((f, i) => {
           const Icon = f.icon;
           return (
             <div key={f.title} className="lt-card" style={{
@@ -1429,9 +1500,7 @@ function BentoGrid() {
               onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${f.color},0.5)`; e.currentTarget.style.boxShadow = `0 24px 60px rgba(${f.color},0.18)`; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.boxShadow = "none"; }}
             >
-              {/* Living visual */}
               <div style={{ height: 140, display: "flex", flexDirection: "column", justifyContent: "center", marginBottom: 18 }}>{f.visual}</div>
-              {/* Copy */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 9, background: `rgba(${f.color},0.15)`, border: `1px solid rgba(${f.color},0.35)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Icon size={15} style={{ color: `rgb(${f.color})` }} />
