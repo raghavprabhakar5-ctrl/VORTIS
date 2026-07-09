@@ -401,71 +401,7 @@ function NeuralField() {
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
 
-    const tick = () => {
-      ctx.clearRect(0, 0, W, H);
 
-      for (const p of pts) {
-        // Gentle drift
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0 || p.y > H) p.vy *= -1;
-
-        // Pull softly toward cursor
-        const dx = mouse.x - p.x, dy = mouse.y - p.y;
-        const md = Math.hypot(dx, dy);
-        if (md < MOUSE_DIST) {
-          p.x += dx * 0.012;
-          p.y += dy * 0.012;
-        }
-      }
-
-      // Links between close particles
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const a = pts[i], b = pts[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < LINK_DIST) {
-            // Lines near the mouse glow brighter
-            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            const mdist = Math.hypot(mouse.x - mx, mouse.y - my);
-            const boost = mdist < MOUSE_DIST ? (1 - mdist / MOUSE_DIST) * 0.5 : 0;
-            const alpha = (1 - d / LINK_DIST) * 0.22 + boost;
-            ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
-            ctx.lineWidth = boost > 0.1 ? 1.2 : 0.6;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Links from cursor to nearby particles
-      for (const p of pts) {
-        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
-        if (d < MOUSE_DIST) {
-          ctx.strokeStyle = `rgba(6,182,212,${(1 - d / MOUSE_DIST) * 0.5})`;
-          ctx.lineWidth = 0.8;
-          ctx.beginPath();
-          ctx.moveTo(mouse.x, mouse.y);
-          ctx.lineTo(p.x, p.y);
-          ctx.stroke();
-        }
-      }
-
-      // Particles on top
-      for (const p of pts) {
-        ctx.fillStyle = `rgba(${p.hue},0.9)`;
-        ctx.shadowColor = `rgba(${p.hue},0.8)`;
-        ctx.shadowBlur = 6;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
-      raf = requestAnimationFrame(tick);
-    };
     raf = requestAnimationFrame(tick);
 
     return () => {
