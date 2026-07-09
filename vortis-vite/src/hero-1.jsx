@@ -114,19 +114,12 @@ export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
 function CursorOrb() {
   const dotRef = useRef(null);
   const ringRef = useRef(null);
-  const glowRef = useRef(null);
-
-  // Raw target position (updates instantly on mousemove)
-  const target = useRef({ x: -300, y: -300 });
-  // Current rendered position (eased toward target every frame)
-  const current = useRef({ x: -300, y: -300 });
-  // Separate, slower-trailing position for the big glow
-  const glowCurrent = useRef({ x: -300, y: -300 });
-
+  const target = useRef({ x: -100, y: -100 });
+  const current = useRef({ x: -100, y: -100 });
   const visible = useRef(false);
   const clicking = useRef(false);
   const rafId = useRef(null);
-
+ 
   useEffect(() => {
     const move = (e) => {
       target.current.x = e.clientX;
@@ -135,67 +128,40 @@ function CursorOrb() {
         visible.current = true;
         if (dotRef.current) dotRef.current.style.opacity = "1";
         if (ringRef.current) ringRef.current.style.opacity = "1";
-        if (glowRef.current) glowRef.current.style.opacity = "1";
-        // snap instantly on first move so it doesn't glide in from corner
         current.current.x = e.clientX;
         current.current.y = e.clientY;
-        glowCurrent.current.x = e.clientX;
-        glowCurrent.current.y = e.clientY;
       }
     };
     const leave = () => {
       visible.current = false;
       if (dotRef.current) dotRef.current.style.opacity = "0";
       if (ringRef.current) ringRef.current.style.opacity = "0";
-      if (glowRef.current) glowRef.current.style.opacity = "0";
     };
-    const down = () => {
-      clicking.current = true;
-      if (ringRef.current) ringRef.current.style.transform =
-        `translate3d(${current.current.x - 14}px, ${current.current.y - 14}px, 0) scale(0.75)`;
-    };
+    const down = () => { clicking.current = true; };
     const up = () => { clicking.current = false; };
-
+ 
     window.addEventListener("mousemove", move, { passive: true });
     window.addEventListener("mouseleave", leave);
     window.addEventListener("mousedown", down);
     window.addEventListener("mouseup", up);
-
-    // Animation loop: lerp current -> target every frame (GPU transforms only)
-    const DOT_EASE = 0.35;   // dot follows fast/tight
-    const RING_EASE = 0.18;  // ring trails a bit behind, gives nice "pull" feel
-    const GLOW_EASE = 0.08;  // glow trails slowest, soft ambient feel
-
+ 
+    const RING_EASE = 0.2;
+ 
     const tick = () => {
-      // dot (tight follow)
-      current.current.x += (target.current.x - current.current.x) * DOT_EASE;
-      current.current.y += (target.current.y - current.current.y) * DOT_EASE;
-
-      // glow (loose follow)
-      glowCurrent.current.x += (target.current.x - glowCurrent.current.x) * GLOW_EASE;
-      glowCurrent.current.y += (target.current.y - glowCurrent.current.y) * GLOW_EASE;
-
+      current.current.x += (target.current.x - current.current.x) * RING_EASE;
+      current.current.y += (target.current.y - current.current.y) * RING_EASE;
+ 
       if (dotRef.current) {
-        const s = clicking.current ? 0.7 : 1;
-        dotRef.current.style.transform =
-          `translate3d(${current.current.x - 7}px, ${current.current.y - 7}px, 0) scale(${s})`;
+        dotRef.current.style.transform = `translate3d(${target.current.x - 3}px, ${target.current.y - 3}px, 0)`;
       }
-      if (ringRef.current && !clicking.current) {
-        // ring eases toward target a touch slower than the dot
-        const rx = current.current.x + (target.current.x - current.current.x) * RING_EASE;
-        const ry = current.current.y + (target.current.y - current.current.y) * RING_EASE;
-        ringRef.current.style.transform =
-          `translate3d(${rx - 16}px, ${ry - 16}px, 0) scale(1)`;
+      if (ringRef.current) {
+        const s = clicking.current ? 0.75 : 1;
+        ringRef.current.style.transform = `translate3d(${current.current.x - 14}px, ${current.current.y - 14}px, 0) scale(${s})`;
       }
-      if (glowRef.current) {
-        glowRef.current.style.transform =
-          `translate3d(${glowCurrent.current.x - 220}px, ${glowCurrent.current.y - 220}px, 0)`;
-      }
-
       rafId.current = requestAnimationFrame(tick);
     };
     rafId.current = requestAnimationFrame(tick);
-
+ 
     return () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseleave", leave);
@@ -204,49 +170,36 @@ function CursorOrb() {
       if (rafId.current) cancelAnimationFrame(rafId.current);
     };
   }, []);
-
+ 
   return (
     <>
-      {/* Soft ambient glow — trails slowest */}
-      <div
-        ref={glowRef}
-        style={{
-          position: "fixed", pointerEvents: "none", zIndex: 9998,
-          left: 0, top: 0, width: 440, height: 440,
-          borderRadius: "50%", opacity: 0,
-          background: "radial-gradient(circle, rgba(124,58,237,0.10) 0%, rgba(168,85,247,0.04) 45%, transparent 72%)",
-          transition: "opacity 0.4s ease",
-          willChange: "transform",
-        }}
-      />
-      {/* Outer ring — trails slightly behind dot, gives depth */}
+      {/* trailing ring outline — no glow blob, no ping */}
       <div
         ref={ringRef}
         style={{
           position: "fixed", pointerEvents: "none", zIndex: 9999,
-          left: 0, top: 0, width: 32, height: 32,
-          borderRadius: "50%", opacity: 0,
-          border: "1.5px solid rgba(168,85,247,0.55)",
-          transition: "opacity 0.3s ease, transform 0.18s ease",
+          left: 0, top: 0, width: 28, height: 28, borderRadius: "50%",
+          opacity: 0, border: "1px solid rgba(168,85,247,0.45)",
+          transition: "opacity 0.3s ease, transform 0.16s ease-out",
           willChange: "transform",
         }}
       />
-      {/* Core dot — tight, immediate follow */}
+      {/* small solid dot, tight follow */}
       <div
         ref={dotRef}
         style={{
-          position: "fixed", pointerEvents: "none", zIndex: 10000,
-          left: 0, top: 0, width: 14, height: 14,
-          borderRadius: "50%", opacity: 0,
-          background: "#a855f7",
-          boxShadow: "0 0 10px rgba(168,85,247,0.8), 0 0 22px rgba(124,58,237,0.45)",
-          transition: "opacity 0.3s ease, transform 0.08s ease-out",
+          position: "fixed", pointerEvents: "none", zIndex: 9999,
+          left: 0, top: 0, width: 6, height: 6, borderRadius: "50%",
+          opacity: 0, background: "#a855f7",
+          boxShadow: "0 0 6px rgba(168,85,247,0.55)",
+          transition: "opacity 0.3s ease",
           willChange: "transform",
         }}
       />
     </>
   );
 }
+
 // ══════════════════════════════════════════════════════════════════
 //  FLOATING PARTICLES
 // ══════════════════════════════════════════════════════════════════
@@ -609,84 +562,114 @@ function TypewriterWord({ word }) {
   );
 }
 // Interactive chat module mock up for the right side visual container
-function HeroVisual() {
-  const [tick, setTick] = useState(0);
+const RING_ITEMS = [
+  { icon: Globe,      color: "124,58,237", title: "Web Search",   desc: "Real-time results with source attribution." },
+  { icon: ImageIcon,  color: "168,85,247", title: "Image Gen",    desc: "Stunning visuals in any style, instantly." },
+  { icon: Code2,      color: "6,182,212",  title: "Code Mastery", desc: "Write, debug, and refactor any language." },
+  { icon: Eye,        color: "99,102,241", title: "Vision AI",    desc: "Analyze images and extract data." },
+  { icon: Brain,      color: "168,85,247", title: "Memory",       desc: "Remembers context across every chat." },
+  { icon: Microscope, color: "6,182,212",  title: "Deep Research",desc: "Synthesizes 50+ sources in minutes." },
+  { icon: FileText,   color: "124,58,237", title: "Documents",    desc: "Chat with PDFs, CSVs, and Word docs." },
+  { icon: Cpu,        color: "168,85,247", title: "Voice Mode",   desc: "Hands-free, multilingual conversation." },
+  { icon: BarChart3,  color: "99,102,241", title: "Analytics",    desc: "Track usage and optimize workflows." },
+];
+ 
+function CapabilityRing() {
+  const [rotation, setRotation] = useState(0);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const pausedRef = useRef(false);
+  const rafId = useRef(null);
+ 
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1200);
-    return () => clearInterval(id);
+    let last = performance.now();
+    const tick = (now) => {
+      const dt = now - last;
+      last = now;
+      if (!pausedRef.current) {
+        setRotation(r => (r + dt * 0.012) % 360);
+      }
+      rafId.current = requestAnimationFrame(tick);
+    };
+    rafId.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId.current);
   }, []);
-
-  const messages = [
-    { role: "user", text: "Analyze competitor pricing" },
-    { role: "ai", text: "Found 12 sources. Stripe charges 2.9% + 30¢…" },
-    { role: "user", text: "Generate a comparison chart" },
-    { role: "ai", text: "Creating visualization…", typing: true },
-  ];
-
+ 
+  const size = 460;
+  const radius = 175;
+  const center = size / 2;
+  const active = hoverIdx !== null ? RING_ITEMS[hoverIdx] : null;
+ 
   return (
-    <div className="hero-visual" style={{
-      width: "100%", maxWidth: 480, borderRadius: 20,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      overflow: "hidden", animation: "waveFloat 6s ease-in-out infinite",
-      boxShadow: "0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.1)",
-    }}>
-      {/* Window chrome */}
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
-        {["#ef4444","#f59e0b","#10b981"].map(c => (
-          <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
-        ))}
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", margin: "0 12px" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-          LIVE
-        </div>
-      </div>
-      
-      {/* Messages */}
-      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{
-            display: "flex", gap: 10, alignItems: "flex-start",
-            justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-            opacity: tick > i * 0.5 ? 1 : 0,
-            transform: tick > i * 0.5 ? "translateY(0)" : "translateY(8px)",
-            transition: "all 0.4s ease",
-          }}>
-            {m.role === "ai" && (
-              <div style={{ width: 26, height: 26, borderRadius: 8, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {/* Ensure component is present or switch to a fallback icon/text */}
-                <VortisLogo size={14} color="#fff" />
-              </div>
-            )}
+    <div style={{ position: "relative", width: size, height: size, margin: "0 auto" }}>
+      {/* ambient glow */}
+      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.10), transparent 70%)", filter: "blur(30px)" }} />
+ 
+      {/* orbit guide ring */}
+      <div style={{ position: "absolute", inset: (size - radius * 2 - 2) / 2, border: "1px dashed rgba(255,255,255,0.08)", borderRadius: "50%" }} />
+ 
+      {/* center detail card */}
+      <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 190, textAlign: "center", zIndex: 2, pointerEvents: "none" }}>
+        {active ? (
+          <div key={hoverIdx} style={{ animation: "fadeIn 0.25s ease both" }}>
             <div style={{
-              padding: "8px 12px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
-              background: m.role === "user" ? "linear-gradient(135deg,#7C3AED,#6366f1)" : "rgba(255,255,255,0.05)",
-              border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none",
-              fontSize: 12.5, color: m.role === "user" ? "#e0d9ff" : "rgba(255,255,255,0.8)",
-              maxWidth: "80%", lineHeight: 1.5,
+              width: 52, height: 52, borderRadius: 14, margin: "0 auto 12px",
+              background: `rgba(${active.color},0.15)`, border: `1px solid rgba(${active.color},0.4)`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: `0 0 30px rgba(${active.color},0.25)`,
             }}>
-              {m.typing ? (
-                <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  {[0,1,2].map(d => (
-                    <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: "#a855f7", animation: `pulse 1.2s ease-in-out ${d * 0.2}s infinite` }} />
-                  ))}
-                </span>
-              ) : m.text}
+              <active.icon size={22} style={{ color: `rgb(${active.color})` }} />
+            </div>
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16, color: "#fff", marginBottom: 6 }}>{active.title}</div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>{active.desc}</div>
+          </div>
+        ) : (
+          <div style={{ animation: "fadeIn 0.4s ease both" }}>
+            <VortisLogo size={34} color="#8b5cf6" />
+            <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 14, color: "rgba(255,255,255,0.5)", marginTop: 10, letterSpacing: "0.02em" }}>
+              Hover a capability
             </div>
           </div>
-        ))}
+        )}
       </div>
-      
-      {/* Input bar */}
-      <div style={{ padding: "10px 16px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ flex: 1, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", padding: "0 12px" }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>Ask anything…</span>
-        </div>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)" }}>
-          <ArrowRight size={14} color="#fff" />
-        </div>
-      </div>
+ 
+      {/* orbiting items */}
+      {RING_ITEMS.map((item, i) => {
+        const angle = (rotation + (360 / RING_ITEMS.length) * i) * (Math.PI / 180);
+        const x = center + radius * Math.cos(angle);
+        const y = center + radius * Math.sin(angle);
+        const isHover = hoverIdx === i;
+        const Icon = item.icon;
+        return (
+          <div
+            key={item.title}
+            onMouseEnter={() => { pausedRef.current = true; setHoverIdx(i); }}
+            onMouseLeave={() => { pausedRef.current = false; setHoverIdx(null); }}
+            style={{
+              position: "absolute", left: 0, top: 0,
+              transform: `translate3d(${x - 26}px, ${y - 26}px, 0) scale(${isHover ? 1.35 : 1})`,
+              transition: isHover ? "transform 0.25s cubic-bezier(.2,.8,.3,1.4)" : "transform 0.1s linear",
+              width: 52, height: 52, borderRadius: 14, cursor: "pointer",
+              background: isHover ? `rgba(${item.color},0.22)` : "rgba(255,255,255,0.04)",
+              border: `1px solid ${isHover ? `rgba(${item.color},0.6)` : "rgba(255,255,255,0.08)"}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              boxShadow: isHover ? `0 8px 28px rgba(${item.color},0.35)` : "none",
+              zIndex: isHover ? 3 : 1,
+            }}
+          >
+            <Icon size={20} style={{ color: isHover ? `rgb(${item.color})` : "rgba(255,255,255,0.55)", transition: "color 0.2s" }} />
+            {isHover && (
+              <div style={{
+                position: "absolute", bottom: "calc(100% + 10px)", left: "50%", transform: "translateX(-50%)",
+                whiteSpace: "nowrap", padding: "5px 10px", borderRadius: 8,
+                background: "rgba(10,10,20,0.92)", border: `1px solid rgba(${item.color},0.35)`,
+                fontSize: 11, fontWeight: 600, color: "#fff", animation: "fadeUp 0.2s ease both",
+              }}>
+                {item.title}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -966,7 +949,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
 <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
   <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
   
-  <HeroVisual />
+   <CapabilityRing />
   
   {/* Floating badges */}
   {[
