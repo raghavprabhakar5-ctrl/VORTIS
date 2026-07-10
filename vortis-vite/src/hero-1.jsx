@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import AICore from "./AICore";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
@@ -222,6 +223,7 @@ function CosmicBg() {
 //  NAV
 // ══════════════════════════════════════════════════════════════════
 const NAV_LINKS = [
+  { label: "About", href: "#about" },
   { label: "Capabilities", href: "#capabilities" },
   { label: "How it works", href: "#howitworks" },
   { label: "Pricing", href: "#pricing" },
@@ -303,7 +305,7 @@ function Nav({ onLogin }) {
 export function NeuralField() {
   const canvasRef = useRef(null);
   const [ref, inView] = useInView(0.15);
- 
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -311,7 +313,38 @@ export function NeuralField() {
     let raf, W, H;
     const mouse = { x: -9999, y: -9999, active: false };
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
- 
+    let hubs = [];
+    let dust = [];
+    let seeded = false;
+
+    const makeParticles = () => {
+      const HUB_COUNT = 8;
+      hubs = Array.from({ length: HUB_COUNT }, () => ({
+        x: Math.random() * W,
+        y: Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.14,
+        vy: (Math.random() - 0.5) * 0.14,
+        r: Math.random() * 2.5 + 4,
+        phase: Math.random() * Math.PI * 2,
+        hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
+      }));
+
+      const DUST_COUNT = 110;
+      dust = Array.from({ length: DUST_COUNT }, () => {
+        const z = 0.25 + Math.random() * 0.75;
+        return {
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - 0.5) * 0.2 * z,
+          vy: (Math.random() - 0.5) * 0.2 * z,
+          z,
+          r: 0.6 + z * 1.3,
+          hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
+        };
+      });
+      seeded = true;
+    };
+
     const resize = () => {
       W = canvas.offsetWidth;
       H = canvas.offsetHeight;
@@ -319,67 +352,38 @@ export function NeuralField() {
       canvas.height = H * DPR;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(DPR, DPR);
+      if (!seeded && W > 0 && H > 0) makeParticles();
     };
     resize();
     window.addEventListener("resize", resize);
- 
-    // ── Hub nodes: few, large, slow, softly pulsing ──
-    const HUB_COUNT = 6;
-    const hubs = Array.from({ length: HUB_COUNT }, () => ({
-      x: Math.random() * 1600,
-      y: Math.random() * 500,
-      vx: (Math.random() - 0.5) * 0.12,
-      vy: (Math.random() - 0.5) * 0.12,
-      r: Math.random() * 2.5 + 3.5,
-      phase: Math.random() * Math.PI * 2,
-      hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
-    }));
- 
-    // ── Dust: many, small, varying depth for parallax ──
-    const DUST_COUNT = 90;
-    const dust = Array.from({ length: DUST_COUNT }, () => {
-      const z = 0.25 + Math.random() * 0.75; // depth: 0 far, 1 near
-      return {
-        x: Math.random() * 1600,
-        y: Math.random() * 500,
-        vx: (Math.random() - 0.5) * 0.18 * z,
-        vy: (Math.random() - 0.5) * 0.18 * z,
-        z,
-        r: 0.5 + z * 1.2,
-        hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
-      };
-    });
- 
+
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
       mouse.x = e.clientX - rect.left;
       mouse.y = e.clientY - rect.top;
       mouse.active = true;
     };
-    const onLeave = () => {
-      mouse.active = false;
-    };
+    const onLeave = () => { mouse.active = false; };
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
- 
-    const LINK_DIST = 150;
- 
+
+    const HUB_LINK_DIST = 420;
+    const DUST_LINK_DIST = 160;
+
     let last = performance.now();
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
       ctx.clearRect(0, 0, W, H);
- 
-      // Soft ambient light pooling around the cursor
+
       if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 220);
-        glow.addColorStop(0, "rgba(139,92,246,0.10)");
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 240);
+        glow.addColorStop(0, "rgba(139,92,246,0.12)");
         glow.addColorStop(1, "rgba(139,92,246,0)");
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, W, H);
       }
- 
-      // Move hubs (bounce off edges, gentle drift)
+
       for (const h of hubs) {
         h.x += h.vx * (dt / 16);
         h.y += h.vy * (dt / 16);
@@ -388,65 +392,77 @@ export function NeuralField() {
         if (mouse.active) {
           const dx = mouse.x - h.x, dy = mouse.y - h.y;
           const d = Math.hypot(dx, dy);
-          if (d < 200) {
-            h.x += dx * 0.004;
-            h.y += dy * 0.004;
+          if (d < 220) { h.x += dx * 0.004; h.y += dy * 0.004; }
+        }
+      }
+
+      // Hub-to-hub backbone links — the "web" structure
+      for (let i = 0; i < hubs.length; i++) {
+        for (let j = i + 1; j < hubs.length; j++) {
+          const a = hubs[i], b = hubs[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < HUB_LINK_DIST) {
+            const alpha = (1 - d / HUB_LINK_DIST) * 0.5;
+            ctx.strokeStyle = `rgba(168,85,247,${alpha})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
           }
         }
       }
- 
-      // Move dust, then link each to its single nearest hub only
+
+      // Dust drifts, links to its nearest hub
       for (const p of dust) {
         p.x += p.vx * (dt / 16);
         p.y += p.vy * (dt / 16);
         if (p.x < 0 || p.x > W) p.vx *= -1;
         if (p.y < 0 || p.y > H) p.vy *= -1;
- 
+
         let nearest = null, nearestD = Infinity;
         for (const h of hubs) {
           const d = Math.hypot(p.x - h.x, p.y - h.y);
           if (d < nearestD) { nearestD = d; nearest = h; }
         }
-        if (nearest && nearestD < LINK_DIST) {
-          const alpha = (1 - nearestD / LINK_DIST) * 0.35 * p.z;
+        if (nearest && nearestD < DUST_LINK_DIST) {
+          const alpha = (1 - nearestD / DUST_LINK_DIST) * 0.45 * p.z;
           const grad = ctx.createLinearGradient(p.x, p.y, nearest.x, nearest.y);
           grad.addColorStop(0, `rgba(${p.hue},0)`);
           grad.addColorStop(1, `rgba(${nearest.hue},${alpha})`);
           ctx.strokeStyle = grad;
-          ctx.lineWidth = 0.6 * p.z;
+          ctx.lineWidth = 0.7 * p.z;
           ctx.beginPath();
           ctx.moveTo(p.x, p.y);
           ctx.lineTo(nearest.x, nearest.y);
           ctx.stroke();
         }
       }
- 
-      // Draw dust (behind hubs, dimmer/smaller for depth)
+
       for (const p of dust) {
-        ctx.globalAlpha = 0.35 + p.z * 0.4;
-        ctx.fillStyle = `rgba(${p.hue},0.8)`;
+        ctx.globalAlpha = 0.4 + p.z * 0.45;
+        ctx.fillStyle = `rgba(${p.hue},0.85)`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
- 
-      // Draw hubs on top: soft glow + bright core, gentle pulse
+
       for (const h of hubs) {
         const pulse = 0.6 + Math.sin(now * 0.0012 + h.phase) * 0.4;
         ctx.shadowColor = `rgba(${h.hue},0.9)`;
-        ctx.shadowBlur = 14 * pulse;
-        ctx.fillStyle = `rgba(${h.hue},${0.85 * pulse + 0.15})`;
+        ctx.shadowBlur = 16 * pulse;
+        ctx.fillStyle = `rgba(${h.hue},${0.9 * pulse + 0.1})`;
         ctx.beginPath();
         ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       }
- 
+
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
- 
+
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
@@ -454,62 +470,22 @@ export function NeuralField() {
       canvas.removeEventListener("mouseleave", onLeave);
     };
   }, []);
- 
+
   return (
-    <section
-      ref={ref}
-      style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}
-    >
+    <section ref={ref} style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}>
       <div style={{ position: "relative", height: 480, maxWidth: 1300, margin: "0 auto" }}>
         <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }} />
- 
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "none",
-            opacity: inView ? 1 : 0,
-            transform: inView ? "translateY(0)" : "translateY(30px)",
-            transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
-          }}
-        >
-          <h2
-            style={{
-              fontFamily: "'Space Grotesk',sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(30px,5vw,58px)",
-              margin: "0 0 14px",
-              letterSpacing: "-0.03em",
-              textAlign: "center",
-              textShadow: "0 0 60px rgba(3,3,10,0.9)",
-            }}
-          >
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", pointerEvents: "none",
+          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
+          transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
+        }}>
+          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(30px,5vw,58px)", margin: "0 0 14px", letterSpacing: "-0.03em", textAlign: "center", textShadow: "0 0 60px rgba(3,3,10,0.9)" }}>
             One mind.{" "}
-            <span
-              style={{
-                background: "linear-gradient(90deg,#a855f7,#06B6D4)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}
-            >
-              A billion connections.
-            </span>
+            <span style={{ background: "linear-gradient(90deg,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>A billion connections.</span>
           </h2>
-          <p
-            style={{
-              fontSize: 16,
-              color: "rgba(255,255,255,0.45)",
-              margin: 0,
-              textAlign: "center",
-              maxWidth: 460,
-              lineHeight: 1.7,
-              textShadow: "0 0 30px rgba(3,3,10,0.9)",
-            }}
-          >
+          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.45)", margin: 0, textAlign: "center", maxWidth: 460, lineHeight: 1.7, textShadow: "0 0 30px rgba(3,3,10,0.9)" }}>
             Move your cursor through the network — this is how Vortis connects your world.
           </p>
         </div>
@@ -1361,38 +1337,9 @@ function SearchTileVisual() {
 }
 
 function VoiceTileVisual() {
-  const [level, setLevel] = useState(0.3);
-  useEffect(() => {
-    const id = setInterval(() => setLevel(0.25 + Math.random() * 0.75), 220);
-    return () => clearInterval(id);
-  }, []);
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, paddingTop: 4 }}>
-      <div style={{
-        width: 72, height: 72, borderRadius: "50%", position: "relative",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "radial-gradient(circle, rgba(124,58,237,0.35), transparent 70%)",
-        animation: "pulse 2s ease-in-out infinite",
-      }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: "50%",
-          background: "linear-gradient(135deg,#7C3AED,#a855f7)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 0 24px rgba(168,85,247,0.5)",
-        }}>
-          <Mic size={20} color="#fff" />
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 20 }}>
-        {[0,1,2,3,4,5,6].map(i => (
-          <div key={i} style={{
-            width: 3, borderRadius: 2, background: "#a855f7",
-            height: `${8 + Math.abs(Math.sin(i + level * 5)) * level * 20}px`,
-            transition: "height 0.15s ease",
-          }} />
-        ))}
-      </div>
+    <div style={{ width: "100%", height: 140 }}>
+      <AICore isConnected={true} isSpeaking={true} />
     </div>
   );
 }
@@ -1438,6 +1385,38 @@ function BentoGrid() {
         </div>
       ),
     },
+    {
+  color: "16,185,129", icon: Shield, title: "Enterprise Security",
+  desc: "AES-256 encryption, SOC 2 compliant — your data never trains models.",
+  visual: (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingTop: 8 }}>
+      <div style={{ width: 64, height: 64, borderRadius: 16, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.35)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(16,185,129,0.25)" }}>
+        <Shield size={26} color="#10b981" />
+      </div>
+      <div style={{ display: "flex", gap: 6 }}>
+        {["AES-256", "SOC 2", "GDPR"].map(l => (
+          <span key={l} style={{ fontSize: 9.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981", fontFamily: "'JetBrains Mono',monospace" }}>{l}</span>
+        ))}
+      </div>
+    </div>
+  ),
+},
+{
+  color: "236,72,153", icon: Cpu, title: "Multi-Model Routing",
+  desc: "Automatically picks the fastest or smartest model for every request.",
+  visual: (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, paddingTop: 10 }}>
+      {["Fast", "Balanced", "Deep"].map((label, i) => (
+        <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <div style={{ width: 34 + i * 8, height: 34 + i * 8, borderRadius: "50%", background: `rgba(236,72,153,${0.12 + i * 0.08})`, border: "1px solid rgba(236,72,153,0.35)", display: "flex", alignItems: "center", justifyContent: "center", animation: `pulse 2s ${i * 0.3}s ease-in-out infinite` }}>
+            <Cpu size={12 + i * 2} color="#ec4899" />
+          </div>
+          <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono',monospace" }}>{label}</span>
+        </div>
+      ))}
+    </div>
+  ),
+},
     {
       color: "6,182,212", icon: Microscope, title: "Deep Research", desc: "50+ sources synthesized into reports in minutes.",
       visual: (
@@ -1743,30 +1722,14 @@ function DemoPanel({ tabId, color }) {
 
   //Voice call
   if (tabId === "voice") return (
-  <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "16px 0" }}>
-      <div style={{
-        width: 64, height: 64, borderRadius: "50%",
-        background: `radial-gradient(circle, rgba(${rgb},0.4), transparent 70%)`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "pulse 1.8s ease-in-out infinite",
-      }}>
-        <div style={{
-          width: 42, height: 42, borderRadius: "50%",
-          background: `linear-gradient(135deg,rgb(${rgb}),#a855f7)`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-        }}>
-          <Mic size={18} color="#fff" />
-        </div>
-      </div>
-      <span style={{ fontSize: 11, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace" }}>LIVE CALL · 00:42</span>
+  <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ height: 170, position: "relative" }}>
+      <AICore isConnected={true} isSpeaking={tick % 4 < 2} />
     </div>
+    <span style={{ fontSize: 11, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace", textAlign: "center" }}>LIVE CALL · 00:42</span>
     <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, overflowY: "auto" }}>
       {data.transcript.map((m, i) => (
-        <div key={i} style={{
-          display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-          opacity: tick > i * 1.3 ? 1 : 0, transition: "opacity 0.4s ease",
-        }}>
+        <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.3 ? 1 : 0, transition: "opacity 0.4s ease" }}>
           <div style={{
             maxWidth: "80%", padding: "8px 13px", fontSize: 12.5, lineHeight: 1.5,
             borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
@@ -2259,6 +2222,70 @@ function DashboardPreview() {
     </section>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  ABOUT
+// ══════════════════════════════════════════════════════════════════
+function About() {
+  const [ref, inView] = useInView(0.15);
+
+  const stats = [
+    { value: "2026", label: "Founded" },
+    { value: "50K+", label: "Users worldwide" },
+    { value: "12", label: "Countries" },
+    { value: "99.9%", label: "Uptime" },
+  ];
+
+  return (
+    <section id="about" ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto", textAlign: "center" }}>
+        <div style={{
+          display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px",
+          borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)",
+          marginBottom: 20, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease",
+        }}>
+          <VortisLogo size={12} color="#a855f7" />
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>About Vortis</span>
+        </div>
+
+        <h2 style={{
+          fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)",
+          margin: "0 0 24px", letterSpacing: "-0.03em", lineHeight: 1.15,
+          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease",
+        }}>
+          Built for people who{" "}
+          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>think fast.</span>
+        </h2>
+
+        <p style={{
+          fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.8, maxWidth: 680, margin: "0 auto 56px",
+          opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.2s ease",
+        }}>
+          Vortis started with a simple frustration: switching between four different AI tools to get one job done.
+          So we built a single surface that thinks, searches, codes, sees, and remembers — all at once. No tab-switching,
+          no context loss, no compromise.
+        </p>
+
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24, maxWidth: 720, margin: "0 auto",
+        }}>
+          {stats.map((s, i) => (
+            <div key={s.label} style={{
+              opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(20px)",
+              transition: `all 0.7s ${i * 0.1 + 0.3}s ease`,
+            }}>
+              <div style={{
+                fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 30,
+                background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              }}>{s.value}</div>
+              <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 // ══════════════════════════════════════════════════════════════════
 //  TESTIMONIALS
 // ══════════════════════════════════════════════════════════════════
@@ -2610,11 +2637,12 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
           <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
         </div>
         <Logos />
+        <About />
         <BentoGrid />
-        <NeuralField /> 
-        <HowItWorks />
+        <NeuralField />
         <Showcase />
-        <DashboardPreview /> 
+        <HowItWorks />
+        <DashboardPreview />
         <Testimonials />
         <Pricing />
         <FAQ />
