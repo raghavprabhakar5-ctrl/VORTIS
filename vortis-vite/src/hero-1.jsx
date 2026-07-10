@@ -309,523 +309,243 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
+// LiveOps — interactive constellation 
 // ══════════════════════════════════════════════════════════════════
-export function NeuralField() {
-  const canvasRef = useRef(null);
+export function LiveOps() {
   const [ref, inView] = useInView(0.15);
+  const [events, setEvents] = useState([]);
+  const [tick, setTick] = useState(0);
 
+  // Generate live events
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let raf, W = 0, H = 0;
-    const mouse = { x: -9999, y: -9999, active: false };
-    const DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-    let hubs = [];
-    let dust = [];
-    let pulses = [];
-    let ripples = [];
-    let waves = [];
-    let scanAngle = 0;
-    let seeded = false;
-    let lastWave = 0;
-    let last = performance.now();
-
-    // THEME-RESTRICTED PALETTE — purple + cyan only
-    const PALETTE = [
-      [168, 85, 247],  // purple (a855f7)
-      [124, 58, 237],  // deep purple (7C3AED)
-      [6, 182, 212],   // cyan (06b6d4)
-      [139, 92, 246],  // violet (8b5cf6)
+    if (!inView) return;
+    const templates = [
+      { type: 'deploy',  text: 'Build deployed to edge',     meta: 'team-vortex · 14 regions',  color: '124,58,237', icon: 'rocket' },
+      { type: 'signup',  text: 'New workspace created',      meta: 'alex@lumio.io',             color: '6,182,212',  icon: 'user' },
+      { type: 'agent',   text: 'Agent completed task',       meta: 'code-gen · 2.4s · 8.2k tok',color: '168,85,247', icon: 'spark' },
+      { type: 'query',   text: 'Semantic search executed',   meta: '1,204 results · 38ms',      color: '6,182,212',  icon: 'search' },
+      { type: 'voice',   text: 'Voice transcription done',   meta: '24s audio · 99.2% acc',     color: '124,58,237', icon: 'mic' },
+      { type: 'build',   text: 'Preview shipped',            meta: 'commit 5bf50c0 · 60fps',    color: '168,85,247', icon: 'code' },
+      { type: 'upgrade', text: 'Team upgraded to Pro',       meta: 'northstar.co · 5 seats',    color: '6,182,212',  icon: 'star' },
+      { type: 'vision',  text: 'Image analysis complete',    meta: '7 objects · 240ms',         color: '124,58,237', icon: 'eye' },
     ];
-
-    const LABELS = ['neural', 'vision', 'code', 'memory', 'search', 'voice', 'graph', 'vector', 'stream', 'cache'];
-
-    let seedState = 12345;
-    const rng = () => { seedState = (seedState * 1664525 + 1013904223) % 4294967296; return seedState / 4294967296; };
-
-    const makeParticles = () => {
-      const HUB_COUNT = 11;  // fewer hubs = less clutter
-      hubs = Array.from({ length: HUB_COUNT }, (_, i) => {
-        const c = PALETTE[i % PALETTE.length];
-        return {
-          x: rng() * W, y: rng() * H,
-          z: 0.4 + rng() * 0.6,
-          vx: (rng() - 0.5) * 0.12,
-          vy: (rng() - 0.5) * 0.12,
-          r: 3 + rng() * 3,
-          phase: rng() * Math.PI * 2,
-          color: c,
-          charge: 0,
-          activity: 0,
-          label: LABELS[i % LABELS.length],
-          restX: 0, restY: 0,
-        };
-      });
-      hubs.forEach(h => { h.restX = h.x; h.restY = h.y; });
-
-      const DUST_COUNT = 120;  // fewer dust particles
-      dust = Array.from({ length: DUST_COUNT }, () => {
-        const z = 0.2 + rng() * 0.8;
-        const c = PALETTE[Math.floor(rng() * PALETTE.length)];
-        return {
-          x: rng() * W, y: rng() * H, z,
-          vx: (rng() - 0.5) * 0.25 * z,
-          vy: (rng() - 0.5) * 0.25 * z,
-          r: 0.4 + z * 1.5,
-          color: c,
-          twinkle: rng() * Math.PI * 2,
-          twinkleSpeed: 0.02 + rng() * 0.03,
-        };
-      });
-      seeded = true;
+    let id = 0;
+    const push = () => {
+      const t = templates[Math.floor(Math.random() * templates.length)];
+      setEvents(prev => [{ ...t, id: id++, time: Date.now() }, ...prev].slice(0, 6));
     };
+    push(); push(); push();
+    const interval = setInterval(push, 1800);
+    return () => clearInterval(interval);
+  }, [inView]);
 
-    const resize = () => {
-      W = canvas.offsetWidth; H = canvas.offsetHeight;
-      canvas.width = W * DPR; canvas.height = H * DPR;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(DPR, DPR);
-      if (!seeded && W > 0 && H > 0) makeParticles();
-    };
-    resize();
-    window.addEventListener("resize", resize);
+  // Pulse tick for sparklines
+  useEffect(() => {
+    if (!inView) return;
+    const id = setInterval(() => setTick(t => t + 1), 1200);
+    return () => clearInterval(id);
+  }, [inView]);
 
-    const onMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-      mouse.active = true;
-    };
-    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
-
-    const onClick = (e) => {
-      if (!mouse.active) return;
-      let nearest = null, nd = Infinity;
-      for (const h of hubs) {
-        const d = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-        if (d < nd) { nd = d; nearest = h; }
-      }
-      if (nearest && nd < 300) {
-        nearest.charge = 1.5;
-        nearest.activity = 1.5;
-        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 160, color: nearest.color, life: 1 });
-        waves.push({ x: nearest.x, y: nearest.y, r: 0, max: Math.max(W, H) * 0.6, color: nearest.color, life: 1 });
-      }
-      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 100, color: [255, 255, 255], life: 1 });
-    };
-
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
-    canvas.addEventListener("click", onClick);
-
-    const spawnPulse = (fromHub, toHub) => {
-      pulses.push({
-        from: fromHub, to: toHub, t: 0,
-        speed: 0.007 + rng() * 0.006,
-        color: fromHub.color, trail: [],
-      });
-    };
-
-    const bezierPoint = (p0, p1, p2, t) => {
-      const mt = 1 - t;
-      return {
-        x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
-        y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
-      };
-    };
-    const controlPoint = (a, b) => {
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const off = Math.sin((a.x + a.y) * 0.008) * 30;
-      return { x: mx - dy / len * off, y: my + dx / len * off };
-    };
-
-    const HUB_LINK_DIST = 340;
-
-    const tick = (now) => {
-      const dt = Math.min(now - last, 32);
-      last = now;
-      // trail-fade clear (bloom accumulation)
-      ctx.fillStyle = "rgba(3,3,10,0.2)";
-      ctx.fillRect(0, 0, W, H);
-
-      // Mouse aura — purple only, subtle
-      if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 240);
-        glow.addColorStop(0, "rgba(124,58,237,0.12)");
-        glow.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // Periodic energy wave every ~6s (slower = calmer)
-      if (now - lastWave > 6000 && hubs.length > 0) {
-        const h = hubs[Math.floor(rng() * hubs.length)];
-        waves.push({ x: h.x, y: h.y, r: 0, max: Math.max(W, H) * 0.7, color: h.color, life: 1 });
-        lastWave = now;
-      }
-
-      // Radar sweep — single beam, slower
-      scanAngle += 0.003;
-      const cx = W / 2, cy = H / 2;
-      if (ctx.createConicGradient) {
-        const sweepGrad = ctx.createConicGradient(scanAngle, cx, cy);
-        sweepGrad.addColorStop(0, "rgba(124,58,237,0.06)");
-        sweepGrad.addColorStop(0.04, "rgba(124,58,237,0)");
-        sweepGrad.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = sweepGrad;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // Update hubs (spring physics)
-      for (const h of hubs) {
-        h.vx += (h.restX - h.x) * 0.0006;
-        h.vy += (h.restY - h.y) * 0.0006;
-        h.x += h.vx * (dt / 16);
-        h.y += h.vy * (dt / 16);
-        h.vx *= 0.99; h.vy *= 0.99;
-        if (h.x < 40) { h.x = 40; h.vx *= -0.5; h.restX = 60 + rng() * 40; }
-        if (h.x > W - 40) { h.x = W - 40; h.vx *= -0.5; h.restX = W - 60 - rng() * 40; }
-        if (h.y < 40) { h.y = 40; h.vy *= -0.5; h.restY = 60 + rng() * 40; }
-        if (h.y > H - 40) { h.y = H - 40; h.vy *= -0.5; h.restY = H - 60 - rng() * 40; }
-
-        // mouse repulsion (gentler)
-        if (mouse.active) {
-          const dx = h.x - mouse.x, dy = h.y - mouse.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 180 && d > 0.1) {
-            const f = (1 - d / 180) * 0.8;
-            h.vx += (dx / d) * f * 0.04;
-            h.vy += (dy / d) * f * 0.04;
-          }
-        }
-
-        // charge builds (slower = calmer)
-        h.charge += (0.001 + h.activity * 0.004) * (dt / 16);
-        if (h.charge >= 1) {
-          const candidates = hubs
-            .filter(o => o !== h)
-            .map(o => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
-            .filter(c => c.d < HUB_LINK_DIST)
-            .sort((a, b) => a.d - b.d)
-            .slice(0, 2);
-          for (const c of candidates) spawnPulse(h, c.o);
-          ripples.push({ x: h.x, y: h.y, r: 0, max: 60, color: h.color, life: 0.6 });
-          h.charge = 0;
-          h.activity = Math.min(1.5, h.activity + 0.5);
-        }
-        h.activity *= 0.95;
-        h.phase += 0.02;
-      }
-
-      // Connections
-      const connections = [];
-      for (let i = 0; i < hubs.length; i++) {
-        for (let j = i + 1; j < hubs.length; j++) {
-          const a = hubs[i], b = hubs[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < HUB_LINK_DIST) connections.push({ a, b, d, cp: controlPoint(a, b) });
-        }
-      }
-
-      // Waves
-      for (let i = waves.length - 1; i >= 0; i--) {
-        const w = waves[i];
-        w.r += 2.5 * (dt / 16);
-        w.life -= 0.003 * (dt / 16);
-        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
-        const [r, g, b] = w.color;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.1})`;
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.35})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Draw connections (bloom + flow + wave boost)
-      for (const c of connections) {
-        const { a, b, d, cp } = c;
-        let alpha = (1 - d / HUB_LINK_DIST) * 0.32;
-        const depthFactor = Math.min(a.z, b.z);
-        alpha *= 0.5 + depthFactor * 0.5;
-
-        // wave boost
-        let waveBoost = 0;
-        const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
-        for (const w of waves) {
-          const wd = Math.hypot(midX - w.x, midY - w.y);
-          if (Math.abs(wd - w.r) < 40) {
-            waveBoost += w.life * (1 - Math.abs(wd - w.r) / 40) * 0.6;
-          }
-        }
-
-        const [r, g, bC] = a.color;
-        const baseWidth = 0.5 + depthFactor * 0.6;
-
-        // outer soft glow
-        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.05 + waveBoost * 0.08})`;
-        ctx.lineWidth = baseWidth * 6;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        // medium
-        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.15 + waveBoost * 0.15})`;
-        ctx.lineWidth = baseWidth * 2.5;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        // bright core (gradient)
-        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-        grad.addColorStop(0, `rgba(${a.color[0]},${a.color[1]},${a.color[2]},${alpha})`);
-        grad.addColorStop(1, `rgba(${b.color[0]},${b.color[1]},${b.color[2]},${alpha})`);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = baseWidth + waveBoost;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-
-        // flowing dashed energy
-        ctx.strokeStyle = `rgba(255,255,255,${(alpha + waveBoost) * 0.5})`;
-        ctx.lineWidth = 0.4;
-        ctx.setLineDash([2, 14]);
-        ctx.lineDashOffset = -now * 0.04;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // mouse proximity highlight
-        if (mouse.active) {
-          const md = Math.hypot(midX - mouse.x, midY - mouse.y);
-          if (md < 140) {
-            const boost = (1 - md / 140) * 0.4;
-            ctx.strokeStyle = `rgba(168,85,247,${boost})`;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Pulses (traveling energy packets)
-      for (let i = pulses.length - 1; i >= 0; i--) {
-        const p = pulses[i];
-        p.t += p.speed * (dt / 16);
-        if (p.t >= 1) {
-          p.to.activity = Math.min(1.5, p.to.activity + 0.5);
-          pulses.splice(i, 1);
-          continue;
-        }
-        const cp = controlPoint(p.from, p.to);
-        const pos = bezierPoint(p.from, cp, p.to, p.t);
-        p.trail.push({ x: pos.x, y: pos.y });
-        if (p.trail.length > 14) p.trail.shift();
-
-        const [r, g, b] = p.color;
-        for (let k = 0; k < p.trail.length; k++) {
-          const tp = p.trail[k];
-          const ta = (k / p.trail.length) * 0.6;
-          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
-          ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        // glowing head
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 16;
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 2.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
-      // Ripples
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const rp = ripples[i];
-        rp.r += 1.6 * (dt / 16);
-        rp.life -= 0.012 * (dt / 16);
-        if (rp.life <= 0 || rp.r > rp.max) { ripples.splice(i, 1); continue; }
-        const [r, g, b] = rp.color;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${rp.life * 0.4})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Dust drift + parallax
-      for (const p of dust) {
-        p.x += p.vx * (dt / 16);
-        p.y += p.vy * (dt / 16);
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        p.twinkle += p.twinkleSpeed;
-
-        if (mouse.active) {
-          // parallax removed for calm — just drift
-        }
-
-        const tw = 0.3 + Math.sin(p.twinkle) * 0.3;
-        const [r, g, b] = p.color;
-        ctx.globalAlpha = (0.2 + p.z * 0.5) * tw;
-        ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      // Hubs (depth-sorted)
-      const sortedHubs = [...hubs].sort((a, b) => a.z - b.z);
-      for (const h of sortedHubs) {
-        const pulse = 0.7 + Math.sin(now * 0.0015 + h.phase) * 0.3;
-        const actBoost = h.activity;
-        const depthScale = 0.6 + h.z * 0.6;
-        const [r, g, b] = h.color;
-
-        // activity halo
-        if (actBoost > 0.05) {
-          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 40);
-          halo.addColorStop(0, `rgba(${r},${g},${b},${0.3 * actBoost})`);
-          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          ctx.fillStyle = halo;
-          ctx.fillRect(h.x - 40, h.y - 40, 80, 80);
-        }
-
-        // charge ring
-        if (h.charge > 0.1) {
-          ctx.strokeStyle = `rgba(${r},${g},${b},${h.charge * 0.5})`;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(h.x, h.y, (h.r + 7) * depthScale, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // rotating dashed ring
-        const ringR = (h.r + 6) * depthScale;
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.15)`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 6]);
-        ctx.lineDashOffset = -now * 0.015;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, ringR, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // glow + core
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 18 * pulse + 8 * actBoost;
-        ctx.fillStyle = `rgba(${r},${g},${b},${0.85 * pulse + 0.15})`;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * depthScale, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // white-hot center
-        ctx.fillStyle = `rgba(255,255,255,${0.4 + actBoost * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * depthScale * 0.4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // label on hover
-        if (mouse.active) {
-          const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-          if (md < 100) {
-            const op = (1 - md / 100);
-            ctx.font = "10px 'JetBrains Mono', monospace";
-            const tw = ctx.measureText(h.label).width;
-            ctx.fillStyle = `rgba(3,3,10,${op * 0.8})`;
-            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r * depthScale - 22, tw + 12, 16);
-            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-            ctx.textAlign = "center";
-            ctx.fillText(h.label, h.x, h.y - h.r * depthScale - 11);
-          }
-        }
-      }
-
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("mouseleave", onLeave);
-      canvas.removeEventListener("click", onClick);
-    };
-  }, []);
+  const stats = [
+    { value: 120, suffix: 'K+', label: 'Active builders',   color: '124,58,237', decimals: 0 },
+    { value: 99.99, suffix: '%', label: 'Uptime SLA',        color: '6,182,212',  decimals: 2 },
+    { value: 12, suffix: 'ms',  label: 'P99 latency',        color: '168,85,247', decimals: 0 },
+    { value: 2.4, suffix: 'M',  label: 'Tokens / sec',       color: '6,182,212',  decimals: 1 },
+  ];
 
   return (
-    <section ref={ref} className="section" style={{ padding: "60px 0 80px", position: "relative" }}>
+    <section ref={ref} className="section reveal" style={{ padding: "80px 40px" }}>
       <style>{`
-        @keyframes nfShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @keyframes opsSlideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes opsDotPulse { 0%,100% { opacity: .4; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
+        @keyframes opsBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+        @keyframes opsShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @keyframes opsOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px,-15px); } }
       `}</style>
 
-      {/* Header — uses your utility classes, sits ABOVE the canvas */}
-      <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
+      {/* Ambient orb */}
+      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 600, height: 400, background: "radial-gradient(ellipse, rgba(124,58,237,0.06), transparent 70%)", filter: "blur(70px)", pointerEvents: "none", animation: "opsOrbDrift 18s ease-in-out infinite" }} />
+
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 50 }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> THE NETWORK
+          <span className="dot" /> LIVE OPERATIONS
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          One mind.{" "}
-          <span className="shimmer-text">A billion connections.</span>
+          Built for scale.{" "}
+          <span className="shimmer-text">Trusted in production.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Move your cursor through the network — this is how Vortis connects your world.
+          Real teams shipping real products, right now. This is Vortis in motion.
         </p>
       </div>
 
-      {/* Canvas — clean, contained, with gradient fade at top/bottom */}
-      <div style={{ position: "relative", height: 440, maxWidth: 1200, margin: "0 auto" }}>
-        {/* Top fade into canvas */}
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 40, background: "linear-gradient(180deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        {/* Bottom fade out of canvas */}
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        {/* Side fades */}
-        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 40, background: "linear-gradient(90deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 40, background: "linear-gradient(270deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
+      {/* Dashboard layout: stats row + live feed */}
+      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }} className="ops-grid">
 
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute", inset: 0,
-            width: "100%", height: "100%",
-            cursor: "crosshair",
-          }}
-        />
+        {/* LEFT — metric cards 2x2 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          {stats.map((s, i) => (
+            <MetricCard key={i} stat={s} index={i} inView={inView} tick={tick} />
+          ))}
+        </div>
 
-        {/* Subtle hint at bottom */}
-        <div style={{
-          position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
-          display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
-          fontSize: 10, color: "rgba(255,255,255,0.3)",
-          fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
+        {/* RIGHT — live event feed */}
+        <div className="gradient-border" style={{
+          borderRadius: 18, background: "rgba(255,255,255,0.015)",
+          padding: 0, overflow: "hidden", position: "relative",
         }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#a855f7" }} />
-            move to influence
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4" }} />
-            click to ignite
-          </span>
+          {/* Feed header */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+            background: "rgba(255,255,255,0.02)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "opsDotPulse 1.5s ease-in-out infinite" }} />
+              <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em" }}>LIVE ACTIVITY</span>
+            </div>
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>vortis ▸ stream</span>
+          </div>
+
+          {/* Feed body */}
+          <div style={{ padding: "12px", minHeight: 320, display: "flex", flexDirection: "column", gap: 8 }}>
+            {events.length === 0 && (
+              <div style={{ padding: 20, textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+                Connecting to stream…
+              </div>
+            )}
+            {events.map((ev, i) => {
+              const [r, g, b] = ev.color.split(",");
+              return (
+                <div key={ev.id} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "11px 14px", borderRadius: 10,
+                  background: i === 0 ? `rgba(${r},${g},${b},0.06)` : "rgba(255,255,255,0.015)",
+                  border: `1px solid ${i === 0 ? `rgba(${r},${g},${b},0.2)` : "rgba(255,255,255,0.04)"}`,
+                  animation: i === 0 ? "opsSlideIn 0.4s ease" : "none",
+                  transition: "all 0.3s ease",
+                }}>
+                  {/* Icon dot */}
+                  <div style={{
+                    width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                    background: `rgba(${r},${g},${b},0.12)`,
+                    border: `1px solid rgba(${r},${g},${b},0.25)`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${r},${g},${b})`, boxShadow: `0 0 6px rgb(${r},${g},${b})` }} />
+                  </div>
+                  {/* Text */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.text}</div>
+                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", marginTop: 1 }}>{ev.meta}</div>
+                  </div>
+                  {/* Time */}
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
+                    {i === 0 ? "now" : `${i * 2 + 1}s`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Feed footer */}
+          <div style={{
+            padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.05)",
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace",
+            background: "rgba(255,255,255,0.02)",
+          }}>
+            <span>2,847 events / min</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#22c55e" }} />
+              all systems operational
+            </span>
+          </div>
         </div>
       </div>
+
+      <style>{`
+        @media (max-width: 880px) { .ops-grid { grid-template-columns: 1fr !important; } }
+      `}</style>
     </section>
   );
 }
+
+function MetricCard({ stat, index, inView, tick }) {
+  const [ref, cardInView] = useInView(0.3);
+  const count = useCountUp(stat.value, 2200, cardInView, stat.decimals);
+  const [r, g, b] = stat.color.split(",");
+
+  // Generate sparkline points that shift each tick
+  const points = Array.from({ length: 12 }, (_, i) => ({
+    x: i * (100 / 11),
+    y: 30 - Math.sin(i * 0.5 + tick * 0.3 + index) * 8 - Math.random() * 4 - (i / 12) * 6,
+  }));
+  const pathD = points.reduce((acc, p, i) => i === 0 ? `M${p.x},${p.y}` : `${acc} L${p.x},${p.y}`, "");
+
+  return (
+    <div
+      ref={ref}
+      className="gradient-border"
+      style={{
+        padding: "22px 20px", borderRadius: 16,
+        background: "rgba(255,255,255,0.015)",
+        position: "relative", overflow: "hidden",
+        opacity: cardInView ? 1 : 0,
+        transform: cardInView ? "translateY(0)" : "translateY(20px)",
+        transition: `all 0.7s ease ${index * 0.1}s`,
+      }}
+    >
+      {/* Top gradient line */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, rgba(${r},${g},${b},0.5), transparent)` }} />
+
+      {/* Label + dot */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {stat.label}
+        </div>
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: `rgb(${r},${g},${b})`, boxShadow: `0 0 6px rgb(${r},${g},${b})`, animation: "opsDotPulse 2s ease-in-out infinite" }} />
+      </div>
+
+      {/* Big number */}
+      <div style={{
+        fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800,
+        fontSize: "clamp(26px,3.5vw,38px)", letterSpacing: "-0.03em", lineHeight: 1,
+        color: `rgb(${r},${g},${b})`, marginBottom: 12,
+        textShadow: `0 0 24px rgba(${r},${g},${b},0.25)`,
+      }}>
+        {count}{stat.suffix}
+      </div>
+
+      {/* Sparkline */}
+      <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", height: 28 }}>
+        <defs>
+          <linearGradient id={`sparkG${index}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={`rgb(${r},${g},${b})`} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={`rgb(${r},${g},${b})`} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={`${pathD} L100,30 L0,30 Z`} fill={`url(#sparkG${index})`} />
+        <path d={pathD} stroke={`rgb(${r},${g},${b})`} strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
+        {/* End dot */}
+        <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="1.5" fill={`rgb(${r},${g},${b})`} />
+      </svg>
+
+      {/* Wave bars in corner */}
+      <div style={{ position: "absolute", bottom: 12, right: 14, display: "flex", gap: 2, alignItems: "flex-end", height: 10 }}>
+        {[...Array(3)].map((_, j) => (
+          <div key={j} style={{
+            width: 2, height: "100%", background: `rgba(${r},${g},${b},0.4)`, borderRadius: 1,
+            transformOrigin: "bottom", animation: `opsBarWave ${0.8 + j * 0.2}s ease-in-out infinite`,
+            animationDelay: `${j * 0.1}s`,
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 // ══════════════════════════════════════════════════════════════════
 //  HERO
@@ -3472,18 +3192,9 @@ function FAQ() {
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
   const [showPicker, setShowPicker] = useState(false);
-  const [count, setCount] = useState(0);
   const btnRef = useRef(null);
-  const orbRef = useRef(null);
 
-  // Live counter
-  useEffect(() => {
-    if (!inView) return;
-    const id = setInterval(() => setCount(c => c + Math.floor(Math.random() * 5) + 1), 1200);
-    return () => clearInterval(id);
-  }, [inView]);
-
-  // Magnetic button (subtle range)
+  // Magnetic button (subtle)
   useEffect(() => {
     const el = btnRef.current; if (!el) return;
     const onWinMove = (e) => {
@@ -3501,209 +3212,89 @@ function CTA({ onLogin }) {
     return () => window.removeEventListener("mousemove", onWinMove);
   }, []);
 
-  // 3D orb tilt
-  useEffect(() => {
-    const el = orbRef.current; if (!el) return;
-    const onMove = (e) => {
-      const r = el.getBoundingClientRect();
-      const px = (e.clientX - r.left) / r.width;
-      const py = (e.clientY - r.top) / r.height;
-      const rx = (py - .5) * -16, ry = (px - .5) * 16;
-      el.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg)`;
-    };
-    const onLeave = () => { el.style.transform = "perspective(800px) rotateX(0) rotateY(0)"; };
-    el.addEventListener("mousemove", onMove);
-    el.addEventListener("mouseleave", onLeave);
-    return () => {
-      el.removeEventListener("mousemove", onMove);
-      el.removeEventListener("mouseleave", onLeave);
-    };
-  }, []);
-
-  // Only 3 floating cards — purple/cyan only, balanced composition
-  const cards = [
-    { side: "left", top: "22%", data: { icon: "shield", value: "99.99%", label: "UPTIME SLA", color: "6,182,212" } },
-    { side: "right", top: "20%", data: { icon: "zap", value: "12ms", label: "P99 LATENCY", color: "124,58,237" } },
-    { side: "left", top: "62%", data: { icon: "users", value: `+${count}`, label: "JOINED TODAY", color: "168,85,247" } },
-  ];
-
   return (
-    <section ref={ref} className="section" style={{ padding: "100px 40px 120px", position: "relative", overflow: "hidden" }}>
+    <section ref={ref} className="section reveal" style={{ padding: "100px 40px 120px", position: "relative", overflow: "hidden" }}>
       <style>{`
-        @keyframes ctaOrbFloat { 0%,100% { transform: translateZ(0) translateY(0); } 50% { transform: translateZ(0) translateY(-10px); } }
-        @keyframes ctaOrbPulse { 0%,100% { opacity: .85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } }
-        @keyframes ctaRingSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes ctaRingSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-        @keyframes ctaRadar { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(1.9); opacity: 0; } }
-        @keyframes ctaCardFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        @keyframes ctaCardFloatRev { 0%,100% { transform: translateY(0); } 50% { transform: translateY(10px); } }
         @keyframes ctaShine { 0% { left: -100%; } 100% { left: 200%; } }
-        @keyframes ctaBarWave { 0%,100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
-        @keyframes ctaDotPulse { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
-        @keyframes ctaGlowPulse { 0%,100% { filter: blur(60px) brightness(1); } 50% { filter: blur(70px) brightness(1.2); } }
+        @keyframes ctaBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes ctaOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-25px,18px); } }
+        @keyframes ctaFadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes ctaDotPulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
       `}</style>
 
-      {/* Background — single soft aurora only, no conic clutter */}
-      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 700, height: 500, background: "radial-gradient(ellipse at center, rgba(124,58,237,0.12), rgba(6,182,212,0.05) 45%, transparent 70%)", animation: "ctaGlowPulse 8s ease-in-out infinite", filter: "blur(60px)", pointerEvents: "none" }} />
+      {/* Ambient orb */}
+      <div style={{ position: "absolute", top: "30%", left: "40%", width: 600, height: 450, background: "radial-gradient(ellipse, rgba(124,58,237,0.08), rgba(6,182,212,0.04) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "ctaOrbDrift 16s ease-in-out infinite" }} />
 
-      {/* ── 3 floating glass cards (down from 6) — purple/cyan only ── */}
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-        {cards.map((card, i) => {
-          const [r, g, b] = card.data.color.split(",");
-          const isLeft = card.side === "left";
-          return (
-            <div key={i} style={{
-              position: "absolute", top: card.top,
-              [isLeft ? "left" : "right"]: "6%",
-              animation: `${i % 2 === 0 ? "ctaCardFloat" : "ctaCardFloatRev"} ${6 + i}s ease-in-out infinite`,
-              animationDelay: `${i * 0.8}s`,
-            }}>
-              <div style={{
-                padding: "13px 17px", borderRadius: 13,
-                background: "rgba(15,12,30,0.7)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-                border: `1px solid rgba(${r},${g},${b},0.25)`,
-                boxShadow: `0 0 30px rgba(${r},${g},${b},0.12)`,
-                display: "flex", alignItems: "center", gap: 10,
-              }}>
-                <div style={{
-                  width: 28, height: 28, borderRadius: 8,
-                  background: `rgba(${r},${g},${b},0.12)`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${r},${g},${b})`, boxShadow: `0 0 8px rgb(${r},${g},${b})`, animation: "ctaDotPulse 2s ease-in-out infinite" }} />
-                </div>
-                <div style={{ textAlign: "left" }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: `rgb(${r},${g},${b})` }}>{card.data.value}</div>
-                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em" }}>{card.data.label}</div>
-                </div>
-                {/* Wave bars — only on the latency card */}
-                {card.data.icon === "zap" && (
-                  <div style={{ display: "flex", gap: 2, height: 14, alignItems: "flex-end", marginLeft: 2 }}>
-                    {[...Array(4)].map((_, j) => (
-                      <div key={j} style={{ width: 2, height: "100%", background: `rgb(${r},${g},${b})`, borderRadius: 1, transformOrigin: "bottom", animation: `ctaBarWave ${0.7 + j * 0.15}s ease-in-out infinite`, animationDelay: `${j * 0.1}s` }} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* Split layout */}
+      <div style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }} className="cta-split">
 
-      {/* ── Main centerpiece ── */}
-      <div style={{ maxWidth: 680, margin: "0 auto", position: "relative", zIndex: 5, textAlign: "center" }}>
-        {/* 3D Orb — cleaner, single radar ring, purple/cyan only */}
-        <div ref={orbRef} style={{
-          width: 120, height: 120, margin: "0 auto 28px",
-          position: "relative", transformStyle: "preserve-3d",
-          transition: "transform .15s ease-out",
-          animation: "ctaOrbFloat 5s ease-in-out infinite",
+        {/* LEFT — copy + button */}
+        <div style={{
+          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
+          transition: "all 0.8s cubic-bezier(.2,.7,.3,1)",
         }}>
-          {/* Single radar ping (not 3) */}
+          {/* Eyebrow */}
+          <div className="eyebrow" style={{ marginBottom: 20 }}>
+            <span className="dot" /> READY WHEN YOU ARE
+          </div>
+
+          {/* Headline */}
+          <h2 className="h-section" style={{ fontSize: "clamp(34px,5vw,56px)", marginBottom: 18 }}>
+            Start thinking{" "}
+            <span className="shimmer-text">faster.</span>
+          </h2>
+
+          {/* Subtext */}
+          <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.65, maxWidth: 480, marginBottom: 32 }}>
+            Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction. Ship your first feature in under 30 minutes.
+          </p>
+
+          {/* Button */}
+          <div style={{ display: "flex", gap: 14, marginBottom: 28, flexWrap: "wrap" }}>
+            <button
+              ref={btnRef}
+              onClick={() => setShowPicker(true)}
+              style={{
+                padding: "15px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
+                background: "linear-gradient(135deg, #7C3AED, #8b5cf6)", color: "#fff",
+                border: "none", cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: 8,
+                position: "relative", overflow: "hidden",
+                boxShadow: "0 0 36px rgba(124,58,237,0.4), 0 10px 28px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)",
+                transition: "box-shadow .3s ease",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.6), 0 14px 40px rgba(124,58,237,0.32), inset 0 1px 0 rgba(255,255,255,0.3)"; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 36px rgba(124,58,237,0.4), 0 10px 28px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)"; }}
+            >
+              {/* Shine sweep */}
+              <span style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)", animation: "ctaShine 3.5s ease-in-out infinite", pointerEvents: "none" }} />
+              <Zap size={17} style={{ position: "relative", zIndex: 1 }} />
+              <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
+              <ArrowRight size={16} style={{ position: "relative", zIndex: 1 }} />
+            </button>
+          </div>
+
+          {/* Trust chips — clean single row */}
           <div style={{
-            position: "absolute", inset: -8, borderRadius: "50%",
-            border: "1.5px solid rgba(168,85,247,0.4)",
-            animation: "ctaRadar 3s ease-out infinite",
-          }} />
-          {/* Outer rotating ring with 2 orbiting dots (purple + cyan) */}
-          <div style={{
-            position: "absolute", inset: -16, borderRadius: "50%",
-            border: "1px solid rgba(168,85,247,0.2)",
-            animation: "ctaRingSpin 16s linear infinite",
+            display: "flex", gap: 18, flexWrap: "wrap",
+            fontSize: 12, color: "rgba(255,255,255,0.4)",
+            fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em",
           }}>
-            {[0, 180].map((deg, i) => (
-              <div key={i} style={{
-                position: "absolute", top: "50%", left: "50%",
-                transform: `rotate(${deg}deg) translateY(-76px)`,
-                width: 7, height: 7, borderRadius: "50%",
-                background: ["#a855f7", "#06b6d4"][i],
-                boxShadow: `0 0 10px ${["#a855f7", "#06b6d4"][i]}`,
-                marginLeft: -3.5, marginTop: -3.5,
-              }} />
+            {["No credit card", "Cancel anytime", "SOC 2 Type II", "12 min setup"].map(t => (
+              <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Check size={12} style={{ color: "rgba(6,182,212,0.8)" }} />
+                {t}
+              </span>
             ))}
           </div>
-          {/* Reverse dashed ring */}
-          <div style={{
-            position: "absolute", inset: -6, borderRadius: "50%",
-            border: "1px dashed rgba(6,182,212,0.25)",
-            animation: "ctaRingSpinRev 12s linear infinite",
-          }} />
-          {/* Core orb — purple→cyan gradient */}
-          <div style={{
-            width: "100%", height: "100%", borderRadius: "50%",
-            background: "radial-gradient(circle at 30% 30%, #fff, #a855f7 30%, #7C3AED 60%, #06b6d4 100%)",
-            boxShadow: "0 0 60px rgba(124,58,237,0.5), inset 0 0 30px rgba(255,255,255,0.2)",
-            animation: "ctaOrbPulse 3s ease-in-out infinite",
-            position: "relative",
-          }}>
-            <div style={{
-              position: "absolute", inset: 0, borderRadius: "50%",
-              background: "radial-gradient(circle at 70% 70%, transparent 50%, rgba(0,0,0,0.35))",
-            }} />
-            {/* Inner shine */}
-            <div style={{
-              position: "absolute", top: "18%", left: "22%", width: 28, height: 18,
-              background: "radial-gradient(ellipse, rgba(255,255,255,0.6), transparent 70%)",
-              borderRadius: "50%", filter: "blur(4px)",
-            }} />
-          </div>
         </div>
 
-        {/* Eyebrow */}
-        <div className="eyebrow" style={{ marginBottom: 18 }}>
-          <span className="dot" /> READY WHEN YOU ARE
-        </div>
-
-        {/* Headline */}
-        <h2 className="h-section" style={{ fontSize: "clamp(34px,5.5vw,60px)", marginBottom: 16 }}>
-          Start thinking{" "}
-          <span className="shimmer-text">faster.</span>
-        </h2>
-
-        {/* Subtext */}
-        <p style={{ fontSize: 17, color: "rgba(255,255,255,0.45)", lineHeight: 1.65, maxWidth: 480, margin: "0 auto 32px" }}>
-          Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction.
-        </p>
-
-        {/* Magnetic button — radar + shine only (no burst layer) */}
-        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 28 }}>
-          <button
-            ref={btnRef}
-            onClick={() => setShowPicker(true)}
-            style={{
-              padding: "16px 38px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-              background: "linear-gradient(135deg, #7C3AED, #8b5cf6)", color: "#fff",
-              border: "none", cursor: "pointer",
-              display: "inline-flex", alignItems: "center", gap: 9,
-              position: "relative", overflow: "hidden",
-              boxShadow: "0 0 40px rgba(124,58,237,0.4), 0 12px 32px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.2)",
-              transition: "box-shadow .3s ease",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 70px rgba(124,58,237,0.6), 0 16px 44px rgba(124,58,237,0.35), inset 0 1px 0 rgba(255,255,255,0.3)"; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.4), 0 12px 32px rgba(124,58,237,0.25), inset 0 1px 0 rgba(255,255,255,0.2)"; }}
-          >
-            {/* Single radar ring */}
-            <span style={{ position: "absolute", inset: -3, borderRadius: 99, border: "2px solid rgba(196,181,253,0.6)", animation: "ctaRadar 2s ease-out infinite", pointerEvents: "none" }} />
-            {/* Shine sweep */}
-            <span style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)", animation: "ctaShine 3.5s ease-in-out infinite", pointerEvents: "none" }} />
-            <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
-            <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
-            <ArrowRight size={16} style={{ position: "relative", zIndex: 1 }} />
-          </button>
-        </div>
-
-        {/* Trust row — clean single line, JetBrains Mono */}
+        {/* RIGHT — terminal mockup */}
         <div style={{
-          display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap",
-          fontSize: 12, color: "rgba(255,255,255,0.35)",
-          fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em",
+          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
+          transition: "all 0.8s cubic-bezier(.2,.7,.3,1) 0.15s",
         }}>
-          {["No credit card", "Cancel anytime", "SOC 2 Type II", "12 min setup"].map(t => (
-            <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-              <Check size={12} style={{ color: "rgba(6,182,212,0.8)" }} />
-              {t}
-            </span>
-          ))}
+          <TerminalMockup />
         </div>
       </div>
 
@@ -3714,7 +3305,135 @@ function CTA({ onLogin }) {
           onClose={() => setShowPicker(false)}
         />
       )}
+
+      <style>{`
+        @media (max-width: 880px) { .cta-split { grid-template-columns: 1fr !important; gap: 40px !important; } }
+      `}</style>
     </section>
+  );
+}
+
+// ── Animated terminal mockup ──
+function TerminalMockup() {
+  const [lines, setLines] = useState([]);
+  const [typed, setTyped] = useState("");
+
+  const script = [
+    { type: "cmd",   text: "npx vortis create my-app",     delay: 0 },
+    { type: "out",   text: "✓ Initializing Vortis workspace",  delay: 600, color: "6,182,212" },
+    { type: "out",   text: "✓ Connecting to 6 services",      delay: 1100, color: "6,182,212" },
+    { type: "out",   text: "✓ Indexing 12.4k documents",      delay: 1600, color: "6,182,212" },
+    { type: "out",   text: "✓ Agents online (4 parallel)",    delay: 2100, color: "168,85,247" },
+    { type: "cmd",   text: "vortis build \"dashboard with MRR\"", delay: 2800 },
+    { type: "out",   text: "→ orchestrating agents…",          delay: 3300, color: "168,85,247" },
+    { type: "out",   text: "→ code-gen · search · vision",     delay: 3700, color: "168,85,247" },
+    { type: "out",   text: "✓ Built in 11.2s · 8,247 tokens",  delay: 4400, color: "6,182,212" },
+    { type: "out",   text: "✓ Deployed to 14 regions",         delay: 4900, color: "6,182,212" },
+    { type: "live",  text: "",                                  delay: 5400 },
+  ];
+
+  useEffect(() => {
+    setLines([]); setTyped("");
+    const timeouts = [];
+    script.forEach((s, i) => {
+      timeouts.push(setTimeout(() => {
+        if (s.type === "cmd") {
+          // typewriter for commands
+          setTyped("");
+          let charIdx = 0;
+          const charInterval = setInterval(() => {
+            charIdx++;
+            setTyped(s.text.slice(0, charIdx));
+            if (charIdx >= s.text.length) {
+              clearInterval(charInterval);
+              setTimeout(() => {
+                setLines(prev => [...prev, s]);
+                setTyped("");
+              }, 300);
+            }
+          }, 45);
+        } else {
+          setLines(prev => [...prev, s]);
+        }
+      }, s.delay));
+    });
+    // Loop
+    const loop = setTimeout(() => {
+      // restart by re-mounting via key change — handled by parent
+    }, 7000);
+    return () => { timeouts.forEach(clearTimeout); clearTimeout(loop); };
+  }, []);
+
+  return (
+    <div className="gradient-border" style={{
+      borderRadius: 16, overflow: "hidden",
+      background: "rgba(3,3,10,0.85)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+      boxShadow: "0 30px 80px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.1)",
+    }}>
+      {/* Terminal header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+        background: "rgba(255,255,255,0.02)",
+      }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#ff5f57" }} />
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#febc2e" }} />
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#28c840" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "ctaDotPulse 1.5s ease-in-out infinite" }} />
+          vortis · zsh
+        </div>
+      </div>
+
+      {/* Terminal body */}
+      <div style={{
+        padding: "18px 20px", minHeight: 320, maxHeight: 320, overflow: "hidden",
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.75,
+      }}>
+        {lines.map((l, i) => (
+          <div key={i} style={{
+            animation: "ctaFadeUp 0.3s ease",
+            color: l.type === "cmd" ? "#fff" : `rgb(${l.color || "168,85,247"})`,
+            display: "flex", gap: 8,
+          }}>
+            {l.type === "cmd" && <span style={{ color: "#a855f7" }}>$</span>}
+            <span>{l.text}</span>
+          </div>
+        ))}
+
+        {/* Current typing line */}
+        {typed && (
+          <div style={{ color: "#fff", display: "flex", gap: 8 }}>
+            <span style={{ color: "#a855f7" }}>$</span>
+            <span>{typed}<span style={{ display: "inline-block", width: 7, height: 13, background: "#a855f7", marginLeft: 1, verticalAlign: "middle", animation: "ctaBlink 0.8s steps(2) infinite" }} /></span>
+          </div>
+        )}
+
+        {/* Live cursor at end */}
+        {lines.length >= 9 && (
+          <div style={{ color: "#fff", display: "flex", gap: 8, marginTop: 4 }}>
+            <span style={{ color: "#a855f7" }}>$</span>
+            <span style={{ display: "inline-block", width: 7, height: 13, background: "#a855f7", animation: "ctaBlink 0.8s steps(2) infinite" }} />
+          </div>
+        )}
+      </div>
+
+      {/* Status bar */}
+      <div style={{
+        padding: "8px 16px", borderTop: "1px solid rgba(255,255,255,0.05)",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace",
+        background: "rgba(255,255,255,0.02)",
+      }}>
+        <span>main · 5bf50c0</span>
+        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#22c55e" }} />
+          live
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -3787,7 +3506,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         </div>
         <Logos />
         <BentoGrid />
-        <NeuralField />
+        <LiveOps/>
         <Showcase />
         <HowItWorks />
         <DashboardPreview />
