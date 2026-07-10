@@ -1495,66 +1495,509 @@ function BentoGrid() {
 //  HOW IT WORKS
 // ══════════════════════════════════════════════════════════════════
 function HowItWorks() {
-  const [ref, inView] = useInView();
+  const [ref, inView] = useInView(0.15);
+  const [active, setActive] = useState(0);
+
   const steps = [
-    { n: 1, t: 'Connect your stack', d: 'Plug Vortis into your repos, docs, databases, and APIs. We index everything in minutes — no migration required, no lock-in.', icon: Layers, c: '#a78bfa' },
-    { n: 2, t: 'Describe the outcome', d: 'Type, paste, or speak what you want built. Vortis orchestrates the right agents in parallel — code, search, vision, voice.', icon: Brain, c: '#22d3ee' },
-    { n: 3, t: 'Watch it ship', d: 'Get production-ready output with tests, types, and docs. Review in a live preview, then deploy to your edge with one click.', icon: Rocket, c: '#ec4899' },
-    { n: 4, t: 'Iterate at lightspeed', d: 'Every change is versioned, observable, and reversible. Your team stays in flow — Vortis handles the busywork.', icon: Zap, c: '#f59e0b' },
+    {
+      n: '01', t: 'Connect your stack', c: '#a78bfa',
+      icon: Layers,
+      d: 'Plug Vortis into your repos, docs, databases, and APIs. We index everything in minutes — no migration, no lock-in, no professional services required.',
+      chips: ['GitHub', 'Notion', 'Postgres', 'Slack', 'Figma'],
+      visual: 'connect',
+    },
+    {
+      n: '02', t: 'Describe the outcome', c: '#22d3ee',
+      icon: Brain,
+      d: 'Type, paste, or speak what you want built. Vortis orchestrates the right agents in parallel — code, search, vision, and voice working as one.',
+      chips: ['chat', 'voice', 'image', 'code', 'docs'],
+      visual: 'describe',
+    },
+    {
+      n: '03', t: 'Watch it ship', c: '#ec4899',
+      icon: Rocket,
+      d: 'Get production-ready output with tests, types, and docs. Review in a live preview, then deploy to your edge network with a single click.',
+      chips: ['preview', 'tests', 'types', 'deploy', 'live'],
+      visual: 'ship',
+    },
+    {
+      n: '04', t: 'Iterate at lightspeed', c: '#f59e0b',
+      icon: Zap,
+      d: 'Every change is versioned, observable, and reversible. Your team stays in flow — Vortis handles the busywork so you can keep building.',
+      chips: ['versioned', 'observable', 'reversible', 'fast'],
+      visual: 'iterate',
+    },
   ];
+
+  // Auto-advance the active step
+  useEffect(() => {
+    if (!inView) return;
+    const id = setInterval(() => {
+      setActive((a) => (a + 1) % steps.length);
+    }, 3200);
+    return () => clearInterval(id);
+  }, [inView, steps.length]);
+
   return (
-    <section ref={ref} className="section" id="how">
-      <div style={{ textAlign: 'center', marginBottom: 70 }} className={`reveal ${inView ? 'in' : ''}`}>
-        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />HOW IT WORKS</div>
-        <h2 className="h-section">From idea to live<br /><span className="gradient-text-aurora">in four steps.</span></h2>
+    <section
+      ref={ref}
+      id="how"
+      className="section"
+      style={{ position: 'relative', overflow: 'hidden' }}
+    >
+      <style>{`
+        @keyframes hiwFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        @keyframes hiwSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes hiwSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes hiwPulse { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+        @keyframes hiwBarWave { 0%,100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+        @keyframes hiwDotFlow { 0% { offset-distance: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
+        @keyframes hiwFadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes hiwTypeBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes hiwScan { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
+        @keyframes hiwRadar { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(2.4); opacity: 0; } }
+        @keyframes hiwShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+      `}</style>
+
+      {/* Header */}
+      <div
+        className={`reveal ${inView ? 'in' : ''}`}
+        style={{ textAlign: 'center', marginBottom: 70 }}
+      >
+        <div className="eyebrow" style={{ marginBottom: 18 }}>
+          <span className="dot" /> HOW IT WORKS
+        </div>
+        <h2 className="h-section">
+          From idea to live
+          <br />
+          <span
+            style={{
+              background:
+                'linear-gradient(110deg,#a78bfa,#22d3ee,#ec4899,#a78bfa)',
+              backgroundSize: '200% auto',
+              WebkitBackgroundClip: 'text',
+              backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              animation: 'hiwShimmer 5s linear infinite',
+            }}
+          >
+            in four moves.
+          </span>
+        </h2>
+        <p
+          className="h-sub"
+          style={{ margin: '18px auto 0' }}
+        >
+          A flow that feels like magic. Every step is fluid, observable, and built for teams that ship.
+        </p>
       </div>
 
-      <div style={{ maxWidth: 880, margin: '0 auto', position: 'relative' }}>
-        {/* Vertical connector line */}
-        <div style={{ position: 'absolute', left: 39, top: 40, bottom: 40, width: 2, background: 'linear-gradient(180deg, rgba(139,92,246,.6), rgba(236,72,153,.4), rgba(245,158,11,.3), transparent)', zIndex: 0 }} />
+      {/* ── Desktop: horizontal timeline (4 columns) ── */}
+      <div
+        className={`reveal ${inView ? 'in' : ''}`}
+        style={{ position: 'relative', maxWidth: 1280, margin: '0 auto' }}
+      >
+        {/* Animated connector line behind the orbs */}
+        <svg
+          viewBox="0 0 1200 120"
+          preserveAspectRatio="none"
+          style={{
+            position: 'absolute',
+            top: 60,
+            left: 0,
+            right: 0,
+            width: '100%',
+            height: 80,
+            zIndex: 0,
+            pointerEvents: 'none',
+          }}
+        >
+          <defs>
+            <linearGradient id="hiwLineG" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#a78bfa" />
+              <stop offset="33%" stopColor="#22d3ee" />
+              <stop offset="66%" stopColor="#ec4899" />
+              <stop offset="100%" stopColor="#f59e0b" />
+            </linearGradient>
+          </defs>
+          {/* Base dashed line */}
+          <line
+            x1="120" y1="40" x2="1080" y2="40"
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth="2"
+            strokeDasharray="6 8"
+          />
+          {/* Animated gradient line that draws on scroll */}
+          <line
+            x1="120" y1="40" x2="1080" y2="40"
+            stroke="url(#hiwLineG)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeDasharray={inView ? '960' : '0'}
+            strokeDashoffset={inView ? '0' : '960'}
+            style={{ transition: 'stroke-dashoffset 2s ease, stroke-dasharray 2s ease' }}
+          />
+          {/* Flowing dots along the line */}
+          {[0, 1, 2, 3].map((i) => (
+            <circle key={i} r="3" fill={steps[i].c}>
+              <animateMotion
+                dur="4s"
+                repeatCount="indefinite"
+                begin={`${i * 1}s`}
+                path="M120,40 L1080,40"
+              />
+              <animate
+                attributeName="opacity"
+                values="0;1;1;0"
+                dur="4s"
+                repeatCount="indefinite"
+                begin={`${i * 1}s`}
+              />
+            </circle>
+          ))}
+        </svg>
 
-        {steps.map((s, i) => (
-          <HowStep key={s.n} step={s} delay={i * 0.1} />
+        {/* Steps grid */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(4, 1fr)',
+            gap: 20,
+            position: 'relative',
+            zIndex: 1,
+          }}
+          className="hiw-grid"
+        >
+          {steps.map((s, i) => {
+            const Icon = s.icon;
+            const isActive = active === i;
+            return (
+              <div
+                key={s.n}
+                onMouseEnter={() => setActive(i)}
+                style={{
+                  position: 'relative',
+                  paddingTop: 90,
+                  opacity: inView ? 1 : 0,
+                  transform: inView ? 'translateY(0)' : 'translateY(30px)',
+                  transition: `all 0.7s ease ${i * 0.12}s`,
+                  cursor: 'pointer',
+                }}
+              >
+                {/* Floating icon orb */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '50%',
+                    transform: `translateX(-50%) ${isActive ? 'scale(1.1)' : 'scale(1)'}`,
+                    width: 76,
+                    height: 76,
+                    transition: 'transform 0.4s ease',
+                    animation: 'hiwFloat 5s ease-in-out infinite',
+                    animationDelay: `${i * 0.4}s`,
+                  }}
+                >
+                  {/* Outer rotating ring */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: -8,
+                      borderRadius: '50%',
+                      border: `1.5px solid ${s.c}40`,
+                      animation: `hiwSpin ${10 + i * 2}s linear infinite`,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: -4,
+                        left: '50%',
+                        width: 7,
+                        height: 7,
+                        borderRadius: '50%',
+                        background: s.c,
+                        boxShadow: `0 0 12px ${s.c}`,
+                        transform: 'translateX(-50%)',
+                      }}
+                    />
+                  </div>
+                  {/* Inner reverse ring */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: -3,
+                      borderRadius: '50%',
+                      border: `1px dashed ${s.c}30`,
+                      animation: `hiwSpinRev ${7 + i}s linear infinite`,
+                    }}
+                  />
+                  {/* Radar ping when active */}
+                  {isActive && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '50%',
+                        border: `2px solid ${s.c}`,
+                        animation: 'hiwRadar 2s ease-out infinite',
+                      }}
+                    />
+                  )}
+                  {/* Core orb */}
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '50%',
+                      background: `radial-gradient(circle at 30% 30%, ${s.c}, ${s.c}55 60%, transparent)`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: isActive
+                        ? `0 0 40px ${s.c}88, inset 0 0 20px rgba(255,255,255,0.2)`
+                        : `0 0 20px ${s.c}44, inset 0 0 12px rgba(255,255,255,0.1)`,
+                      transition: 'box-shadow 0.4s ease',
+                    }}
+                  >
+                    <Icon size={26} style={{ color: '#fff' }} />
+                  </div>
+                </div>
+
+                {/* Card */}
+                <div
+                  style={{
+                    background: isActive
+                      ? `linear-gradient(160deg, ${s.c}18, rgba(8,6,20,0.85))`
+                      : 'linear-gradient(160deg, rgba(15,12,30,0.6), rgba(8,6,20,0.8))',
+                    border: `1px solid ${isActive ? s.c + '55' : 'rgba(255,255,255,0.06)'}`,
+                    borderRadius: 20,
+                    padding: '26px 22px',
+                    minHeight: 260,
+                    transition: 'all 0.35s ease',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    boxShadow: isActive ? `0 20px 50px -15px ${s.c}55` : 'none',
+                    position: 'relative',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {/* Top gradient line */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: 1,
+                      background: `linear-gradient(90deg, transparent, ${s.c}88, transparent)`,
+                    }}
+                  />
+                  {/* Step number */}
+                  <div
+                    style={{
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      color: s.c,
+                      fontWeight: 700,
+                      letterSpacing: '.15em',
+                      marginBottom: 10,
+                    }}
+                  >
+                    STEP {s.n}
+                  </div>
+                  {/* Title */}
+                  <h3
+                    style={{
+                      fontFamily: "'Space Grotesk', sans-serif",
+                      fontSize: 20,
+                      fontWeight: 700,
+                      letterSpacing: '-.02em',
+                      margin: '0 0 10px',
+                    }}
+                  >
+                    {s.t}
+                  </h3>
+                  {/* Description */}
+                  <p
+                    style={{
+                      color: 'rgba(255,255,255,0.58)',
+                      fontSize: 13.5,
+                      lineHeight: 1.6,
+                      margin: '0 0 16px',
+                    }}
+                  >
+                    {s.d}
+                  </p>
+                  {/* Chips */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 6,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {s.chips.map((ch) => (
+                      <span
+                        key={ch}
+                        style={{
+                          fontSize: 10,
+                          padding: '4px 9px',
+                          borderRadius: 6,
+                          background: `${s.c}1a`,
+                          border: `1px solid ${s.c}33`,
+                          color: s.c,
+                          fontFamily: "'JetBrains Mono', monospace",
+                          letterSpacing: '.02em',
+                        }}
+                      >
+                        {ch}
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Active indicator bar at bottom */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      height: 2,
+                      width: isActive ? '100%' : '0%',
+                      background: `linear-gradient(90deg, ${s.c}, transparent)`,
+                      transition: 'width 0.5s ease',
+                    }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Progress dots (mobile-friendly indicator) */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 8,
+            marginTop: 40,
+          }}
+        >
+          {steps.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => setActive(i)}
+              style={{
+                width: active === i ? 28 : 8,
+                height: 8,
+                borderRadius: 4,
+                background: active === i ? s.c : 'rgba(255,255,255,0.15)',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                boxShadow: active === i ? `0 0 12px ${s.c}` : 'none',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Bottom band: live animated stat strip ── */}
+      <div
+        className={`reveal ${inView ? 'in' : ''}`}
+        style={{
+          marginTop: 60,
+          maxWidth: 1100,
+          margin: '60px auto 0',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: 14,
+        }}
+        className2="hiw-stats"
+      >
+        {[
+          { v: '12 min', l: 'Avg setup time', c: '#a78bfa' },
+          { v: '4 agents', l: 'Run in parallel', c: '#22d3ee' },
+          { v: '60 fps', l: 'Live preview', c: '#ec4899' },
+          { v: '1 click', l: 'Edge deploy', c: '#f59e0b' },
+        ].map((stat, i) => (
+          <div
+            key={i}
+            style={{
+              padding: '20px 18px',
+              borderRadius: 16,
+              background: 'rgba(255,255,255,0.025)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              textAlign: 'left',
+              position: 'relative',
+              overflow: 'hidden',
+              opacity: inView ? 1 : 0,
+              transform: inView ? 'translateY(0)' : 'translateY(20px)',
+              transition: `all 0.6s ease ${0.4 + i * 0.1}s`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 800,
+                fontFamily: "'Space Grotesk', sans-serif",
+                letterSpacing: '-.03em',
+                background: `linear-gradient(180deg, #fff, ${stat.c})`,
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                marginBottom: 4,
+              }}
+            >
+              {stat.v}
+            </div>
+            <div
+              style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}
+            >
+              {stat.l}
+            </div>
+            {/* Mini wave bars */}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 10,
+                right: 12,
+                display: 'flex',
+                gap: 2,
+                alignItems: 'flex-end',
+                height: 14,
+              }}
+            >
+              {[...Array(5)].map((_, j) => (
+                <div
+                  key={j}
+                  style={{
+                    width: 2,
+                    height: '100%',
+                    background: stat.c,
+                    opacity: 0.5,
+                    borderRadius: 1,
+                    transformOrigin: 'bottom',
+                    animation: `hiwBarWave ${0.7 + j * 0.15}s ease-in-out infinite`,
+                    animationDelay: `${j * 0.08}s`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         ))}
       </div>
+
+      <style>{`
+        @media(max-width:980px){
+          .hiw-grid{grid-template-columns:repeat(2,1fr)!important}
+        }
+        @media(max-width:600px){
+          .hiw-grid{grid-template-columns:1fr!important}
+          .hiw-stats{grid-template-columns:repeat(2,1fr)!important}
+        }
+      `}</style>
     </section>
-  );
-}
-
-function HowStep({ step, delay }) {
-  const [ref, inView] = useInView(0.4);
-  const Icon = step.icon;
-  return (
-    <div ref={ref} className={`reveal ${inView ? 'in' : ''}`} style={{
-      display: 'flex', gap: 24, marginBottom: 40, alignItems: 'flex-start', position: 'relative', zIndex: 1,
-      transitionDelay: `${delay}s`,
-    }}>
-      {/* Number ring */}
-      <div style={{ flexShrink: 0, position: 'relative', width: 80, height: 80 }}>
-        <svg width="80" height="80" viewBox="0 0 80 80" style={{ position: 'absolute', inset: 0 }}>
-          <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="2" />
-          <circle cx="40" cy="40" r="36" fill="none" stroke={step.c} strokeWidth="2" strokeLinecap="round"
-            strokeDasharray={inView ? '226' : '0'} strokeDashoffset={inView ? '0' : '226'}
-            transform="rotate(-90 40 40)" style={{ transition: 'stroke-dashoffset 1.4s ease, stroke-dasharray 1.4s ease' }} />
-        </svg>
-        <div style={{
-          position: 'absolute', inset: 8, borderRadius: '50%',
-          background: `radial-gradient(circle, ${step.c}33, transparent 70%)`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Icon size={22} style={{ color: step.c }} />
-        </div>
-      </div>
-
-      {/* Text */}
-      <div style={{ paddingTop: 14, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: step.c, fontWeight: 700, letterSpacing: '.1em' }}>STEP 0{step.n}</span>
-        </div>
-        <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 700, letterSpacing: '-.02em', margin: '0 0 12px' }}>{step.t}</h3>
-        <p style={{ color: 'rgba(255,255,255,.6)', fontSize: 16, lineHeight: 1.6, margin: 0, maxWidth: 600 }}>{step.d}</p>
-      </div>
-    </div>
   );
 }
 
@@ -2535,23 +2978,23 @@ function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
   const [showPicker, setShowPicker] = useState(false);
 
-  // Floating rectangle configs — each drifts on its own path
+  // Floating rectangles — all positioned in the LOWER half + far sides
+  // so they never overlap the upper section or the main card.
   const rects = [
-    { w: 200, h: 110, top: '6%',  left: '-4%', delay: 0, dur: 22, rot: -12, color: '139,92,246',  label: 'neural' },
-    { w: 160, h: 90,  top: '72%', left: '4%',  delay: 3, dur: 18, rot: 8,   color: '236,72,153',  label: 'edge' },
-    { w: 240, h: 130, top: '12%', left: '82%', delay: 1, dur: 26, rot: -6,  color: '34,211,238',  label: 'gpu' },
-    { w: 180, h: 100, top: '76%', left: '86%', delay: 4, dur: 20, rot: 14,  color: '245,158,11',  label: 'cache' },
-    { w: 140, h: 80,  top: '44%', left: '-8%', delay: 2, dur: 24, rot: 6,   color: '139,92,246',  label: 'vector' },
-    { w: 120, h: 70,  top: '38%', left: '90%', delay: 5, dur: 19, rot: -10, color: '236,72,153',  label: 'stream' },
-    { w: 100, h: 60,  top: '88%', left: '48%', delay: 1.5, dur: 17, rot: 4, color: '34,211,238',  label: 'live' },
-    { w: 90,  h: 56,  top: '2%',  left: '46%', delay: 3.5, dur: 21, rot: -8, color: '245,158,11', label: 'sync' },
+    { w: 190, h: 100, top: '58%', left: '2%',  delay: 0,   dur: 22, rot: -12, color: '139,92,246', label: 'neural' },
+    { w: 150, h: 84,  top: '78%', left: '8%',  delay: 3,   dur: 18, rot: 8,   color: '236,72,153', label: 'edge' },
+    { w: 210, h: 116, top: '60%', left: '78%', delay: 1,   dur: 26, rot: -6,  color: '34,211,238', label: 'gpu' },
+    { w: 165, h: 92,  top: '80%', left: '82%', delay: 4,   dur: 20, rot: 14,  color: '245,158,11', label: 'cache' },
+    { w: 130, h: 74,  top: '66%', left: '24%', delay: 2,   dur: 24, rot: 6,   color: '139,92,246', label: 'vector' },
+    { w: 120, h: 68,  top: '84%', left: '60%', delay: 5,   dur: 19, rot: -10, color: '236,72,153', label: 'stream' },
+    { w: 100, h: 60,  top: '70%', left: '44%', delay: 1.5, dur: 17, rot: 4,   color: '34,211,238', label: 'live' },
   ];
 
   return (
     <section
       ref={ref}
       style={{
-        padding: '120px 40px',
+        padding: '120px 40px 140px',
         borderTop: '1px solid rgba(255,255,255,0.04)',
         position: 'relative',
         zIndex: 1,
@@ -2559,18 +3002,15 @@ function CTA({ onLogin }) {
         overflow: 'hidden',
       }}
     >
-      {/* ── All keyframes inline so nothing depends on global CSS ── */}
+      {/* All keyframes inline — no global CSS dependency */}
       <style>{`
-        @keyframes ctaRect0 { 0%,100% { transform: rotate(-12deg) translate(0,0); } 50% { transform: rotate(-6deg) translate(70px,40px); } }
-        @keyframes ctaRect1 { 0%,100% { transform: rotate(8deg) translate(0,0); }  50% { transform: rotate(14deg) translate(-60px,-50px); } }
-        @keyframes ctaRect2 { 0%,100% { transform: rotate(-6deg) translate(0,0); }  50% { transform: rotate(2deg) translate(-80px,50px); } }
-        @keyframes ctaRect3 { 0%,100% { transform: rotate(14deg) translate(0,0); } 50% { transform: rotate(8deg) translate(50px,-60px); } }
-        @keyframes ctaRect4 { 0%,100% { transform: rotate(6deg) translate(0,0); }   50% { transform: rotate(0deg) translate(90px,-30px); } }
-        @keyframes ctaRect5 { 0%,100% { transform: rotate(-10deg) translate(0,0); } 50% { transform: rotate(-4deg) translate(-70px,40px); } }
-        @keyframes ctaRect6 { 0%,100% { transform: rotate(4deg) translate(0,0); }   50% { transform: rotate(-2deg) translate(-40px,-30px); } }
-        @keyframes ctaRect7 { 0%,100% { transform: rotate(-8deg) translate(0,0); }  50% { transform: rotate(-12deg) translate(50px,30px); } }
-        @keyframes ctaMarqueeL { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        @keyframes ctaMarqueeR { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+        @keyframes ctaRect0 { 0%,100% { transform: rotate(-12deg) translate(0,0); } 50% { transform: rotate(-6deg) translate(50px,-20px); } }
+        @keyframes ctaRect1 { 0%,100% { transform: rotate(8deg) translate(0,0); }   50% { transform: rotate(14deg) translate(-40px,-25px); } }
+        @keyframes ctaRect2 { 0%,100% { transform: rotate(-6deg) translate(0,0); }  50% { transform: rotate(2deg) translate(-55px,-20px); } }
+        @keyframes ctaRect3 { 0%,100% { transform: rotate(14deg) translate(0,0); }  50% { transform: rotate(8deg) translate(35px,-30px); } }
+        @keyframes ctaRect4 { 0%,100% { transform: rotate(6deg) translate(0,0); }   50% { transform: rotate(0deg) translate(60px,-15px); } }
+        @keyframes ctaRect5 { 0%,100% { transform: rotate(-10deg) translate(0,0); } 50% { transform: rotate(-4deg) translate(-45px,-20px); } }
+        @keyframes ctaRect6 { 0%,100% { transform: rotate(4deg) translate(0,0); }   50% { transform: rotate(-2deg) translate(-25px,-15px); } }
         @keyframes ctaConicSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes ctaPulseDot { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
         @keyframes ctaBarWave { 0%,100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
@@ -2583,116 +3023,13 @@ function CTA({ onLogin }) {
           position: 'absolute',
           inset: 0,
           background:
-            'radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124,58,237,0.10), transparent)',
+            'radial-gradient(ellipse 60% 50% at 50% 40%, rgba(124,58,237,0.10), transparent)',
           pointerEvents: 'none',
         }}
       />
 
-      {/* ── FLOATING RECTANGLES — drifting in background ── */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          overflow: 'hidden',
-        }}
-      >
-        {rects.map((r, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              top: r.top,
-              left: r.left,
-              width: r.w,
-              height: r.h,
-              borderRadius: 18,
-              background: `linear-gradient(135deg, rgba(${r.color},0.10), rgba(${r.color},0.02))`,
-              border: `1px solid rgba(${r.color},0.28)`,
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              boxShadow: `0 0 50px rgba(${r.color},0.18), inset 0 0 30px rgba(${r.color},0.05)`,
-              animation: `ctaRect${i} ${r.dur}s ease-in-out infinite`,
-              animationDelay: `${r.delay}s`,
-              opacity: inView ? 1 : 0,
-              transition: 'opacity 1s ease',
-            }}
-          >
-            {/* Top gradient line */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 12,
-                left: 12,
-                right: 12,
-                height: 1,
-                background: `linear-gradient(90deg, transparent, rgba(${r.color},0.7), transparent)`,
-              }}
-            />
-            {/* Live dot */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 14,
-                right: 14,
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: `rgba(${r.color},0.95)`,
-                boxShadow: `0 0 12px rgba(${r.color},0.9)`,
-                animation: 'ctaPulseDot 2s ease-in-out infinite',
-              }}
-            />
-            {/* Label */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 24,
-                left: 14,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 9,
-                color: `rgba(${r.color},0.8)`,
-                letterSpacing: '.1em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {r.label}
-            </div>
-            {/* Mini bars at bottom — wave animated */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 14,
-                left: 14,
-                right: 14,
-                display: 'flex',
-                gap: 3,
-                alignItems: 'flex-end',
-                height: 16,
-              }}
-            >
-              {[...Array(8)].map((_, j) => (
-                <div
-                  key={j}
-                  style={{
-                    flex: 1,
-                    height: '100%',
-                    background: `rgba(${r.color},${0.25 + (j % 3) * 0.15})`,
-                    borderRadius: 1.5,
-                    transformOrigin: 'bottom',
-                    animation: `ctaBarWave ${0.8 + (j % 4) * 0.2}s ease-in-out infinite`,
-                    animationDelay: `${j * 0.08}s`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── MAIN CTA CARD with rotating conic rectangle border ── */}
-      <div style={{ maxWidth: 720, margin: '0 auto', position: 'relative' }}>
-        {/* Conic rotating border */}
+      {/* ── MAIN CTA CARD with rotating conic border ── */}
+      <div style={{ maxWidth: 720, margin: '0 auto', position: 'relative', zIndex: 2 }}>
         <div
           style={{
             position: 'absolute',
@@ -2710,15 +3047,13 @@ function CTA({ onLogin }) {
             transition: 'opacity 1s ease',
           }}
         />
-
-        {/* Inner glass card */}
         <div
           style={{
             position: 'relative',
             padding: '64px 40px',
             borderRadius: 30,
             background:
-              'linear-gradient(160deg, rgba(15,12,30,0.88), rgba(8,6,20,0.94))',
+              'linear-gradient(160deg, rgba(15,12,30,0.92), rgba(8,6,20,0.96))',
             backdropFilter: 'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',
             opacity: inView ? 1 : 0,
@@ -2800,7 +3135,6 @@ function CTA({ onLogin }) {
                   '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)';
               }}
             >
-              {/* Radar ping ring around button */}
               <span
                 style={{
                   position: 'absolute',
@@ -2820,99 +3154,122 @@ function CTA({ onLogin }) {
         </div>
       </div>
 
-      {/* ── MOVING MARQUEE RECTANGLES (two rows, opposite directions) ── */}
-      <div style={{ marginTop: 60, position: 'relative' }}>
-        {/* Row 1 — moving left */}
+      {/* ── FLOATING RECTANGLES — contained BELOW the card only ── */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: '45%',
+          pointerEvents: 'none',
+          overflow: 'hidden',
+          zIndex: 1,
+        }}
+      >
+        {/* Top fade so rectangles never touch the card above */}
         <div
           style={{
-            overflow: 'hidden',
-            maskImage:
-              'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
-            WebkitMaskImage:
-              'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
-            marginBottom: 10,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 60,
+            background:
+              'linear-gradient(180deg, rgba(4,3,12,1), transparent)',
+            zIndex: 2,
+            pointerEvents: 'none',
           }}
-        >
+        />
+        {rects.map((r, i) => (
           <div
+            key={i}
             style={{
-              display: 'flex',
-              gap: 12,
-              width: 'max-content',
-              animation: 'ctaMarqueeL 28s linear infinite',
+              position: 'absolute',
+              top: r.top,
+              left: r.left,
+              width: r.w,
+              height: r.h,
+              borderRadius: 18,
+              background: `linear-gradient(135deg, rgba(${r.color},0.10), rgba(${r.color},0.02))`,
+              border: `1px solid rgba(${r.color},0.28)`,
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              boxShadow: `0 0 50px rgba(${r.color},0.18), inset 0 0 30px rgba(${r.color},0.05)`,
+              animation: `ctaRect${i} ${r.dur}s ease-in-out infinite`,
+              animationDelay: `${r.delay}s`,
+              opacity: inView ? 1 : 0,
+              transition: 'opacity 1.2s ease',
             }}
           >
-            {[...marqueeLeft, ...marqueeLeft].map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 20px',
-                  borderRadius: 14,
-                  background:
-                    'linear-gradient(135deg, rgba(139,92,246,.06), rgba(236,72,153,.03))',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  fontSize: 13,
-                  color: 'rgba(255,255,255,0.75)',
-                  whiteSpace: 'nowrap',
-                  fontWeight: 500,
-                  backdropFilter: 'blur(6px)',
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{m.icon}</span>
-                {m.t}
-              </div>
-            ))}
+            <div
+              style={{
+                position: 'absolute',
+                top: 12,
+                left: 12,
+                right: 12,
+                height: 1,
+                background: `linear-gradient(90deg, transparent, rgba(${r.color},0.7), transparent)`,
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 14,
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: `rgba(${r.color},0.95)`,
+                boxShadow: `0 0 12px rgba(${r.color},0.9)`,
+                animation: 'ctaPulseDot 2s ease-in-out infinite',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                top: 24,
+                left: 14,
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 9,
+                color: `rgba(${r.color},0.8)`,
+                letterSpacing: '.1em',
+                textTransform: 'uppercase',
+              }}
+            >
+              {r.label}
+            </div>
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 14,
+                left: 14,
+                right: 14,
+                display: 'flex',
+                gap: 3,
+                alignItems: 'flex-end',
+                height: 16,
+              }}
+            >
+              {[...Array(8)].map((_, j) => (
+                <div
+                  key={j}
+                  style={{
+                    flex: 1,
+                    height: '100%',
+                    background: `rgba(${r.color},${0.25 + (j % 3) * 0.15})`,
+                    borderRadius: 1.5,
+                    transformOrigin: 'bottom',
+                    animation: `ctaBarWave ${0.8 + (j % 4) * 0.2}s ease-in-out infinite`,
+                    animationDelay: `${j * 0.08}s`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Row 2 — moving right */}
-        <div
-          style={{
-            overflow: 'hidden',
-            maskImage:
-              'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
-            WebkitMaskImage:
-              'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              gap: 12,
-              width: 'max-content',
-              animation: 'ctaMarqueeR 32s linear infinite',
-            }}
-          >
-            {[...marqueeRight, ...marqueeRight].map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '12px 20px',
-                  borderRadius: 14,
-                  background:
-                    'linear-gradient(135deg, rgba(34,211,238,.05), rgba(245,158,11,.03))',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  fontSize: 13,
-                  color: 'rgba(255,255,255,0.75)',
-                  whiteSpace: 'nowrap',
-                  fontWeight: 500,
-                  backdropFilter: 'blur(6px)',
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{m.icon}</span>
-                {m.t}
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Auth modal */}
       {showPicker && (
         <AuthPicker
           onLogin={(provider) => {
