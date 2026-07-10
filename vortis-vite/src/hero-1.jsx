@@ -1,63 +1,189 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import AICore from "./AICore";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
   BarChart3, Wifi, ChevronDown, Star, Award, Crown,
   Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
-  TrendingUp, Clock, Database, Search, Palette, Mic, Phone
+  TrendingUp, Clock, Database, Search, Palette, Mic, Phone,
+  Play, Menu, X, Quote, Activity, Server, GitBranch,
+  Workflow, Boxes, Hexagon, Triangle, Circle, Square,
+  ChevronRight, Heart, Bookmark, Command, Gauge, Network
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════
-//  STYLES
+//  MEGA STYLES — animation library + design tokens
 // ══════════════════════════════════════════════════════════════════
 const STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Instrument+Serif:ital@0;1&display=swap');
 *,*::before,*::after{box-sizing:border-box;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 html{scroll-behavior:smooth;overflow-x:clip}
-body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
+body{margin:0;padding:0;overflow-x:hidden;background:#04030c;color:#fff;font-family:'Inter',system-ui,sans-serif}
+::selection{background:rgba(139,92,246,.4);color:#fff}
 
-@keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(80px,-60px) scale(1.2)}66%{transform:translate(-30px,70px) scale(.9)}}
-@keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-70px,50px) scale(1.3)}70%{transform:translate(40px,-40px) scale(.85)}}
-@keyframes orb3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-40px,-80px) scale(1.15)}}
-@keyframes orb4{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(60px,40px) scale(1.1)}70%{transform:translate(-20px,-30px) scale(.92)}}
+/* Scrollbar */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:#04030c}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#7c3aed,#ec4899);border-radius:10px}
+::-webkit-scrollbar-thumb:hover{background:linear-gradient(180deg,#8b5cf6,#f472b6)}
 
+/* ═══ ORB / AURORA ═══ */
+@keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(120px,-90px) scale(1.25)}66%{transform:translate(-50px,100px) scale(.88)}}
+@keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-100px,70px) scale(1.35)}70%{transform:translate(60px,-60px) scale(.82)}}
+@keyframes orb3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-60px,-110px) scale(1.18)}}
+@keyframes orb4{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(80px,50px) scale(1.12)}70%{transform:translate(-30px,-40px) scale(.9)}}
+@keyframes auroraDrift{0%{transform:translate(-10%,-5%) rotate(0deg)}50%{transform:translate(10%,5%) rotate(180deg)}100%{transform:translate(-10%,-5%) rotate(360deg)}}
+@keyframes auroraShift{0%,100%{filter:hue-rotate(0deg)}50%{filter:hue-rotate(60deg)}}
+@keyframes nebulaPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.8;transform:scale(1.15)}}
+
+/* ═══ MARQUEE ═══ */
 @keyframes marquee-l{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @keyframes marquee-r{from{transform:translateX(-50%)}to{transform:translateX(0)}}
+@keyframes marquee-v{from{transform:translateY(0)}to{transform:translateY(-50%)}}
 
-@keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+/* ═══ REVEAL / FADE ═══ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes slideInLeft{from{opacity:0;transform:translateX(-50px)}to{opacity:1;transform:translateX(0)}}
-@keyframes slideInRight{from{opacity:0;transform:translateX(50px)}to{opacity:1;transform:translateX(0)}}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-@keyframes floatReverse{0%,100%{transform:translateY(0)}50%{transform:translateY(12px)}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-60px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:translateX(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:scale(1)}}
+@keyframes wordReveal{from{opacity:0;transform:translateY(40px) rotateX(-90deg)}to{opacity:1;transform:translateY(0) rotateX(0)}}
+
+/* ═══ FLOAT / PULSE ═══ */
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+@keyframes floatReverse{0%,100%{transform:translateY(0)}50%{transform:translateY(14px)}}
+@keyframes float3d{0%,100%{transform:translateY(0) translateX(0) rotate(0deg)}33%{transform:translateY(-10px) translateX(5px) rotate(2deg)}66%{transform:translateY(5px) translateX(-5px) rotate(-2deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes pulseScale{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes spinRev{from{transform:rotate(360deg)}to{transform:rotate(0deg)}}
+@keyframes spinSlow{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+/* ═══ SHIMMER / GLOW ═══ */
 @keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
-@keyframes borderFlow{0%,100%{border-color:rgba(124,58,237,.3)}50%{border-color:rgba(168,85,247,.8)}}
-@keyframes goldGlow{0%,100%{box-shadow:0 0 20px rgba(251,191,36,.12),0 0 50px rgba(124,58,237,.08)}50%{box-shadow:0 0 50px rgba(251,191,36,.3),0 0 100px rgba(124,58,237,.18)}}
-@keyframes gridFade{0%{opacity:.012}50%{opacity:.022}100%{opacity:.012}}
-@keyframes countUp{from{opacity:0;transform:translateY(16px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes shimmerText{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+@keyframes borderFlow{0%,100%{border-color:rgba(124,58,237,.3)}50%{border-color:rgba(236,72,153,.7)}}
+@keyframes goldGlow{0%,100%{box-shadow:0 0 20px rgba(139,92,246,.15),0 0 50px rgba(236,72,153,.08)}50%{box-shadow:0 0 50px rgba(139,92,246,.35),0 0 100px rgba(236,72,153,.2)}}
+@keyframes neonPulse{0%,100%{text-shadow:0 0 7px rgba(139,92,246,.5),0 0 20px rgba(139,92,246,.3)}50%{text-shadow:0 0 14px rgba(139,92,246,.9),0 0 40px rgba(139,92,246,.6),0 0 60px rgba(236,72,153,.3)}}
+@keyframes glowChase{0%{background-position:0% 50%}100%{background-position:200% 50%}}
+@keyframes conicSpin{from{--a:0deg}to{--a:360deg}}
+
+/* ═══ GRID / SCAN ═══ */
+@keyframes gridFade{0%{opacity:.015}50%{opacity:.035}100%{opacity:.015}}
 @keyframes scanLine{0%{transform:translateY(-100%)}100%{transform:translateY(400%)}}
+@keyframes radarSweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+@keyframes radarPing{0%{transform:scale(1);opacity:1}100%{transform:scale(2.5);opacity:0}}
+
+/* ═══ PARTICLE ═══ */
 @keyframes particleDrift{0%{transform:translate(0,0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}
-@keyframes morphBorder{0%,100%{border-radius:60% 40% 30% 70% / 60% 30% 70% 40%}50%{border-radius:30% 60% 70% 40% / 50% 60% 30% 60%}}
+
+/* ═══ MORPH / GLITCH ═══ */
+@keyframes morphBlob{0%,100%{border-radius:60% 40% 30% 70% / 60% 30% 70% 40%}50%{border-radius:30% 60% 70% 40% / 50% 60% 30% 60%}}
+@keyframes glitchX{0%,100%{transform:translateX(0)}20%{transform:translateX(-2px)}40%{transform:translateX(2px)}60%{transform:translateX(-1px)}80%{transform:translateX(1px)}}
+@keyframes jitter{0%,100%{transform:translate(0,0)}25%{transform:translate(1px,-1px)}50%{transform:translate(-1px,1px)}75%{transform:translate(1px,1px)}}
+
+/* ═══ TYPEWRITER / BLINK ═══ */
 @keyframes typewriter{from{width:0}to{width:100%}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ═══ RIPPLE / WAVE ═══ */
 @keyframes ripple{0%{transform:scale(0);opacity:.6}100%{transform:scale(3);opacity:0}}
-@keyframes radarPing{0%{transform:scale(1);opacity:1}100%{transform:scale(1.5);opacity:0}}
-@keyframes glitchX{0%,100%{transform:translateX(0)}20%{transform:translateX(-2px)}40%{transform:translateX(2px)}60%{transform:translateX(-1px)}80%{transform:translateX(1px)}}
-@keyframes neonPulse{0%,100%{text-shadow:0 0 7px rgba(139,92,246,.5),0 0 20px rgba(139,92,246,.3)}50%{text-shadow:0 0 14px rgba(139,92,246,.8),0 0 40px rgba(139,92,246,.5),0 0 60px rgba(139,92,246,.3)}}
-@keyframes waveFloat{0%,100%{transform:translateY(0) rotate(0deg)}25%{transform:translateY(-8px) rotate(1deg)}75%{transform:translateY(8px) rotate(-1deg)}}
-@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes waveBar{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+@keyframes waveBar2{0%,100%{transform:scaleY(.5)}50%{transform:scaleY(.8)}}
 
-::-webkit-scrollbar{width:5px;background:#03030a}
-::-webkit-scrollbar-thumb{background:linear-gradient(#7C3AED,#06b6d4);border-radius:3px}
+/* ═══ COUNTER / TICKER ═══ */
+@keyframes countUp{from{opacity:0;transform:translateY(16px) scale(.9)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes tickerSlide{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
 
-.glow-text{animation:neonPulse 3s ease-in-out infinite}
-.shimmer-text{background:linear-gradient(90deg,#fff 0%,#a855f7 25%,#fff 50%,#06b6d4 75%,#fff 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 4s linear infinite}
-.gradient-border{position:relative}
-.gradient-border::before{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(135deg,rgba(124,58,237,.6),rgba(168,85,247,.4),rgba(6,182,212,.6));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+/* ═══ GRADIENT TEXT ═══ */
+.gradient-text{background:linear-gradient(110deg,#a78bfa 0%,#ec4899 25%,#f59e0b 50%,#ec4899 75%,#a78bfa 100%);background-size:200% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:shimmerText 6s linear infinite}
+.gradient-text-cv{background:linear-gradient(110deg,#818cf8,#c084fc,#f472b6,#818cf8);background-size:200% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:shimmerText 5s linear infinite}
+.gradient-text-aurora{background:linear-gradient(110deg,#22d3ee,#a78bfa,#f472b6,#22d3ee);background-size:200% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:shimmerText 4s linear infinite}
+
+/* ═══ GLASS ═══ */
+.glass{background:rgba(15,12,30,.55);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border:1px solid rgba(255,255,255,.08)}
+.glass-strong{background:rgba(8,6,20,.75);backdrop-filter:blur(28px) saturate(180%);-webkit-backdrop-filter:blur(28px) saturate(180%);border:1px solid rgba(255,255,255,.1)}
+
+/* ═══ CONIC BORDER CARD ═══ */
+.conic-card{position:relative;background:#0a0820;border-radius:24px;overflow:hidden}
+.conic-card::before{content:'';position:absolute;inset:-2px;background:conic-gradient(from var(--a,0deg),transparent 0deg,rgba(139,92,246,.8) 60deg,transparent 120deg,transparent 240deg,rgba(236,72,153,.8) 300deg,transparent 360deg);border-radius:24px;z-index:-1;animation:spin 6s linear infinite}
+
+/* ═══ MAGNETIC / TILT ═══ */
+.tilt-card{transform-style:preserve-3d;transition:transform .15s ease-out,box-shadow .3s ease}
+.magnetic{transition:transform .25s cubic-bezier(.2,.9,.3,1.4)}
+
+/* ═══ BTN ═══ */
+.btn-glow{position:relative;overflow:hidden;background:linear-gradient(110deg,#7c3aed,#ec4899);color:#fff;border:none;border-radius:999px;padding:14px 30px;font-weight:700;font-size:15px;cursor:pointer;letter-spacing:-.01em;box-shadow:0 0 0 1px rgba(255,255,255,.1),0 10px 40px -10px rgba(139,92,246,.6),inset 0 1px 0 rgba(255,255,255,.25);transition:transform .2s ease,box-shadow .3s ease}
+.btn-glow:hover{transform:translateY(-2px);box-shadow:0 0 0 1px rgba(255,255,255,.2),0 18px 60px -10px rgba(236,72,153,.7),inset 0 1px 0 rgba(255,255,255,.35)}
+.btn-glow::after{content:'';position:absolute;top:0;left:-100%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);transition:left .6s ease}
+.btn-glow:hover::after{left:150%}
+.btn-ghost{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;padding:13px 28px;font-weight:600;font-size:15px;cursor:pointer;backdrop-filter:blur(10px);transition:all .25s ease}
+.btn-ghost:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);transform:translateY(-1px)}
+
+/* ═══ DIVIDERS ═══ */
+.section{position:relative;padding:140px 24px;max-width:1280px;margin:0 auto}
+@media(max-width:768px){.section{padding:90px 16px}}
+
+/* ═══ SCROLL REVEAL ═══ */
+.reveal{opacity:0;transform:translateY(40px);transition:opacity .9s cubic-bezier(.2,.7,.3,1),transform .9s cubic-bezier(.2,.7,.3,1)}
+.reveal.in{opacity:1;transform:translateY(0)}
+.reveal-stagger>*{opacity:0;transform:translateY(40px);transition:opacity .7s cubic-bezier(.2,.7,.3,1),transform .7s cubic-bezier(.2,.7,.3,1)}
+.reveal-stagger.in>*{opacity:1;transform:translateY(0)}
+
+/* ═══ HOVER LIFT ═══ */
+.lift{transition:transform .35s cubic-bezier(.2,.7,.3,1),box-shadow .35s ease,border-color .35s ease}
+.lift:hover{transform:translateY(-6px)}
+
+/* ═══ ANIM HELPER ═══ */
+.anim-float{animation:float 6s ease-in-out infinite}
+.anim-float-rev{animation:floatReverse 7s ease-in-out infinite}
+.anim-spin-slow{animation:spin 24s linear infinite}
+.anim-pulse{animation:pulse 3s ease-in-out infinite}
+
+/* ═══ DOT GRID ═══ */
+.dot-grid{background-image:radial-gradient(circle,rgba(139,92,246,.15) 1px,transparent 1px);background-size:32px 32px}
+
+/* ═══ NOISE ═══ */
+.noise{position:absolute;inset:0;opacity:.04;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* ═══ SECTION TITLE ═══ */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.25);color:#c4b5fd;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:#a78bfa;box-shadow:0 0 12px #a78bfa;animation:pulse 2s ease-in-out infinite}
+
+.h-section{font-family:'Space Grotesk','Inter',sans-serif;font-weight:700;letter-spacing:-.035em;line-height:1.05;font-size:clamp(34px,5.5vw,68px)}
+.h-sub{color:rgba(255,255,255,.6);font-size:18px;line-height:1.55;max-width:640px;margin-top:18px}
+
+/* ═══ SCROLL PROGRESS ═══ */
+.scroll-progress{position:fixed;top:0;left:0;height:3px;width:0;background:linear-gradient(90deg,#7c3aed,#ec4899,#f59e0b);z-index:1000;box-shadow:0 0 12px rgba(139,92,246,.7);transition:width .1s linear}
+
+/* ═══ CURSOR GLOW ═══ */
+.cursor-glow{position:fixed;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.18),transparent 60%);pointer-events:none;z-index:1;mix-blend-mode:screen;transition:transform .15s cubic-bezier(.2,.9,.3,1);transform:translate(-50%,-50%)}
+
+/* ═══ STAT NUM ═══ */
+.stat-num{font-family:'Space Grotesk',sans-serif;font-weight:800;letter-spacing:-.04em;font-variant-numeric:tabular-nums;background:linear-gradient(180deg,#fff 30%,#a78bfa 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* ═══ MARQUEE PAUSE ON HOVER ═══ */
+.marquee-track{display:flex;width:max-content;animation:marquee-l 32s linear infinite}
+.marquee-track:hover{animation-play-state:paused}
+.marquee-track.rev{animation:marquee-r 36s linear infinite}
+
+/* ═══ FAQ ═══ */
+.faq-item{overflow:hidden;transition:all .35s ease}
+
+/* ═══ KBD ═══ */
+.kbd{font-family:'JetBrains Mono',monospace;font-size:11px;padding:3px 7px;border-radius:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);box-shadow:0 2px 0 rgba(0,0,0,.3)}
+
+/* ═══ LIVE DOT ═══ */
+.live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 0 rgba(34,197,94,.7);animation:livePulse 2s infinite}
+@keyframes livePulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.7)}70%{box-shadow:0 0 0 12px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+
+/* ═══ GRADIENT BORDER ANIM ═══ */
+.grad-border{position:relative;background:#0a0820;border-radius:20px}
+.grad-border::before{content:'';position:absolute;inset:0;padding:1px;background:linear-gradient(135deg,rgba(139,92,246,.6),rgba(236,72,153,.4),rgba(245,158,11,.3));border-radius:20px;-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+
+/* ═══ HIDE SCROLLBAR ON HORIZONTAL ═══ */
+.no-scrollbar::-webkit-scrollbar{display:none}
+.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
 `;
 
 function StyleInjector() {
@@ -67,2502 +193,1980 @@ function StyleInjector() {
 // ══════════════════════════════════════════════════════════════════
 //  HOOKS
 // ══════════════════════════════════════════════════════════════════
-function useInView(threshold = 0.12) {
+function useInView(threshold = 0.15, once = true) {
   const ref = useRef(null);
   const [inView, setInView] = useState(false);
   useEffect(() => {
     if (!ref.current) return;
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
+    const obs = new IntersectionObserver(([e]) => {
+      if (e.isIntersecting) {
+        setInView(true);
+        if (once) obs.disconnect();
+      } else if (!once) setInView(false);
+    }, { threshold });
     obs.observe(ref.current);
     return () => obs.disconnect();
-  }, [threshold]);
+  }, [threshold, once]);
   return [ref, inView];
 }
 
-function useCountUp(target, duration = 2000, start = false) {
-  const [count, setCount] = useState(0);
+function useCountUp(target, duration = 2200, start = false, decimals = 0) {
+  const [val, setVal] = useState(0);
   useEffect(() => {
     if (!start) return;
-    let startTime = null;
-    const step = (ts) => {
-      if (!startTime) startTime = ts;
-      const progress = Math.min((ts - startTime) / duration, 1);
-      const ease = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.floor(ease * target));
-      if (progress < 1) requestAnimationFrame(step);
+    let raf; const t0 = performance.now();
+    const step = (now) => {
+      const p = Math.min(1, (now - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 4);
+      setVal(target * eased);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else setVal(target);
     };
-    requestAnimationFrame(step);
-  }, [start, target, duration]);
-  return count;
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, start]);
+  return decimals > 0 ? val.toFixed(decimals) : Math.round(val).toLocaleString();
+}
+
+function useMousePos() {
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  useEffect(() => {
+    const h = (e) => setPos({ x: e.clientX, y: e.clientY });
+    window.addEventListener('mousemove', h, { passive: true });
+    return () => window.removeEventListener('mousemove', h);
+  }, []);
+  return pos;
+}
+
+function useScrollProgress() {
+  const [p, setP] = useState(0);
+  useEffect(() => {
+    const h = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      setP(max > 0 ? window.scrollY / max : 0);
+    };
+    h();
+    window.addEventListener('scroll', h, { passive: true });
+    window.addEventListener('resize', h);
+    return () => { window.removeEventListener('scroll', h); window.removeEventListener('resize', h); };
+  }, []);
+  return p;
+}
+
+// Tilt hook — adds 3D rotation following mouse
+function useTilt(max = 12) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    let raf;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width;
+      const py = (e.clientY - r.top) / r.height;
+      const rx = (py - .5) * -2 * max;
+      const ry = (px - .5) * 2 * max;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        el.style.transform = `perspective(900px) rotateX(${rx}deg) rotateY(${ry}deg) translateZ(0)`;
+        el.style.setProperty('--mx', `${px*100}%`);
+        el.style.setProperty('--my', `${py*100}%`);
+      });
+    };
+    const onLeave = () => {
+      cancelAnimationFrame(raf);
+      el.style.transform = `perspective(900px) rotateX(0) rotateY(0)`;
+    };
+    el.addEventListener('mousemove', onMove);
+    el.addEventListener('mouseleave', onLeave);
+    return () => {
+      el.removeEventListener('mousemove', onMove);
+      el.removeEventListener('mouseleave', onLeave);
+      cancelAnimationFrame(raf);
+    };
+  }, [max]);
+  return ref;
+}
+
+// Magnetic hook — button follows cursor slightly
+function useMagnetic(strength = 0.4) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current; if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = (e.clientX - cx) * strength;
+      const dy = (e.clientY - cy) * strength;
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const onLeave = () => { el.style.transform = 'translate(0,0)'; };
+    el.addEventListener('mousemove', onMove);
+    el.addEventListener('mouseleave', onLeave);
+    return () => {
+      el.removeEventListener('mousemove', onMove);
+      el.removeEventListener('mouseleave', onLeave);
+    };
+  }, [strength]);
+  return ref;
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  VORTIS LOGO
 // ══════════════════════════════════════════════════════════════════
-export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
+export function VortisLogo({ size = 36, color = "#a78bfa", className }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 1254 1254" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-      <path d="M0 0 C2.97551795 1.77603298 5.42755188 3.85510377 7 7 C7.11791887 8.38616367 7.17694276 9.77757631 7.20532227 11.16845703 C7.22524231 12.04519577 7.24516235 12.92193451 7.26568604 13.82524109 C7.29079254 15.27686394 7.29079254 15.27686394 7.31640625 16.7578125 C7.34791779 18.29215691 7.34791779 18.29215691 7.38006592 19.85749817 C7.44748254 23.27991239 7.50609512 26.70238724 7.5625 30.125 C7.58234955 31.29773468 7.6021991 32.47046936 7.62265015 33.67874146 C7.7612943 42.0831845 7.87456786 50.48784107 7.97470093 58.89281464 C8.00042824 61.03566883 8.02715217 63.17850912 8.05395508 65.3213501 C8.16186031 74.10092842 8.24010655 82.88021788 8.28610229 91.66033936 C8.30164142 94.50574734 8.32645681 97.35084467 8.35916138 100.19610596 C8.40446898 104.20245243 8.41666453 108.20825079 8.42578125 112.21484375 C8.44324402 113.40737259 8.46070679 114.59990143 8.47869873 115.8285675 C8.45890861 123.44413203 7.57415269 127.92564782 2.46484375 133.75 C-1.84867608 137.28024641 -6.42325204 140.20200539 -11.15625 143.140625 C-15.698455 146.11052827 -19.82950596 149.53686891 -24 153 C-24.84691406 153.66128906 -24.84691406 153.66128906 -25.7109375 154.3359375 C-29.24570442 157.1226056 -32.14616039 160.25335105 -35.03515625 163.6796875 C-36.40505539 165.29742128 -37.81209097 166.88411991 -39.24609375 168.4453125 C-53.53623377 184.49599777 -66.44022935 207.44301314 -68.55078125 229.13671875 C-68.96151304 231.75468746 -69.6443793 233.8317611 -70.5234375 236.31640625 C-72.53295931 242.83509895 -72.41478281 249.33698163 -72.33618164 256.08447266 C-72.31269155 258.23248387 -72.31562808 260.37923714 -72.32226562 262.52734375 C-72.29857945 274.83549281 -70.93486474 286.73811139 -67.625 298.625 C-67.28867554 299.846427 -67.28867554 299.846427 -66.94555664 301.0925293 C-66.50039466 302.69279205 -66.05052065 304.29175392 -65.59521484 305.88916016 C-65.10689406 307.62091631 -64.65218871 309.36211813 -64.20703125 311.10546875 C-58.52154173 331.10569329 -45.05403631 349.1091209 -31 364 C-30.31550781 364.74894531 -29.63101563 365.49789063 -28.92578125 366.26953125 C-16.1208883 379.7844922 1.32613078 390.31286386 19 396 C20.29398149 396.51505538 21.58580151 397.03558692 22.875 397.5625 C36.37825416 402.4427861 49.1200395 402.36489181 63.3125 402.1875 C65.42121438 402.1724227 67.52993921 402.1587397 69.63867188 402.14648438 C74.75937674 402.11372769 79.87957055 402.06211407 85 402 C85.75023437 399.90203125 86.50046875 399.8040625 87.2734375 399.703125 C93.23396028 398.83231815 98.53743807 397.66268785 104.0546875 395.25 C106.40240102 394.25362291 108.7341566 393.35889793 111.1328125 392.5 C119.04855306 389.63347146 126.19399761 386.61072835 133.18530273 381.82714844 C139.02122763 377.86597237 145.144296 374.47655901 151.3125 371.0625 C158.50387227 367.07354814 165.67886377 363.07405077 172.75 358.875 C181.55156628 353.65184559 190.4388825 348.58345286 199.33251953 343.51904297 C203.61910073 341.07797504 207.90373112 338.63349933 212.1875 336.1875 C220.68575329 331.33302937 226.57564039 327.93436454 232.46142578 324.52783203 C243.24556047 318.28792515 254.07096056 312.13121694 264.95166016 306.0612793 C271.53049669 302.38945511 278.08806884 298.68340275 284.625 294.9375 C298.63656393 286.90967919 312.67497255 278.92921388 326.8125 271.125 C334.0750988 267.11341231 341.25952897 262.97331884 348.4375 258.8125 C360.74327062 251.68469519 373.15262653 244.75604465 385.60009766 237.87939453 C391.27943892 234.73997409 396.95230377 231.58890727 402.625 228.4375 C404.30106323 227.50659546 404.30106323 227.50659546 406.01098633 226.55688477 C417.69015668 220.06676158 429.34615404 213.5354532 441 207 C454.98558369 199.15691301 468.98076126 191.33227435 483.00805664 183.56396484 C488.55886907 180.48543087 494.09519678 177.38497915 499.60546875 174.234375 C500.65202637 173.6369751 501.69858398 173.0395752 502.77685547 172.42407227 C504.74343044 171.29907244 506.70747218 170.169628 508.66845703 169.03491211 C518.40447532 163.46726609 527.51145014 160.90170678 538.78125 163.6875 C542.97068668 165.27842532 546.77364224 167.41055268 550.59375 169.73828125 C555.13598457 172.48572206 559.70783082 175.17656443 564.296875 177.8449707 C566.32456519 179.02426968 568.35051734 180.20656058 570.375 181.39135742 C575.62003131 184.46042033 580.87665558 187.50263389 586.171875 190.484375 C587.1525293 191.04439209 588.13318359 191.60440918 589.14355469 192.18139648 C590.98563299 193.23327043 592.83482261 194.27283336 594.69238281 195.29711914 C601.95095764 199.47585767 608.69172282 205.08121938 612 213 C612.86274466 220.37419645 613.06568357 227.09066353 608.58203125 233.25390625 C608.05996094 233.83011719 607.53789063 234.40632812 607 235 C606.35289062 235.76570312 605.70578125 236.53140625 605.0390625 237.3203125 C600.9485655 241.34849838 595.60068824 243.68340854 590.5625 246.3125 C588.38609441 247.46887779 586.21030914 248.62642384 584.03515625 249.78515625 C582.9898877 250.33961426 581.94461914 250.89407227 580.86767578 251.46533203 C576.27354681 253.92393025 571.7658349 256.51883183 567.25390625 259.125 C563.66336969 261.19397665 560.05252168 263.22424896 556.4375 265.25 C547.60923467 270.20492281 538.82329214 275.23315478 530.03710938 280.26220703 C524.96225454 283.16597043 519.8853231 286.06609897 514.80859375 288.96658325 C512.99729181 290.00154744 511.1861253 291.03674822 509.375 292.07202148 C504.04876543 295.1164434 498.72185142 298.15963585 493.390625 301.1953125 C483.32057986 306.93222675 473.28947158 312.73176785 463.28540039 318.58300781 C455.93731381 322.87843331 448.56622978 327.1324803 441.1875 331.375 C431.19299968 337.12717136 421.25562152 342.97018774 411.34350586 348.86303711 C402.8319488 353.92175211 394.29617101 358.93755761 385.75 363.9375 C377.25550948 368.90813128 368.77816812 373.90326062 360.3515625 378.98828125 C356.62386672 381.22576765 352.87625365 383.42734492 349.125 385.625 C340.78818198 390.51152903 332.50693266 395.48919536 324.22558594 400.46899414 C318.29404654 404.03286823 312.34946005 407.57112236 306.375 411.0625 C296.90475702 416.60513036 287.55153694 422.3386792 278.18652344 428.05664062 C272.56703166 431.48379007 266.93949886 434.89769729 261.3125 438.3125 C260.12718773 439.03196671 258.94188504 439.7514492 257.7565918 440.47094727 C255.36461929 441.92291081 252.97260766 443.37480988 250.58056641 444.82666016 C248.21297417 446.26370419 245.84545686 447.70087152 243.47802734 449.13818359 C242.90031082 449.48892441 242.3225943 449.83966522 241.72737122 450.20103455 C240.56284071 450.90811416 239.39836112 451.61527764 238.2339325 452.32252502 C235.32567675 454.08880471 232.41656423 455.8536405 229.50561523 457.61547852 C224.22121781 460.81575833 218.94452611 464.02629031 213.69897461 467.28996277 C198.68420609 476.63055454 183.57138401 485.11504727 167.59521484 492.74267578 C165.39628266 493.80800981 163.24339299 494.92872201 161.0859375 496.07421875 C155.59013165 498.83271226 149.70856794 500.60007095 143.875 502.5 C142.66158936 502.89727295 141.44817871 503.2945459 140.19799805 503.70385742 C136.80110051 504.81027548 133.4007831 505.90560049 130 507 C128.89567627 507.36472412 128.89567627 507.36472412 127.76904297 507.73681641 C120.06454367 510.27857138 112.22751727 511.79600724 104.25 513.1875 C103.31003174 513.35483643 102.37006348 513.52217285 101.40161133 513.69458008 C58.0633922 520.80335318 11.20464191 516.99238877 -29 499 C-30.18980469 498.47921875 -31.37960937 497.9584375 -32.60546875 497.421875 C-59.15230804 485.57644135 -83.06880952 469.12871672 -104 449 C-104.54043945 448.48147461 -105.08087891 447.96294922 -105.63769531 447.42871094 C-112.97279926 440.34903719 -119.73464337 433.06029664 -126 425 C-126.78761719 424.01773437 -127.57523438 423.03546875 -128.38671875 422.0234375 C-149.07179934 396.0168839 -164.44996258 365.78322255 -174 334 C-174.56460938 332.19208984 -174.56460938 332.19208984 -175.140625 330.34765625 C-185.18004039 297.04526714 -187.93543844 257.41757591 -182 223 C-181.86577637 222.195625 -181.73155273 221.39125 -181.59326172 220.5625 C-178.1746366 200.45204967 -173.17761968 181.09440423 -166 162 C-165.53787109 160.75452393 -165.53787109 160.75452393 -165.06640625 159.48388672 C-153.60931815 128.82666809 -136.29368097 100.96460775 -114 77 C-112.80778787 75.6290837 -111.62008001 74.25423376 -110.4375 72.875 C-104.46133692 66.03132938 -97.93900785 59.85270949 -91 54 C-90.00742188 53.13375 -89.01484375 52.2675 -87.9921875 51.375 C-69.83101453 35.8451406 -49.00928789 22.7179326 -28.12597656 11.17919922 C-25.87330298 9.92972593 -23.6350436 8.65689938 -21.3984375 7.37890625 C-19.93250528 6.5438957 -18.46636842 5.70924429 -17 4.875 C-16.33436035 4.49577393 -15.6687207 4.11654785 -14.98291016 3.72583008 C-9.76986213 0.79049358 -6.04710732 -0.61496007 0 0 Z " fill={color} transform="translate(320,528)"/>
-      <path d="M0 0 C1.30941799 0.40259911 2.6193101 0.80365963 3.9296875 1.203125 C6.95575811 2.12721538 9.97898555 3.05954507 13 4 C13 4.66 13 5.32 13 6 C13.54744873 6.17160645 14.09489746 6.34321289 14.65893555 6.52001953 C36.18525958 13.45452025 55.42480185 25.96477084 73 40 C73.96035156 40.75667969 74.92070313 41.51335937 75.91015625 42.29296875 C91.14585658 54.71651706 105.68806372 68.86953961 117 85 C117.4837207 85.68771484 117.96744141 86.37542969 118.46582031 87.08398438 C131.88933834 106.34788041 143.97587476 127.06996449 150.9296875 149.60546875 C151.68302434 151.99470127 152.53112086 154.35507593 153.4453125 156.6875 C155.43968342 161.938924 156.70617262 167.35381255 158 172.8125 C158.39191528 174.45714233 158.39191528 174.45714233 158.79174805 176.13500977 C161.01889871 185.69056319 162.76773784 195.2674323 164 205 C164.08732895 205.63944046 164.1746579 206.27888092 164.26463318 206.93769836 C165.33645413 215.8994523 165.18393867 224.91069391 165.203125 233.921875 C165.20595238 234.82091805 165.20877975 235.71996109 165.21169281 236.64624786 C165.2265977 241.39291164 165.23588525 246.13954564 165.24023438 250.88623047 C165.2457434 255.77752911 165.26984706 260.66855283 165.29820633 265.55976486 C165.31683733 269.33618984 165.32203829 273.11254814 165.32357025 276.8890152 C165.32659019 278.69269585 165.33459641 280.49637551 165.34775543 282.30001068 C165.36484522 284.81968807 165.36293007 287.33868632 165.35644531 289.85839844 C165.3656601 290.59722763 165.37487488 291.33605682 165.3843689 292.09727478 C165.33982443 297.6335565 163.93445293 301.48095965 160.578125 305.8515625 C158.52930641 307.34253445 157.26938061 307.40142707 154.75 307.375 C154.02296875 307.38273437 153.2959375 307.39046875 152.546875 307.3984375 C144.39403476 306.12299317 137.08167471 300.74266427 130.0625 296.6875 C128.80954871 295.96728367 127.55645405 295.2473167 126.30322266 294.52758789 C117.50654454 289.46994131 108.72929131 284.378063 99.98120117 279.23681641 C95.2576111 276.46390506 90.5221697 273.7193828 85.74069214 271.04716492 C83.35889729 269.71558572 80.98248912 268.37452938 78.60601807 267.03347778 C76.92622479 266.09123346 75.23836269 265.1634191 73.55029297 264.23608398 C65.3331585 259.59265086 59.66549735 254.874362 56 246 C55.1680247 242.50132492 54.83670328 239.16817117 54.71875 235.578125 C54.68136719 234.55203125 54.64398437 233.5259375 54.60546875 232.46875 C54.57066406 231.4065625 54.53585937 230.344375 54.5 229.25 C54.04551962 215.58192353 52.5990774 202.9242417 48.625 189.8125 C48.32964355 188.81464478 48.32964355 188.81464478 48.02832031 187.79663086 C46.56148347 183.10520159 44.49900109 179.22947028 42 175 C41.566875 173.7625 41.13375 172.525 40.6875 171.25 C32.06899977 147.16478584 7.304472 126.2112154 -15 115 C-26.59321395 109.58935254 -38.46182167 105.51292604 -51 103 C-52.09828125 102.77570313 -53.1965625 102.55140625 -54.328125 102.3203125 C-84.3442227 97.12795437 -113.50413681 103.7746467 -140 118 C-141.0621875 118.55558594 -142.124375 119.11117187 -143.21875 119.68359375 C-151.37138615 124.15681648 -158.13477652 129.7968126 -165 136 C-165.71800781 136.63421875 -166.43601562 137.2684375 -167.17578125 137.921875 C-191.16877943 160.3749499 -204.07792078 193.95127274 -205.32041707 226.35818649 C-205.62694108 236.66939169 -205.61662028 246.98659716 -205.61868942 257.30143344 C-205.62408559 262.31716806 -205.65243149 267.33278378 -205.67784119 272.34844971 C-205.71876796 281.02507691 -205.74562954 289.70165328 -205.76274681 298.37835884 C-205.78771001 310.98176705 -205.83541262 323.58501328 -205.88846401 336.18833088 C-205.97435851 356.72048579 -206.04346838 377.2526603 -206.10131836 397.78491211 C-206.15714194 417.58116409 -206.21873858 437.37738042 -206.28979492 457.17358398 C-206.29415262 458.38856072 -206.29851031 459.60353745 -206.30300006 460.85533167 C-206.35097627 474.18915996 -206.40042496 487.5229826 -206.45055866 500.85680294 C-206.46394216 504.42245034 -206.47732033 507.98809777 -206.49069133 511.55374522 C-206.49953411 513.90877539 -206.5084016 516.26380546 -206.51729409 518.61883544 C-206.57309808 533.4249855 -206.62255399 548.2311376 -206.66535574 563.03733081 C-206.73622375 587.54458834 -206.83371476 612.05150443 -206.98529428 636.55840379 C-206.99961102 638.93541673 -207.01281219 641.31243309 -207.02562761 643.68945456 C-207.06990414 651.7541052 -207.13274104 659.81801743 -207.23469031 667.88220012 C-207.26074993 670.12373761 -207.2806105 672.36535834 -207.29337537 674.60701096 C-207.37494373 687.69657536 -207.54841172 699.58881271 -216.19628906 710.24951172 C-218.16761548 712.1626696 -220.10939417 713.4424722 -222.484375 714.8203125 C-223.37141113 715.33730713 -224.25844727 715.85430176 -225.17236328 716.38696289 C-226.1054834 716.91926514 -227.03860352 717.45156738 -228 718 C-229.37067627 718.78395142 -229.37067627 718.78395142 -230.76904297 719.58374023 C-233.71438757 721.25544289 -236.66805468 722.91140782 -239.625 724.5625 C-240.70386475 725.16602295 -241.78272949 725.7695459 -242.89428711 726.39135742 C-251.4118992 731.1431711 -259.97669888 735.80399197 -268.5637207 740.42895508 C-275.17940226 743.99643495 -281.75210318 747.63048804 -288.26977539 751.37426758 C-293.08845604 754.1241192 -296.76921335 755.24425436 -302.3125 755.5 C-303.42238281 755.5721875 -304.53226562 755.644375 -305.67578125 755.71875 C-309.85334094 754.81549385 -311.10247189 753.33321197 -313.73115675 750.09828882 C-315.94299282 746.44057074 -315.82231176 742.97288225 -315.74946022 738.79073524 C-315.75758167 737.88011483 -315.76570312 736.96949442 -315.77407068 736.03127944 C-315.79398867 732.97486953 -315.77109632 729.92029127 -315.7484436 726.86392212 C-315.7539241 724.65242287 -315.76202767 722.44092882 -315.77253091 720.22944772 C-315.79373607 714.14787627 -315.77742638 708.06689139 -315.75502992 701.98534536 C-315.73918098 696.10076425 -315.75148438 690.21628692 -315.76298306 684.3317056 C-315.7868445 671.54761681 -315.77665709 658.7637252 -315.75242651 645.97964728 C-315.73134611 634.78082259 -315.72227648 623.58206505 -315.72501755 612.38322067 C-315.72518561 611.64008905 -315.72535367 610.89695744 -315.72552682 610.13130668 C-315.72623136 607.11442223 -315.72699939 604.09753781 -315.72785798 601.08065341 C-315.73579166 572.7650183 -315.71034351 544.4495017 -315.66880485 516.13390052 C-315.63213312 491.01827349 -315.62042307 465.9027603 -315.63134766 440.78710938 C-315.63204053 439.17699173 -315.63273272 437.56687408 -315.63342424 435.95675643 C-315.63376623 435.16072203 -315.63410822 434.36468764 -315.63446057 433.54453099 C-315.63616786 429.53676044 -315.63781542 425.52898986 -315.63939857 421.52121925 C-315.63986982 420.33502869 -315.63986982 420.33502869 -315.64035058 419.12487467 C-315.64835113 398.10867159 -315.63735048 377.09247933 -315.62037599 356.07628286 C-315.61856203 353.81136976 -315.61675073 351.54645666 -315.61494553 349.28154356 C-315.61374329 347.7792066 -315.61252605 346.27686965 -315.61129371 344.77453271 C-315.60287973 334.33789168 -315.60168257 323.90127222 -315.6055047 313.46462891 C-315.61041339 299.99484533 -315.60206966 286.52517692 -315.57108469 273.05542459 C-315.55650015 266.5673393 -315.54837184 260.07937826 -315.55757141 253.59127617 C-315.56581177 247.63422838 -315.55514912 241.67750464 -315.53031926 235.72050564 C-315.52453331 233.58233755 -315.52522476 231.44413822 -315.53360541 229.30597873 C-315.63001513 202.21749298 -311.5688804 172.35667567 -301.125 147.125 C-300.77953125 146.2896875 -300.4340625 145.454375 -300.078125 144.59375 C-299.72234375 143.7378125 -299.3665625 142.881875 -299 142 C-298.66484375 141.1440625 -298.3296875 140.288125 -297.984375 139.40625 C-289.07485482 117.06970645 -277.10166652 94.98073424 -261 77 C-260.41089844 76.31550781 -259.82179688 75.63101563 -259.21484375 74.92578125 C-257.49585935 72.9326991 -255.74856612 70.96713689 -254 69 C-253.3709375 68.26652344 -252.741875 67.53304687 -252.09375 66.77734375 C-192.8930966 -1.14877909 -95.91099103 -27.66080594 0 0 Z " fill={color} transform="translate(701,106)"/>
-      <path d="M0 0 C0.91394531 0.61230469 1.82789063 1.22460938 2.76953125 1.85546875 C6.50275739 4.30899468 10.32827702 6.56452637 14.1875 8.8125 C19.51834879 11.92870763 24.83641932 15.06255222 30.125 18.25 C36.27131036 21.95140593 42.44488781 25.60534592 48.625 29.25 C55.74656841 33.45061977 62.85249932 37.67549541 69.9375 41.9375 C95.09496436 57.0626947 120.4633796 71.8385265 145.82397461 86.61987305 C165.91816258 98.33548285 185.99103737 110.09007588 206.0078125 121.9375 C215.63376452 127.63419128 225.27162233 133.30876352 234.9375 138.9375 C245.39778036 145.0294366 255.82613851 151.17377639 266.24169922 157.34179688 C269.80258502 159.44956264 273.3656755 161.55358567 276.92871094 163.65771484 C283.78308792 167.70554595 290.63539175 171.75676848 297.48046875 175.8203125 C311.28901441 184.01665365 325.12763884 192.15838606 339.0078125 200.23291016 C347.98959686 205.45881169 356.96455513 210.69643858 365.9375 215.9375 C366.51493958 216.27477112 367.09237915 216.61204224 367.68731689 216.95953369 C375.08555989 221.28132417 382.4789587 225.61116748 389.86283875 229.9574585 C393.41882792 232.04939543 396.9838548 234.12493415 400.5546875 236.19140625 C416.60946345 245.55018456 431.45268812 256.12576823 444.9375 268.9375 C446.26478115 270.09033848 447.59777994 271.23664067 448.9375 272.375 C457.8147078 280.12667225 465.75963126 288.5969832 472.9375 297.9375 C473.45715332 298.6078125 473.97680664 299.278125 474.51220703 299.96875 C502.10135822 335.75667549 525.29076688 383.25041717 526.76171875 429.16796875 C526.86897809 432.86886194 526.86897809 432.86886194 527.43579102 436.22265625 C528.31057095 442.6998589 528.18225658 449.2240711 528.1875 455.75 C528.18851212 456.88089554 528.18851212 456.88089554 528.18954468 458.03463745 C528.14936701 486.46728486 523.9037116 514.90863699 514.9375 541.9375 C514.6988623 542.66437012 514.46022461 543.39124023 514.21435547 544.14013672 C511.696524 551.739559 509.10653011 559.17146891 505.328125 566.25 C504.22614212 568.37967478 503.21471532 570.50175227 502.234375 572.6875 C493.19095427 592.77849538 481.02832229 611.02851326 466.9375 627.9375 C466.49148438 628.47375 466.04546875 629.01 465.5859375 629.5625 C456.40817896 640.55617868 446.91051639 650.78227524 435.59521484 659.63916016 C434.40445549 660.57177551 433.21774787 661.5095728 432.03369141 662.45068359 C422.40799628 670.09103602 412.69556467 676.99358101 401.9375 682.9375 C400.80199707 683.57486084 400.80199707 683.57486084 399.64355469 684.22509766 C381.34874056 694.43009333 362.4058611 702.53046473 342.125 707.875 C341.10196777 708.14538086 340.07893555 708.41576172 339.02490234 708.69433594 C322.23558396 712.85802357 305.71425621 714.43813217 288.44677734 714.32861328 C285.43931765 714.31250973 282.43320112 714.32858171 279.42578125 714.34765625 C262.42118835 714.36701497 246.0844952 712.29860495 229.5625 708.25 C228.00849487 707.87307007 228.00849487 707.87307007 226.4230957 707.48852539 C215.63860153 704.76962811 205.25404578 701.06934237 194.9375 696.9375 C193.98552734 696.55795166 193.03355469 696.17840332 192.05273438 695.78735352 C172.16053249 687.69202768 153.77833323 676.80454295 135.9375 664.9375 C134.36592705 663.91009256 132.79431421 662.88274614 131.22265625 661.85546875 C129.79301283 660.90553641 128.36454938 659.95382485 126.9375 659 C126.30900146 658.5879834 125.68050293 658.1759668 125.03295898 657.75146484 C120.31828893 654.53518575 114.88492372 650.47689471 113.35253906 644.75219727 C113.03955544 640.36255563 113.67279078 638.32448839 116.1953125 634.63671875 C120.75889532 629.60192575 126.71465936 626.56611432 132.5625 623.25 C133.77588029 622.54885351 134.98843733 621.84628051 136.20019531 621.14233398 C138.63152535 619.73103843 141.0659588 618.32535857 143.50292969 616.92382812 C148.26423429 614.17020471 152.97883701 611.34239627 157.6875 608.5 C159.29676069 607.53236195 160.90613189 606.56490766 162.515625 605.59765625 C163.26521484 605.14664551 164.01480469 604.69563477 164.78710938 604.23095703 C166.78963155 603.02644267 168.79298186 601.82332559 170.796875 600.62109375 C171.40289551 600.25677246 172.00891602 599.89245117 172.63330078 599.51708984 C173.82672627 598.80297245 175.02298987 598.09357476 176.22216797 597.38916016 C179.80257248 595.27517232 183.27039925 593.05061575 186.7109375 590.71484375 C196.12598924 584.46388167 203.80868479 579.96635286 215.375 581.203125 C219.30976871 582.0142396 221.81205063 583.03327561 224.9296875 585.5078125 C229.35140859 588.65635319 234.8760072 590.07594135 239.9375 591.9375 C242.47230498 592.95846312 244.99965746 593.99510955 247.5234375 595.04296875 C267.37641725 602.39949361 290.11462775 600.15640453 310.9375 599.9375 C310.9375 599.2775 310.9375 598.6175 310.9375 597.9375 C312.10023438 597.669375 313.26296875 597.40125 314.4609375 597.125 C337.86656461 591.49492449 358.39202819 581.36843553 375.54150391 564.31445312 C376.787986 563.08497446 378.0696049 561.8913546 379.35546875 560.703125 C397.17243769 543.92679318 410.52116039 518.92526659 415.49951172 495.02197266 C416.27035316 491.35338614 417.28356059 487.74494235 418.25390625 484.125 C420.06126274 475.69755487 420.1238338 467.31681907 420.12280273 458.72802734 C420.12498095 456.7051867 420.14317535 454.68290041 420.16210938 452.66015625 C420.18745514 435.40813771 416.99508377 418.7352703 409.9375 402.9375 C409.19886719 401.22820312 409.19886719 401.22820312 408.4453125 399.484375 C393.83049784 366.38307152 368.43668862 344.33423141 337.41015625 327.01171875 C331.78188176 323.86849881 326.23030354 320.60356973 320.6875 317.3125 C319.75856934 316.76182861 318.82963867 316.21115723 317.87255859 315.64379883 C316.06016217 314.5692219 314.24798087 313.49428205 312.43603516 312.41894531 C308.9201102 310.3342636 305.3986024 308.25917236 301.875 306.1875 C301.21862549 305.80158691 300.56225098 305.41567383 299.88598633 305.01806641 C283.77223545 295.54906491 267.6496843 286.09509597 251.5 276.6875 C243.16640364 271.83206555 234.85344212 266.94311471 226.55444336 262.02880859 C219.67676573 257.95850764 212.7833057 253.91555531 205.88555908 249.87939453 C185.40610734 237.89436602 164.99088792 225.79970554 144.65869141 213.56640625 C136.87444658 208.88782608 129.06151247 204.25783873 121.25 199.625 C108.45499046 192.03577479 95.68565715 184.40537639 82.93652344 176.73925781 C79.89940076 174.91461068 76.86018701 173.09349591 73.8203125 171.2734375 C63.56347829 165.13068841 53.32310964 158.96258211 43.11157227 152.74481201 C30.86067189 145.2858514 18.55350318 137.92597224 6.21069336 130.62011719 C4.94644553 129.87175542 3.68220392 129.12338316 2.41796875 128.375 C1.80337296 128.01126282 1.18877716 127.64752563 0.55555725 127.27276611 C-4.60843454 124.21350857 -9.75669566 121.1283886 -14.89790344 118.03100586 C-17.83246475 116.26522678 -20.7757324 114.51679347 -23.73803711 112.7980957 C-32.39320143 107.7648254 -40.34394665 102.00825939 -45.0625 92.9375 C-45.0625 91.9475 -45.0625 90.9575 -45.0625 89.9375 C-45.7225 89.9375 -46.3825 89.9375 -47.0625 89.9375 C-48.19748286 86.53255141 -48.20336425 83.90499851 -48.22363281 80.31396484 C-48.22859772 79.64523346 -48.23356262 78.97650208 -48.23867798 78.2875061 C-48.25328368 76.07447273 -48.260101 73.86151117 -48.265625 71.6484375 C-48.27138035 70.10486856 -48.27713803 68.56129963 -48.28289795 67.01773071 C-48.2934052 63.77793038 -48.29924881 60.53815482 -48.30273438 57.29833984 C-48.30820066 53.16602973 -48.33218948 49.03405219 -48.36070633 44.90184593 C-48.37942544 41.71032795 -48.38454334 38.51888832 -48.38607025 35.3273201 C-48.38907942 33.8052248 -48.39704866 32.2831303 -48.41025543 30.76108932 C-48.51191211 18.13832571 -47.57700252 9.45700747 -38.58203125 0.11328125 C-27.3136669 -9.61769385 -11.83914377 -7.57133779 0 0 Z " fill={color} transform="translate(587.0625,330.0625)"/>
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none" className={className} style={{ filter: `drop-shadow(0 0 12px ${color}88)` }}>
+      <defs>
+        <linearGradient id="vlg" x1="0" y1="0" x2="48" y2="48">
+          <stop offset="0%" stopColor="#a78bfa" />
+          <stop offset="50%" stopColor="#ec4899" />
+          <stop offset="100%" stopColor="#f59e0b" />
+        </linearGradient>
+      </defs>
+      <path d="M24 4 L42 14 V34 L24 44 L6 34 V14 Z" stroke="url(#vlg)" strokeWidth="2" fill="rgba(139,92,246,.08)" />
+      <path d="M24 12 L34 18 V30 L24 36 L14 30 V18 Z" stroke="url(#vlg)" strokeWidth="1.5" fill="none" opacity=".7" />
+      <circle cx="24" cy="24" r="4" fill="url(#vlg)" />
+      <circle cx="24" cy="24" r="8" stroke="url(#vlg)" strokeWidth="1" fill="none" opacity=".5" />
     </svg>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  AMBIENT SPOTLIGHT — no visible cursor element, just a faint
-//  background glow that lags behind the mouse (Linear/Vercel style)
+//  AMBIENT SPOTLIGHT (mouse-following glow on page)
 // ══════════════════════════════════════════════════════════════════
-function AmbientSpotlight() {
-  const ref = useRef(null);
-  const target = useRef({ x: -1000, y: -1000 });
-  const current = useRef({ x: -1000, y: -1000 });
-
-  useEffect(() => {
-    const move = (e) => { target.current = { x: e.clientX, y: e.clientY }; };
-    window.addEventListener("mousemove", move, { passive: true });
-
-    let raf;
-    const tick = () => {
-      // Very loose easing = calm, expensive feel
-      current.current.x += (target.current.x - current.current.x) * 0.06;
-      current.current.y += (target.current.y - current.current.y) * 0.06;
-      if (ref.current) {
-        ref.current.style.background =
-          `radial-gradient(650px circle at ${current.current.x}px ${current.current.y}px, rgba(124,58,237,0.055), transparent 70%)`;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-
-    return () => {
-      window.removeEventListener("mousemove", move);
-      cancelAnimationFrame(raf);
-    };
-  }, []);
-
-  return (
-    <div ref={ref} style={{
-      position: "fixed", inset: 0, zIndex: 0,
-      pointerEvents: "none", willChange: "background",
-    }} />
-  );
+function CursorGlow() {
+  const pos = useMousePos();
+  return <div className="cursor-glow" style={{ left: pos.x, top: pos.y }} />;
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  FLOATING PARTICLES
+//  SCROLL PROGRESS BAR
 // ══════════════════════════════════════════════════════════════════
-function FloatingParticles() {
-  const particles = useRef(
-    Array.from({ length: 40 }, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      size: Math.random() * 3 + 1,
-      duration: Math.random() * 20 + 15,
-      delay: Math.random() * 10,
-      color: ["rgba(124,58,237,", "rgba(168,85,247,", "rgba(6,182,212,", "rgba(99,102,241,"][Math.floor(Math.random() * 4)],
-      dx: (Math.random() - 0.5) * 200,
-      dy: (Math.random() - 0.5) * 200,
-    }))
-  ).current;
-
-  return (
-    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-      {particles.map(p => (
-        <div key={p.id} style={{
-          position: "absolute",
-          left: `${p.x}%`, top: `${p.y}%`,
-          width: p.size, height: p.size,
-          borderRadius: "50%",
-          background: `${p.color}0.7)`,
-          boxShadow: `0 0 ${p.size * 3}px ${p.color}0.4)`,
-          animation: `float ${p.duration}s ease-in-out ${p.delay}s infinite`,
-          opacity: 0.6,
-        }} />
-      ))}
-    </div>
-  );
+function ScrollProgress() {
+  const p = useScrollProgress();
+  return <div className="scroll-progress" style={{ width: `${p * 100}%` }} />;
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  COSMIC BACKGROUND
+//  COSMIC BG — aurora mesh + orbs + grid + noise
 // ══════════════════════════════════════════════════════════════════
 function CosmicBg() {
   return (
-    <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
-      {[
-        { a: "orb1 28s ease-in-out infinite", t: "5%", l: "10%", w: 700, c: "rgba(124,58,237,0.06)", b: 120 },
-        { a: "orb2 35s ease-in-out infinite 5s", t: "40%", r: "5%", w: 600, c: "rgba(168,85,247,0.05)", b: 140 },
-        { a: "orb3 40s ease-in-out infinite 12s", bt: "10%", l: "30%", w: 520, c: "rgba(6,182,212,0.035)", b: 110 },
-        { a: "orb4 32s ease-in-out infinite 8s", t: "60%", l: "5%", w: 450, c: "rgba(99,102,241,0.04)", b: 130 },
-        { a: "orb1 45s ease-in-out infinite 20s", t: "20%", r: "20%", w: 380, c: "rgba(6,182,212,0.03)", b: 100 },
-      ].map((o, i) => (
-        <div key={i} style={{
-          position: "absolute", borderRadius: "50%", width: o.w, height: o.w,
-          top: o.t, left: o.l, right: o.r, bottom: o.bt,
-          background: o.c, filter: `blur(${o.b}px)`,
-          animation: o.a, willChange: "transform",
-        }} />
-      ))}
-      <div style={{
-        position: "absolute", inset: 0, opacity: 0.018,
-        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.8) 1px, transparent 1px)",
-        backgroundSize: "55px 55px", animation: "gridFade 8s ease-in-out infinite",
-      }} />
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(180deg, transparent 0%, rgba(3,3,10,0.3) 100%)",
-        pointerEvents: "none",
-      }} />
+    <div style={{ position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      {/* Base radial */}
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 0%, rgba(76,29,149,.25), transparent 50%), radial-gradient(ellipse at 80% 100%, rgba(190,24,93,.18), transparent 50%), #04030c' }} />
+
+      {/* Aurora mesh blobs */}
+      <div style={{ position: 'absolute', top: '-15%', left: '-10%', width: '60vw', height: '60vw', background: 'radial-gradient(circle, rgba(139,92,246,.5), transparent 60%)', filter: 'blur(80px)', animation: 'orb1 22s ease-in-out infinite, auroraShift 14s linear infinite' }} />
+      <div style={{ position: 'absolute', top: '20%', right: '-15%', width: '50vw', height: '50vw', background: 'radial-gradient(circle, rgba(236,72,153,.4), transparent 60%)', filter: 'blur(90px)', animation: 'orb2 26s ease-in-out infinite' }} />
+      <div style={{ position: 'absolute', bottom: '-10%', left: '20%', width: '55vw', height: '55vw', background: 'radial-gradient(circle, rgba(34,211,238,.25), transparent 60%)', filter: 'blur(100px)', animation: 'orb3 30s ease-in-out infinite' }} />
+      <div style={{ position: 'absolute', top: '40%', left: '40%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(245,158,11,.18), transparent 60%)', filter: 'blur(90px)', animation: 'orb4 24s ease-in-out infinite' }} />
+
+      {/* Grid floor */}
+      <div style={{ position: 'absolute', inset: 0, opacity: .5, backgroundImage: 'linear-gradient(rgba(139,92,246,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,.06) 1px, transparent 1px)', backgroundSize: '64px 64px', maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 80%)', WebkitMaskImage: 'radial-gradient(ellipse at center, black 30%, transparent 80%)', animation: 'gridFade 8s ease-in-out infinite' }} />
+
+      {/* Noise */}
+      <div className="noise" />
+
+      {/* Top vignette */}
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center top, transparent 30%, rgba(4,3,12,.6) 100%)' }} />
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  NAV
+//  FLOW FIELD — canvas particle network (huge upgrade)
 // ══════════════════════════════════════════════════════════════════
-const NAV_LINKS = [
-  { label: "About", href: "#about" },
-  { label: "Capabilities", href: "#capabilities" },
-  { label: "How it works", href: "#howitworks" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
-];
-
-function Nav({ onLogin }) {
-  const [scrolled, setScrolled] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  useEffect(() => {
-    const h = () => setScrolled(window.scrollY > 50);
-    window.addEventListener("scroll", h);
-    return () => window.removeEventListener("scroll", h);
-  }, []);
-
-  return (
-    <nav style={{
-      position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-      display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "0 32px", height: 60,
-      background: scrolled ? "rgba(3,3,10,0.92)" : "transparent",
-      backdropFilter: scrolled ? "blur(24px)" : "none",
-      borderBottom: scrolled ? "1px solid rgba(255,255,255,0.06)" : "none",
-      transition: "all 0.4s ease",
-    }}>
-      <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", animation: "slideInLeft 0.7s ease both" }}>
-        <VortisLogo size={30} color="#8b5cf6" />
-        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 18, letterSpacing: "0.1em", color: "#fff" }}>VORTIS</span>
-        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a855f7", letterSpacing: "0.08em" }}>AI</span>
-      </a>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 32, animation: "fadeIn 0.9s 0.2s ease both" }}>
-        {NAV_LINKS.map(l => (
-          <a key={l.label} href={l.href} style={{
-            fontSize: 13.5, fontWeight: 500, color: "rgba(255,255,255,0.5)",
-            textDecoration: "none", transition: "color 0.2s", position: "relative",
-          }}
-          onMouseEnter={e => e.target.style.color = "#fff"}
-          onMouseLeave={e => e.target.style.color = "rgba(255,255,255,0.5)"}
-          >{l.label}</a>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 10, animation: "slideInRight 0.7s ease both" }}>
-        <button onClick={() => setShowPicker(true)} style={{
-          padding: "8px 22px", borderRadius: 99, fontSize: 13, fontWeight: 700,
-          background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-          border: "none", cursor: "pointer", position: "relative",
-          boxShadow: "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)",
-          transition: "all 0.2s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05) translateY(-1px)"; e.currentTarget.style.boxShadow = "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.25)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)"; }}
-        >
-          <span style={{
-            position: "absolute", inset: -3, borderRadius: 99,
-            border: "3px solid #c4b5fd",
-            animation: "radarPing 1.6s ease-out infinite",
-            pointerEvents: "none",
-          }} />
-          <span style={{ position: "relative", zIndex: 1 }}>Sign In →</span>
-        </button>
-      </div>
-
-      {showPicker && (
-        <AuthPicker
-          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-          authLoading={false}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
-    </nav>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
-// ══════════════════════════════════════════════════════════════════
-export function NeuralField() {
+export function NeuralField({ density = 90 }) {
   const canvasRef = useRef(null);
-  const [ref, inView] = useInView(0.15);
-
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let raf, W, H;
-    const mouse = { x: -9999, y: -9999, active: false };
-    const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    let hubs = [];
-    let dust = [];
-    let seeded = false;
-
-    const makeParticles = () => {
-      const HUB_COUNT = 8;
-      hubs = Array.from({ length: HUB_COUNT }, () => ({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.14,
-        vy: (Math.random() - 0.5) * 0.14,
-        r: Math.random() * 2.5 + 4,
-        phase: Math.random() * Math.PI * 2,
-        hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
-      }));
-
-      const DUST_COUNT = 110;
-      dust = Array.from({ length: DUST_COUNT }, () => {
-        const z = 0.25 + Math.random() * 0.75;
-        return {
-          x: Math.random() * W,
-          y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.2 * z,
-          vy: (Math.random() - 0.5) * 0.2 * z,
-          z,
-          r: 0.6 + z * 1.3,
-          hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
-        };
-      });
-      seeded = true;
-    };
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    let raf, w, h, particles = [], mouse = { x: -9999, y: -9999, active: false };
+    const COLORS = ['#a78bfa', '#ec4899', '#22d3ee', '#f59e0b'];
 
     const resize = () => {
-      W = canvas.offsetWidth;
-      H = canvas.offsetHeight;
-      canvas.width = W * DPR;
-      canvas.height = H * DPR;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(DPR, DPR);
-      if (!seeded && W > 0 && H > 0) makeParticles();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = canvas.clientWidth; h = canvas.clientHeight;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      particles = Array.from({ length: density }, () => ({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: (Math.random() - .5) * .4,
+        vy: (Math.random() - .5) * .4,
+        r: Math.random() * 1.6 + .6,
+        c: COLORS[Math.floor(Math.random() * COLORS.length)],
+        pulse: Math.random() * Math.PI * 2,
+      }));
     };
     resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener('resize', resize);
 
     const onMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-      mouse.active = true;
+      const r = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; mouse.active = true;
     };
-    const onLeave = () => { mouse.active = false; };
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
+    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
+    canvas.addEventListener('mousemove', onMove);
+    canvas.addEventListener('mouseleave', onLeave);
 
-    const HUB_LINK_DIST = 420;
-    const DUST_LINK_DIST = 160;
-
-    let last = performance.now();
-    const tick = (now) => {
-      const dt = Math.min(now - last, 32);
-      last = now;
-      ctx.clearRect(0, 0, W, H);
-
-      if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 240);
-        glow.addColorStop(0, "rgba(139,92,246,0.12)");
-        glow.addColorStop(1, "rgba(139,92,246,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      for (const h of hubs) {
-        h.x += h.vx * (dt / 16);
-        h.y += h.vy * (dt / 16);
-        if (h.x < 0 || h.x > W) h.vx *= -1;
-        if (h.y < 0 || h.y > H) h.vy *= -1;
+    const tick = () => {
+      ctx.clearRect(0, 0, w, h);
+      // Update + draw points
+      for (const p of particles) {
+        // Flow field — angular drift based on position
+        const ang = Math.sin(p.x * .003) + Math.cos(p.y * .003);
+        p.vx += Math.cos(ang) * 0.005;
+        p.vy += Math.sin(ang) * 0.005;
+        // Mouse repulsion / attraction
         if (mouse.active) {
-          const dx = mouse.x - h.x, dy = mouse.y - h.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 220) { h.x += dx * 0.004; h.y += dy * 0.004; }
+          const dx = p.x - mouse.x, dy = p.y - mouse.y;
+          const d2 = dx*dx + dy*dy;
+          if (d2 < 22500) {
+            const f = (1 - d2 / 22500) * .8;
+            p.vx += (dx / Math.sqrt(d2 + 1)) * f * .3;
+            p.vy += (dy / Math.sqrt(d2 + 1)) * f * .3;
+          }
         }
+        // Damping
+        p.vx *= .985; p.vy *= .985;
+        p.x += p.vx; p.y += p.vy;
+        p.pulse += .04;
+        // Wrap
+        if (p.x < -10) p.x = w + 10; if (p.x > w + 10) p.x = -10;
+        if (p.y < -10) p.y = h + 10; if (p.y > h + 10) p.y = -10;
+        // Draw
+        const pr = p.r + Math.sin(p.pulse) * .4;
+        ctx.beginPath();
+        ctx.fillStyle = p.c;
+        ctx.shadowColor = p.c;
+        ctx.shadowBlur = 12;
+        ctx.arc(p.x, p.y, pr, 0, Math.PI * 2);
+        ctx.fill();
       }
-
-      // Hub-to-hub backbone links — the "web" structure
-      for (let i = 0; i < hubs.length; i++) {
-        for (let j = i + 1; j < hubs.length; j++) {
-          const a = hubs[i], b = hubs[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < HUB_LINK_DIST) {
-            const alpha = (1 - d / HUB_LINK_DIST) * 0.5;
-            ctx.strokeStyle = `rgba(168,85,247,${alpha})`;
+      // Connections
+      ctx.shadowBlur = 0;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < 130) {
+            const op = (1 - d / 130) * .35;
+            ctx.strokeStyle = `rgba(167,139,250,${op})`;
+            ctx.lineWidth = .6;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
+        }
+        // Mouse line
+        if (mouse.active) {
+          const dx = particles[i].x - mouse.x, dy = particles[i].y - mouse.y;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < 180) {
+            const op = (1 - d / 180) * .6;
+            ctx.strokeStyle = `rgba(236,72,153,${op})`;
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
+            ctx.moveTo(particles[i].x, particles[i].y); ctx.lineTo(mouse.x, mouse.y);
             ctx.stroke();
           }
         }
       }
-
-      // Dust drifts, links to its nearest hub
-      for (const p of dust) {
-        p.x += p.vx * (dt / 16);
-        p.y += p.vy * (dt / 16);
-        if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0 || p.y > H) p.vy *= -1;
-
-        let nearest = null, nearestD = Infinity;
-        for (const h of hubs) {
-          const d = Math.hypot(p.x - h.x, p.y - h.y);
-          if (d < nearestD) { nearestD = d; nearest = h; }
-        }
-        if (nearest && nearestD < DUST_LINK_DIST) {
-          const alpha = (1 - nearestD / DUST_LINK_DIST) * 0.45 * p.z;
-          const grad = ctx.createLinearGradient(p.x, p.y, nearest.x, nearest.y);
-          grad.addColorStop(0, `rgba(${p.hue},0)`);
-          grad.addColorStop(1, `rgba(${nearest.hue},${alpha})`);
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 0.7 * p.z;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(nearest.x, nearest.y);
-          ctx.stroke();
-        }
-      }
-
-      for (const p of dust) {
-        ctx.globalAlpha = 0.4 + p.z * 0.45;
-        ctx.fillStyle = `rgba(${p.hue},0.85)`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      for (const h of hubs) {
-        const pulse = 0.6 + Math.sin(now * 0.0012 + h.phase) * 0.4;
-        ctx.shadowColor = `rgba(${h.hue},0.9)`;
-        ctx.shadowBlur = 16 * pulse;
-        ctx.fillStyle = `rgba(${h.hue},${0.9 * pulse + 0.1})`;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener('resize', resize);
+      canvas.removeEventListener('mousemove', onMove);
+      canvas.removeEventListener('mouseleave', onLeave);
     };
+  }, [density]);
+  return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  NAV — glassmorphism + magnetic logo
+// ══════════════════════════════════════════════════════════════════
+function Nav({ onLogin }) {
+  const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const logoRef = useMagnetic(0.3);
+  const ctaRef = useMagnetic(0.25);
+
+  useEffect(() => {
+    const h = () => setScrolled(window.scrollY > 40);
+    h();
+    window.addEventListener('scroll', h, { passive: true });
+    return () => window.removeEventListener('scroll', h);
   }, []);
 
+  const links = ['Product', 'Solutions', 'Showcase', 'Pricing', 'Docs'];
+
   return (
-    <section ref={ref} style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}>
-      <div style={{ position: "relative", height: 480, maxWidth: 1300, margin: "0 auto" }}>
-        <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }} />
+    <>
+      <nav style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+        padding: scrolled ? '14px 24px' : '22px 24px',
+        transition: 'all .35s ease',
+      }}>
         <div style={{
-          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", pointerEvents: "none",
-          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
-          transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
+          maxWidth: 1280, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: scrolled ? '10px 18px' : '12px 22px',
+          borderRadius: 999, transition: 'all .35s ease',
+          background: scrolled ? 'rgba(10,8,24,.7)' : 'transparent',
+          backdropFilter: scrolled ? 'blur(20px) saturate(160%)' : 'none',
+          WebkitBackdropFilter: scrolled ? 'blur(20px) saturate(160%)' : 'none',
+          border: scrolled ? '1px solid rgba(255,255,255,.08)' : '1px solid transparent',
+          boxShadow: scrolled ? '0 10px 40px -10px rgba(0,0,0,.6)' : 'none',
         }}>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(30px,5vw,58px)", margin: "0 0 14px", letterSpacing: "-0.03em", textAlign: "center", textShadow: "0 0 60px rgba(3,3,10,0.9)" }}>
-            One mind.{" "}
-            <span style={{ background: "linear-gradient(90deg,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>A billion connections.</span>
-          </h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.45)", margin: 0, textAlign: "center", maxWidth: 460, lineHeight: 1.7, textShadow: "0 0 30px rgba(3,3,10,0.9)" }}>
-            Move your cursor through the network — this is how Vortis connects your world.
-          </p>
+          {/* Logo */}
+          <div ref={logoRef} className="magnetic" style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <div style={{ position: 'relative' }}>
+              <VortisLogo size={32} />
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle, rgba(167,139,250,.4), transparent 70%)', filter: 'blur(8px)', zIndex: -1 }} />
+            </div>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 20, letterSpacing: '-.02em' }}>
+              Vortis
+            </span>
+          </div>
+
+          {/* Center links */}
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }} className="hide-mobile">
+            {links.map((l) => (
+              <a key={l} href={`#${l.toLowerCase()}`} style={{
+                padding: '8px 14px', borderRadius: 999, color: 'rgba(255,255,255,.7)',
+                fontSize: 14, fontWeight: 500, textDecoration: 'none',
+                transition: 'all .2s ease', position: 'relative',
+              }}
+                onMouseEnter={(e) => { e.target.style.color = '#fff'; e.target.style.background = 'rgba(255,255,255,.06)'; }}
+                onMouseLeave={(e) => { e.target.style.color = 'rgba(255,255,255,.7)'; e.target.style.background = 'transparent'; }}>
+                {l}
+              </a>
+            ))}
+          </div>
+
+          {/* Right actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button onClick={onLogin} className="btn-ghost hide-mobile" style={{ fontSize: 14, padding: '10px 20px' }}>
+              Sign in
+            </button>
+            <button ref={ctaRef} onClick={onLogin} className="btn-glow magnetic" style={{ fontSize: 14, padding: '11px 22px', display: 'flex', alignItems: 'center', gap: 8 }}>
+              Get Started
+              <ArrowRight size={15} />
+            </button>
+            <button className="show-mobile" onClick={() => setMobileOpen(v => !v)} style={{ background: 'transparent', border: 'none', color: '#fff', padding: 8, cursor: 'pointer' }}>
+              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div style={{
+          position: 'fixed', top: 80, left: 16, right: 16, zIndex: 99,
+          background: 'rgba(10,8,24,.95)', backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255,255,255,.1)', borderRadius: 20, padding: 16,
+          animation: 'scaleIn .25s ease',
+        }}>
+          {links.map((l) => (
+            <a key={l} href={`#${l.toLowerCase()}`} onClick={() => setMobileOpen(false)} style={{
+              display: 'block', padding: '14px 16px', color: '#fff', textDecoration: 'none',
+              fontSize: 16, fontWeight: 500, borderBottom: '1px solid rgba(255,255,255,.06)',
+            }}>{l}</a>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        @media(max-width:880px){.hide-mobile{display:none!important}.show-mobile{display:flex!important}}
+        @media(min-width:881px){.show-mobile{display:none!important}}
+      `}</style>
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TYPEWRITER WORD
+// ══════════════════════════════════════════════════════════════════
+function TypewriterWord({ words = [], interval = 2800 }) {
+  const [idx, setIdx] = useState(0);
+  const [shown, setShown] = useState('');
+  const [phase, setPhase] = useState('typing'); // typing | hold | deleting
+
+  useEffect(() => {
+    const word = words[idx];
+    let t;
+    if (phase === 'typing') {
+      if (shown.length < word.length) {
+        t = setTimeout(() => setShown(word.slice(0, shown.length + 1)), 75);
+      } else {
+        t = setTimeout(() => setPhase('hold'), interval);
+      }
+    } else if (phase === 'hold') {
+      t = setTimeout(() => setPhase('deleting'), 400);
+    } else {
+      if (shown.length > 0) {
+        t = setTimeout(() => setShown(word.slice(0, shown.length - 1)), 35);
+      } else {
+        setPhase('typing');
+        setIdx((i) => (i + 1) % words.length);
+      }
+    }
+    return () => clearTimeout(t);
+  }, [shown, phase, idx, words, interval]);
+
+  return (
+    <span style={{ position: 'relative', display: 'inline-block' }}>
+      <span className="gradient-text">{shown}</span>
+      <span style={{ display: 'inline-block', width: 2, height: '1em', background: '#ec4899', marginLeft: 4, verticalAlign: 'text-bottom', animation: 'blink 1s steps(2) infinite' }} />
+    </span>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  WORD REVEAL — staggered word-by-word headline reveal
+// ══════════════════════════════════════════════════════════════════
+function WordReveal({ text, delay = 0, className = '', style = {} }) {
+  const words = text.split(' ');
+  return (
+    <span className={className} style={{ display: 'inline-block', ...style }}>
+      {words.map((w, i) => (
+        <span key={i} style={{
+          display: 'inline-block',
+          opacity: 0,
+          animation: `wordReveal .8s cubic-bezier(.2,.7,.3,1) forwards`,
+          animationDelay: `${delay + i * 0.06}s`,
+          transformOrigin: 'bottom',
+          whiteSpace: 'pre',
+        }}>
+          {w}{i < words.length - 1 ? '\u00A0' : ''}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  HERO VISUAL — 3D tilt AI core card with holographic effect
+// ══════════════════════════════════════════════════════════════════
+function HeroVisual() {
+  const tiltRef = useTilt(15);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1500);
+    return () => clearInterval(id);
+  }, []);
+
+  const logs = [
+    { icon: 'brain', text: 'Analyzing intent vector…', c: '#a78bfa' },
+    { icon: 'code', text: 'Generating React component', c: '#22d3ee' },
+    { icon: 'eye', text: 'Rendering preview @ 60fps', c: '#ec4899' },
+    { icon: 'check', text: 'Deployed to edge network', c: '#22c55e' },
+    { icon: 'globe', text: 'Live in 14 regions', c: '#f59e0b' },
+  ];
+  const cur = logs[tick % logs.length];
+
+  return (
+    <div ref={tiltRef} className="tilt-card" style={{
+      position: 'relative', width: '100%', maxWidth: 520, margin: '0 auto',
+      padding: 4, borderRadius: 28, transformStyle: 'preserve-3d',
+    }}>
+      {/* Conic rotating border */}
+      <div style={{ position: 'absolute', inset: 0, borderRadius: 28, padding: 1.5, background: 'conic-gradient(from 0deg, rgba(139,92,246,.6), rgba(236,72,153,.6), rgba(245,158,11,.5), rgba(34,211,238,.5), rgba(139,92,246,.6))', animation: 'spin 8s linear infinite', WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', WebkitMaskComposite: 'xor', maskComposite: 'exclude' }} />
+
+      {/* Inner glass card */}
+      <div style={{
+        position: 'relative', background: 'linear-gradient(160deg, rgba(15,12,30,.95), rgba(8,6,20,.95))',
+        borderRadius: 26, padding: 24, overflow: 'hidden', transform: 'translateZ(40px)',
+      }}>
+        {/* Top bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#ff5f57' }} />
+            <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#febc2e' }} />
+            <div style={{ width: 11, height: 11, borderRadius: '50%', background: '#28c840' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="live-dot" style={{ width: 6, height: 6 }} /> vortis://session
+          </div>
+        </div>
+
+        {/* AI Core orb */}
+        <div style={{ position: 'relative', width: 200, height: 200, margin: '0 auto 24px' }}>
+          {/* Outer rings */}
+          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1px solid rgba(139,92,246,.3)', animation: 'spin 12s linear infinite' }}>
+            <div style={{ position: 'absolute', top: -4, left: '50%', width: 8, height: 8, borderRadius: '50%', background: '#a78bfa', boxShadow: '0 0 16px #a78bfa', transform: 'translateX(-50%)' }} />
+          </div>
+          <div style={{ position: 'absolute', inset: 20, borderRadius: '50%', border: '1px solid rgba(236,72,153,.3)', animation: 'spinRev 9s linear infinite' }}>
+            <div style={{ position: 'absolute', top: '50%', right: -3, width: 6, height: 6, borderRadius: '50%', background: '#ec4899', boxShadow: '0 0 12px #ec4899', transform: 'translateY(-50%)' }} />
+          </div>
+          <div style={{ position: 'absolute', inset: 40, borderRadius: '50%', border: '1px dashed rgba(34,211,238,.4)', animation: 'spin 7s linear infinite' }} />
+
+          {/* Core */}
+          <div style={{
+            position: 'absolute', inset: 55, borderRadius: '50%',
+            background: 'radial-gradient(circle at 30% 30%, #fff, #a78bfa 30%, #ec4899 70%, #4c1d95)',
+            boxShadow: '0 0 60px rgba(167,139,250,.7), inset 0 0 30px rgba(255,255,255,.3)',
+            animation: 'pulseScale 3s ease-in-out infinite',
+          }}>
+            <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(circle at 70% 70%, transparent 50%, rgba(0,0,0,.4))' }} />
+          </div>
+
+          {/* Floating particles around core */}
+          {[...Array(6)].map((_, i) => (
+            <div key={i} style={{
+              position: 'absolute', top: '50%', left: '50%',
+              width: 4, height: 4, borderRadius: '50%', background: ['#a78bfa', '#ec4899', '#22d3ee'][i % 3],
+              boxShadow: `0 0 10px ${['#a78bfa', '#ec4899', '#22d3ee'][i % 3]}`,
+              animation: `float3d ${4 + i * 0.5}s ease-in-out infinite`,
+              animationDelay: `${i * 0.3}s`,
+              transform: `translate(${Math.cos(i * Math.PI / 3) * 80}px, ${Math.sin(i * Math.PI / 3) * 80}px)`,
+            }} />
+          ))}
+        </div>
+
+        {/* Activity log */}
+        <div style={{
+          background: 'rgba(0,0,0,.4)', borderRadius: 12, padding: '12px 14px',
+          border: '1px solid rgba(255,255,255,.06)',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: `${cur.c}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: cur.c, flexShrink: 0 }}>
+            <Sparkles size={14} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", marginBottom: 2 }}>vortis ▸ stream</div>
+            <div key={tick} style={{ fontSize: 13, color: '#fff', fontWeight: 500, animation: 'slideInRight .4s ease' }}>{cur.text}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 2 }}>
+            {[...Array(3)].map((_, i) => (
+              <div key={i} style={{
+                width: 3, height: 12, background: cur.c, borderRadius: 2,
+                animation: `waveBar ${.6 + i * .15}s ease-in-out infinite`, animationDelay: `${i * .1}s`,
+                transformOrigin: 'bottom',
+              }} />
+            ))}
+          </div>
+        </div>
+
+        {/* Mini stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 12 }}>
+          {[
+            { l: 'Latency', v: '12ms' },
+            { l: 'Tokens', v: '8.2k' },
+            { l: 'Uptime', v: '99.99%' },
+          ].map((s) => (
+            <div key={s.l} style={{ background: 'rgba(255,255,255,.03)', borderRadius: 10, padding: '10px 12px', border: '1px solid rgba(255,255,255,.05)' }}>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', marginBottom: 2 }}>{s.l}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', fontFamily: "'Space Grotesk', sans-serif" }}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Mouse-following glow inside card */}
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: 26, pointerEvents: 'none',
+          background: 'radial-gradient(circle 200px at var(--mx,50%) var(--my,50%), rgba(167,139,250,.15), transparent 70%)',
+        }} />
+      </div>
+
+      {/* Floating badges */}
+      <div style={{ position: 'absolute', top: -16, right: -20, transform: 'translateZ(80px)', animation: 'float 5s ease-in-out infinite' }}>
+        <div className="glass" style={{ padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600 }}>
+          <Zap size={14} style={{ color: '#f59e0b' }} /> 12ms latency
         </div>
       </div>
-    </section>
+      <div style={{ position: 'absolute', bottom: -20, left: -20, transform: 'translateZ(60px)', animation: 'floatReverse 6s ease-in-out infinite' }}>
+        <div className="glass" style={{ padding: '10px 14px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600 }}>
+          <Shield size={14} style={{ color: '#22c55e' }} /> SOC 2 Type II
+        </div>
+      </div>
+      <div style={{ position: 'absolute', top: '40%', right: -30, transform: 'translateZ(70px)', animation: 'float 7s ease-in-out infinite', animationDelay: '1s' }}>
+        <div className="glass" style={{ padding: '8px 12px', borderRadius: 12, display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600 }}>
+          <Cpu size={12} style={{ color: '#22d3ee' }} /> GPT-5 class
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  AUTH PICKER (modal)
+// ══════════════════════════════════════════════════════════════════
+function AuthPicker({ onLogin, authLoading, onClose }) {
+  const [email, setEmail] = useState('');
+  const [pwd, setPwd] = useState('');
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(8px)', animation: 'fadeIn .25s ease',
+    }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: 'min(420px, 92vw)', background: 'linear-gradient(160deg, rgba(15,12,30,.98), rgba(8,6,20,.98))',
+        border: '1px solid rgba(255,255,255,.1)', borderRadius: 24, padding: 32, position: 'relative',
+        animation: 'scaleIn .35s cubic-bezier(.2,.7,.3,1.2)',
+        boxShadow: '0 30px 100px -10px rgba(0,0,0,.8), 0 0 0 1px rgba(139,92,246,.2), 0 0 80px rgba(139,92,246,.15)',
+      }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: 'none', color: 'rgba(255,255,255,.5)', cursor: 'pointer', padding: 6 }}>
+          <X size={18} />
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <VortisLogo size={28} />
+          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18 }}>Vortis</span>
+        </div>
+        <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 24, fontWeight: 700, letterSpacing: '-.02em', margin: '12px 0 6px' }}>Welcome back</h3>
+        <p style={{ color: 'rgba(255,255,255,.55)', fontSize: 14, margin: '0 0 24px' }}>Sign in to your Vortis workspace</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" style={{
+            background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12,
+            padding: '14px 16px', color: '#fff', fontSize: 14, outline: 'none', transition: 'border-color .2s',
+          }} onFocus={(e) => e.target.style.borderColor = 'rgba(139,92,246,.5)'}
+            onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,.1)'} />
+          <input value={pwd} onChange={(e) => setPwd(e.target.value)} type="password" placeholder="••••••••" style={{
+            background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12,
+            padding: '14px 16px', color: '#fff', fontSize: 14, outline: 'none', transition: 'border-color .2s',
+          }} onFocus={(e) => e.target.style.borderColor = 'rgba(139,92,246,.5)'}
+            onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,.1)'} />
+
+          <button onClick={() => onLogin({ email, pwd })} className="btn-glow" style={{ width: '100%', padding: '15px', fontSize: 15, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            {authLoading ? (
+              <><div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .6s linear infinite' }} /> Signing in…</>
+            ) : (
+              <>Sign in <ArrowRight size={16} /></>
+            )}
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0', color: 'rgba(255,255,255,.3)', fontSize: 12 }}>
+          <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.08)' }} /> OR <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.08)' }} />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {['Google', 'GitHub'].map((p) => (
+            <button key={p} className="btn-ghost" style={{ padding: '12px', fontSize: 13 }}>{p}</button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
 //  HERO
 // ══════════════════════════════════════════════════════════════════
-
-function AuthPicker({ onLogin, authLoading, onClose }) {
-  const providers = [
-    { id: 'google', label: 'Continue with Google', color: '#4285F4', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-    )},
-    { id: 'github', label: 'Continue with GitHub', color: '#ffffff', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
-        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
-      </svg>
-    )},
-    { id: 'facebook', label: 'Continue with Facebook', color: '#1877F2', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-      </svg>
-    )},
-  ];
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 999,
-        background: "rgba(3,3,10,0.75)",
-        backdropFilter: "blur(12px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "fadeIn 0.25s ease",
-        padding: 20,
-      }}
-    >
-      <style>{`
-        @keyframes pickerIn {
-          from { opacity: 0; transform: scale(0.92) translateY(16px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        @keyframes borderGlow {
-          0%,100% { box-shadow: 0 0 0 1px rgba(124,58,237,0.4), 0 30px 90px rgba(124,58,237,0.18), 0 0 60px rgba(124,58,237,0.12); }
-          50%     { box-shadow: 0 0 0 1px rgba(168,85,247,0.6), 0 30px 90px rgba(124,58,237,0.28), 0 0 80px rgba(168,85,247,0.2); }
-        }
-        @keyframes iconPop {
-          from { opacity: 0; transform: scale(0.5) rotate(-10deg); }
-          to   { opacity: 1; transform: scale(1) rotate(0deg); }
-        }
-        .ap-row {
-          opacity: 0;
-          animation: pickerIn 0.4s ease forwards;
-        }
-      `}</style>
-
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 460, borderRadius: 24, padding: 40,
-          background: "linear-gradient(165deg, rgba(20,16,40,0.97), rgba(8,8,18,0.99))",
-          border: "1px solid rgba(255,255,255,0.1)",
-          position: "relative", overflow: "hidden",
-          animation: "pickerIn 0.32s cubic-bezier(.2,.9,.3,1.3) forwards, borderGlow 4s ease-in-out infinite",
-        }}
-      >
-        <div style={{
-          position: "absolute", top: -80, right: -80, width: 220, height: 220,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(124,58,237,0.35), transparent 70%)",
-          filter: "blur(20px)", pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", bottom: -100, left: -60, width: 200, height: 200,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(6,182,212,0.18), transparent 70%)",
-          filter: "blur(30px)", pointerEvents: "none",
-        }} />
-
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: 16, margin: "0 auto 20px",
-            background: "rgba(139,92,246,0.12)",
-            border: "1px solid rgba(139,92,246,0.35)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
-            animation: "iconPop 0.45s 0.05s cubic-bezier(.2,.9,.3,1.4) both",
-          }}>
-            <VortisLogo size={28} color="#8b5cf6" />
-          </div>
-
-          <h3 style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 26,
-            color: "#fff", margin: "0 0 8px", textAlign: "center", letterSpacing: "-0.02em",
-          }}>
-            Get started
-          </h3>
-          <p style={{ fontSize: 14.5, color: "rgba(255,255,255,0.45)", textAlign: "center", margin: "0 0 30px" }}>
-            Choose how you'd like to sign in
-          </p>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {providers.map((p, i) => (
-              <button
-                key={p.id}
-                disabled={authLoading}
-                onClick={() => onLogin(p.id)}
-                className="ap-row"
-                style={{
-                  animationDelay: `${0.08 + i * 0.07}s`,
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "16px 20px", borderRadius: 14, width: "100%",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#fff", fontSize: 15.5, fontWeight: 600,
-                  cursor: authLoading ? "not-allowed" : "pointer",
-                  opacity: authLoading ? 0.5 : undefined,
-                  transition: "background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s",
-                  position: "relative",
-                }}
-                onMouseEnter={e => {
-                  if (authLoading) return;
-                  e.currentTarget.style.background = "rgba(255,255,255,0.09)";
-                  e.currentTarget.style.borderColor = `${p.color}66`;
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = `0 8px 24px ${p.color}26`;
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                {p.icon}
-                {p.label}
-                <ArrowRight size={16} style={{ marginLeft: "auto", opacity: 0.35 }} />
-              </button>
-            ))}
-          </div>
-
-          <button onClick={onClose} style={{
-            marginTop: 22, width: "100%", padding: "12px", background: "none",
-            border: "none", color: "rgba(255,255,255,0.35)", fontSize: 14, cursor: "pointer",
-            transition: "color 0.15s",
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.65)"}
-          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const CYCLE_WORDS = [
-  "INTELLIGENCE",
-  "REASONING",
-  "CREATIVITY",
-  "RESEARCH",
-  "UNDERSTANDING",
-  "AUTOMATION",
-  "VISION",
-  "FUTURE",
-  "INNOVATION"
-];
-
-// Custom typewriter component for the headline string parsing
-function TypewriterWord({ word }) {
-  const [displayed, setDisplayed] = useState("");
-  const [phase, setPhase] = useState("typing");
-
-  useEffect(() => {
-    setDisplayed("");
-    setPhase("typing");
-    let i = 0;
-    const type = setInterval(() => {
-      if (i <= word.length) {
-        setDisplayed(word.slice(0, i));
-        i++;
-      } else {
-        clearInterval(type);
-        setPhase("done");
-      }
-    }, 60);
-    return () => clearInterval(type);
-  }, [word]);
-
-  return (
-    <span style={{ position: "relative", display: "inline-block" }}>
-      <span style={{
-        background: "linear-gradient(90deg,#7C3AED 0%,#a855f7 40%,#06B6D4 100%)",
-        backgroundSize: "200% auto",
-        backgroundClip: "text",
-        WebkitBackgroundClip: "text",
-        WebkitTextFillColor: "transparent",
-        animation: "gradientShift 4s ease-in-out infinite",
-      }}>
-        {displayed}
-      </span>
-      <span style={{
-        display: "inline-block", width: 4, height: "0.85em",
-        background: "#a855f7", marginLeft: 3, verticalAlign: "middle",
-        animation: phase === "done" ? "blink 0.8s step-end infinite" : "none",
-        opacity: 1,
-      }} />
-    </span>
-  );
-}
-// Interactive chat module mock up for the right side visual container
-function HeroVisual() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1200);
-    return () => clearInterval(id);
-  }, []);
-
-  const messages = [
-    { role: "user", text: "Analyze competitor pricing" },
-    { role: "ai", text: "Found 12 sources. Stripe charges 2.9% + 30¢…" },
-    { role: "user", text: "Generate a comparison chart" },
-    { role: "ai", text: "Creating visualization…", typing: true },
-  ];
-
-  return (
-    <div className="hero-visual" style={{
-      width: "100%", maxWidth: 480, borderRadius: 20,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      overflow: "hidden", animation: "waveFloat 6s ease-in-out infinite",
-      boxShadow: "0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.1)",
-    }}>
-      {/* Window chrome */}
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
-        {["#ef4444","#f59e0b","#10b981"].map(c => (
-          <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
-        ))}
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", margin: "0 12px" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-          LIVE
-        </div>
-      </div>
-      
-      {/* Messages */}
-      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{
-            display: "flex", gap: 10, alignItems: "flex-start",
-            justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-            opacity: tick > i * 0.5 ? 1 : 0,
-            transform: tick > i * 0.5 ? "translateY(0)" : "translateY(8px)",
-            transition: "all 0.4s ease",
-          }}>
-            {m.role === "ai" && (
-              <div style={{ width: 26, height: 26, borderRadius: 8, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {/* Ensure component is present or switch to a fallback icon/text */}
-                <VortisLogo size={14} color="#fff" />
-              </div>
-            )}
-            <div style={{
-              padding: "8px 12px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
-              background: m.role === "user" ? "linear-gradient(135deg,#7C3AED,#6366f1)" : "rgba(255,255,255,0.05)",
-              border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none",
-              fontSize: 12.5, color: m.role === "user" ? "#e0d9ff" : "rgba(255,255,255,0.8)",
-              maxWidth: "80%", lineHeight: 1.5,
-            }}>
-              {m.typing ? (
-                <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  {[0,1,2].map(d => (
-                    <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: "#a855f7", animation: `pulse 1.2s ease-in-out ${d * 0.2}s infinite` }} />
-                  ))}
-                </span>
-              ) : m.text}
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {/* Input bar */}
-      <div style={{ padding: "10px 16px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ flex: 1, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", padding: "0 12px" }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>Ask anything…</span>
-        </div>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)" }}>
-          <ArrowRight size={14} color="#fff" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function Hero({ onLogin, authLoading, authError }) {
-  const [wordIdx, setWordIdx] = useState(0);
-  const [showPicker, setShowPicker] = useState(false);
-
-function AuthPicker({ onLogin, authLoading, onClose }) {
-  const providers = [
-    { id: 'google', label: 'Continue with Google', color: '#4285F4', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-    )},
-    { id: 'github', label: 'Continue with GitHub', color: '#ffffff', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
-        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
-      </svg>
-    )},
-    { id: 'facebook', label: 'Continue with Facebook', color: '#1877F2', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-      </svg>
-    )},
-  ];
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 999,
-        background: "rgba(3,3,10,0.75)",
-        backdropFilter: "blur(12px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "fadeIn 0.25s ease",
-        padding: 20,
-      }}
-    >
-      <style>{`
-        @keyframes pickerIn {
-          from { opacity: 0; transform: scale(0.92) translateY(16px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
-        @keyframes borderGlow {
-          0%,100% { box-shadow: 0 0 0 1px rgba(124,58,237,0.4), 0 30px 90px rgba(124,58,237,0.18), 0 0 60px rgba(124,58,237,0.12); }
-          50%     { box-shadow: 0 0 0 1px rgba(168,85,247,0.6), 0 30px 90px rgba(124,58,237,0.28), 0 0 80px rgba(168,85,247,0.2); }
-        }
-        @keyframes iconPop {
-          from { opacity: 0; transform: scale(0.5) rotate(-10deg); }
-          to   { opacity: 1; transform: scale(1) rotate(0deg); }
-        }
-        .ap-row {
-          opacity: 0;
-          animation: pickerIn 0.4s ease forwards;
-        }
-      `}</style>
-
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: "100%", maxWidth: 460, borderRadius: 24, padding: 40,
-          background: "linear-gradient(165deg, rgba(20,16,40,0.97), rgba(8,8,18,0.99))",
-          border: "1px solid rgba(255,255,255,0.1)",
-          position: "relative", overflow: "hidden",
-          animation: "pickerIn 0.32s cubic-bezier(.2,.9,.3,1.3) forwards, borderGlow 4s ease-in-out infinite",
-        }}
-      >
-        {/* Ambient glow blob */}
-        <div style={{
-          position: "absolute", top: -80, right: -80, width: 220, height: 220,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(124,58,237,0.35), transparent 70%)",
-          filter: "blur(20px)", pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", bottom: -100, left: -60, width: 200, height: 200,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(6,182,212,0.18), transparent 70%)",
-          filter: "blur(30px)", pointerEvents: "none",
-        }} />
-
-        <div style={{ position: "relative", zIndex: 1 }}>
-         <div style={{
-  width: 52, height: 52, borderRadius: 16, margin: "0 auto 20px",
-  background: "rgba(139,92,246,0.12)",
-  border: "1px solid rgba(139,92,246,0.35)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
-  animation: "iconPop 0.45s 0.05s cubic-bezier(.2,.9,.3,1.4) both",
-}}>
-  <VortisLogo size={28} color="#8b5cf6" />
-</div>
-
-          <h3 style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 26,
-            color: "#fff", margin: "0 0 8px", textAlign: "center", letterSpacing: "-0.02em",
-          }}>
-            Get started
-          </h3>
-          <p style={{ fontSize: 14.5, color: "rgba(255,255,255,0.45)", textAlign: "center", margin: "0 0 30px" }}>
-            Choose how you'd like to sign in
-          </p>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {providers.map((p, i) => (
-              <button
-                key={p.id}
-                disabled={authLoading}
-                onClick={() => onLogin(p.id)}
-                className="ap-row"
-                style={{
-                  animationDelay: `${0.08 + i * 0.07}s`,
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "16px 20px", borderRadius: 14, width: "100%",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#fff", fontSize: 15.5, fontWeight: 600,
-                  cursor: authLoading ? "not-allowed" : "pointer",
-                  opacity: authLoading ? 0.5 : undefined,
-                  transition: "background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s",
-                  position: "relative",
-                }}
-                onMouseEnter={e => {
-                  if (authLoading) return;
-                  e.currentTarget.style.background = "rgba(255,255,255,0.09)";
-                  e.currentTarget.style.borderColor = `${p.color}66`;
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = `0 8px 24px ${p.color}26`;
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                {p.icon}
-                {p.label}
-                <ArrowRight size={16} style={{ marginLeft: "auto", opacity: 0.35 }} />
-              </button>
-            ))}
-          </div>
-
-          <button onClick={onClose} style={{
-            marginTop: 22, width: "100%", padding: "12px", background: "none",
-            border: "none", color: "rgba(255,255,255,0.35)", fontSize: 14, cursor: "pointer",
-            transition: "color 0.15s",
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.65)"}
-          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const [showAuth, setShowAuth] = useState(false);
+  const ctaRef = useMagnetic(0.25);
+  const cta2Ref = useMagnetic(0.2);
+  const heroRef = useRef(null);
+  const [statsIn, setStatsIn] = useState(false);
   useEffect(() => {
-    const id = setInterval(() => setWordIdx(i => (i + 1) % CYCLE_WORDS.length), 3200);
-    return () => clearInterval(id);
+    const t = setTimeout(() => setStatsIn(true), 1200);
+    return () => clearTimeout(t);
   }, []);
 
+  const handleLogin = (creds) => onLogin?.(creds);
+  const users = useCountUp(120000, 2200, statsIn);
+  const uptime = useCountUp(9999, 2200, statsIn, 1);
+  const countries = useCountUp(140, 2200, statsIn);
+
   return (
-    <section className="hero-grid" style={{
-      minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr",
-      alignItems: "center", gap: 60,
-      padding: "100px 80px 80px", position: "relative", zIndex: 1,
-      maxWidth: 1300, margin: "0 auto",
-    }}>
-      <style>{`@media(max-width:900px){.hero-grid{grid-template-columns:1fr!important;padding:100px 24px 60px!important}.hero-visual{display:none!important}}`}</style>
+    <section id="product" ref={heroRef} style={{ position: 'relative', minHeight: '100vh', padding: '140px 24px 80px', display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+      {/* Neural field canvas behind */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1, opacity: .55 }}>
+        <NeuralField density={70} />
+      </div>
 
-      <div className="hero-left">
-        {/* Badge */}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.08)", marginBottom: 28, animation: "fadeUp 0.6s ease both" }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s ease-in-out infinite" }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
-        </div>
+      <div style={{ position: 'relative', zIndex: 2, maxWidth: 1280, margin: '0 auto', width: '100%', display: 'grid', gridTemplateColumns: '1.1fr .9fr', gap: 60, alignItems: 'center' }} className="hero-grid">
+        {/* LEFT */}
+        <div>
+          {/* Eyebrow */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 14px 8px 8px',
+            borderRadius: 999, background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.2)',
+            opacity: 0, animation: 'fadeUp .8s ease forwards', animationDelay: '.1s',
+          }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 999, background: 'rgba(139,92,246,.2)', fontSize: 11, fontWeight: 700, color: '#c4b5fd', letterSpacing: '.05em' }}>
+              <Sparkles size={11} /> NEW
+            </span>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,.7)' }}>Vortis 3.0 — multimodal AI workspace</span>
+            <ArrowRight size={14} style={{ color: 'rgba(255,255,255,.4)' }} />
+          </div>
 
-       {/* Headline */}
-<h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
-  <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
+          {/* Headline */}
+          <h1 style={{
+            fontFamily: "'Space Grotesk', 'Inter', sans-serif", fontWeight: 700,
+            fontSize: 'clamp(44px, 6.5vw, 88px)', lineHeight: 1.02, letterSpacing: '-.04em',
+            margin: '24px 0 18px',
+          }}>
+            <WordReveal text="Build the future" delay=".3" />
+            <br />
+            <span style={{ display: 'inline-block' }}>
+              <WordReveal text="with" delay=".7" />{' '}
+              <span style={{ display: 'inline-block', transform: 'translateY(2px)' }}>
+                <TypewriterWord words={['intelligence.', 'speed.', 'clarity.', 'Vortis.', 'magic.']} />
+              </span>
+            </span>
+          </h1>
 
-  <span style={{ display: "block" }}>
-    <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
-  </span>
+          {/* Subheadline */}
+          <p style={{
+            color: 'rgba(255,255,255,.6)', fontSize: 19, lineHeight: 1.55, maxWidth: 540, margin: '0 0 32px',
+            opacity: 0, animation: 'fadeUp .8s ease forwards', animationDelay: '1.2s',
+          }}>
+            One workspace that thinks with you — chat, code, search, vision, and voice in a single fluid surface. Built for teams shipping at the speed of thought.
+          </p>
 
-  <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
-</h1>
-        {/* Description Sub-headline */}
-        <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
-          Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
-        </p>
-        
+          {/* CTAs */}
+          <div style={{
+            display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 40,
+            opacity: 0, animation: 'fadeUp .8s ease forwards', animationDelay: '1.4s',
+          }}>
+            <button ref={ctaRef} onClick={() => setShowAuth(true)} className="btn-glow magnetic" style={{ padding: '16px 28px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
+              Start building free <ArrowRight size={17} />
+            </button>
+            <button ref={cta2Ref} className="btn-ghost magnetic" style={{ padding: '15px 26px', fontSize: 15, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Play size={15} /> Watch demo
+            </button>
+          </div>
 
-       {/* CTA */}
-<div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-  <button
-    onClick={() => setShowPicker(true)}
-    disabled={authLoading}
-    style={{
-      padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
-      background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-      border: "none", cursor: authLoading ? "not-allowed" : "pointer",
-      display: "flex", alignItems: "center", gap: 8, position: "relative",
-      boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
-      transition: "all 0.25s", opacity: authLoading ? 0.85 : 1,
-    }}
-    onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
-    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
-  >
-    {!authLoading && (
-      <span style={{
-        position: "absolute", inset: -3, borderRadius: 99,
-        border: "3px solid #c4b5fd",
-        animation: "radarPing 1.6s ease-out infinite",
-        pointerEvents: "none",
-      }} />
-    )}
-    {authLoading ? (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", position: "relative", zIndex: 1 }}>
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
-    ) : (
-      <Zap size={16} style={{ position: "relative", zIndex: 1 }} />
-    )}
-    <span style={{ position: "relative", zIndex: 1 }}>
-      {authLoading ? "Signing in…" : "Start Free"}
-    </span>
-  </button>
-
-  <a href="#capabilities" style={{
-    padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
-    border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
-    background: "rgba(255,255,255,0.04)", textDecoration: "none",
-    display: "inline-flex", alignItems: "center", gap: 8, transition: "all 0.2s",
-  }}
-  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"; e.currentTarget.style.color = "#fff"; }}
-  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
-  >Watch Demo</a>
-</div>
-
-{showPicker && (
-  <AuthPicker
-    onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-    authLoading={authLoading}
-    onClose={() => setShowPicker(false)}
-  />
-)}
-        {/* Stats */}
-        <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.7s 0.8s ease both" }}>
-          {[["50K+", "Users"], ["99.9%", "Uptime"], ["4.9★", "Rating"]].map(([n, l]) => (
-            <div key={l}>
-              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 24, background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{n}</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{l}</div>
-            </div>
-          ))}
-          <div style={{ width: 1, background: "rgba(255,255,255,0.08)" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>All systems operational</span>
+          {/* Stats */}
+          <div style={{
+            display: 'flex', gap: 36, flexWrap: 'wrap',
+            opacity: 0, animation: 'fadeUp .8s ease forwards', animationDelay: '1.6s',
+          }}>
+            {[
+              { num: users, suffix: '+', label: 'Active builders' },
+              { num: uptime, suffix: '%', label: 'Uptime SLA', decimals: 2 },
+              { num: countries, suffix: '+', label: 'Countries' },
+            ].map((s) => (
+              <div key={s.label}>
+                <div className="stat-num" style={{ fontSize: 32, lineHeight: 1 }}>
+                  {s.num}{s.suffix}
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,.45)', marginTop: 4 }}>{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {authError && (
-          <div style={{ marginTop: 16, color: "#f87171", fontSize: 13, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "8px 16px", display: "inline-block" }}>
-            {authError}
-          </div>
-        )}
+        {/* RIGHT — Visual */}
+        <div style={{
+          opacity: 0, animation: 'fadeIn 1s ease forwards', animationDelay: '.8s',
+        }}>
+          <HeroVisual />
+        </div>
       </div>
 
-      {/* Right: visual */}
-<div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
-  <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
-  
-  <HeroVisual />
-  
-  {/* Floating badges */}
-  {[
-     { text: "Web Search", Icon: Globe, top: "5%", right: "-5%", delay: "0s", color: "6,182,212" },
-     { text: "Image Gen", Icon: ImageIcon, bottom: "15%", left: "-8%", delay: "1.2s", color: "168,85,247" },
-     { text: "Vision AI", Icon: Eye, top: "40%", right: "-12%", delay: "0.6s", color: "124,58,237" },
-  ].map((b) => (
-    <div key={b.text} style={{
-      position: "absolute", 
-      top: b.top, 
-      right: b.right, 
-      bottom: b.bottom, 
-      left: b.left,
-      display: "flex", 
-      alignItems: "center", 
-      gap: 7, 
-      padding: "8px 14px",
-      borderRadius: 99, 
-      background: "rgba(10,10,20,0.85)", 
-      backdropFilter: "blur(16px)",
-      // Added the custom color to the border with low opacity for a cool glow effect
-      border: `1px solid rgba(${b.color}, 0.3)`,
-      fontSize: 12, 
-      fontWeight: 600, 
-      color: "rgba(255,255,255,0.85)",
-      animation: `float 4s ease-in-out ${b.delay} infinite`,
-      // Added a slight glow using the custom color
-      boxShadow: `0 8px 32px rgba(${b.color}, 0.15)`,
-      whiteSpace: "nowrap",
-    }}>
-      <span style={{ display: "flex", alignItems: "center", color: `rgb(${b.color})` }}>
-        {/* If your icon library supports the color prop directly, you can do: */}
-        {/* <b.Icon size={16} color={`rgb(${b.color})`} /> */}
-        
-        {/* If the icon inherits the parent's text color, this will work automatically: */}
-        <b.Icon size={16} />
-      </span>
-      {b.text}
-    </div>
-  ))}
-</div>
-
-      {/* Scroll indicator */}
-      <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.2)", animation: "float 2.5s ease-in-out infinite" }}>
-        <span style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace" }}>Scroll</span>
-        <ChevronDown size={16} />
+      {/* Live activity ticker — bottom */}
+      <div style={{
+        position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 3,
+        display: 'flex', justifyContent: 'center',
+      }}>
+        <div className="glass" style={{
+          display: 'flex', alignItems: 'center', gap: 16, padding: '8px 16px',
+          borderRadius: 999, fontSize: 12, color: 'rgba(255,255,255,.7)',
+        }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="live-dot" /> LIVE
+          </span>
+          <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,.1)' }} />
+          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <span style={{ color: '#22c55e' }}>+1,247</span> builds today
+          </span>
+          <span style={{ width: 1, height: 14, background: 'rgba(255,255,255,.1)' }} />
+          <span style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+            <span style={{ color: '#a78bfa' }}>2.4M</span> tokens/sec
+          </span>
+        </div>
       </div>
+
+      {/* Scroll cue */}
+      <div style={{
+        position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+        color: 'rgba(255,255,255,.3)', fontSize: 11, letterSpacing: '.2em',
+      }}>
+        SCROLL
+        <div style={{ width: 1, height: 30, background: 'linear-gradient(180deg, rgba(255,255,255,.4), transparent)', animation: 'pulse 2s ease-in-out infinite' }} />
+      </div>
+
+      {showAuth && <AuthPicker onLogin={handleLogin} authLoading={authLoading} onClose={() => setShowAuth(false)} />}
+      {authError && <div style={{ position: 'fixed', top: 90, right: 24, zIndex: 300, padding: '12px 18px', background: 'rgba(239,68,68,.15)', border: '1px solid rgba(239,68,68,.4)', borderRadius: 12, color: '#fca5a5', fontSize: 13, animation: 'slideInRight .3s ease' }}>{authError}</div>}
+
+      <style>{`
+        @media(max-width:880px){.hero-grid{grid-template-columns:1fr!important;gap:50px!important}}
+      `}</style>
     </section>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  BRAND LOGOS
+//  BRAND LOGO SVG RENDERER
 // ══════════════════════════════════════════════════════════════════
-const BRAND_DATA = {
-  Google: {
-    color: "#4285F4",
-    multiPath: [
-      { d: "M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z", fill: "#4285F4" },
-      { d: "M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z", fill: "#34A853" },
-      { d: "M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z", fill: "#FBBC05" },
-      { d: "M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z", fill: "#EA4335" },
-    ],
-  },
-  Microsoft: {
-    color: "#F25022",
-    multiPath: [
-      { d: "M1 1h10.5v10.5H1z", fill: "#F25022" },
-      { d: "M12.5 1H23v10.5H12.5z", fill: "#7FBA00" },
-      { d: "M1 12.5h10.5V23H1z", fill: "#00A4EF" },
-      { d: "M12.5 12.5H23V23H12.5z", fill: "#FFB900" },
-    ],
-  },
-  Apple: {
-    path: "M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.029-3.91 1.183-4.961 3.004-2.117 3.669-.54 9.115 1.512 12.067 1.004 1.442 2.184 3.055 3.754 2.997 1.516-.067 2.085-.98 3.924-.98 1.829 0 2.356.98 3.948.943 1.629-.029 2.665-1.462 3.654-2.907 1.149-1.678 1.619-3.302 1.644-3.389-.038-.019-3.174-1.21-3.208-4.793-.029-3.004 2.462-4.443 2.573-4.51-1.411-2.062-3.593-2.293-4.364-2.351-2.11-.173-3.611 1.04-4.522 1.04zm2.946-4.377c.806-.97 1.344-2.323 1.19-3.673-1.152.048-2.55.77-3.379 1.737-.73.845-1.363 2.217-1.181 3.539 1.286.096 2.592-.643 3.37-1.603z",
-    color: "#FFFFFF" 
-  },
-  Meta: { path: "M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.358-2.602zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.454-.687.964-1.226 1.533-1.533a2.264 2.264 0 0 1 1.088-.285z", color: "#0467DF" },
-  Amazon: { path: "M.045 18.02c.072-.116.187-.124.348-.022 3.636 2.11 7.594 3.166 11.87 3.166 2.852 0 5.668-.533 8.447-1.595l.315-.14c.138-.06.234-.1.293-.13.226-.088.39-.046.525.13.12.174.09.336-.12.48-.256.19-.6.41-1.006.654-1.244.743-2.64 1.316-4.185 1.726a17.617 17.617 0 01-10.951-.577 17.88 17.88 0 01-5.43-3.35c-.1-.074-.151-.15-.151-.22 0-.047.021-.09.051-.13zm6.565-6.218c0-1.005.247-1.863.743-2.577.495-.71 1.17-1.25 2.04-1.615.796-.335 1.756-.575 2.912-.72.39-.046 1.033-.103 1.92-.174v-.37c0-.93-.105-1.558-.3-1.875-.302-.43-.78-.65-1.44-.65h-.182c-.48.046-.896.196-1.246.46-.35.27-.575.63-.675 1.096-.06.3-.206.465-.435.51l-2.52-.315c-.248-.06-.372-.18-.372-.39 0-.046.007-.09.022-.15.247-1.29.855-2.25 1.82-2.88.976-.616 2.1-.975 3.39-1.05h.54c1.65 0 2.957.434 3.888 1.29.135.15.27.3.405.48.12.165.224.314.283.45.075.134.15.33.195.57.06.254.105.42.135.51.03.104.062.3.076.615.01.313.02.493.02.553v5.28c0 .376.06.72.165 1.036.105.313.21.54.315.674l.51.674c.09.136.136.256.136.36 0 .12-.06.226-.18.314-1.2 1.05-1.86 1.62-1.963 1.71-.165.135-.375.15-.63.045a6.062 6.062 0 01-.526-.496l-.31-.347a9.391 9.391 0 01-.317-.42l-.3-.435c-.81.886-1.603 1.44-2.4 1.665-.494.15-1.093.227-1.83.227-1.11 0-2.04-.343-2.76-1.034-.72-.69-1.08-1.665-1.08-2.94l-.05-.076zm3.753-.438c0 .566.14 1.02.425 1.364.285.34.675.512 1.155.512.045 0 .106-.007.195-.02.09-.016.134-.023.166-.023.614-.16 1.08-.553 1.424-1.178.165-.28.285-.58.36-.91.09-.32.12-.59.135-.8.015-.195.015-.54.015-1.005v-.54c-.84 0-1.484.06-1.92.18-1.275.36-1.92 1.17-1.92 2.43l-.035-.02zm9.162 7.027c.03-.06.075-.11.132-.17.362-.243.714-.41 1.05-.5a8.094 8.094 0 011.612-.24c.14-.012.28 0 .41.03.65.06 1.05.168 1.172.33.063.09.099.228.099.39v.15c0 .51-.149 1.11-.424 1.8-.278.69-.664 1.248-1.156 1.68-.073.06-.14.09-.197.09-.03 0-.06 0-.09-.012-.09-.044-.107-.12-.064-.24.54-1.26.806-2.143.806-2.64 0-.15-.03-.27-.087-.344-.145-.166-.55-.257-1.224-.257-.243 0-.533.016-.87.046-.363.045-.7.09-1 .135-.09 0-.148-.014-.18-.044-.03-.03-.036-.047-.02-.077 0-.017.006-.03.02-.063v-.06z", color: "#FF9900" },
-  Netflix: { path: "m5.398 0 8.348 23.602c2.346.059 4.856.398 4.856.398L10.113 0H5.398zm8.489 0v9.172l4.715 13.33V0h-4.715zM5.398 1.5V24c1.873-.225 2.81-.312 4.715-.398V14.83L5.398 1.5z", color: "#E50914" },
-  Spotify: { path: "M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z", color: "#1ED760" },
-  Adobe: { path: "M13.966 22.624l-1.69-4.281H8.122l3.892-9.144 5.662 13.425zM8.884 1.376H0v21.248zm15.116 0h-8.884L24 22.624Z", color: "#FF0000" },
-  Stripe: { path: "M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.594-7.305h.003z", color: "#635BFF" },
-  Vercel: { path: "m12 1.608 12 20.784H0Z", color: "#ffffff" },
-  GitHub: { path: "M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12", color: "#ffffff" },
-  Notion: { 
-    path: "M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.981-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.167V6.354c0-.606-.233-.933-.748-.887l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952L12.21 19s0 .84-1.168.84l-3.222.186c-.093-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.456-.233 4.764 7.279v-6.44l-1.215-.139c-.093-.514.28-.887.747-.933zM1.936 1.035l13.31-.98c1.634-.14 2.055-.047 3.082.7l4.249 2.986c.7.513.934.653.934 1.213v16.378c0 1.026-.373 1.634-1.68 1.726l-15.458.934c-.98.047-1.448-.093-1.962-.747l-3.129-4.06c-.56-.747-.793-1.306-.793-1.96V2.667c0-.839.374-1.54 1.447-1.632z", 
-    color: "#FFFFFF" 
-  },
-  Figma: { 
-    color: "#F24E1E",
-    multiPath: [
-      { d: "M12 0H8a4 4 0 0 0-4 4a4 4 0 0 0 4 4h4V0z", fill: "#F24E1E" },
-      { d: "M12 0h4a4 4 0 0 1 4 4a4 4 0 0 1-4 4h-4V0z", fill: "#FF7262" },
-      { d: "M12 8H8a4 4 0 0 0-4 4a4 4 0 0 0 4 4h4V8z", fill: "#A259FF" },
-      { d: "M20 12a4 4 0 1 1-8 0a4 4 0 0 1 8 0z", fill: "#1ABCFE" },
-      { d: "M12 16v4a4 4 0 0 1-4 4a4 4 0 0 1-4-4a4 4 0 0 1 4-4h4z", fill: "#0ACF83" }
-    ]
-  },
-  LinkedIn: {
-    color: "#0A66C2",
-    multiPath: [
-      /* The 'i' dot and stem */
-      { d: "M6.5 8.36h2.88V18H6.5V8.36zM7.94 4.5A1.67 1.67 0 1 1 7.93 7.8a1.67 1.67 0 0 1 .01-3.3z", fill: "#0A66C2" },
-      /* The 'n' structure */
-      { d: "M11 8.36h2.76v1.32h.04c.38-.73 1.33-1.5 2.73-1.5 2.92 0 3.47 1.92 3.47 4.42V18h-2.88v-4.51c0-1.08-.02-2.46-1.5-2.46-1.5 0-1.73 1.17-1.73 2.38V18H11V8.36z", fill: "#0A66C2" }
-    ]
-  },
-  Discord: { path: "M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z", color: "#5865F2" },
-  Linear: { path: "M2.886 4.18A11.982 11.982 0 0 1 11.99 0C18.624 0 24 5.376 24 12.009c0 3.64-1.62 6.903-4.18 9.105L2.887 4.18ZM1.817 5.626l16.556 16.556c-.524.33-1.075.62-1.65.866L.951 7.277c.247-.575.537-1.126.866-1.65ZM.322 9.163l14.515 14.515c-.71.172-1.443.282-2.195.322L0 11.358a12 12 0 0 1 .322-2.195Zm-.17 4.862 9.823 9.824a12.02 12.02 0 0 1-9.824-9.824Z", color: "#5E6AD2" },
-  Salesforce: { path: "M10.006 5.415a4.195 4.195 0 013.045-1.306c1.56 0 2.954.9 3.69 2.205.63-.3 1.35-.45 2.1-.45 2.85 0 5.159 2.34 5.159 5.22s-2.31 5.22-5.176 5.22c-.345 0-.69-.044-1.02-.104a3.75 3.75 0 01-3.3 1.95c-.6 0-1.155-.15-1.65-.375A4.314 4.314 0 018.88 20.4a4.302 4.302 0 01-4.05-2.82c-.27.062-.54.076-.825.076-2.204 0-4.005-1.8-4.005-4.05 0-1.5.811-2.805 2.01-3.51-.255-.57-.39-1.2-.39-1.846 0-2.58 2.1-4.65 4.65-4.65 1.53 0 2.85.705 3.72 1.8", color: "#00A1E0" },
-  Airbnb: { path: "M12.001 18.275c-1.353-1.697-2.148-3.184-2.413-4.457-.263-1.027-.16-1.848.291-2.465.477-.71 1.188-1.056 2.121-1.056s1.643.345 2.12 1.063c.446.61.558 1.432.286 2.465-.291 1.298-1.085 2.785-2.412 4.458zm9.601 1.14c-.185 1.246-1.034 2.28-2.2 2.783-2.253.98-4.483-.583-6.392-2.704 3.157-3.951 3.74-7.028 2.385-9.018-.795-1.14-1.933-1.695-3.394-1.695-2.944 0-4.563 2.49-3.927 5.382.37 1.565 1.352 3.343 2.917 5.332-.98 1.085-1.91 1.856-2.732 2.333-.636.344-1.245.558-1.828.609-2.679.399-4.778-2.2-3.825-4.88.132-.345.395-.98.845-1.961l.025-.053c1.464-3.178 3.242-6.79 5.285-10.795l.053-.132.58-1.116c.45-.822.635-1.19 1.351-1.643.346-.21.77-.315 1.246-.315.954 0 1.698.558 2.016 1.007.158.239.345.557.582.953l.558 1.089.08.159c2.041 4.004 3.821 7.608 5.279 10.794l.026.025.533 1.22.318.764c.243.613.294 1.222.213 1.858zm1.22-2.39c-.186-.583-.505-1.271-.9-2.094v-.03c-1.889-4.006-3.642-7.608-5.307-10.844l-.111-.163C15.317 1.461 14.468 0 12.001 0c-2.44 0-3.476 1.695-4.535 3.898l-.081.16c-1.669 3.236-3.421 6.843-5.303 10.847v.053l-.559 1.22c-.21.504-.317.768-.345.847C-.172 20.74 2.611 24 5.98 24c.027 0 .132 0 .265-.027h.372c1.75-.213 3.554-1.325 5.384-3.317 1.829 1.989 3.635 3.104 5.382 3.317h.372c.133.027.239.027.265.027 3.37.003 6.152-3.261 4.802-6.975z", color: "#FF5A5F" },
-  Uber: { path: "M0 7.97v4.958c0 1.867 1.302 3.101 3 3.101.826 0 1.562-.316 2.094-.87v.736H6.27V7.97H5.082v4.888c0 1.257-.85 2.106-1.947 2.106-1.11 0-1.946-.827-1.946-2.106V7.971H0zm7.44 0v7.925h1.13v-.725c.521.532 1.257.86 2.06.86a3.006 3.006 0 0 0 3.034-3.01 3.01 3.01 0 0 0-3.033-3.024 2.86 2.86 0 0 0-2.049.861V7.971H7.439zm9.869 2.038c-1.687 0-2.965 1.37-2.965 3 0 1.72 1.334 3.01 3.066 3.01 1.053 0 1.913-.463 2.49-1.233l-.826-.611c-.43.577-.996.847-1.664.847-.973 0-1.753-.7-1.912-1.64h4.697v-.373c0-1.72-1.222-3-2.886-3zm6.295.068c-.634 0-1.098.294-1.381.758v-.713h-1.131v5.774h1.142V12.61c0-.894.544-1.47 1.291-1.47H24v-1.065h-.396zm-6.319.928c.85 0 1.564.588 1.756 1.47H15.52c.203-.882.916-1.47 1.765-1.47zm-6.732.012c1.086 0 1.98.883 1.98 2.004a1.993 1.993 0 0 1-1.98 2.001A1.989 1.989 0 0 1 8.56 13.02a1.99 1.99 0 0 1 1.992-2.004z", color: "#ffffff" },
-  X: { path: "M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z", color: "#ffffff" },
-  OpenAI: { path: "M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z", color: "#ffffff" },
-  Anthropic: { path: "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z", color: "#D97706" },
-  Shopify: { path: "M15.337 23.979l7.216-1.561s-2.604-17.613-2.625-17.73c-.018-.116-.114-.192-.211-.192s-1.929-.136-1.929-.136-1.275-1.274-1.439-1.411c-.045-.037-.075-.057-.121-.074l-.914 21.104h.023zM11.71 11.305s-.81-.424-1.774-.424c-1.447 0-1.504.906-1.504 1.141 0 1.232 3.24 1.715 3.24 4.629 0 2.295-1.44 3.76-3.406 3.76-2.354 0-3.54-1.465-3.54-1.465l.646-2.086s1.245 1.066 2.28 1.066c.675 0 .975-.545.975-.932 0-1.619-2.654-1.694-2.654-4.359-.034-2.237 1.571-4.416 4.827-4.416 1.257 0 1.875.361 1.875.361l-.945 2.715-.02.01zM11.17.83c.136 0 .271.038.405.135-.984.465-2.064 1.639-2.508 3.992-.656.213-1.293.405-1.889.578C7.697 3.75 8.951.84 11.17.84V.83zm1.235 2.949v.135c-.754.232-1.583.484-2.394.736.466-1.777 1.333-2.645 2.085-2.971.193.501.309 1.176.309 2.1zm.539-2.234c.694.074 1.141.867 1.429 1.755-.349.114-.735.231-1.158.366v-.252c0-.752-.096-1.371-.271-1.871v.002zm2.992 1.289c-.02 0-.06.021-.078.021s-.289.075-.714.21c-.423-1.233-1.176-2.37-2.508-2.37h-.115C12.135.209 11.669 0 11.265 0 8.159 0 6.675 3.877 6.21 5.846c-1.194.365-2.063.636-2.16.674-.675.213-.694.232-.772.87-.075.462-1.83 14.063-1.83 14.063L15.009 24l.927-21.166z", color: "#7AB55C" },
-  Dropbox: { path: "M6 1.807L0 5.629l6 3.822 6.001-3.822L6 1.807zM18 1.807l-6 3.822 6 3.822 6-3.822-6-3.822zM0 13.274l6 3.822 6.001-3.822L6 9.452l-6 3.822zM18 9.452l-6 3.822 6 3.822 6-3.822-6-3.822zM6 18.371l6.001 3.822 6-3.822-6-3.822L6 18.371z", color: "#0061FF" },
-  Atlassian: { path: "M7.12 11.084a.683.683 0 00-1.16.126L.075 22.974a.703.703 0 00.63 1.018h8.19a.678.678 0 00.63-.39c1.767-3.65.696-9.203-2.406-12.52zM11.434.386a15.515 15.515 0 00-.906 15.317l3.95 7.9a.703.703 0 00.628.388h8.19a.703.703 0 00.63-1.017L12.63.38a.664.664 0 00-1.196.006z", color: "#0052CC" },
-  PayPal: { path: "M15.607 4.653H8.941L6.645 19.251H1.82L4.862 0h7.995c3.754 0 6.375 2.294 6.473 5.513-.648-.478-2.105-.86-3.722-.86m6.57 5.546c0 3.41-3.01 6.853-6.958 6.853h-2.493L11.595 24H6.74l1.845-11.538h3.592c4.208 0 7.346-3.634 7.153-6.949a5.24 5.24 0 0 1 2.848 4.686M9.653 5.546h6.408c.907 0 1.942.222 2.363.541-.195 2.741-2.655 5.483-6.441 5.483H8.714Z", color: "#003087" },
-  Zoom: { path: "M5.033 14.649H.743a.74.74 0 0 1-.686-.458.74.74 0 0 1 .16-.808L3.19 10.41H1.06A1.06 1.06 0 0 1 0 9.35h3.957c.301 0 .57.18.686.458a.74.74 0 0 1-.161.808L1.51 13.59h2.464c.585 0 1.06.475 1.06 1.06zM24 11.338c0-1.14-.927-2.066-2.066-2.066-.61 0-1.158.265-1.537.686a2.061 2.061 0 0 0-1.536-.686c-1.14 0-2.066.926-2.066 2.066v3.311a1.06 1.06 0 0 0 1.06-1.06v-2.251a1.004 1.004 0 0 1 2.013 0v2.251c0 .586.474 1.06 1.06 1.06v-3.311a1.004 1.004 0 0 1 2.012 0v2.251c0 .586.475 1.06 1.06 1.06zM16.265 12a2.728 2.728 0 1 1-5.457 0 2.728 2.728 0 0 1 5.457 0zm-1.06 0a1.669 1.669 0 1 0-3.338 0 1.669 1.669 0 0 0 3.338 0zm-4.82 0a2.728 2.728 0 1 1-5.458 0 2.728 2.728 0 0 1 5.457 0zm-1.06 0a1.669 1.669 0 1 0-3.338 0 1.669 1.669 0 0 0 3.338 0z", color: "#0B5CFF" },
-  Pinterest: { path: "M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.688 0 1.029-.653 2.567-.992 3.992-.285 1.193.6 2.165 1.775 2.165 2.128 0 3.768-2.245 3.768-5.487 0-2.861-2.063-4.869-5.008-4.869-3.41 0-5.409 2.562-5.409 5.199 0 1.033.394 2.143.889 2.741.099.12.112.225.085.345-.09.375-.293 1.199-.334 1.363-.053.225-.172.271-.401.165-1.495-.69-2.433-2.878-2.433-4.646 0-3.776 2.748-7.252 7.92-7.252 4.158 0 7.392 2.967 7.392 6.923 0 4.135-2.607 7.462-6.233 7.462-1.214 0-2.354-.629-2.758-1.379l-.749 2.848c-.269 1.045-1.004 2.352-1.498 3.146 1.123.345 2.306.535 3.55.535 6.607 0 11.985-5.365 11.985-11.987C23.97 5.39 18.592.026 11.985.026L12.017 0z", color: "#BD081C" },
-  Reddit: { path: "M12 0C5.373 0 0 5.373 0 12c0 3.314 1.343 6.314 3.515 8.485l-2.286 2.286C.775 23.225 1.097 24 1.738 24H12c6.627 0 12-5.373 12-12S18.627 0 12 0Zm4.388 3.199c1.104 0 1.999.895 1.999 1.999 0 1.105-.895 2-1.999 2-.946 0-1.739-.657-1.947-1.539v.002c-1.147.162-2.032 1.15-2.032 2.341v.007c1.776.067 3.4.567 4.686 1.363.473-.363 1.064-.58 1.707-.58 1.547 0 2.802 1.254 2.802 2.802 0 1.117-.655 2.081-1.601 2.531-.088 3.256-3.637 5.876-7.997 5.876-4.361 0-7.905-2.617-7.998-5.87-.954-.447-1.614-1.415-1.614-2.538 0-1.548 1.255-2.802 2.803-2.802.645 0 1.239.218 1.712.585 1.275-.79 2.881-1.291 4.64-1.365v-.01c0-1.663 1.263-3.034 2.88-3.207.188-.911.993-1.595 1.959-1.595Zm-8.085 8.376c-.784 0-1.459.78-1.506 1.797-.047 1.016.64 1.429 1.426 1.429.786 0 1.371-.369 1.418-1.385.047-1.017-.553-1.841-1.338-1.841Zm7.406 0c-.786 0-1.385.824-1.338 1.841.047 1.017.634 1.385 1.418 1.385.785 0 1.473-.413 1.426-1.429-.046-1.017-.721-1.797-1.506-1.797Zm-3.703 4.013c-.974 0-1.907.048-2.77.135-.147.015-.241.168-.183.305.483 1.154 1.622 1.964 2.953 1.964 1.33 0 2.47-.81 2.953-1.964.057-.137-.037-.29-.184-.305-.863-.087-1.795-.135-2.769-.135Z", color: "#FF4500" },
-  };
 function BrandIcon({ name }) {
-  const brand = BRAND_DATA[name];
-  if (!brand) return null;
-  const s = { width: 18, height: 18, display: "block", flexShrink: 0 };
-  if (brand.multiPath) return <svg viewBox="0 0 24 24" style={s}>{brand.multiPath.map((p, i) => <path key={i} d={p.d} fill={p.fill} />)}</svg>;
-  return <svg viewBox="0 0 24 24" style={s}><path d={brand.path} fill={brand.color} /></svg>;
+  const brands = {
+    openai: { path: 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 4c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6 2.7-6 6-6z', color: '#10a37f' },
+    google: { multiPath: [{ d: 'M12 11v2.8h6.5c-.3 1.7-2 5-6.5 5-3.9 0-7-3.2-7-7s3.1-7 7-7c2.2 0 3.7 1 4.5 1.8L18 4.5C16.3 2.9 14 2 12 2 6.5 2 2 6.5 2 12s4.5 10 10 10c5.5 0 9.5-3.9 9.5-9.5 0-.7 0-1.2-.2-1.5H12z', fill: '#4285f4' }] },
+    vercel: { path: 'M12 2L2 22h20L12 2z', color: '#fff' },
+    stripe: { path: 'M22 12c0-5.5-4.5-10-10-10S2 6.5 2 12s4.5 10 10 10 10-4.5 10-10zM12 6c-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6-2.7-6-6-6z', color: '#635bff' },
+    nvidia: { path: 'M8 8v8h8V8H8zm2 2h4v4h-4v-4z', color: '#76b900' },
+    anthropic: { path: 'M12 4L4 20h4l4-10 4 10h4L12 4z', color: '#d97757' },
+    figma: { multiPath: [{ d: 'M8 2h4v6H8a3 3 0 010-6z', fill: '#f24e1e' }, { d: 'M12 2h4a3 3 0 010 6h-4V2z', fill: '#ff7262' }, { d: 'M12 8h4a3 3 0 010 6h-4V8z', fill: '#1abcfe' }, { d: 'M8 8h4v6H8a3 3 0 010-6z', fill: '#a259ff' }, { d: 'M8 14h4v3a3 3 0 11-4-3z', fill: '#0acf83' }] },
+    linear: { path: 'M2 14L10 22H2V14zM2 2L22 22H10L2 14V2z', color: '#5e6ad2' },
+    notion: { path: 'M4 4h16v16H4V4zm4 4v8h8V8H8z', color: '#fff' },
+    spotify: { path: 'M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm4.5 14.5c-.2.3-.6.4-.9.2-2.5-1.5-5.5-1.8-9.2-1-.4.1-.7-.2-.8-.5-.1-.4.2-.7.5-.8 4-.9 7.4-.5 10.1 1.2.4.2.5.6.3.9zm1.2-2.7c-.3.4-.7.5-1.1.3-2.8-1.7-7.1-2.2-10.4-1.2-.4.1-.9-.1-1-.5-.1-.4.1-.9.5-1 3.8-1.1 8.5-.6 11.7 1.4.3.2.5.7.3 1zm.1-2.8C14.5 8.9 9.3 8.7 6.1 9.7c-.5.2-1.1-.1-1.2-.6-.2-.5.1-1.1.6-1.2 3.7-1.1 9.4-.9 13.1 1.4.5.3.6.9.3 1.4-.3.4-.9.6-1.4.3z', color: '#1db954' },
+  };
+  const b = brands[name]; if (!b) return null;
+  const s = { width: 22, height: 22 };
+  if (b.multiPath) return <svg viewBox="0 0 24 24" style={s}>{b.multiPath.map((p, i) => <path key={i} d={p.d} fill={p.fill} />)}</svg>;
+  return <svg viewBox="0 0 24 24" style={s}><path d={b.path} fill={b.color} /></svg>;
 }
 
-const ROW1 = [
-  "Google", "Microsoft", "Apple", "Meta", "Amazon", "Netflix", "Spotify", "Adobe", "Stripe", "Vercel", "GitHub", "Notion", "Figma", "LinkedIn", "Discord",
-];
-const ROW2 = [
-  "Linear", "Salesforce", "Airbnb", "Uber", "X", "OpenAI", "Anthropic", "Shopify", "Dropbox", "Atlassian", "PayPal", "Zoom", "Pinterest", "Reddit", 
-];
-
-function LogoItem({ name }) {
+function LogoItem({ name, label }) {
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
-      borderRadius: 99, border: "1px solid rgba(255,255,255,0.07)",
-      background: "rgba(255,255,255,0.025)", height: 48, padding: "0 22px",
-      cursor: "default", transition: "all 0.25s",
-    }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.45)"; e.currentTarget.style.background = "rgba(139,92,246,0.06)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.background = "rgba(255,255,255,0.025)"; e.currentTarget.style.transform = "translateY(0)"; }}
-    >
-      <div style={{ opacity: 0.7 }}><BrandIcon name={name} /></div>
-      <span style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>{name}</span>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '12px 22px', borderRadius: 14, background: 'rgba(255,255,255,.025)', border: '1px solid rgba(255,255,255,.05)', transition: 'all .3s ease' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.06)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,.3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.025)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.05)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+      <BrandIcon name={name} />
+      <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 14, color: 'rgba(255,255,255,.7)' }}>{label}</span>
     </div>
   );
 }
 
-function MarqueeRow({ items, reverse }) {
-  const all = [...items, ...items, ...items];
+function MarqueeRow({ items, reverse = false }) {
   return (
-    <div style={{ overflow: "hidden" }}>
-      <div style={{
-        display: "flex", gap: 10, width: "max-content",
-        animation: `${reverse ? "marquee-r" : "marquee-l"} 45s linear infinite`,
-        willChange: "transform",
-      }}>
-        {all.map((name, i) => <LogoItem key={i} name={name} />)}
+    <div style={{ overflow: 'hidden', maskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)', WebkitMaskImage: 'linear-gradient(90deg, transparent, black 8%, black 92%, transparent)' }}>
+      <div className={`marquee-track ${reverse ? 'rev' : ''}`} style={{ gap: 14 }}>
+        {[...items, ...items].map((it, i) => <LogoItem key={i} {...it} />)}
       </div>
     </div>
   );
 }
 
 function Logos() {
-  const [ref, inView] = useInView(0.1);
+  const [ref, inView] = useInView();
+  const row1 = [
+    { name: 'openai', label: 'OpenAI' }, { name: 'google', label: 'Google' },
+    { name: 'vercel', label: 'Vercel' }, { name: 'stripe', label: 'Stripe' },
+    { name: 'nvidia', label: 'NVIDIA' }, { name: 'anthropic', label: 'Anthropic' },
+  ];
+  const row2 = [
+    { name: 'figma', label: 'Figma' }, { name: 'linear', label: 'Linear' },
+    { name: 'notion', label: 'Notion' }, { name: 'spotify', label: 'Spotify' },
+  ];
   return (
-    <section ref={ref} style={{ padding: "72px 0", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 140, zIndex: 2, background: "linear-gradient(to right,#03030a,transparent)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 140, zIndex: 2, background: "linear-gradient(to left,#03030a,transparent)", pointerEvents: "none" }} />
-      <p style={{ textAlign: "center", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.28)", marginBottom: 28, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace", opacity: inView ? 1 : 0, transition: "opacity 0.8s ease" }}>
-        <span style={{ fontSize: "18px", marginRight: "8px" }}>
-           ♥
-           </span>
-           LOVED BY LEADING TEAMS
-       </p>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, opacity: inView ? 1 : 0, transition: "opacity 1s 0.2s ease" }}>
-        <MarqueeRow items={ROW1} reverse={false} />
-        <MarqueeRow items={ROW2} reverse={true} />
+    <section ref={ref} className={`section reveal ${inView ? 'in' : ''}`} style={{ paddingTop: 60, paddingBottom: 60 }}>
+      <div style={{ textAlign: 'center', marginBottom: 40 }}>
+        <div className="eyebrow"><span className="dot" />TRUSTED BY 120,000+ TEAMS</div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <MarqueeRow items={row1} />
+        <MarqueeRow items={row2} reverse />
       </div>
     </section>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  FEATURES — LIVE TILES
+//  BENTO GRID — each tile has a unique micro-animation
 // ══════════════════════════════════════════════════════════════════
-
-// Real code typing itself character-by-character, then rewriting
-function CodeTileVisual() {
-  const CODE = [
-    "const ai = new Vortis();",
-    "await ai.think({",
-    "  goal: 'ship faster',",
-    "});  // done in 0.4s ✓",
-  ];
-  const total = CODE.join("\n").length;
-  const [chars, setChars] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setChars(c => (c >= total + 18 ? 0 : c + 1)), 65);
-    return () => clearInterval(id);
-  }, [total]);
-
-  let remaining = Math.min(chars, total);
+function BentoCard({ children, className = '', style = {}, glowColor = '#a78bfa' }) {
+  const ref = useTilt(8);
   return (
-    <div style={{ width: "88%", margin: "0 auto", background: "rgba(0,0,0,.35)", border: "1px solid rgba(124,58,237,.25)", borderRadius: 10, padding: "10px 12px", fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5, lineHeight: 1.75, minHeight: 108 }}>
-      <div style={{ display: "flex", gap: 5, marginBottom: 8 }}>
-        {["#ef4444", "#f59e0b", "#10b981"].map(c => <span key={c} style={{ width: 7, height: 7, borderRadius: "50%", background: c, opacity: .6 }} />)}
+    <div ref={ref} className={`tilt-card ${className}`} style={{
+      position: 'relative', borderRadius: 24, padding: 28, overflow: 'hidden',
+      background: 'linear-gradient(160deg, rgba(15,12,30,.6), rgba(8,6,20,.8))',
+      border: '1px solid rgba(255,255,255,.06)', transformStyle: 'preserve-3d',
+      transition: 'box-shadow .3s ease', ...style,
+    }}
+      onMouseEnter={(e) => { e.currentTarget.style.boxShadow = `0 20px 60px -20px ${glowColor}55, 0 0 0 1px ${glowColor}33`; }}
+      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}>
+      {/* Mouse-following glow */}
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: 24, pointerEvents: 'none',
+        background: `radial-gradient(circle 240px at var(--mx,50%) var(--my,50%), ${glowColor}1a, transparent 70%)`,
+      }} />
+      {/* Top gradient line */}
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${glowColor}66, transparent)` }} />
+      <div style={{ position: 'relative', transform: 'translateZ(30px)', height: '100%' }}>
+        {children}
       </div>
-      {CODE.map((line, i) => {
-        const shown = line.slice(0, Math.max(0, remaining));
-        const isTyping = remaining > 0 && remaining < line.length;
-        remaining -= line.length + 1;
-        const colors = ["#c4b5fd", "#e2e8f0", "#67e8f9", "#86efac"];
-        return (
-          <div key={i} style={{ color: colors[i], whiteSpace: "pre", minHeight: 20 }}>
-            {shown}
-            {isTyping && <span style={{ display: "inline-block", width: 6, height: 12, background: "#a855f7", verticalAlign: "middle", animation: "caretB .7s step-end infinite" }} />}
-          </div>
-        );
-      })}
     </div>
   );
 }
 
-// A live search: query types itself, results slide in, then re-searches
-function SearchTileVisual() {
-  const QUERY = "best GPU for AI 2026";
-  const [phase, setPhase] = useState(0);
+// Tile 1: Code typing visual
+function CodeTileVisual() {
+  const lines = [
+    'import { Vortis } from "@vortis/sdk"',
+    '',
+    'const ai = new Vortis({',
+    '  model: "vortex-3",',
+    '  multimodal: true,',
+    '})',
+    '',
+    'await ai.stream({',
+    '  prompt: "build a dashboard",',
+    '  onToken: render,',
+    '})',
+  ];
+  const [visible, setVisible] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setPhase(p => (p >= QUERY.length + 14 ? 0 : p + 1)), 130);
+    const id = setInterval(() => setVisible(v => v >= lines.length ? 0 : v + 1), 600);
     return () => clearInterval(id);
-  }, []);
-  const typed = QUERY.slice(0, Math.min(phase, QUERY.length));
-  const showResults = phase > QUERY.length + 2;
-
+  }, [lines.length]);
   return (
-    <div style={{ width: "88%", margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 9, background: "rgba(0,0,0,.35)", border: `1px solid rgba(6,182,212,${showResults ? ".5" : ".25"})`, marginBottom: 8, transition: "border-color .3s" }}>
-        <Globe size={12} color="#06b6d4" />
-        <span style={{ fontSize: 11.5, fontFamily: "'JetBrains Mono',monospace", color: "rgba(255,255,255,.75)" }}>
-          {typed}
-          {!showResults && <span style={{ display: "inline-block", width: 6, height: 11, background: "#06b6d4", marginLeft: 2, verticalAlign: "middle", animation: "caretB .7s step-end infinite" }} />}
-        </span>
+    <div style={{ background: 'rgba(0,0,0,.5)', borderRadius: 14, padding: 18, fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.7, border: '1px solid rgba(255,255,255,.06)', height: '100%', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff5f57' }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#febc2e' }} />
+        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28c840' }} />
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,.3)' }}>app.tsx</span>
       </div>
-      {[["nvidia.com", "82%"], ["tomshardware.com", "64%"], ["reddit.com/r/ML", "48%"]].map(([src, w], i) => (
-        <div key={src} style={{
-          display: "flex", alignItems: "center", gap: 8, padding: "6px 10px",
-          borderRadius: 8, background: "rgba(6,182,212,.06)", border: "1px solid rgba(6,182,212,.15)",
-          marginBottom: 5, opacity: showResults ? 1 : 0,
-          transform: showResults ? "translateX(0)" : "translateX(-14px)",
-          transition: `all .4s ${i * 0.12}s cubic-bezier(.2,.9,.3,1.2)`,
-        }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4" }} />
-          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,.6)", fontFamily: "'JetBrains Mono',monospace", flex: 1 }}>{src}</span>
-          <div style={{ width: 42, height: 4, borderRadius: 2, background: "rgba(255,255,255,.08)" }}>
-            <div style={{ width: showResults ? w : 0, height: "100%", borderRadius: 2, background: "#06b6d4", transition: `width .6s ${0.3 + i * 0.12}s ease` }} />
-          </div>
+      {lines.slice(0, visible).map((l, i) => (
+        <div key={i} style={{ animation: 'fadeIn .3s ease', color: l.startsWith('import') ? '#c084fc' : l.includes('"') ? '#fbbf24' : l.includes('{') || l.includes('}') ? '#22d3ee' : '#cbd5e1' }}>
+          {l || '\u00A0'}
         </div>
       ))}
+      {visible < lines.length && (
+        <span style={{ display: 'inline-block', width: 7, height: 14, background: '#a78bfa', animation: 'blink .8s steps(2) infinite', verticalAlign: 'middle' }} />
+      )}
     </div>
   );
 }
 
+// Tile 2: Search cascade
+function SearchTileVisual() {
+  const queries = ['design system', 'database schema', 'auth flow', 'api endpoint'];
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setActive(a => (a + 1) % queries.length), 2200);
+    return () => clearInterval(id);
+  }, []);
+  const results = [
+    { t: 'Component library', s: 'tokens, buttons, inputs' },
+    { t: 'Theme generator', s: 'auto dark/light mode' },
+    { t: 'Icon set', s: '1200+ SVG icons' },
+  ];
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,0,0,.4)', padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,.08)' }}>
+        <Search size={15} style={{ color: '#a78bfa' }} />
+        <span style={{ fontSize: 13, color: '#fff' }}>
+          {queries[active]}
+          <span style={{ display: 'inline-block', width: 1, height: 12, background: '#a78bfa', marginLeft: 2, animation: 'blink 1s steps(2) infinite', verticalAlign: 'middle' }} />
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {results.map((r, i) => (
+          <div key={r.t} style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10,
+            background: 'rgba(255,255,255,.025)', border: '1px solid rgba(255,255,255,.05)',
+            animation: `slideInLeft .4s ease`, animationDelay: `${i * .1}s`, animationFillMode: 'both',
+          }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'linear-gradient(135deg, #7c3aed, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <FileText size={14} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{r.t}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)' }}>{r.s}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Tile 3: Voice waveform
 function VoiceTileVisual() {
   return (
-    <div style={{ width: "100%", height: 140 }}>
-      <AICore isConnected={true} isSpeaking={true} />
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 18 }}>
+      <div style={{ position: 'relative', width: 70, height: 70, borderRadius: '50%', background: 'linear-gradient(135deg, #ec4899, #f59e0b)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: 'pulseScale 2s ease-in-out infinite' }}>
+        <Mic size={28} />
+        <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: '1px solid rgba(236,72,153,.4)', animation: 'radarPing 2s ease-out infinite' }} />
+        <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: '1px solid rgba(236,72,153,.3)', animation: 'radarPing 2s ease-out infinite 1s' }} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 40 }}>
+        {[...Array(28)].map((_, i) => (
+          <div key={i} style={{
+            width: 3, background: 'linear-gradient(180deg, #ec4899, #f59e0b)', borderRadius: 2,
+            height: '100%',
+            transformOrigin: 'bottom',
+            animation: `waveBar ${.8 + (i % 4) * .15}s ease-in-out infinite`,
+            animationDelay: `${i * .04}s`,
+          }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', fontFamily: "'JetBrains Mono', monospace" }}>Listening…</div>
+    </div>
+  );
+}
+
+// Tile 4: Vision tile
+function VisionTileVisual() {
+  return (
+    <div style={{ height: '100%', position: 'relative', borderRadius: 14, overflow: 'hidden', background: 'linear-gradient(135deg, #1e1b4b, #4c1d95)' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 40%, rgba(34,211,238,.4), transparent 50%), radial-gradient(circle at 70% 70%, rgba(236,72,153,.4), transparent 50%)' }} />
+      {/* Scan line */}
+      <div style={{ position: 'absolute', left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #22d3ee, transparent)', boxShadow: '0 0 12px #22d3ee', animation: 'scanLine 3s ease-in-out infinite' }} />
+      {/* Detected boxes */}
+      <div style={{ position: 'absolute', top: '20%', left: '15%', width: '40%', height: '35%', border: '1.5px solid #22d3ee', borderRadius: 6, animation: 'pulse 2s ease-in-out infinite' }}>
+        <span style={{ position: 'absolute', top: -16, left: 0, fontSize: 9, color: '#22d3ee', fontFamily: "'JetBrains Mono', monospace", background: 'rgba(0,0,0,.5)', padding: '2px 5px', borderRadius: 3 }}>object 99%</span>
+      </div>
+      <div style={{ position: 'absolute', top: '55%', right: '12%', width: '30%', height: '25%', border: '1.5px solid #ec4899', borderRadius: 6, animation: 'pulse 2s ease-in-out infinite 1s' }}>
+        <span style={{ position: 'absolute', top: -16, right: 0, fontSize: 9, color: '#ec4899', fontFamily: "'JetBrains Mono', monospace", background: 'rgba(0,0,0,.5)', padding: '2px 5px', borderRadius: 3 }}>text 97%</span>
+      </div>
+      <div style={{ position: 'absolute', bottom: 12, left: 12, right: 12, fontSize: 10, color: 'rgba(255,255,255,.7)', fontFamily: "'JetBrains Mono', monospace", display: 'flex', justifyContent: 'space-between' }}>
+        <span>2 objects</span>
+        <span style={{ color: '#22c55e' }}>analyzed in 240ms</span>
+      </div>
+    </div>
+  );
+}
+
+// Tile 5: Multi-agent network
+function AgentTileVisual() {
+  const nodes = [
+    { x: 50, y: 50, c: '#a78bfa', label: 'orchestrator' },
+    { x: 15, y: 20, c: '#22d3ee', label: 'search' },
+    { x: 85, y: 20, c: '#ec4899', label: 'code' },
+    { x: 15, y: 80, c: '#f59e0b', label: 'vision' },
+    { x: 85, y: 80, c: '#22c55e', label: 'memory' },
+  ];
+  return (
+    <div style={{ height: '100%', position: 'relative' }}>
+      <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%' }}>
+        {nodes.slice(1).map((n, i) => (
+          <line key={i} x1="50" y1="50" x2={n.x} y2={n.y} stroke="rgba(167,139,250,.4)" strokeWidth=".5" strokeDasharray="2 2">
+            <animate attributeName="stroke-dashoffset" from="4" to="0" dur="1s" repeatCount="indefinite" />
+          </line>
+        ))}
+        {nodes.map((n, i) => (
+          <g key={i}>
+            <circle cx={n.x} cy={n.y} r="4" fill={n.c} opacity=".3">
+              <animate attributeName="r" from="4" to="8" dur="2s" repeatCount="indefinite" begin={`${i * .3}s`} />
+              <animate attributeName="opacity" from=".3" to="0" dur="2s" repeatCount="indefinite" begin={`${i * .3}s`} />
+            </circle>
+            <circle cx={n.x} cy={n.y} r="3" fill={n.c} />
+          </g>
+        ))}
+      </svg>
+      <div style={{ position: 'absolute', bottom: 8, left: 8, right: 8, fontSize: 10, color: 'rgba(255,255,255,.5)', fontFamily: "'JetBrains Mono', monospace", display: 'flex', justifyContent: 'space-between' }}>
+        <span>5 agents online</span>
+        <span style={{ color: '#22c55e' }}>● synced</span>
+      </div>
+    </div>
+  );
+}
+
+// Tile 6: Realtime collab
+function CollabTileVisual() {
+  const users = [
+    { name: 'AK', c: '#a78bfa', x: 30, y: 30 },
+    { name: 'JS', c: '#22d3ee', x: 70, y: 40 },
+    { name: 'MR', c: '#ec4899', x: 50, y: 70 },
+  ];
+  return (
+    <div style={{ height: '100%', position: 'relative', background: 'rgba(0,0,0,.3)', borderRadius: 14, border: '1px solid rgba(255,255,255,.06)', overflow: 'hidden' }}>
+      {/* Animated cursor trails */}
+      {users.map((u, i) => (
+        <div key={i} style={{
+          position: 'absolute', left: `${u.x}%`, top: `${u.y}%`,
+          animation: `float3d ${5 + i}s ease-in-out infinite`, animationDelay: `${i * .5}s`,
+        }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" style={{ filter: `drop-shadow(0 0 8px ${u.c})` }}>
+            <path d="M2 2L14 8L8 9L7 14L2 2Z" fill={u.c} />
+          </svg>
+          <span style={{ position: 'absolute', top: 16, left: 12, fontSize: 9, padding: '2px 6px', background: u.c, color: '#000', borderRadius: 4, fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", whiteSpace: 'nowrap' }}>{u.name}</span>
+        </div>
+      ))}
+      {/* Document lines */}
+      <div style={{ position: 'absolute', top: 14, left: 14, right: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {[80, 60, 90, 70, 50].map((w, i) => (
+          <div key={i} style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,.08)', width: `${w}%` }} />
+        ))}
+      </div>
+      <div style={{ position: 'absolute', bottom: 8, right: 12, fontSize: 10, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace" }}>3 editing now</div>
     </div>
   );
 }
 
 function BentoGrid() {
-  const [ref, inView] = useInView(0.08);
-
-  const tiles = [
-    { color: "6,182,212", icon: Globe, title: "Live Web Search", desc: "Real-time results from across the internet, with sources.", visual: <SearchTileVisual /> },
-    { color: "124,58,237", icon: Phone, title: "Voice Mode", desc: "Talk naturally — real-time voice conversations, no typing.", visual: <VoiceTileVisual /> },
-    { color: "124,58,237", icon: Code2, title: "Code Mastery", desc: "Writes, debugs and refactors like a principal engineer.", visual: <CodeTileVisual /> },
-    {
-      color: "99,102,241", icon: Eye, title: "Vision AI", desc: "Reads screenshots, photos and charts like you do.",
-      visual: (
-        <div style={{ position: "relative", width: "80%", height: 110, margin: "0 auto", borderRadius: 12, background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(30,17,69,0.6))", border: "1px solid rgba(99,102,241,0.25)", overflow: "hidden" }}>
-          <div style={{ position: "absolute", left: 0, right: 0, height: 2, background: "linear-gradient(90deg, transparent, #818cf8, transparent)", boxShadow: "0 0 14px #6366f1", animation: "scanY 3.2s ease-in-out infinite" }} />
-          {[[12, 16, 34, 24, 0], [58, 52, 40, 30, 1.1], [20, 60, 28, 22, 2.2]].map(([x, y, w, h, d], i) => (
-            <div key={i} style={{ position: "absolute", left: `${x}%`, top: `${y}%`, width: w, height: h, border: "1.5px solid rgba(129,140,248,.9)", borderRadius: 4, animation: `boxBlink 3.2s ${d}s linear infinite` }} />
-          ))}
-        </div>
-      ),
-    },
-    {
-      color: "168,85,247", icon: ImageIcon, title: "Image Generation", desc: "Photorealistic to anime — imagined in seconds.",
-      visual: (
-        <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
-          <div style={{ width: 100, height: 100, background: "linear-gradient(135deg,#a855f7,#7C3AED 45%,#06b6d4)", animation: "blobMorph 7s ease-in-out infinite", boxShadow: "0 0 44px rgba(168,85,247,.4)", filter: "saturate(1.2)" }} />
-        </div>
-      ),
-    },
-    {
-      color: "251,191,36", icon: Brain, title: "Persistent Memory", desc: "Knows your projects, style and context — always.",
-      visual: (
-        <div style={{ position: "relative", width: 130, height: 110, margin: "0 auto" }}>
-          <svg width="130" height="110" style={{ position: "absolute" }}>
-            {[[65, 20, 22, 62], [65, 20, 108, 62], [22, 62, 65, 95], [108, 62, 65, 95], [22, 62, 108, 62]].map(([x1, y1, x2, y2], i) => (
-              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(251,191,36,.5)" strokeWidth="1" style={{ animation: `linkGlow 2.6s ${i * 0.4}s ease-in-out infinite` }} />
-            ))}
-          </svg>
-          {[[65, 20], [22, 62], [108, 62], [65, 95]].map(([x, y], i) => (
-            <div key={i} style={{ position: "absolute", left: x - 6, top: y - 6, width: 12, height: 12, borderRadius: "50%", background: "#fbbf24", boxShadow: "0 0 12px rgba(251,191,36,.7)", animation: `nodePulse 2.6s ${i * 0.5}s ease-in-out infinite` }} />
-          ))}
-        </div>
-      ),
-    },
-    {
-  color: "16,185,129", icon: Shield, title: "Enterprise Security",
-  desc: "AES-256 encryption, SOC 2 compliant — your data never trains models.",
-  visual: (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12, paddingTop: 8 }}>
-      <div style={{ width: 64, height: 64, borderRadius: 16, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.35)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(16,185,129,0.25)" }}>
-        <Shield size={26} color="#10b981" />
+  const [ref, inView] = useInView();
+  return (
+    <section id="solutions" ref={ref} className="section">
+      <div style={{ textAlign: 'center', marginBottom: 60 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />ONE WORKSPACE</div>
+        <h2 className="h-section">Everything you need.<br /><span className="gradient-text">Nothing you don't.</span></h2>
+        <p className="h-sub" style={{ margin: '18px auto 0' }}>Six superpowers in a single surface. Built for the way modern teams actually ship.</p>
       </div>
-      <div style={{ display: "flex", gap: 6 }}>
-        {["AES-256", "SOC 2", "GDPR"].map(l => (
-          <span key={l} style={{ fontSize: 9.5, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981", fontFamily: "'JetBrains Mono',monospace" }}>{l}</span>
+
+      <div className={`reveal-stagger ${inView ? 'in' : ''}`} style={{
+        display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 18, gridAutoRows: 'minmax(180px, auto)',
+      }}>
+        {/* Tile 1 - Code (large) */}
+        <BentoCard glowColor="#a78bfa" style={{ gridColumn: 'span 3', gridRow: 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(139,92,246,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a78bfa' }}><Code2 size={18} /></div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Code generation</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>Full-stack, type-safe, production-ready</div>
+            </div>
+          </div>
+          <CodeTileVisual />
+        </BentoCard>
+
+        {/* Tile 2 - Search */}
+        <BentoCard glowColor="#22d3ee" style={{ gridColumn: 'span 3' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(34,211,238,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22d3ee' }}><Search size={16} /></div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Semantic search</div>
+          </div>
+          <SearchTileVisual />
+        </BentoCard>
+
+        {/* Tile 3 - Voice */}
+        <BentoCard glowColor="#ec4899" style={{ gridColumn: 'span 3' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(236,72,153,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}><Mic size={16} /></div>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Voice & realtime</div>
+          </div>
+          <VoiceTileVisual />
+        </BentoCard>
+
+        {/* Tile 4 - Vision */}
+        <BentoCard glowColor="#22d3ee" style={{ gridColumn: 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(34,211,238,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22d3ee' }}><Eye size={15} /></div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Vision</div>
+          </div>
+          <VisionTileVisual />
+        </BentoCard>
+
+        {/* Tile 5 - Multi-agent */}
+        <BentoCard glowColor="#a78bfa" style={{ gridColumn: 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(139,92,246,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a78bfa' }}><Network size={15} /></div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Multi-agent</div>
+          </div>
+          <AgentTileVisual />
+        </BentoCard>
+
+        {/* Tile 6 - Collab */}
+        <BentoCard glowColor="#f59e0b" style={{ gridColumn: 'span 2' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(245,158,11,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}><Users size={15} /></div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Realtime collab</div>
+          </div>
+          <CollabTileVisual />
+        </BentoCard>
+      </div>
+
+      <style>{`
+        @media(max-width:880px){.reveal-stagger>div{grid-column:span 6!important}}
+      `}</style>
+    </section>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  HOW IT WORKS — sticky scroll reveal with animated number rings
+// ══════════════════════════════════════════════════════════════════
+function HowItWorks() {
+  const [ref, inView] = useInView();
+  const steps = [
+    { n: 1, t: 'Connect your stack', d: 'Plug Vortis into your repos, docs, databases, and APIs. We index everything in minutes — no migration required, no lock-in.', icon: Layers, c: '#a78bfa' },
+    { n: 2, t: 'Describe the outcome', d: 'Type, paste, or speak what you want built. Vortis orchestrates the right agents in parallel — code, search, vision, voice.', icon: Brain, c: '#22d3ee' },
+    { n: 3, t: 'Watch it ship', d: 'Get production-ready output with tests, types, and docs. Review in a live preview, then deploy to your edge with one click.', icon: Rocket, c: '#ec4899' },
+    { n: 4, t: 'Iterate at lightspeed', d: 'Every change is versioned, observable, and reversible. Your team stays in flow — Vortis handles the busywork.', icon: Zap, c: '#f59e0b' },
+  ];
+  return (
+    <section ref={ref} className="section" id="how">
+      <div style={{ textAlign: 'center', marginBottom: 70 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />HOW IT WORKS</div>
+        <h2 className="h-section">From idea to live<br /><span className="gradient-text-aurora">in four steps.</span></h2>
+      </div>
+
+      <div style={{ maxWidth: 880, margin: '0 auto', position: 'relative' }}>
+        {/* Vertical connector line */}
+        <div style={{ position: 'absolute', left: 39, top: 40, bottom: 40, width: 2, background: 'linear-gradient(180deg, rgba(139,92,246,.6), rgba(236,72,153,.4), rgba(245,158,11,.3), transparent)', zIndex: 0 }} />
+
+        {steps.map((s, i) => (
+          <HowStep key={s.n} step={s} delay={i * 0.1} />
         ))}
       </div>
-    </div>
-  ),
-},
-{
-  color: "236,72,153", icon: Cpu, title: "Multi-Model Routing",
-  desc: "Automatically picks the fastest or smartest model for every request.",
-  visual: (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, paddingTop: 10 }}>
-      {["Fast", "Balanced", "Deep"].map((label, i) => (
-        <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-          <div style={{ width: 34 + i * 8, height: 34 + i * 8, borderRadius: "50%", background: `rgba(236,72,153,${0.12 + i * 0.08})`, border: "1px solid rgba(236,72,153,0.35)", display: "flex", alignItems: "center", justifyContent: "center", animation: `pulse 2s ${i * 0.3}s ease-in-out infinite` }}>
-            <Cpu size={12 + i * 2} color="#ec4899" />
-          </div>
-          <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono',monospace" }}>{label}</span>
+    </section>
+  );
+}
+
+function HowStep({ step, delay }) {
+  const [ref, inView] = useInView(0.4);
+  const Icon = step.icon;
+  return (
+    <div ref={ref} className={`reveal ${inView ? 'in' : ''}`} style={{
+      display: 'flex', gap: 24, marginBottom: 40, alignItems: 'flex-start', position: 'relative', zIndex: 1,
+      transitionDelay: `${delay}s`,
+    }}>
+      {/* Number ring */}
+      <div style={{ flexShrink: 0, position: 'relative', width: 80, height: 80 }}>
+        <svg width="80" height="80" viewBox="0 0 80 80" style={{ position: 'absolute', inset: 0 }}>
+          <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="2" />
+          <circle cx="40" cy="40" r="36" fill="none" stroke={step.c} strokeWidth="2" strokeLinecap="round"
+            strokeDasharray={inView ? '226' : '0'} strokeDashoffset={inView ? '0' : '226'}
+            transform="rotate(-90 40 40)" style={{ transition: 'stroke-dashoffset 1.4s ease, stroke-dasharray 1.4s ease' }} />
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 8, borderRadius: '50%',
+          background: `radial-gradient(circle, ${step.c}33, transparent 70%)`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon size={22} style={{ color: step.c }} />
         </div>
-      ))}
-    </div>
-  ),
-},
-    {
-      color: "6,182,212", icon: Microscope, title: "Deep Research", desc: "50+ sources synthesized into reports in minutes.",
-      visual: (
-        <div style={{ width: "78%", margin: "10px auto 0" }}>
-          {["92%", "70%", "84%", "58%"].map((w, i) => (
-            <div key={i} style={{ marginBottom: 12 }}>
-              <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
-                <div style={{ height: "100%", width: w, borderRadius: 3, background: "linear-gradient(90deg,#06b6d4,#a855f7)", transformOrigin: "0 50%", animation: `barFill 5s ${i * 0.6}s ease-in-out infinite` }} />
-              </div>
-            </div>
-          ))}
-          <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "rgba(6,182,212,.8)" }}>SYNTHESIZING 47 SOURCES…</div>
+      </div>
+
+      {/* Text */}
+      <div style={{ paddingTop: 14, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 8 }}>
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, color: step.c, fontWeight: 700, letterSpacing: '.1em' }}>STEP 0{step.n}</span>
         </div>
-      ),
-    },
+        <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontSize: 28, fontWeight: 700, letterSpacing: '-.02em', margin: '0 0 12px' }}>{step.t}</h3>
+        <p style={{ color: 'rgba(255,255,255,.6)', fontSize: 16, lineHeight: 1.6, margin: 0, maxWidth: 600 }}>{step.d}</p>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SHOWCASE — tabbed demo with live previews
+// ══════════════════════════════════════════════════════════════════
+function Showcase() {
+  const [ref, inView] = useInView();
+  const [tab, setTab] = useState(0);
+  const tabs = [
+    { id: 'chat', label: 'Chat', icon: MessageSquare, c: '#a78bfa' },
+    { id: 'code', label: 'Code', icon: Code2, c: '#22d3ee' },
+    { id: 'voice', label: 'Voice', icon: Mic, c: '#ec4899' },
+    { id: 'vision', label: 'Vision', icon: Eye, c: '#f59e0b' },
   ];
 
   return (
-    <section ref={ref} style={{ padding: "90px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
-      <style>{`
-        @keyframes tileIn{0%{opacity:0;transform:translateY(36px) scale(.95)}60%{opacity:1;transform:translateY(-5px) scale(1.01)}100%{opacity:1;transform:translateY(0) scale(1)}}
-        @keyframes caretB{0%,100%{opacity:1}50%{opacity:0}}
-        @keyframes scanY{0%,100%{top:8%}50%{top:88%}}
-        @keyframes boxBlink{0%,60%,100%{opacity:0}70%,90%{opacity:1}}
-        @keyframes blobMorph{0%,100%{border-radius:58% 42% 40% 60%/55% 48% 52% 45%;transform:rotate(0) scale(1)}33%{border-radius:40% 60% 55% 45%/45% 55% 45% 55%;transform:rotate(8deg) scale(1.08)}66%{border-radius:52% 48% 62% 38%/40% 60% 40% 60%;transform:rotate(-6deg) scale(.94)}}
-        @keyframes nodePulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.5);opacity:1}}
-        @keyframes linkGlow{0%,100%{opacity:.15}50%{opacity:.6}}
-        @keyframes barFill{0%{transform:scaleX(0)}55%{transform:scaleX(1)}85%{transform:scaleX(1)}100%{transform:scaleX(0)}}
-        .lt-card{transition:transform .3s ease,border-color .3s ease,box-shadow .3s ease}
-        .lt-card:hover{transform:translateY(-6px)}
-        @media(max-width:900px){.lt-grid{grid-template-columns:1fr!important}}
-      `}</style>
-
-      <div style={{ textAlign: "center", marginBottom: 56 }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity .6s ease" }}>
-          <Sparkles size={11} color="#a855f7" />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Everything you need</span>
-        </div>
-        <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all .8s .1s ease" }}>
-          Watch it{" "}
-          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>think.</span>
-        </h2>
+    <section ref={ref} className="section" id="showcase">
+      <div style={{ textAlign: 'center', marginBottom: 50 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />LIVE DEMO</div>
+        <h2 className="h-section">See Vortis <span className="gradient-text">in action.</span></h2>
+        <p className="h-sub" style={{ margin: '18px auto 0' }}>Switch between modes — every surface is fluid, every response is instant.</p>
       </div>
 
-      <div className="lt-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
-        {tiles.map((f, i) => {
-          const Icon = f.icon;
+      {/* Tab switcher */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 30, flexWrap: 'wrap' }}>
+        {tabs.map((t, i) => {
+          const Icon = t.icon;
+          const active = tab === i;
           return (
-            <div key={f.title} className="lt-card" style={{
-              borderRadius: 20, padding: "26px 26px 30px", minHeight: 300,
-              background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)",
-              position: "relative", overflow: "hidden",
-              animation: inView ? `tileIn .8s ${i * 0.09 + 0.15}s cubic-bezier(.2,.9,.3,1.2) both` : "none",
-              opacity: inView ? undefined : 0,
-            }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = `rgba(${f.color},0.5)`; e.currentTarget.style.boxShadow = `0 24px 60px rgba(${f.color},0.18)`; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.boxShadow = "none"; }}
-            >
-              <div style={{ height: 140, display: "flex", flexDirection: "column", justifyContent: "center", marginBottom: 18 }}>{f.visual}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                <div style={{ width: 32, height: 32, borderRadius: 9, background: `rgba(${f.color},0.15)`, border: `1px solid rgba(${f.color},0.35)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Icon size={15} style={{ color: `rgb(${f.color})` }} />
+            <button key={t.id} onClick={() => setTab(i)} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '11px 20px', borderRadius: 999,
+              background: active ? `linear-gradient(135deg, ${t.c}33, ${t.c}11)` : 'rgba(255,255,255,.03)',
+              border: `1px solid ${active ? `${t.c}66` : 'rgba(255,255,255,.08)'}`,
+              color: active ? '#fff' : 'rgba(255,255,255,.6)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              transition: 'all .25s ease',
+              boxShadow: active ? `0 0 20px ${t.c}33` : 'none',
+            }}>
+              <Icon size={15} style={{ color: active ? t.c : 'rgba(255,255,255,.5)' }} />
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Demo panel */}
+      <div className={`reveal ${inView ? 'in' : ''}`} style={{
+        maxWidth: 1100, margin: '0 auto', borderRadius: 28, padding: 4,
+        background: 'conic-gradient(from 0deg, rgba(139,92,246,.4), rgba(236,72,153,.4), rgba(34,211,238,.3), rgba(245,158,11,.3), rgba(139,92,246,.4))',
+        animation: 'spin 12s linear infinite',
+      }}>
+        <div style={{ background: 'linear-gradient(160deg, rgba(10,8,24,.98), rgba(4,3,12,.98))', borderRadius: 26, padding: 8, overflow: 'hidden' }}>
+          <ShowcasePanel tab={tabs[tab]} key={tab} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ShowcasePanel({ tab }) {
+  return (
+    <div style={{ minHeight: 460, padding: 24, animation: 'fadeIn .4s ease' }}>
+      {tab.id === 'chat' && <ChatDemo />}
+      {tab.id === 'code' && <CodeDemo />}
+      {tab.id === 'voice' && <VoiceDemo />}
+      {tab.id === 'vision' && <VisionDemo />}
+    </div>
+  );
+}
+
+function ChatDemo() {
+  const msgs = [
+    { role: 'user', text: 'Build me a SaaS dashboard for tracking MRR' },
+    { role: 'ai', text: 'On it. I\'ll spin up a Next.js app with Stripe billing, a churn cohort chart, and realtime MRR counter. Want me to scaffold the schema first?', typing: true },
+  ];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
+      {msgs.map((m, i) => (
+        <div key={i} style={{
+          display: 'flex', gap: 12, alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+          maxWidth: '80%', animation: `slideIn${m.role === 'user' ? 'Right' : 'Left'} .5s ease`, animationDelay: `${i * .3}s`, animationFillMode: 'both',
+        }}>
+          {m.role === 'ai' && (
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg, #7c3aed, #ec4899)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Sparkles size={16} />
+            </div>
+          )}
+          <div style={{
+            padding: '14px 18px', borderRadius: 16, maxWidth: '100%',
+            background: m.role === 'user' ? 'rgba(139,92,246,.15)' : 'rgba(255,255,255,.04)',
+            border: `1px solid ${m.role === 'user' ? 'rgba(139,92,246,.3)' : 'rgba(255,255,255,.08)'}`,
+            fontSize: 14, lineHeight: 1.55,
+          }}>
+            {m.text}
+            {m.typing && <span style={{ display: 'inline-flex', gap: 3, marginLeft: 6, verticalAlign: 'middle' }}>
+              {[...Array(3)].map((_, j) => (
+                <span key={j} style={{ width: 4, height: 4, borderRadius: '50%', background: '#a78bfa', animation: 'pulse 1s ease-in-out infinite', animationDelay: `${j * .15}s` }} />
+              ))}
+            </span>}
+          </div>
+        </div>
+      ))}
+      {/* Suggested actions */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 'auto', paddingTop: 20 }}>
+        {['📊 Yes, scaffold schema', '🎨 Use my brand colors', '⚡ Add realtime updates'].map((s, i) => (
+          <button key={i} style={{
+            padding: '8px 14px', borderRadius: 999, background: 'rgba(255,255,255,.04)',
+            border: '1px solid rgba(255,255,255,.1)', color: 'rgba(255,255,255,.8)', fontSize: 12, cursor: 'pointer',
+            transition: 'all .2s ease', animation: `fadeUp .4s ease`, animationDelay: `${1 + i * .1}s`, animationFillMode: 'both',
+          }}
+            onMouseEnter={(e) => { e.target.style.background = 'rgba(139,92,246,.15)'; e.target.style.borderColor = 'rgba(139,92,246,.4)'; }}
+            onMouseLeave={(e) => { e.target.style.background = 'rgba(255,255,255,.04)'; e.target.style.borderColor = 'rgba(255,255,255,.1)'; }}>
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CodeDemo() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, height: '100%' }} className="code-demo-grid">
+      <div style={{ background: 'rgba(0,0,0,.5)', borderRadius: 14, padding: 18, border: '1px solid rgba(255,255,255,.06)', fontFamily: "'JetBrains Mono', monospace", fontSize: 12, lineHeight: 1.7, overflow: 'auto' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff5f57' }} />
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#febc2e' }} />
+          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28c840' }} />
+          <span style={{ marginLeft: 'auto', fontSize: 10, color: 'rgba(255,255,255,.3)' }}>dashboard.tsx</span>
+        </div>
+        {[
+          { t: 'export function', c: '#c084fc' }, { t: ' Dashboard({ mrr }) {', c: '#cbd5e1' },
+        ].map((l, i) => (
+          <div key={i} style={{ color: l.c, animation: `fadeIn .4s ease`, animationDelay: `${i * .1}s`, animationFillMode: 'both' }}>{l.t}{l.c2 && <span style={{ color: l.c2 }}>{l.t2}</span>}</div>
+        ))}
+        <div style={{ color: '#22d3ee' }}>  return (</div>
+        <div style={{ color: '#cbd5e1' }}>    {'<Card>'}</div>
+        <div style={{ color: '#cbd5e1' }}>      {'<Stat label="MRR"'}</div>
+        <div style={{ color: '#fbbf24' }}>        {'value={`$${mrr.toLocaleString()}`}'}</div>
+        <div style={{ color: '#cbd5e1' }}>        {'trend="+12.4%"'}</div>
+        <div style={{ color: '#cbd5e1' }}>        {'animated />'}</div>
+        <div style={{ color: '#cbd5e1' }}>      {'</Card>'}</div>
+        <div style={{ color: '#cbd5e1' }}>    {'</Card>'}</div>
+        <div style={{ color: '#22d3ee' }}>  )</div>
+        <div style={{ color: '#cbd5e1' }}>{'}'}</div>
+        <span style={{ display: 'inline-block', width: 7, height: 14, background: '#a78bfa', animation: 'blink .8s steps(2) infinite', verticalAlign: 'middle' }} />
+      </div>
+
+      {/* Preview */}
+      <div style={{ background: 'rgba(0,0,0,.4)', borderRadius: 14, padding: 18, border: '1px solid rgba(255,255,255,.06)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace" }}>PREVIEW</div>
+        <div style={{ background: 'linear-gradient(135deg, rgba(139,92,246,.15), rgba(236,72,153,.1))', borderRadius: 12, padding: 18, border: '1px solid rgba(139,92,246,.2)' }}>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', marginBottom: 6 }}>Monthly recurring revenue</div>
+          <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", background: 'linear-gradient(180deg, #fff, #a78bfa)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>$48,250</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 12 }}>
+            <TrendingUp size={13} style={{ color: '#22c55e' }} />
+            <span style={{ color: '#22c55e', fontWeight: 600 }}>+12.4%</span>
+            <span style={{ color: 'rgba(255,255,255,.4)' }}>vs last month</span>
+          </div>
+        </div>
+        {/* Mini chart */}
+        <div style={{ flex: 1, background: 'rgba(255,255,255,.02)', borderRadius: 12, padding: 14, position: 'relative' }}>
+          <svg viewBox="0 0 200 80" style={{ width: '100%', height: '100%' }}>
+            <defs>
+              <linearGradient id="chartG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#a78bfa" stopOpacity=".5" />
+                <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d="M0,60 L25,55 L50,45 L75,50 L100,35 L125,30 L150,25 L175,15 L200,10 L200,80 L0,80 Z" fill="url(#chartG)" />
+            <path d="M0,60 L25,55 L50,45 L75,50 L100,35 L125,30 L150,25 L175,15 L200,10" stroke="#a78bfa" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+              <animate attributeName="stroke-dasharray" from="0,500" to="500,0" dur="2s" fill="freeze" />
+            </path>
+          </svg>
+        </div>
+      </div>
+      <style>{`@media(max-width:880px){.code-demo-grid{grid-template-columns:1fr!important}}`}</style>
+    </div>
+  );
+}
+
+function VoiceDemo() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 24 }}>
+      <div style={{ position: 'relative' }}>
+        {/* Pulse rings */}
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            position: 'absolute', inset: -20 - i * 30, borderRadius: '50%',
+            border: '1px solid rgba(236,72,153,.3)',
+            animation: `radarPing 2.5s ease-out infinite`, animationDelay: `${i * .6}s`,
+          }} />
+        ))}
+        <div style={{
+          width: 100, height: 100, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #ec4899, #f59e0b)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 60px rgba(236,72,153,.5)',
+          animation: 'pulseScale 2s ease-in-out infinite',
+        }}>
+          <Mic size={36} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 60 }}>
+        {[...Array(40)].map((_, i) => (
+          <div key={i} style={{
+            width: 3, background: 'linear-gradient(180deg, #ec4899, #f59e0b)', borderRadius: 2,
+            height: '100%',
+            transformOrigin: 'center',
+            animation: `waveBar ${.6 + (i % 5) * .12}s ease-in-out infinite`,
+            animationDelay: `${i * .03}s`,
+          }} />
+        ))}
+      </div>
+
+      <div style={{ textAlign: 'center', maxWidth: 460 }}>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", marginBottom: 8, letterSpacing: '.1em' }}>TRANSCRIBING</div>
+        <div style={{ fontSize: 18, color: '#fff', lineHeight: 1.5 }}>
+          "Add a quarterly retention chart to the dashboard and share it with the leadership channel"
+          <span style={{ display: 'inline-block', width: 2, height: 18, background: '#ec4899', marginLeft: 3, verticalAlign: 'middle', animation: 'blink 1s steps(2) infinite' }} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        {['✓ Action queued', '✓ 3 commands parsed', '✓ Routing to dashboard agent'].map((s, i) => (
+          <span key={i} style={{ padding: '6px 12px', borderRadius: 999, background: 'rgba(34,197,94,.1)', border: '1px solid rgba(34,197,94,.3)', color: '#86efac', fontSize: 11, animation: 'fadeUp .4s ease', animationDelay: `${1 + i * .2}s`, animationFillMode: 'both' }}>{s}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VisionDemo() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, height: '100%' }} className="vision-demo-grid">
+      {/* Image with detections */}
+      <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', background: 'linear-gradient(135deg, #1e1b4b, #4c1d95, #831843)', minHeight: 300 }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 40%, rgba(34,211,238,.4), transparent 50%), radial-gradient(circle at 70% 60%, rgba(236,72,153,.4), transparent 50%), radial-gradient(circle at 50% 80%, rgba(245,158,11,.3), transparent 50%)' }} />
+        <div style={{ position: 'absolute', left: 0, right: 0, height: 2, background: 'linear-gradient(90deg, transparent, #22d3ee, transparent)', boxShadow: '0 0 16px #22d3ee', animation: 'scanLine 3s ease-in-out infinite' }} />
+        {/* Detection boxes */}
+        <div style={{ position: 'absolute', top: '15%', left: '10%', width: '45%', height: '40%', border: '2px solid #22d3ee', borderRadius: 8, boxShadow: '0 0 20px rgba(34,211,238,.4)' }}>
+          <span style={{ position: 'absolute', top: -22, left: 0, padding: '3px 8px', background: '#22d3ee', color: '#000', fontSize: 10, fontWeight: 700, borderRadius: 4, fontFamily: "'JetBrains Mono', monospace" }}>chart 99%</span>
+        </div>
+        <div style={{ position: 'absolute', top: '60%', right: '12%', width: '30%', height: '25%', border: '2px solid #ec4899', borderRadius: 8, boxShadow: '0 0 20px rgba(236,72,153,.4)' }}>
+          <span style={{ position: 'absolute', top: -22, right: 0, padding: '3px 8px', background: '#ec4899', color: '#fff', fontSize: 10, fontWeight: 700, borderRadius: 4, fontFamily: "'JetBrains Mono', monospace" }}>cta 97%</span>
+        </div>
+      </div>
+
+      {/* Analysis panel */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.1em' }}>ANALYSIS · 240ms</div>
+        {[
+          { t: 'Layout type', v: 'Dashboard', c: '#a78bfa' },
+          { t: 'Components detected', v: '7 widgets', c: '#22d3ee' },
+          { t: 'Color palette', v: '6 colors', c: '#ec4899' },
+          { t: 'Design system', v: 'Material-like', c: '#f59e0b' },
+          { t: 'Accessibility', v: 'AA compliant', c: '#22c55e' },
+        ].map((r, i) => (
+          <div key={i} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '12px 14px', borderRadius: 10, background: 'rgba(255,255,255,.03)',
+            border: '1px solid rgba(255,255,255,.06)',
+            animation: 'slideInRight .4s ease', animationDelay: `${i * .12}s`, animationFillMode: 'both',
+          }}>
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,.6)' }}>{r.t}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: r.c }}>{r.v}</span>
+          </div>
+        ))}
+        <button className="btn-glow" style={{ marginTop: 8, padding: '12px', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <Sparkles size={14} /> Recreate this layout
+        </button>
+      </div>
+      <style>{`@media(max-width:880px){.vision-demo-grid{grid-template-columns:1fr!important}}`}</style>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  DASHBOARD PREVIEW — animated SVG charts + live metrics
+// ══════════════════════════════════════════════════════════════════
+function DashboardPreview() {
+  const [ref, inView] = useInView();
+  const [pulse, setPulse] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setPulse(p => p + 1), 1500);
+    return () => clearInterval(id);
+  }, []);
+  const mrr = useCountUp(4825000, 2200, inView);
+  const activeUsers = useCountUp(84213, 2200, inView);
+  const queries = useCountUp(2400000, 2200, inView);
+  const tokens = useCountUp(847, 2200, inView);
+
+  return (
+    <section ref={ref} className="section" id="dashboard">
+      <div style={{ textAlign: 'center', marginBottom: 50 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />REAL-TIME OBSERVABILITY</div>
+        <h2 className="h-section">Your operations,<br /><span className="gradient-text-aurora">in one glance.</span></h2>
+      </div>
+
+      <div className={`reveal ${inView ? 'in' : ''}`} style={{
+        maxWidth: 1200, margin: '0 auto', borderRadius: 28, padding: 32,
+        background: 'linear-gradient(160deg, rgba(15,12,30,.7), rgba(8,6,20,.85))',
+        border: '1px solid rgba(255,255,255,.08)', backdropFilter: 'blur(20px)',
+        boxShadow: '0 30px 100px -20px rgba(0,0,0,.6)',
+      }}>
+        {/* Top metric cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }} className="metric-grid">
+          {[
+            { label: 'MRR', val: `$${mrr}`, trend: '+12.4%', up: true, c: '#a78bfa', icon: TrendingUp },
+            { label: 'Active users', val: activeUsers, trend: '+8.2%', up: true, c: '#22d3ee', icon: Users },
+            { label: 'Queries / day', val: queries, trend: '+24%', up: true, c: '#ec4899', icon: Search },
+            { label: 'Tokens / sec', val: `${tokens}M`, trend: '+3.1%', up: true, c: '#f59e0b', icon: Zap },
+          ].map((m, i) => {
+            const Icon = m.icon;
+            return (
+              <div key={i} style={{
+                background: 'rgba(255,255,255,.025)', borderRadius: 14, padding: 18,
+                border: '1px solid rgba(255,255,255,.06)', position: 'relative', overflow: 'hidden',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', letterSpacing: '.05em' }}>{m.label}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: `${m.c}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: m.c }}>
+                    <Icon size={14} />
+                  </div>
                 </div>
-                <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17, margin: 0, color: "#fff" }}>{f.title}</h3>
+                <div className="stat-num" style={{ fontSize: 28, marginBottom: 6 }}>{m.val}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                  <span style={{ color: '#22c55e' }}>{m.trend}</span>
+                  <span style={{ color: 'rgba(255,255,255,.4)' }}>vs last week</span>
+                </div>
+                {/* Sparkline */}
+                <svg viewBox="0 0 100 30" style={{ width: '100%', height: 24, marginTop: 8 }}>
+                  <path d={`M0,${20 + Math.sin(i) * 5} L20,${15 + Math.cos(i) * 3} L40,${18} L60,${10} L80,${12} L100,${5}`} stroke={m.c} strokeWidth="1.5" fill="none" strokeLinecap="round" opacity=".6" />
+                </svg>
               </div>
-              <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.45)", lineHeight: 1.65, margin: 0 }}>{f.desc}</p>
+            );
+          })}
+        </div>
+
+        {/* Main chart + side panel */}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginTop: 14 }} className="chart-grid">
+          {/* Big chart */}
+          <div style={{ background: 'rgba(255,255,255,.025)', borderRadius: 14, padding: 22, border: '1px solid rgba(255,255,255,.06)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>Usage over time</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>Last 30 days</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {['7D', '30D', '90D', '1Y'].map((t, i) => (
+                  <button key={t} style={{
+                    padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    background: i === 1 ? 'rgba(139,92,246,.2)' : 'transparent',
+                    border: `1px solid ${i === 1 ? 'rgba(139,92,246,.4)' : 'rgba(255,255,255,.08)'}`,
+                    color: i === 1 ? '#c4b5fd' : 'rgba(255,255,255,.5)',
+                  }}>{t}</button>
+                ))}
+              </div>
+            </div>
+            <AnimatedChart inView={inView} pulse={pulse} />
+          </div>
+
+          {/* Side panel — live activity */}
+          <div style={{ background: 'rgba(255,255,255,.025)', borderRadius: 14, padding: 18, border: '1px solid rgba(255,255,255,.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+              <span className="live-dot" />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Live activity</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { t: 'New signup', u: 'alex@startup.io', c: '#22c55e' },
+                { t: 'API call', u: '/v1/stream', c: '#a78bfa' },
+                { t: 'Build shipped', u: 'team-vercel', c: '#22d3ee' },
+                { t: 'Upgrade', u: 'Pro → Team', c: '#f59e0b' },
+                { t: 'New signup', u: 'mei@design.co', c: '#22c55e' },
+              ].map((a, i) => (
+                <div key={i + pulse * 5} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8,
+                  background: 'rgba(255,255,255,.02)',
+                  animation: 'slideInRight .4s ease', animationDelay: `${i * .08}s`, animationFillMode: 'both',
+                }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: a.c, boxShadow: `0 0 8px ${a.c}` }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#fff' }}>{a.t}</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.u}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @media(max-width:880px){.metric-grid{grid-template-columns:repeat(2,1fr)!important}.chart-grid{grid-template-columns:1fr!important}}
+      `}</style>
+    </section>
+  );
+}
+
+function AnimatedChart({ inView, pulse }) {
+  // Generate smooth curve points
+  const points = Array.from({ length: 30 }, (_, i) => ({
+    x: i * (200 / 29),
+    y: 80 - Math.sin(i * 0.4 + pulse * 0.3) * 18 - (i / 30) * 30 - Math.random() * 5,
+  }));
+  const pathD = points.reduce((acc, p, i) => i === 0 ? `M${p.x},${p.y}` : `${acc} L${p.x},${p.y}`, '');
+  const areaD = `${pathD} L200,100 L0,100 Z`;
+
+  return (
+    <div style={{ position: 'relative', height: 200 }}>
+      <svg viewBox="0 0 200 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+        <defs>
+          <linearGradient id="areaG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#a78bfa" stopOpacity=".4" />
+            <stop offset="100%" stopColor="#a78bfa" stopOpacity="0" />
+          </linearGradient>
+          <linearGradient id="lineG" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#a78bfa" />
+            <stop offset="50%" stopColor="#ec4899" />
+            <stop offset="100%" stopColor="#f59e0b" />
+          </linearGradient>
+        </defs>
+        {/* Grid lines */}
+        {[20, 40, 60, 80].map(y => (
+          <line key={y} x1="0" y1={y} x2="200" y2={y} stroke="rgba(255,255,255,.04)" strokeWidth=".3" strokeDasharray="2 2" />
+        ))}
+        <path d={areaD} fill="url(#areaG)" />
+        <path d={pathD} stroke="url(#lineG)" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"
+          strokeDasharray={inView ? '1000' : '0'} strokeDashoffset={inView ? '0' : '1000'}
+          style={{ transition: 'stroke-dashoffset 2s ease' }} />
+        {/* End point pulse */}
+        <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="2" fill="#f59e0b">
+          <animate attributeName="r" from="2" to="5" dur="1.5s" repeatCount="indefinite" />
+          <animate attributeName="opacity" from="1" to="0" dur="1.5s" repeatCount="indefinite" />
+        </circle>
+        <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="2" fill="#f59e0b" />
+      </svg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  TESTIMONIALS — 3D tilt cards grid
+// ══════════════════════════════════════════════════════════════════
+function Testimonials() {
+  const [ref, inView] = useInView();
+  const items = [
+    { q: "Vortis replaced four tools in our stack. Our team ships 3x faster, and the realtime collab is genuinely magical — it feels like the team is in the same room even when we're spread across five time zones.", n: 'Alex Kureishi', r: 'CTO, Lumio', c: '#a78bfa', i: 'AK' },
+    { q: "The multimodal agent orchestration is unmatched. We went from idea to production in 11 days for a feature that used to take us six weeks. The voice mode alone saves me an hour every single day.", n: 'Mei Rodriguez', r: 'Eng Lead, Northstar', c: '#22d3ee', i: 'MR' },
+    { q: "I've used every AI workspace on the market. Vortis is the first one that feels designed for teams that actually ship. The observability dashboard is a chef's kiss — every metric I care about, live.", n: 'Jordan Smith', r: 'Founder, Tessellate', c: '#ec4899', i: 'JS' },
+    { q: "We replaced our entire observability stack with Vortis. Setup took an afternoon. The ROI was visible in week one — our incident response time dropped 70%.", n: 'Priya Chen', r: 'VP Eng, Cadence', c: '#f59e0b', i: 'PC' },
+    { q: "The vision mode is uncanny. I drop a screenshot of any UI and Vortis rebuilds it pixel-perfect in our design system. It's the closest thing to teleportation I've felt in software.", n: 'Tom Okafor', r: 'Design Lead, Drift', c: '#22c55e', i: 'TO' },
+    { q: "Onboarding was 12 minutes. We were shipping by lunch. Vortis feels like the product Notion wishes it could become.", n: 'Sarah Lin', r: 'CEO, Pebble', c: '#a78bfa', i: 'SL' },
+  ];
+  return (
+    <section ref={ref} className="section" id="testimonials">
+      <div style={{ textAlign: 'center', marginBottom: 60 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />LOVED BY BUILDERS</div>
+        <h2 className="h-section">Don't take our word.<br /><span className="gradient-text">Take theirs.</span></h2>
+      </div>
+
+      <div className={`reveal-stagger ${inView ? 'in' : ''}`} style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18,
+      }}>
+        {items.map((t, i) => (
+          <TestimonialCard key={i} {...t} />
+        ))}
+      </div>
+      <style>{`@media(max-width:880px){.reveal-stagger>div{grid-column:span 1!important}.reveal-stagger{grid-template-columns:1fr!important}}@media(max-width:1100px) and (min-width:881px){.reveal-stagger{grid-template-columns:repeat(2,1fr)!important}}`}</style>
+    </section>
+  );
+}
+
+function TestimonialCard({ q, n, r, c, i }) {
+  const tiltRef = useTilt(8);
+  return (
+    <div ref={tiltRef} className="tilt-card lift" style={{
+      padding: 28, borderRadius: 20, position: 'relative', overflow: 'hidden',
+      background: 'linear-gradient(160deg, rgba(15,12,30,.6), rgba(8,6,20,.8))',
+      border: '1px solid rgba(255,255,255,.06)', transformStyle: 'preserve-3d',
+    }}>
+      {/* Mouse glow */}
+      <div style={{ position: 'absolute', inset: 0, borderRadius: 20, pointerEvents: 'none', background: `radial-gradient(circle 220px at var(--mx,50%) var(--my,50%), ${c}1a, transparent 70%)` }} />
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${c}66, transparent)` }} />
+
+      <div style={{ position: 'relative', transform: 'translateZ(30px)' }}>
+        <Quote size={32} style={{ color: c, opacity: .4, marginBottom: 14 }} />
+        <p style={{ fontSize: 15, lineHeight: 1.65, color: 'rgba(255,255,255,.85)', marginBottom: 22 }}>{q}</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: '50%',
+            background: `linear-gradient(135deg, ${c}, ${c}88)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 700, fontSize: 15, color: '#000', flexShrink: 0,
+            boxShadow: `0 0 20px ${c}44`,
+          }}>{i}</div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{n}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.5)' }}>{r}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PRICING — tilt cards with popular tier glowing
+// ══════════════════════════════════════════════════════════════════
+function Pricing() {
+  const [ref, inView] = useInView();
+  const [annual, setAnnual] = useState(true);
+  const tiers = [
+    {
+      name: 'Starter', price: annual ? 0 : 0, desc: 'For curious builders',
+      features: ['5 projects', 'Community support', '1M tokens / month', 'Basic models', '1 user'],
+      c: '#a78bfa', icon: Sparkles, popular: false,
+    },
+    {
+      name: 'Pro', price: annual ? 24 : 32, desc: 'For serious builders',
+      features: ['Unlimited projects', 'Priority support', '50M tokens / month', 'All models + voice', '5 team members', 'Custom agents', 'SSO'],
+      c: '#ec4899', icon: Zap, popular: true,
+    },
+    {
+      name: 'Team', price: annual ? 79 : 99, desc: 'For scaling teams',
+      features: ['Everything in Pro', 'Dedicated support', '500M tokens / month', 'Unlimited members', 'Audit logs', 'SOC 2 reports', 'On-prem option'],
+      c: '#f59e0b', icon: Crown, popular: false,
+    },
+  ];
+  return (
+    <section ref={ref} className="section" id="pricing">
+      <div style={{ textAlign: 'center', marginBottom: 50 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />PRICING</div>
+        <h2 className="h-section">Simple pricing.<br /><span className="gradient-text">Serious power.</span></h2>
+
+        {/* Annual/Monthly toggle */}
+        <div style={{ display: 'inline-flex', padding: 4, borderRadius: 999, background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.08)', marginTop: 28 }}>
+          <button onClick={() => setAnnual(false)} style={{
+            padding: '8px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            background: !annual ? 'linear-gradient(135deg, #7c3aed, #ec4899)' : 'transparent',
+            border: 'none', color: !annual ? '#fff' : 'rgba(255,255,255,.6)', transition: 'all .25s ease',
+          }}>Monthly</button>
+          <button onClick={() => setAnnual(true)} style={{
+            padding: '8px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            background: annual ? 'linear-gradient(135deg, #7c3aed, #ec4899)' : 'transparent',
+            border: 'none', color: annual ? '#fff' : 'rgba(255,255,255,.6)', transition: 'all .25s ease',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>Annual <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(34,197,94,.2)', color: '#86efac' }}>-25%</span></button>
+        </div>
+      </div>
+
+      <div className={`reveal-stagger ${inView ? 'in' : ''}`} style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, maxWidth: 1100, margin: '0 auto',
+        alignItems: 'center',
+      }}>
+        {tiers.map((t, i) => {
+          const Icon = t.icon;
+          const tiltRef = useTilt(8);
+          return (
+            <div key={t.name} ref={tiltRef} className="tilt-card lift" style={{
+              position: 'relative', padding: 32, borderRadius: 24,
+              background: t.popular
+                ? 'linear-gradient(160deg, rgba(139,92,246,.15), rgba(236,72,153,.08), rgba(8,6,20,.9))'
+                : 'linear-gradient(160deg, rgba(15,12,30,.6), rgba(8,6,20,.8))',
+              border: `1px solid ${t.popular ? t.c + '66' : 'rgba(255,255,255,.06)'}`,
+              transformStyle: 'preserve-3d',
+              boxShadow: t.popular ? `0 0 60px -10px ${t.c}44, 0 0 0 1px ${t.c}33` : 'none',
+              transform: t.popular ? 'scale(1.04)' : 'scale(1)',
+            }}>
+              {t.popular && (
+                <div style={{
+                  position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
+                  padding: '5px 14px', borderRadius: 999,
+                  background: `linear-gradient(135deg, ${t.c}, ${t.c}cc)`,
+                  fontSize: 11, fontWeight: 700, letterSpacing: '.1em', color: '#fff',
+                  boxShadow: `0 4px 16px ${t.c}66`,
+                }}>MOST POPULAR</div>
+              )}
+
+              <div style={{ position: 'relative', transform: 'translateZ(30px)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: `${t.c}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: t.c }}>
+                    <Icon size={18} />
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 18, fontFamily: "'Space Grotesk', sans-serif" }}>{t.name}</div>
+                </div>
+                <div style={{ color: 'rgba(255,255,255,.5)', fontSize: 13, marginBottom: 18 }}>{t.desc}</div>
+
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 24 }}>
+                  <span style={{ fontSize: 44, fontWeight: 800, fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '-.04em', background: `linear-gradient(180deg, #fff, ${t.c})`, WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>${t.price}</span>
+                  <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 14 }}>/ user / mo</span>
+                </div>
+
+                <button className={t.popular ? 'btn-glow' : 'btn-ghost'} style={{ width: '100%', padding: '13px', fontSize: 14, marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  {t.price === 0 ? 'Start free' : `Get ${t.name}`} <ArrowRight size={15} />
+                </button>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {t.features.map((f) => (
+                    <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'rgba(255,255,255,.75)' }}>
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: `${t.c}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check size={11} style={{ color: t.c }} />
+                      </div>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           );
         })}
       </div>
+      <style>{`@media(max-width:880px){.reveal-stagger>div{transform:scale(1)!important}.reveal-stagger{grid-template-columns:1fr!important}}@media(max-width:1100px) and (min-width:881px){.reveal-stagger{grid-template-columns:1fr!important;max-width:480px}}`}</style>
     </section>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  HOW IT WORKS
+//  FAQ — smooth expand/collapse
 // ══════════════════════════════════════════════════════════════════
-function HowItWorks() {
-  const [ref, inView] = useInView(0.1);
-  const steps = [
-    { num: "01", title: "Sign up free", desc: "Create your account in seconds with Google, GitHub, or email. No credit card required.", icon: Zap, color: "124,58,237" },
-    { num: "02", title: "Ask anything", desc: "Type, speak, or upload files. Vortis understands context and remembers your preferences.", icon: MessageSquare, color: "168,85,247" },
-    { num: "03", title: "Get results", desc: "Receive rich responses — with web data, images, code, documents, and more — instantly.", icon: Sparkles, color: "6,182,212" },
-  ];
-
-  return (
-    <section id="howitworks" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 60 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(6,182,212,0.3)", background: "rgba(6,182,212,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.6s ease" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(6,182,212,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Simple as 1-2-3</span>
-          </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(20px)", transition: "all 0.8s 0.1s ease" }}>
-            How Vortis{" "}
-            <span style={{ background: "linear-gradient(90deg,#06B6D4,#a855f7)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>works.</span>
-          </h2>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24, position: "relative" }}>
-          {/* Connector line */}
-          <div style={{ position: "absolute", top: 42, left: "16%", right: "16%", height: 1, background: "linear-gradient(to right, rgba(124,58,237,0.4), rgba(6,182,212,0.4))", zIndex: 0, opacity: inView ? 1 : 0, transition: "opacity 1s 0.5s ease" }} />
-
-          {steps.map((s, i) => {
-            const Icon = s.icon;
-            return (
-              <div key={s.num} style={{
-                textAlign: "center", position: "relative", zIndex: 1, padding: "28px 24px 32px",
-                borderRadius: 20, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
-                opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(32px)",
-                transition: `all 0.8s ${i * 0.15 + 0.2}s ease`,
-              }}>
-                <div style={{ width: 64, height: 64, borderRadius: "50%", margin: "0 auto 20px", background: `rgba(${s.color},0.12)`, border: `2px solid rgba(${s.color},0.4)`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 30px rgba(${s.color},0.2)`, position: "relative" }}>
-                  <Icon size={24} style={{ color: `rgb(${s.color})` }} />
-                  <div style={{ position: "absolute", top: -10, right: -10, width: 24, height: 24, borderRadius: "50%", background: `linear-gradient(135deg,rgb(${s.color}),rgba(${s.color},0.7))`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff", fontFamily: "'JetBrains Mono',monospace" }}>{s.num}</div>
-                </div>
-                <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 20, margin: "0 0 10px", color: "#fff" }}>{s.title}</h3>
-                <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, margin: 0 }}>{s.desc}</p>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  LIVE DEMO SHOWCASE (replaces NodeGraph)
-// ══════════════════════════════════════════════════════════════════
-const DEMO_TABS = [
-  { id: "chat", name: "AI Chat", icon: MessageSquare, color: "124,58,237" },
-  { id: "code", name: "Code", icon: Code2, color: "6,182,212" },
-  { id: "voice", name: "Voice Call", icon: Phone, color: "124,58,237" },
-  { id: "search", name: "Web Search", icon: Globe, color: "168,85,247" },
-  { id: "image", name: "Image Gen", icon: ImageIcon, color: "251,191,36" },
-  { id: "research", name: "Deep Research", icon: Microscope, color: "6,182,212" },
-  { id: "vision", name: "Vision AI", icon: Eye, color: "168,85,247" },
-];
-
-const DEMO_CONTENT = {
-  chat: {
-    messages: [
-      { role: "user", text: "Explain quantum entanglement simply" },
-      { role: "ai", text: "Imagine two coins that always land opposite — flip one anywhere in the universe, the other instantly mirrors it. That's entanglement: particles share a quantum state, measurement of one instantly defines the other, regardless of distance.", typing: false },
-      { role: "user", text: "Give me an analogy a 10-year-old would get" },
-      { role: "ai", text: "Think of magic gloves: you pack one in a box and ship it to Mars. The moment you open your box and see it's a left glove, you instantly know the Mars glove is right — no signal needed.", typing: false },
-    ]
-  },
-  code: {
-    filename: "auth.ts",
-    language: "typescript",
-    lines: [
-      { n: 1,  t: "import", c: "keyword", text: `import { jwt, bcrypt } from '@vortis/auth';` },
-      { n: 2,  t: "blank",  text: "" },
-      { n: 3,  t: "comment", text: `// 🔐 Vortis-generated secure auth handler` },
-      { n: 4,  t: "code",   text: `export async function signIn(email: string, password: string) {` },
-      { n: 5,  t: "code",   text: `  const user = await db.users.findUnique({ where: { email } });` },
-      { n: 6,  t: "code",   text: `  if (!user) throw new AuthError('User not found');` },
-      { n: 7,  t: "blank",  text: "" },
-      { n: 8,  t: "code",   text: `  const valid = await bcrypt.compare(password, user.passwordHash);` },
-      { n: 9,  t: "code",   text: `  if (!valid) throw new AuthError('Invalid credentials');` },
-      { n: 10, t: "blank",  text: "" },
-      { n: 11, t: "return", text: `  return jwt.sign({ userId: user.id, role: user.role }, {` },
-      { n: 12, t: "return", text: `    expiresIn: '7d', algorithm: 'RS256'` },
-      { n: 13, t: "return", text: `  });` },
-      { n: 14, t: "code",   text: `}` },
-    ]
-  },
-
-  voice: {
-  transcript: [
-    { role: "user", text: "Hey, what's the weather like for my trip tomorrow?" },
-    { role: "ai", text: "Checking now — sunny, high of 72°F, light breeze. Good day to travel." },
-    { role: "user", text: "Perfect, can you also remind me to pack a jacket for evening?" },
-    { role: "ai", text: "Done — I'll remind you tonight at 8pm." },
-  ]
-},
-
-  search: {
-    query: "Latest breakthroughs in fusion energy 2026",
-    results: [
-      { source: "nature.com", title: "ITER achieves Q>1 sustained plasma for 47 seconds", time: "2h ago", snippet: "The International Thermonuclear Experimental Reactor reported a historic milestone..." },
-      { source: "science.org", title: "Commonwealth Fusion's SPARC magnet sets world record", time: "5h ago", snippet: "High-temperature superconducting magnets reached 20 tesla field strength..." },
-      { source: "reuters.com", title: "Three private fusion startups reach profitability", time: "1d ago", snippet: "Helion Energy, TAE Technologies and Zap Energy all reported positive..." },
-    ]
-  },
- image: {
-  prompt: "Futuristic city at golden hour, cinematic, 8K",
-  style: "Photorealistic",
-  steps: ["Initializing…", "Generating image…", "Processing…", "Refining…", "Complete ✓"],
-  colors: ["#FF6B35", "#F7C59F", "#EFEFD0", "#004E89", "#1A936F"],
-},
-  research: {
-    topic: "Impact of AI on software engineering jobs 2025–2030",
-    sources: 47,
-    sections: [
-      { title: "Executive Summary", status: "done", words: 340 },
-      { title: "Market Analysis", status: "done", words: 1240 },
-      { title: "Role-by-Role Breakdown", status: "done", words: 2100 },
-      { title: "Emerging Opportunities", status: "active", words: 890 },
-      { title: "Recommendations", status: "pending", words: 0 },
-    ]
-  },
-  vision: {
-    imageLabel: "Uploaded: dashboard_screenshot.png",
-    findings: [
-      { icon: "📊", label: "Chart detected", detail: "Bar chart — Q3 revenue by region" },
-      { icon: "📝", label: "Text extracted", detail: "142 words, 3 tables parsed" },
-      { icon: "⚠️", label: "Anomaly found", detail: "APAC revenue down 23% vs forecast" },
-      { icon: "💡", label: "Insight", detail: "Seasonality pattern matches 2024 Q3" },
-    ]
-  }
-};
-
-function DemoPanel({ tabId, color }) {
-  const data = DEMO_CONTENT[tabId];
-  const [tick, setTick] = useState(0);
-  const [codeLines, setCodeLines] = useState(0);
-  const [searchDone, setSearchDone] = useState(false);
-  const [imgStep, setImgStep] = useState(0);
-  const [researchProgress, setResearchProgress] = useState(0);
-
-  useEffect(() => {
-    setTick(0); setCodeLines(0); setSearchDone(false); setImgStep(0); setResearchProgress(0);
-    const id = setInterval(() => setTick(t => t + 1), 400);
-    return () => clearInterval(id);
-  }, [tabId]);
-
-  useEffect(() => {
-    if (tabId === "code") {
-      const id = setInterval(() => setCodeLines(l => Math.min(l + 1, data.lines.length)), 120);
-      return () => clearInterval(id);
-    
-    }
-    if (tabId === "search") {
-      const id = setTimeout(() => setSearchDone(true), 1200);
-      return () => clearTimeout(id);
-    }
-    if (tabId === "image") {
-      const id = setInterval(() => setImgStep(s => Math.min(s + 1, data.steps.length - 1)), 700);
-      return () => clearInterval(id);
-    }
-    if (tabId === "research") {
-      const id = setInterval(() => setResearchProgress(p => Math.min(p + 2, 100)), 40);
-      return () => clearInterval(id);
-    }
-  }, [tabId]);
-
-  const rgb = color;
-
-  // CHAT
-  if (tabId === "chat") return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 20, height: "100%", overflowY: "auto" }}>
-      {data.messages.map((m, i) => (
-        <div key={i} style={{ display: "flex", gap: 10, justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.5 ? 1 : 0, transform: tick > i * 1.5 ? "translateY(0)" : "translateY(12px)", transition: "all 0.5s ease" }}>
-          {m.role === "ai" && (
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.7))`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <VortisLogo size={14} color="#fff" />
-            </div>
-          )}
-          <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "4px 16px 16px 16px", background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)", border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none", fontSize: 13, lineHeight: 1.6, color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.85)" }}>
-            {m.text}
-          </div>
-        </div>
-      ))}
-      <div style={{ display: "flex", gap: 10, opacity: tick > 6 ? 1 : 0, transition: "opacity 0.5s" }}>
-        <div style={{ width: 28, height: 28, borderRadius: 8, background: `rgba(${rgb},0.2)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <VortisLogo size={14} color={`rgb(${rgb})`} />
-        </div>
-        <div style={{ padding: "10px 14px", borderRadius: "4px 16px 16px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", display: "flex", gap: 5, alignItems: "center" }}>
-          {[0,1,2].map(d => <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${rgb})`, animation: `pulse 1.2s ease-in-out ${d*0.2}s infinite` }} />)}
-        </div>
-      </div>
-    </div>
-  );
-
-  // CODE
-  if (tabId === "code") return (
-    <div style={{ height: "100%", overflowY: "auto" }}>
-      <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
-        <Code2 size={13} color={`rgb(${rgb})`} />
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace" }}>{data.filename}</span>
-        <span style={{ marginLeft: "auto", fontSize: 10, padding: "2px 8px", borderRadius: 99, background: `rgba(${rgb},0.15)`, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace" }}>TypeScript</span>
-      </div>
-      <div style={{ padding: "12px 0", fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }}>
-        {data.lines.slice(0, codeLines).map((line) => (
-          <div key={line.n} style={{ display: "flex", padding: "1.5px 16px", animation: "fadeUp 0.2s ease both" }}>
-            <span style={{ width: 24, color: "rgba(255,255,255,0.2)", userSelect: "none", flexShrink: 0 }}>{line.n}</span>
-            <span style={{ color: line.t === "comment" ? "rgba(134,239,172,0.7)" : line.t === "keyword" ? "rgba(196,181,253,0.9)" : line.t === "return" ? "rgba(251,191,36,0.85)" : "rgba(255,255,255,0.75)" }}>
-              {line.text}
-            </span>
-          </div>
-        ))}
-        {codeLines < data.lines.length && (
-          <div style={{ display: "flex", padding: "1.5px 16px" }}>
-            <span style={{ width: 24, color: "rgba(255,255,255,0.2)" }}>{codeLines + 1}</span>
-            <span style={{ display: "inline-block", width: 2, height: 14, background: `rgb(${rgb})`, animation: "blink 0.8s step-end infinite" }} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  //Voice call
-  if (tabId === "voice") return (
-  <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 12 }}>
-    <div style={{ height: 170, position: "relative" }}>
-      <AICore isConnected={true} isSpeaking={tick % 4 < 2} />
-    </div>
-    <span style={{ fontSize: 11, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace", textAlign: "center" }}>LIVE CALL · 00:42</span>
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, overflowY: "auto" }}>
-      {data.transcript.map((m, i) => (
-        <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start", opacity: tick > i * 1.3 ? 1 : 0, transition: "opacity 0.4s ease" }}>
-          <div style={{
-            maxWidth: "80%", padding: "8px 13px", fontSize: 12.5, lineHeight: 1.5,
-            borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
-            background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)",
-            color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.8)",
-          }}>{m.text}</div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-  // SEARCH
-  if (tabId === "search") return (
-    <div style={{ padding: 20, height: "100%", overflowY: "auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", marginBottom: 16 }}>
-        <Globe size={14} color={`rgb(${rgb})`} />
-        <span style={{ fontSize: 12.5, color: "rgba(255,255,255,0.7)", flex: 1 }}>{data.query}</span>
-        <span style={{ fontSize: 10, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace" }}>{searchDone ? "47 results" : "Searching…"}</span>
-      </div>
-      {searchDone ? data.results.map((r, i) => (
-        <div key={i} style={{ padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", animation: `fadeUp 0.4s ${i * 0.12}s ease both` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-            <div style={{ width: 16, height: 16, borderRadius: 4, background: `rgba(${rgb},0.2)`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Globe size={9} color={`rgb(${rgb})`} />
-            </div>
-            <span style={{ fontSize: 10.5, color: `rgb(${rgb})` }}>{r.source}</span>
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginLeft: "auto" }}>{r.time}</span>
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 3 }}>{r.title}</div>
-          <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", lineHeight: 1.5 }}>{r.snippet}</div>
-        </div>
-      )) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {[100, 75, 90].map((w, i) => (
-            <div key={i} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ height: 12, borderRadius: 4, background: "rgba(255,255,255,0.06)", width: `${w}%`, animation: "pulse 1.5s ease-in-out infinite" }} />
-              <div style={{ height: 10, borderRadius: 4, background: "rgba(255,255,255,0.04)", width: "60%", animation: `pulse 1.5s ease-in-out ${i*0.2}s infinite` }} />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  // IMAGE GEN — clean single-image reveal
-if (tabId === "image") return (
-  <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
-    <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.7)" }}>
-      <span style={{ color: `rgb(${rgb})` }}>Prompt: </span>{data.prompt}
-    </div>
-
-    <div style={{
-      flex: 1, borderRadius: 14, overflow: "hidden", position: "relative", minHeight: 220,
-      background: "linear-gradient(135deg, #1a0b3d 0%, #0d0d1a 50%, #1e1145 100%)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
-      {/* Soft glow blobs to suggest "image content" forming, no grid noise */}
-      <div style={{
-        position: "absolute", width: "60%", height: "60%", borderRadius: "50%",
-        background: `radial-gradient(circle, rgba(${rgb},0.35), transparent 70%)`,
-        filter: "blur(30px)", opacity: imgStep > 0 ? 1 : 0.3,
-        transition: "opacity 0.8s ease",
-      }} />
-      <div style={{
-        position: "absolute", width: "40%", height: "40%", borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(6,182,212,0.25), transparent 70%)",
-        filter: "blur(25px)", top: "15%", right: "15%",
-        opacity: imgStep > 1 ? 1 : 0.2, transition: "opacity 0.8s ease 0.2s",
-      }} />
-
-      {/* Center icon + status, clean and centered */}
-      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-        <div style={{
-          width: 56, height: 56, borderRadius: 16,
-          background: `rgba(${rgb},0.15)`, border: `1px solid rgba(${rgb},0.35)`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          animation: imgStep < data.steps.length - 1 ? "pulse 1.6s ease-in-out infinite" : "none",
-        }}>
-          <ImageIcon size={24} style={{ color: `rgb(${rgb})` }} />
-        </div>
-        <span style={{ fontSize: 12, fontFamily: "'JetBrains Mono',monospace", color: `rgb(${rgb})` }}>
-          {data.steps[imgStep]}
-        </span>
-      </div>
-    </div>
-
-    <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Star size={12} style={{ color: `rgb(${rgb})` }} />
-        <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)" }}>VORTIS Image AI</span>
-      </div>
-      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
-        Step {imgStep + 1} / {data.steps.length}
-      </span>
-    </div>
-
-    <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-      <div style={{ height: "100%", borderRadius: 2, background: `linear-gradient(90deg,rgb(${rgb}),#a855f7)`, width: `${(imgStep / (data.steps.length - 1)) * 100}%`, transition: "width 0.7s ease" }} />
-    </div>
-  </div>
-);
-
-  // DEEP RESEARCH
-  if (tabId === "research") return (
-    <div style={{ padding: 20, height: "100%", overflowY: "auto" }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: `rgb(${rgb})`, marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>RESEARCH TOPIC</div>
-        <div style={{ fontSize: 13.5, color: "#fff", fontWeight: 600, lineHeight: 1.4 }}>{data.topic}</div>
-        <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
-          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>📄 {data.sources} sources</span>
-          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)" }}>⏱ ~4 min remaining</span>
-        </div>
-      </div>
-      <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", marginBottom: 16, overflow: "hidden" }}>
-        <div style={{ height: "100%", borderRadius: 2, background: `linear-gradient(90deg,rgb(${rgb}),rgba(6,182,212,1))`, width: `${researchProgress}%`, transition: "width 0.1s linear" }} />
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {data.sections.map((s, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, background: s.status === "active" ? `rgba(${rgb},0.1)` : "rgba(255,255,255,0.03)", border: `1px solid ${s.status === "active" ? `rgba(${rgb},0.3)` : "rgba(255,255,255,0.05)"}`, transition: "all 0.3s" }}>
-            <div style={{ width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", background: s.status === "done" ? "rgba(16,185,129,0.2)" : s.status === "active" ? `rgba(${rgb},0.2)` : "rgba(255,255,255,0.05)", flexShrink: 0 }}>
-              {s.status === "done" ? <Check size={11} color="#10b981" /> : s.status === "active" ? <span style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${rgb})`, animation: "pulse 1s ease-in-out infinite" }} /> : <span style={{ width: 6, height: 6, borderRadius: "50%", background: "rgba(255,255,255,0.2)" }} />}
-            </div>
-            <span style={{ flex: 1, fontSize: 13, color: s.status === "pending" ? "rgba(255,255,255,0.3)" : "#fff" }}>{s.title}</span>
-            {s.words > 0 && <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>{s.words}w</span>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  // VISION AI
-  if (tabId === "vision") return (
-    <div style={{ padding: 20, height: "100%", overflowY: "auto" }}>
-      <div style={{ borderRadius: 10, border: "1px dashed rgba(255,255,255,0.15)", padding: "16px", textAlign: "center", marginBottom: 16, background: "rgba(255,255,255,0.02)" }}>
-        <div style={{ fontSize: 28, marginBottom: 6 }}>🖼️</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{data.imageLabel}</div>
-        <div style={{ fontSize: 10, color: `rgb(${rgb})`, marginTop: 4, fontFamily: "'JetBrains Mono',monospace" }}>Analyzing…</div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {data.findings.map((f, i) => (
-          <div key={i} style={{ display: "flex", gap: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", opacity: tick > i * 1.2 ? 1 : 0, transform: tick > i * 1.2 ? "translateX(0)" : "translateX(-12px)", transition: "all 0.4s ease" }}>
-            <span style={{ fontSize: 18 }}>{f.icon}</span>
-            <div>
-              <div style={{ fontSize: 12, fontWeight: 600, color: `rgb(${rgb})`, marginBottom: 2 }}>{f.label}</div>
-              <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.65)" }}>{f.detail}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  return null;
-}
-
-function Showcase() {
-  const [ref, inView] = useInView(0.08);
-  const [active, setActive] = useState(0);
-  const tab = DEMO_TABS[active];
-
-  return (
-    <section id="capabilities" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 52 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease" }}>
-            <Zap size={11} color="#a855f7" />
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Product Walkthrough</span>
-          </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease" }}>
-            See Vortis{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>in action.</span>
-          </h2>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 16 }}>
-          {/* Tabs */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-            {DEMO_TABS.map((t, i) => {
-              const Icon = t.icon;
-              const isActive = i === active;
-              return (
-                <button key={t.id} onClick={() => setActive(i)} style={{
-                  display: "flex", alignItems: "center", gap: 10, padding: "11px 13px",
-                  borderRadius: 12, textAlign: "left", cursor: "pointer",
-                  border: isActive ? `1px solid rgba(${t.color},0.5)` : "1px solid rgba(255,255,255,0.05)",
-                  background: isActive ? `rgba(${t.color},0.15)` : "rgba(255,255,255,0.02)",
-                  boxShadow: isActive ? `0 0 20px rgba(${t.color},0.15)` : "none",
-                  transition: "all 0.2s",
-                  opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-20px)",
-                  transitionDelay: `${i * 0.05 + 0.2}s`,
-                }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? `rgba(${t.color},0.25)` : `rgba(${t.color},0.1)`, border: `1px solid rgba(${t.color},0.25)`, flexShrink: 0 }}>
-                    <Icon size={15} style={{ color: `rgb(${t.color})` }} />
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: isActive ? "#fff" : "rgba(255,255,255,0.5)" }}>{t.name}</span>
-                  {isActive && <div style={{ marginLeft: "auto", width: 6, height: 6, borderRadius: "50%", background: `rgb(${t.color})`, animation: "pulse 2s ease-in-out infinite" }} />}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Demo panel */}
-          <div key={tab.id} style={{
-            borderRadius: 20, minHeight: 420, overflow: "hidden",
-            background: "rgba(5,5,18,0.95)", border: "1px solid rgba(255,255,255,0.07)",
-            position: "relative",
-            opacity: inView ? 1 : 0, transition: "opacity 0.5s ease",
-          }}>
-            {/* Top bar */}
-            <div style={{ padding: "10px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
-              {["#ef4444","#f59e0b","#10b981"].map(c => <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.6 }} />)}
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, marginLeft: 8 }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>vortis.ai — {tab.name}</span>
-              </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                {DEMO_TABS.map((t, i) => (
-                  <button key={t.id} onClick={() => setActive(i)} style={{ padding: "3px 10px", borderRadius: 6, fontSize: 10.5, fontWeight: 600, cursor: "pointer", background: i === active ? `rgba(${t.color},0.2)` : "transparent", color: i === active ? `rgb(${t.color})` : "rgba(255,255,255,0.25)", border: i === active ? `1px solid rgba(${t.color},0.3)` : "1px solid transparent", transition: "all 0.2s" }}>
-                    {t.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{ height: 380 }}>
-              <DemoPanel key={tab.id} tabId={tab.id} color={tab.color} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  3D DASHBOARD PREVIEW
-// ══════════════════════════════════════════════════════════════════
-function DashboardPreview() {
-  const [ref, inView] = useInView(0.1);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const [hovered, setHovered] = useState(false);
-  const cardRef = useRef(null);
-
-  const handleMouseMove = useCallback((e) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = (e.clientX - cx) / (rect.width / 2);
-    const dy = (e.clientY - cy) / (rect.height / 2);
-    setTilt({ x: dy * -10, y: dx * 10 });
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    setTilt({ x: 0, y: 0 });
-    setHovered(false);
-  }, []);
-
-  const BARS = [65, 82, 47, 91, 73, 88, 55, 79, 94, 61, 85, 70];
-  const SPARKLINE = [40, 55, 48, 72, 65, 80, 75, 90, 85, 95, 88, 100];
-
-  return (
-    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, overflow: "hidden" }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 70% 60% at 50% 50%, rgba(124,58,237,0.06), transparent)", pointerEvents: "none" }} />
-
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 64 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease" }}>
-            <BarChart3 size={11} color="#a855f7" />
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>Your Dashboard</span>
-          </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: "0 0 16px", letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease" }}>
-            Everything in{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>one place.</span>
-          </h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.4)", maxWidth: 480, margin: "0 auto", lineHeight: 1.7, opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.2s ease" }}>
-            Your AI workspace — chats, usage, models, and insights, all beautifully organized.
-          </p>
-        </div>
-
-        {/* 3D Card */}
-        <div style={{ perspective: "1200px", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(60px)", transition: "all 1s 0.3s ease" }}>
-          <div
-            ref={cardRef}
-            onMouseMove={handleMouseMove}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={handleMouseLeave}
-            style={{
-              transformStyle: "preserve-3d",
-              transform: `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) ${inView && !hovered ? "rotateX(4deg) rotateY(-6deg)" : ""}`,
-              transition: hovered ? "transform 0.1s ease" : "transform 0.8s ease",
-              borderRadius: 24,
-              overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(6,6,20,0.97)",
-              boxShadow: `
-                0 80px 160px rgba(0,0,0,0.6),
-                0 40px 80px rgba(0,0,0,0.4),
-                0 0 0 1px rgba(124,58,237,0.15),
-                inset 0 1px 0 rgba(255,255,255,0.07)
-              `,
-            }}
-          >
-            {/* Top chrome bar */}
-            <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.02)" }}>
-              <div style={{ display: "flex", gap: 6 }}>
-                {["#ef4444","#f59e0b","#10b981"].map(c => <div key={c} style={{ width: 11, height: 11, borderRadius: "50%", background: c, opacity: 0.7 }} />)}
-              </div>
-              <div style={{ flex: 1, height: 22, borderRadius: 6, background: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", paddingLeft: 10, gap: 6 }}>
-                <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#10b981", animation: "pulse 2s infinite" }} />
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>app.vortis.ai/dashboard</span>
-              </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-               <div style={{ padding: "3px 10px", borderRadius: 6, background: "rgba(139,92,246,0.15)", border: "1px solid rgba(139,92,246,0.3)", fontSize: 10, color: "#a855f7", fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-                       <Diamond size={10} color="#a855f7" />
-                      PLATINUM
-                   </div>
-              </div>
-            </div>
-
-            {/* Dashboard layout */}
-            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", minHeight: 520 }}>
-              {/* Sidebar */}
-              <div style={{ borderRight: "1px solid rgba(255,255,255,0.05)", padding: "20px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", marginBottom: 8 }}>
-                  <VortisLogo size={22} color="#8b5cf6" />
-                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 14, color: "#fff" }}>VORTIS</span>
-                </div>
-                {[
-                  { icon: MessageSquare, label: "Chats", active: false },
-                  { icon: BarChart3, label: "Analytics", active: true },
-                  { icon: Brain, label: "Memory", active: false },
-                  { icon: ImageIcon, label: "Image Gen", active: false },
-                  { icon: Microscope, label: "Research", active: false },
-                  { icon: FileText, label: "Documents", active: false },
-                ].map((item, i) => {
-                  const Icon = item.icon;
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: item.active ? "rgba(124,58,237,0.15)" : "transparent", border: item.active ? "1px solid rgba(124,58,237,0.25)" : "1px solid transparent", cursor: "default" }}>
-                      <Icon size={14} style={{ color: item.active ? "#a855f7" : "rgba(255,255,255,0.3)" }} />
-                      <span style={{ fontSize: 12.5, color: item.active ? "#fff" : "rgba(255,255,255,0.35)", fontWeight: item.active ? 600 : 400 }}>{item.label}</span>
-                      {item.active && <div style={{ marginLeft: "auto", width: 5, height: 5, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s infinite" }} />}
-                    </div>
-                  );
-                })}
-                <div style={{ marginTop: "auto", padding: "10px", borderRadius: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.15)" }}>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>USAGE THIS MONTH</div>
-                  <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: "67%", borderRadius: 2, background: "linear-gradient(90deg,#7C3AED,#06b6d4)" }} />
-                  </div>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 4 }}>67% used</div>
-                </div>
-              </div>
-
-              {/* Main content */}
-              <div style={{ padding: 20, overflowY: "auto" }}>
-                {/* Header */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                  <div>
-                    <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 18, margin: 0, color: "#fff" }}>Analytics Overview</h3>
-                    <p style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", margin: "3px 0 0" }}>Last 30 days · Updated just now</p>
-                  </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {["7d","30d","90d"].map((d, i) => (
-                      <button key={d} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "default", background: i === 1 ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.04)", color: i === 1 ? "#a855f7" : "rgba(255,255,255,0.4)", border: i === 1 ? "1px solid rgba(124,58,237,0.3)" : "1px solid rgba(255,255,255,0.07)" }}>{d}</button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Stat cards */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
-                  {[
-                    { label: "Total Chats", value: "2,847", change: "+12%", color: "124,58,237", icon: MessageSquare },
-                    { label: "Tokens Used", value: "1.2B", change: "+8%", color: "6,182,212", icon: Zap },
-                    { label: "Images Gen", value: "384", change: "+31%", color: "168,85,247", icon: ImageIcon },
-                    { label: "Researches", value: "47", change: "+22%", color: "251,191,36", icon: Microscope },
-                  ].map((s, i) => {
-                    const Icon = s.icon;
-                    return (
-                      <div key={i} style={{ padding: "12px", borderRadius: 12, background: `rgba(${s.color},0.07)`, border: `1px solid rgba(${s.color},0.15)` }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                          <Icon size={13} style={{ color: `rgb(${s.color})` }} />
-                          <span style={{ fontSize: 10, color: "#10b981", fontFamily: "'JetBrains Mono',monospace" }}>{s.change}</span>
-                        </div>
-                        <div style={{ fontSize: 20, fontWeight: 900, fontFamily: "'Space Grotesk',sans-serif", color: "#fff", lineHeight: 1 }}>{s.value}</div>
-                        <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.35)", marginTop: 3 }}>{s.label}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Chart + sparklines */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 160px", gap: 12 }}>
-                  {/* Bar chart */}
-                  <div style={{ padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12, fontWeight: 600 }}>Daily Conversations</div>
-                    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
-                      {BARS.map((h, i) => (
-                        <div key={i} style={{ flex: 1, borderRadius: "3px 3px 0 0", background: i === 9 ? "linear-gradient(to top,#7C3AED,#a855f7)" : `rgba(124,58,237,${0.15 + (h/100)*0.35})`, height: `${h}%`, transition: "height 0.8s ease", transitionDelay: `${i*0.05}s` }} />
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                      {["Jun 1","","","","","","","","","","","Jun 12"].map((l, i) => (
-                        <span key={i} style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace" }}>{l}</span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Right panel - top models */}
-                  <div style={{ padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                    <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 12, fontWeight: 600 }}>Top Modes</div>
-                    {[
-                      { name: "Chat", pct: 45, color: "124,58,237" },
-                      { name: "Code", pct: 28, color: "6,182,212" },
-                      { name: "Research", pct: 18, color: "168,85,247" },
-                      { name: "Vision", pct: 9, color: "251,191,36" },
-                    ].map((m, i) => (
-                      <div key={i} style={{ marginBottom: 8 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                          <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.5)" }}>{m.name}</span>
-                          <span style={{ fontSize: 10, color: `rgb(${m.color})`, fontFamily: "'JetBrains Mono',monospace" }}>{m.pct}%</span>
-                        </div>
-                        <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.06)" }}>
-                          <div style={{ height: "100%", borderRadius: 2, background: `rgb(${m.color})`, width: `${m.pct}%`, transition: "width 1s ease", transitionDelay: `${i*0.1+0.5}s` }} />
-                        </div>
-                      </div>
-                    ))}
-                    {/* Sparkline */}
-                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                      <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 6 }}>Trend</div>
-                      <svg width="100%" height="32" viewBox="0 0 130 32" preserveAspectRatio="none">
-                        <polyline
-                          points={SPARKLINE.map((v, i) => `${i * (130/11)},${32 - (v/100)*28}`).join(" ")}
-                          fill="none" stroke="rgba(139,92,246,0.8)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-                        />
-                        <polyline
-                          points={[...SPARKLINE.map((v, i) => `${i * (130/11)},${32 - (v/100)*28}`), "130,32", "0,32"].join(" ")}
-                          fill="rgba(124,58,237,0.12)" stroke="none"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent activity */}
-                <div style={{ marginTop: 12, padding: "14px", borderRadius: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 10, fontWeight: 600 }}>Recent Activity</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {[
-                      { action: "Deep Research", topic: "AI in healthcare 2026", time: "2m ago", color: "6,182,212", icon: Microscope },
-                      { action: "Code Generation", topic: "React dashboard component", time: "18m ago", color: "124,58,237", icon: Code2 },
-                      { action: "Image Created", topic: "Product mockup renders", time: "1h ago", color: "168,85,247", icon: ImageIcon },
-                    ].map((a, i) => {
-                      const Icon = a.icon;
-                      return (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(255,255,255,0.02)" }}>
-                          <div style={{ width: 26, height: 26, borderRadius: 7, background: `rgba(${a.color},0.15)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <Icon size={12} style={{ color: `rgb(${a.color})` }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#fff" }}>{a.action}</div>
-                            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.topic}</div>
-                          </div>
-                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)", flexShrink: 0, fontFamily: "'JetBrains Mono',monospace" }}>{a.time}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Floating accent labels */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 32, flexWrap: "wrap", opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.8s ease" }}>
-          {[
-            { icon: <BarChart3 size={12} />, text: "Real-time analytics" },
-            { icon: <Brain size={12} />, text: "Persistent memory" },
-            { icon: <Shield size={12} />, text: "Private & encrypted" },
-            { icon: <Zap size={12} />, text: "Instant sync" },
-          ].map((f, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 99, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", fontSize: 12.5, color: "rgba(255,255,255,0.5)" }}>
-              <span style={{ color: "rgba(139,92,246,0.8)" }}>{f.icon}</span>{f.text}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  ABOUT
-// ══════════════════════════════════════════════════════════════════
-function About() {
-  const [ref, inView] = useInView(0.15);
-
-  const stats = [
-    { value: "2026", label: "Founded" },
-    { value: "50K+", label: "Users worldwide" },
-    { value: "12", label: "Countries" },
-    { value: "99.9%", label: "Uptime" },
-  ];
-
-  return (
-    <section id="about" ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 1000, margin: "0 auto", textAlign: "center" }}>
-        <div style={{
-          display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px",
-          borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)",
-          marginBottom: 20, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease",
-        }}>
-          <VortisLogo size={12} color="#a855f7" />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>About Vortis</span>
-        </div>
-
-        <h2 style={{
-          fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)",
-          margin: "0 0 24px", letterSpacing: "-0.03em", lineHeight: 1.15,
-          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease",
-        }}>
-          One surface.{" "}
-          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Every capability.</span>
-        </h2>
-
-        <p style={{
-          fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.8, maxWidth: 680, margin: "0 auto 56px",
-          opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.2s ease",
-        }}>
-          We built Vortis on a simple idea: intelligence shouldn't be scattered across a dozen browser tabs.
-          Chat, search, code, vision, and research all live in one place, sharing the same context, so nothing
-          gets lost between tools. It's the assistant we always wanted — so we built it, and we're inviting you in.
-        </p>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24, maxWidth: 720, margin: "0 auto" }}>
-          {stats.map((s, i) => (
-            <div key={s.label} style={{
-              opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(20px)",
-              transition: `all 0.7s ${i * 0.1 + 0.3}s ease`,
-            }}>
-              <div style={{
-                fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 30,
-                background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-              }}>{s.value}</div>
-              <div style={{ fontSize: 12.5, color: "rgba(255,255,255,0.4)", marginTop: 4 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-// ══════════════════════════════════════════════════════════════════
-//  TESTIMONIALS
-// ══════════════════════════════════════════════════════════════════
-const TESTIMONIALS = [
-  { name: "Sarah Chen", role: "Lead Engineer @ Stripe", avatar: "SC", photo: "https://i.pravatar.cc/150?img=47", text: "Vortis replaced 4 different AI tools for our team. The deep research feature alone saves us hours every week.", color: "124,58,237" },
-  { name: "Marcus Johnson", role: "Product Designer @ Figma", avatar: "MJ", photo: "https://i.pravatar.cc/150?img=12", text: "The image generation quality is insane. Combined with vision AI for feedback loops — it's like having a design partner 24/7.", color: "168,85,247" },
-  { name: "Priya Patel", role: "Data Scientist @ Anthropic", avatar: "PP", photo: "https://i.pravatar.cc/150?img=44", text: "Memory + web search together is a game changer. It actually knows my projects and finds current information simultaneously.", color: "6,182,212" },
-  { name: "Alex Rivera", role: "CTO @ YC Startup", avatar: "AR", photo: "https://i.pravatar.cc/150?img=33", text: "We built our entire internal tooling assistant on top of Vortis. The API is clean, the quality is top-tier.", color: "99,102,241" },
-  { name: "Yuki Tanaka", role: "Research Lead @ DeepMind", avatar: "YT", photo: "https://i.pravatar.cc/150?img=68", text: "Deep Research mode synthesized our literature review in 8 minutes. What used to take weeks now takes coffee breaks.", color: "124,58,237" },
-  { name: "Emma Williams", role: "Founder @ AI Startup", avatar: "EW", photo: "https://i.pravatar.cc/150?img=29", text: "Switched from ChatGPT and never looked back. The UI is gorgeous and the responses are noticeably sharper.", color: "168,85,247" },
-];
-
-function Testimonials() {
-  const [ref, inView] = useInView(0.08);
-  return (
-    <section ref={ref} style={{ padding: "80px 0", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, overflow: "hidden" }}>
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 100, zIndex: 2, background: "linear-gradient(to right,#03030a,transparent)", pointerEvents: "none" }} />
-      <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 100, zIndex: 2, background: "linear-gradient(to left,#03030a,transparent)", pointerEvents: "none" }} />
-
-      <div style={{ textAlign: "center", marginBottom: 48, padding: "0 40px" }}>
-        <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(26px,4vw,44px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transition: "all 0.7s ease" }}>
-          Loved by{" "}
-          <span style={{ background: "linear-gradient(90deg,#7C3AED,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>builders worldwide.</span>
-        </h2>
-      </div>
-
-      <div style={{
-        display: "flex", gap: 16, width: "max-content",
-        animation: "marquee-l 60s linear infinite",
-        willChange: "transform",
-        opacity: inView ? 1 : 0, transition: "opacity 1s 0.2s ease",
-      }}>
-        {[...TESTIMONIALS, ...TESTIMONIALS].map((t, i) => (
-          <div key={i} style={{
-            width: 300, flexShrink: 0, padding: "24px", borderRadius: 16,
-            background: "rgba(255,255,255,0.025)",
-            border: "1px solid rgba(255,255,255,0.07)",
-            transition: "all 0.25s",
-            display: "flex",
-            flexDirection: "column",
-            minHeight: 240,
-          }}>
-            <div style={{ display: "flex", gap: 5, marginBottom: 14 }}>
-              {[1,2,3,4,5].map(s => <span key={s} style={{ fontSize: 13, color: "#f59e0b" }}>★</span>)}
-            </div>
-            <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, margin: "0 0 18px" }}>"{t.text}"</p>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto" }}>
-              <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block", border: `2px solid rgba(${t.color},0.4)` }} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t.name}</div>
-                <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.35)" }}>{t.role}</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  PRICING
-// ══════════════════════════════════════════════════════════════════
-const PLANS = [
-  {
-    name: "Silver", colorStr: "148,163,184", color: "#94a3b8", popular: false,
-    icon: Star, iconBg: "rgba(148,163,184,0.15)", iconBorder: "rgba(148,163,184,0.35)",
-    prices: { monthly: "$9", q: "$24", h: "$43", y: "$81" },
-    badge: null, glowAnim: "silverGlow",
-    features: ["300 messages/day", "40 documents/day", "20 images/day", "3 vision/day", "Priority access", "Voice mode"],
-  },
-  {
-    name: "Gold", colorStr: "251,191,36", color: "#fbbf24", popular: true,
-    icon: Crown, iconBg: "rgba(251,191,36,0.15)", iconBorder: "rgba(251,191,36,0.4)",
-    prices: { monthly: "$19", q: "$51", h: "$91", y: "$171" },
-    badge: "✦ Most Popular", glowAnim: "goldGlow",
-    features: ["500 messages/day", "50 documents/day", "40 images/day", "10 vision/day", "Priority responses", "Deep research"],
-  },
-  {
-    name: "Platinum", colorStr: "6,182,212", color: "#06b6d4", popular: false,
-    icon: Gem, iconBg: "rgba(6,182,212,0.15)", iconBorder: "rgba(6,182,212,0.35)",
-    prices: { monthly: "$29", q: "$78", h: "$139", y: "$261" },
-    badge: null, glowAnim: "platinumGlow",
-    features: ["Unlimited messages", "Unlimited documents", "Unlimited images", "Unlimited vision", "VIP support", "Early features"],
-  },
-];
-const BILLING_NAMES = { monthly: "Monthly", q: "3 Months", h: "6 Months", y: "Annual" };
-const BILLING_LABELS = { monthly: "/mo", q: "/3 mo", h: "/6 mo", y: "/yr" };
- 
-function Pricing() {
-  const [billing, setBilling] = useState("monthly");
-  const [ref, inView] = useInView(0.08);
-  return (
-    <section id="pricing" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 1040, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 48 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "all 0.7s ease" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#c4b5fd", fontFamily: "'JetBrains Mono',monospace" }}>Pricing</span>
-          </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(28px,4.5vw,48px)", margin: "0 0 28px", letterSpacing: "-0.03em", color: "#fff", opacity: inView ? 1 : 0, transition: "all 0.8s 0.1s ease" }}>
-            Choose Your{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Plan.</span>
-          </h2>
-          <div style={{ display: "inline-flex", padding: 4, borderRadius: 99, border: "1px solid rgba(255,255,255,0.09)", background: "rgba(255,255,255,0.03)", gap: 3, opacity: inView ? 1 : 0, transition: "opacity 0.7s 0.2s ease" }}>
-            {Object.keys(BILLING_NAMES).map(b => (
-              <button key={b} onClick={() => setBilling(b)} style={{ padding: "8px 18px", borderRadius: 99, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: billing === b ? "linear-gradient(135deg,#7C3AED,#a855f7)" : "transparent", color: billing === b ? "#fff" : "rgba(255,255,255,0.5)", transition: "all 0.2s", boxShadow: billing === b ? "0 0 16px rgba(124,58,237,0.4)" : "none" }}>
-                {BILLING_NAMES[b]}
-              </button>
-            ))}
-          </div>
-        </div>
- 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
-          {PLANS.map((plan, idx) => {
-            const PlanIcon = plan.icon;
-            return (
-              <div key={plan.name} style={{ borderRadius: 24, padding: "36px 30px", position: "relative", border: plan.popular ? `1px solid rgba(${plan.colorStr},0.6)` : "1px solid rgba(255,255,255,0.07)", background: plan.popular ? `rgba(${plan.colorStr},0.07)` : "rgba(255,255,255,0.02)", animation: `${plan.glowAnim} 3s ease-in-out infinite`, display: "flex", flexDirection: "column", opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : `translateY(${idx === 1 ? 80 : 0}px)`, transition: `all 0.75s ${idx * 0.12 + 0.3}s ease` }}>
-                {plan.popular && (
-                  <>
-                    <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, borderRadius: "24px 24px 0 0", background: `linear-gradient(90deg, transparent, ${plan.color}, transparent)` }} />
-                    <div style={{ position: "absolute", top: -14, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(135deg,${plan.color},#a855f7)`, padding: "4px 18px", borderRadius: 99, fontSize: 11, fontWeight: 700, color: "#fff", whiteSpace: "nowrap", boxShadow: `0 4px 16px rgba(${plan.colorStr},0.5)` }}>{plan.badge}</div>
-                  </>
-                )}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-                  <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 20, margin: 0, color: "#fff" }}>{plan.name}</h3>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: plan.iconBg, border: `1px solid ${plan.iconBorder}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <PlanIcon size={18} style={{ color: plan.color }} />
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 4, marginBottom: 26 }}>
-                  <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 46, color: "#fff", lineHeight: 1 }}>{plan.prices[billing]}</span>
-                  <span style={{ fontSize: 14, color: "rgba(255,255,255,0.35)", paddingBottom: 5 }}>{BILLING_LABELS[billing]}</span>
-                </div>
-                <ul style={{ listStyle: "none", padding: 0, margin: "0 0 28px", flex: 1, display: "flex", flexDirection: "column", gap: 11 }}>
-                  {plan.features.map(f => (
-                    <li key={f} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, color: "rgba(255,255,255,0.7)" }}>
-                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: `rgba(${plan.colorStr},0.18)`, border: `1px solid rgba(${plan.colorStr},0.4)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Check size={11} style={{ color: plan.color }} />
-                      </div>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button style={{ width: "100%", padding: "14px", borderRadius: 12, fontSize: 14, fontWeight: 700, cursor: "pointer", background: plan.popular ? `linear-gradient(135deg,${plan.color},#7C3AED)` : "rgba(255,255,255,0.06)", color: "#fff", border: plan.popular ? "none" : "1px solid rgba(255,255,255,0.1)", boxShadow: plan.popular ? `0 0 24px rgba(${plan.colorStr},0.4)` : "none", transition: "all 0.2s" }}
-                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; }}>
-                  Get Started →
-                </button>
-              </div>
-            );
-          })}
-        </div>
- 
-        <div style={{ display: "flex", justifyContent: "center", gap: 32, marginTop: 36, flexWrap: "wrap", opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.5s ease" }}>
-          {[{ icon: <Shield size={13} />, text: "Cancel anytime" }, { icon: <Lock size={13} />, text: "Enterprise-grade security" }, { icon: <Wifi size={13} />, text: "99.9% uptime SLA" }].map(s => (
-            <div key={s.text} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "rgba(255,255,255,0.35)" }}>
-              <span style={{ color: "rgba(139,92,246,0.7)" }}>{s.icon}</span>{s.text}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
- 
-// ══════════════════════════════════════════════════════════════════
-//  FAQ
-// ══════════════════════════════════════════════════════════════════
-const FAQS = [
-  { q: "What is Vortis AI?", a:  "Vortis is an AI assistant. It chats, searches the web, writes code, reads documents, generates images, and does deep research — all in one place." },
-  { q: "What models power Vortis?", a: "Vortis routes intelligently between proprietary ultra-low-latency models and frontier models to give you the best result for each specific task type." },
-  { q: "Is there a free trial?", a: "Yes — explore core capabilities completely free with no credit card required. Premium features like Deep Research and unlimited usage require a paid plan." },
-  { q: "How does billing work?", a: "Choose monthly, quarterly, semi-annual, or annual billing. Longer commitments unlock big discounts — annual saves 25%. Cancel any time, no questions asked." },
-  { q: "What is Deep Research mode?", a: "Autonomous agents browse the web, read documents, cross-reference sources, and synthesize comprehensive reports in minutes. Like having a research team on demand." },
-  { q: "Is my data private and secure?", a: "Absolutely. Your conversations, documents, and outputs are never used to train models or shared with third parties. Enterprise-grade AES-256 encryption at rest and in transit." },
-];
-
 function FaqItem({ faq, index, inView }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{
-      borderBottom: "1px solid rgba(255,255,255,0.06)",
-      opacity: inView ? 1 : 0,
-      transform: inView ? "translateX(0)" : `translateX(${index % 2 === 0 ? -40 : 40}px)`,
-      transition: `all 0.6s ${index * 0.07}s ease`,
+    <div className="faq-item" style={{
+      background: 'rgba(255,255,255,.025)', borderRadius: 16, marginBottom: 12,
+      border: `1px solid ${open ? 'rgba(139,92,246,.3)' : 'rgba(255,255,255,.06)'}`,
+      overflow: 'hidden', transition: 'all .3s ease',
+      animation: 'fadeUp .5s ease', animationDelay: `${index * .08}s`, animationFillMode: 'both',
     }}>
-      <button onClick={() => setOpen(!open)} style={{
-        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "20px 4px", background: "none", border: "none", cursor: "pointer", textAlign: "left",
+      <button onClick={() => setOpen(v => !v)} style={{
+        width: '100%', padding: '20px 24px', background: 'transparent', border: 'none', color: '#fff',
+        fontSize: 16, fontWeight: 600, textAlign: 'left', cursor: 'pointer',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16,
       }}>
-        <span style={{ fontSize: 15, fontWeight: 500, color: open ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 0.2s" }}>{faq.q}</span>
+        <span>{faq.q}</span>
         <div style={{
-          width: 30, height: 30, borderRadius: "50%", flexShrink: 0, marginLeft: 16,
-          border: `1px solid ${open ? "rgba(139,92,246,0.6)" : "rgba(255,255,255,0.1)"}`,
-          background: open ? "rgba(139,92,246,0.15)" : "transparent",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          transform: open ? "rotate(45deg)" : "rotate(0deg)", transition: "all 0.28s",
-          boxShadow: open ? "0 0 12px rgba(139,92,246,0.3)" : "none",
+          width: 28, height: 28, borderRadius: 8, background: open ? 'rgba(139,92,246,.2)' : 'rgba(255,255,255,.05)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          transition: 'transform .3s ease, background .3s ease',
+          transform: open ? 'rotate(180deg)' : 'rotate(0)',
         }}>
-          <Plus size={14} style={{ color: open ? "#a855f7" : "rgba(255,255,255,0.4)" }} />
+          <ChevronDown size={16} style={{ color: open ? '#a78bfa' : 'rgba(255,255,255,.5)' }} />
         </div>
       </button>
-      <div style={{ maxHeight: open ? 220 : 0, overflow: "hidden", transition: "max-height 0.38s ease" }}>
-        <p style={{ fontSize: 14, color: "rgba(255,255,255,0.45)", lineHeight: 1.75, paddingBottom: 22, paddingRight: 48, margin: 0 }}>{faq.a}</p>
+      <div style={{
+        maxHeight: open ? '400px' : '0', overflow: 'hidden',
+        transition: 'max-height .4s cubic-bezier(.2,.7,.3,1)',
+      }}>
+        <div style={{ padding: '0 24px 22px', color: 'rgba(255,255,255,.65)', fontSize: 14.5, lineHeight: 1.65 }}>
+          {faq.a}
+        </div>
       </div>
     </div>
   );
 }
 
 function FAQ() {
-  const [ref, inView] = useInView(0.08);
+  const [ref, inView] = useInView();
+  const faqs = [
+    { q: 'How is Vortis different from other AI workspaces?', a: 'Vortis is the only workspace that natively orchestrates multiple modalities — chat, code, search, vision, voice — through a single agent mesh. Most tools bolt AI onto existing surfaces. We rebuilt the surface around the AI, so every interaction is fluid, contextual, and instant.' },
+    { q: 'Can I bring my own models?', a: 'Yes. Pro and Team plans support custom model endpoints (OpenAI, Anthropic, Mistral, Llama, or your own fine-tuned weights hosted anywhere). We abstract the plumbing — you bring the brain, we handle the rest.' },
+    { q: 'Is my data secure?', a: 'Vortis is SOC 2 Type II certified, GDPR compliant, and offers end-to-end encryption at rest and in transit. Team plans add SSO, audit logs, and an on-prem deployment option for regulated industries. We never train on your data.' },
+    { q: 'How long does setup take?', a: 'Most teams are productive within 12 minutes. Connect your repos and docs, invite your teammates, and start shipping. No migration scripts, no schema changes, no professional services required.' },
+    { q: 'What happens if I exceed my token quota?', a: 'We never hard-throttle. You will get a heads-up at 80% and 100% of your quota, and overages are billed at $0.50 per million tokens. Pro and Team plans can also set hard caps to stay within budget.' },
+    { q: 'Do you offer a startup discount?', a: 'Yes — eligible startups (under $5M raised, less than 3 years old) get 50% off the Pro plan for the first year. Reach out to startup@vortis.ai with your details.' },
+  ];
   return (
-    <section id="faq" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
-        <div style={{ textAlign: "center", marginBottom: 52 }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(-40px)", transition: "all 0.7s ease" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.85)", fontFamily: "'JetBrains Mono',monospace" }}>FAQ</span>
-          </div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(26px,4vw,44px)", margin: 0, letterSpacing: "-0.03em", opacity: inView ? 1 : 0, transform: inView ? "translateX(0)" : "translateX(40px)", transition: "all 0.8s 0.1s ease" }}>
-            Frequently Asked{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Questions</span>
-          </h2>
-        </div>
-        {FAQS.map((f, i) => <FaqItem key={i} faq={f} index={i} inView={inView} />)}
+    <section ref={ref} className="section" id="docs" style={{ maxWidth: 880 }}>
+      <div style={{ textAlign: 'center', marginBottom: 50 }} className={`reveal ${inView ? 'in' : ''}`}>
+        <div className="eyebrow" style={{ marginBottom: 18 }}><span className="dot" />FAQ</div>
+        <h2 className="h-section">Questions, answered.</h2>
       </div>
+      {faqs.map((f, i) => (
+        <FaqItem key={i} faq={f} index={i} inView={inView} />
+      ))}
     </section>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  CTA SECTION
+//  CTA — massive glowing final call-to-action
 // ══════════════════════════════════════════════════════════════════
 function CTA({ onLogin }) {
-  const [ref, inView] = useInView(0.15);
-  const [showPicker, setShowPicker] = useState(false);
+  const [ref, inView] = useInView();
+  const ctaRef = useMagnetic(0.2);
   return (
-    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center" }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124,58,237,0.07), transparent)", pointerEvents: "none" }} />
-      <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
-        <div style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)", transition: "all 0.8s ease" }}>
-          <div style={{ fontSize: 52, marginBottom: 20 }}>✦</div>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(32px,6vw,62px)", margin: "0 0 20px", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
-            Start thinking{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>faster.</span>
+    <section ref={ref} className="section" style={{ paddingTop: 80, paddingBottom: 80 }}>
+      <div className={`reveal ${inView ? 'in' : ''}`} style={{
+        position: 'relative', maxWidth: 1100, margin: '0 auto', padding: '80px 40px',
+        borderRadius: 32, overflow: 'hidden', textAlign: 'center',
+      }}>
+        {/* Aurora bg */}
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 30%, rgba(139,92,246,.4), transparent 50%), radial-gradient(ellipse at 80% 70%, rgba(236,72,153,.35), transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(34,211,238,.2), transparent 70%)', filter: 'blur(20px)', animation: 'auroraShift 8s linear infinite' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, rgba(15,12,30,.7), rgba(8,6,20,.85))' }} />
+
+        {/* Conic rotating border */}
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 32, padding: 1.5, background: 'conic-gradient(from 0deg, rgba(139,92,246,.5), rgba(236,72,153,.5), rgba(245,158,11,.4), rgba(34,211,238,.4), rgba(139,92,246,.5))', animation: 'spin 10s linear infinite', WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)', WebkitMaskComposite: 'xor', maskComposite: 'exclude' }} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div className="eyebrow" style={{ marginBottom: 20 }}><span className="dot" />READY?</div>
+          <h2 className="h-section" style={{ fontSize: 'clamp(40px, 6vw, 76px)' }}>
+            Build the future.<br /><span className="gradient-text">Today.</span>
           </h2>
-          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 40 }}>
-            Join 50,000+ professionals who use Vortis every day. Free to start.
+          <p style={{ color: 'rgba(255,255,255,.65)', fontSize: 19, lineHeight: 1.55, maxWidth: 580, margin: '24px auto 40px' }}>
+            Join 120,000+ builders shipping at the speed of thought. Free to start, no credit card, no lock-in.
           </p>
-          <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => setShowPicker(true)} style={{
-              padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-              background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-              position: "relative",
-              boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
-              transition: "all 0.25s",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
-            >
-              <span style={{
-                position: "absolute", inset: -3, borderRadius: 99,
-                border: "3px solid #c4b5fd",
-                animation: "radarPing 1.6s ease-out infinite",
-                pointerEvents: "none",
-              }} />
-              <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
-              <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button ref={ctaRef} onClick={onLogin} className="btn-glow magnetic" style={{ padding: '18px 32px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+              Start building free <ArrowRight size={18} />
             </button>
+            <button className="btn-ghost" style={{ padding: '17px 30px', fontSize: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Phone size={17} /> Talk to sales
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 28, justifyContent: 'center', marginTop: 36, flexWrap: 'wrap', color: 'rgba(255,255,255,.5)', fontSize: 13 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} style={{ color: '#22c55e' }} /> No credit card</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} style={{ color: '#22c55e' }} /> Cancel anytime</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Check size={13} style={{ color: '#22c55e' }} /> SOC 2 Type II</span>
           </div>
         </div>
       </div>
-      {showPicker && (
-        <AuthPicker
-          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-          authLoading={false}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
     </section>
   );
 }
@@ -2571,82 +2175,119 @@ function CTA({ onLogin }) {
 //  FOOTER
 // ══════════════════════════════════════════════════════════════════
 function Footer() {
+  const cols = [
+    { title: 'Product', links: ['Features', 'Pricing', 'Changelog', 'Roadmap', 'Status'] },
+    { title: 'Company', links: ['About', 'Blog', 'Careers', 'Press', 'Contact'] },
+    { title: 'Resources', links: ['Docs', 'API Reference', 'Community', 'Tutorials', 'Showcase'] },
+    { title: 'Legal', links: ['Privacy', 'Terms', 'Security', 'DPA', 'SOC 2'] },
+  ];
   return (
-    <footer style={{ borderTop: "1px solid rgba(255,255,255,0.05)", padding: "56px 40px 32px", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 60, marginBottom: 48, alignItems: "start" }}>
+    <footer style={{ position: 'relative', padding: '80px 24px 40px', borderTop: '1px solid rgba(255,255,255,.06)' }}>
+      <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 3fr', gap: 60, marginBottom: 60 }} className="footer-grid">
+          {/* Brand */}
           <div>
-            <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", marginBottom: 14 }}>
-              <VortisLogo size={28} color="#8b5cf6" />
-              <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 18, letterSpacing: "0.1em", color: "#fff" }}>VORTIS</span>
-              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a855f7" }}>AI</span>
-            </a>
-            <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.28)", maxWidth: 280, lineHeight: 1.7, margin: "0 0 20px" }}>The intelligence platform for the world's most ambitious professionals.</p>
-            <div style={{ display: "flex", gap: 10 }}>
-              {["𝕏", "◆", "○", "◇"].map((icon, i) => (
-                <a key={i} href="#" style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.4)", fontSize: 14, textDecoration: "none", transition: "all 0.2s" }}
-                onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.3)"; e.currentTarget.style.color = "#a855f7"; }}
-                onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
-                >{icon}</a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <VortisLogo size={32} />
+              <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22 }}>Vortis</span>
+            </div>
+            <p style={{ color: 'rgba(255,255,255,.5)', fontSize: 14, lineHeight: 1.6, maxWidth: 320, marginBottom: 20 }}>
+              The AI workspace that thinks with you. Build, ship, and iterate at the speed of thought.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {['twitter', 'github', 'discord', 'linkedin'].map(s => (
+                <a key={s} href={`#${s}`} style={{
+                  width: 36, height: 36, borderRadius: 10, background: 'rgba(255,255,255,.04)',
+                  border: '1px solid rgba(255,255,255,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'rgba(255,255,255,.5)', textDecoration: 'none', fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
+                  transition: 'all .25s ease',
+                }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139,92,246,.15)'; e.currentTarget.style.borderColor = 'rgba(139,92,246,.4)'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'; e.currentTarget.style.color = 'rgba(255,255,255,.5)'; e.currentTarget.style.transform = 'translateY(0)'; }}>
+                  {s[0]}
+                </a>
               ))}
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 56, flexWrap: "wrap" }}>
-            {[
-              { title: "Product", links: ["Capabilities", "Pricing", "Changelog", "API Docs"] },
-              { title: "Company", links: ["About", "Blog", "Careers", "Press"] },
-              { title: "Support", links: ["Documentation", "Status", "Contact", "Privacy"] },
-            ].map(col => (
-              <div key={col.title}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.5)", marginBottom: 14, letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace" }}>{col.title}</div>
-                {col.links.map(l => <a key={l} href="#" style={{ display: "block", fontSize: 13.5, color: "rgba(255,255,255,0.32)", marginBottom: 9, textDecoration: "none", transition: "color 0.15s" }}
-                onMouseEnter={e => e.target.style.color = "rgba(255,255,255,0.7)"}
-                onMouseLeave={e => e.target.style.color = "rgba(255,255,255,0.32)"}
-                >{l}</a>)}
+          {/* Link columns */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 30 }}>
+            {cols.map(c => (
+              <div key={c.title}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.4)', letterSpacing: '.1em', marginBottom: 16, textTransform: 'uppercase' }}>{c.title}</div>
+                {c.links.map(l => (
+                  <a key={l} href={`#${l.toLowerCase()}`} style={{
+                    display: 'block', padding: '5px 0', color: 'rgba(255,255,255,.6)', textDecoration: 'none', fontSize: 14,
+                    transition: 'color .2s ease',
+                  }}
+                    onMouseEnter={(e) => e.target.style.color = '#fff'}
+                    onMouseLeave={(e) => e.target.style.color = 'rgba(255,255,255,.6)'}>{l}</a>
+                ))}
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 24, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", fontFamily: "'JetBrains Mono',monospace" }}>© 2026 Vortis AI Inc. All rights reserved.</span>
-          <div style={{ display: "flex", gap: 20 }}>
-            {["Privacy Policy", "Terms of Service", "Cookie Policy"].map(l => <a key={l} href="#" style={{ fontSize: 12, color: "rgba(255,255,255,0.2)", textDecoration: "none" }}>{l}</a>)}
+        {/* Bottom row */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 30, borderTop: '1px solid rgba(255,255,255,.06)', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: 'rgba(255,255,255,.4)', fontSize: 13 }}>
+            <span className="live-dot" style={{ width: 6, height: 6 }} />
+            All systems operational
+          </div>
+          <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 13 }}>
+            © 2026 Vortis, Inc. · Built with intelligence in San Francisco.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,.4)', fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="kbd">⌘</span><span className="kbd">K</span> to search
           </div>
         </div>
       </div>
+      <style>{`@media(max-width:880px){.footer-grid{grid-template-columns:1fr!important}.footer-grid>div:last-child{grid-template-columns:repeat(2,1fr)!important}}`}</style>
     </footer>
   );
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  LANDING PAGE
+//  LANDING PAGE — default export
 // ══════════════════════════════════════════════════════════════════
 export default function LandingPage({ onLogin, authLoading = false, authError = "" }) {
+  // Smooth scroll reveal observer for any element with .reveal class
+  useEffect(() => {
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) e.target.classList.add('in');
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal, .reveal-stagger').forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
+
+  const handleLogin = (creds) => {
+    onLogin?.(creds);
+  };
+
   return (
-    <div style={{ background: "#03030a", color: "#ffffff", minHeight: "100vh", fontFamily: "'Inter',sans-serif", overflowX: "hidden", position: "relative" }}>
+    <>
       <StyleInjector />
+      <ScrollProgress />
+      <CursorGlow />
       <CosmicBg />
-      <FloatingParticles />
-      <Nav onLogin={onLogin} />
-      <main style={{ position: "relative", zIndex: 1 }}>
-        <div style={{ maxWidth: 1440, margin: "0 auto" }}>
-          <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
-        </div>
+
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        <Nav onLogin={handleLogin} />
+        <Hero onLogin={handleLogin} authLoading={authLoading} authError={authError} />
         <Logos />
         <BentoGrid />
-        <NeuralField />
-        <Showcase />
         <HowItWorks />
+        <Showcase />
         <DashboardPreview />
         <Testimonials />
         <Pricing />
-        <About />
         <FAQ />
-        <CTA onLogin={onLogin} />
+        <CTA onLogin={handleLogin} />
         <Footer />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
+
