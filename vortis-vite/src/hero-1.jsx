@@ -309,9 +309,10 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  INTELLIGENCE PRISM — one beam in, four capabilities out
-//  (replaces NeuralField) — matches Vortis AI theme:
-//  purple/cyan palette, dark bg, "Chat/Vision/Code/Research unified"
+//  PARTICLE GALAXY — spiral arms orbiting a glowing core
+//  (replaces NeuralField) — thousands of particles, motion-blur
+//  trails, cursor gravity well, click-to-detonate supernova.
+//  Pure 2D canvas, no Three.js, no THREE.Clock.
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -323,48 +324,109 @@ export function NeuralField() {
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, active: false };
+    const mouse = { x: -9999, y: -9999, active: false };
 
     let stars = [];
-    let pulses = [];      // click-triggered sync pulses traveling along beams
-    let sparkles = [];    // emission sparkles at the prism faces
+    let particles = [];
+    let core = null;
+    let shockwaves = [];
+    let supernovaFlash = 0;
     let t0 = performance.now();
     let last = t0;
     let seeded = false;
 
-    let seed = 31337;
+    let seed = 99173;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
-    // The 4 refracted beams — one per Vortis capability
-    const BEAMS = [
-      { label: "CHAT",     color: [168, 85, 247],  angle: -1.05, baseAngle: -1.05 },  // purple, upper
-      { label: "VISION",   color: [6, 182, 212],   angle: -0.35, baseAngle: -0.35 },  // cyan, upper-right
-      { label: "CODE",     color: [236, 72, 153],  angle:  0.35, baseAngle:  0.35 },  // magenta, lower-right
-      { label: "RESEARCH", color: [59, 130, 246],  angle:  1.05, baseAngle:  1.05 },  // blue, lower
-    ];
-
-    // Particles flowing along each beam
-    let beamParticles = BEAMS.map(() => Array.from({ length: 22 }, () => ({
-      t: rng(), speed: 0.0035 + rng() * 0.004, r: 1 + rng() * 1.6, phase: rng() * Math.PI * 2,
-    })));
-
-    // Incoming beam particles (white)
-    let inParticles = Array.from({ length: 18 }, () => ({
-      t: rng(), speed: 0.005 + rng() * 0.004, r: 1 + rng() * 1.4,
-    }));
-
     const init = () => {
-      // Sparse starfield
-      const STAR_COUNT = Math.min(160, Math.max(80, Math.floor(W * H / 5000)));
+      // ── Background starfield (parallax, distinct from galaxy) ──
+      const STAR_COUNT = Math.min(220, Math.max(100, Math.floor(W * H / 3500)));
       stars = Array.from({ length: STAR_COUNT }, () => ({
         x: rng() * W,
         y: rng() * H,
-        r: 0.3 + rng() * 1.1,
-        baseAlpha: 0.2 + rng() * 0.6,
-        twinkleSpeed: 0.4 + rng() * 1.6,
+        r: 0.2 + rng() * 1.0,
+        baseAlpha: 0.15 + rng() * 0.55,
+        twinkleSpeed: 0.3 + rng() * 1.4,
         phase: rng() * Math.PI * 2,
-        depth: 0.2 + rng() * 0.8,
+        depth: 0.1 + rng() * 0.9,
       }));
+
+      // ── Galaxy parameters ──
+      const cx = W * 0.5, cy = H * 0.5;
+      const maxR = Math.min(W, H) * 0.42;
+      const ARMS = 3;
+      const PARTICLE_COUNT = Math.min(4500, Math.max(2000, Math.floor(W * H / 90)));
+
+      core = { x: cx, y: cy, r: 18, pulse: 0 };
+
+      particles = [];
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        // Distribute particles along spiral arms with scatter
+        const arm = i % ARMS;
+        const armOffset = (arm / ARMS) * Math.PI * 2;
+
+        // Radius — bias toward center (more density inside)
+        const u = rng();
+        const radius = Math.pow(u, 0.7) * maxR + 8;
+
+        // Spiral tightness — log spiral
+        const spiralAngle = Math.log(radius / 8 + 1) * 2.2 + armOffset;
+
+        // Scatter perpendicular to arm (dust lane effect)
+        const scatter = (rng() - 0.5) * 0.5 * (1 - radius / maxR * 0.3);
+        const angle = spiralAngle + scatter;
+
+        // Differential rotation: inner orbits faster
+        const orbitSpeed = 0.0008 / (radius / maxR + 0.15);
+
+        // Color: white-hot core → purple mid → cyan outer → dim edge
+        const tRel = radius / maxR;
+        let r, g, b;
+        if (tRel < 0.15) {
+          // Core: white-yellow
+          r = 255; g = 245 + rng() * 10; b = 220 + rng() * 35;
+        } else if (tRel < 0.45) {
+          // Inner arm: purple-magenta
+          const k = (tRel - 0.15) / 0.30;
+          r = 255 - k * 90;  // → 165
+          g = 245 - k * 160; // → 85
+          b = 220 - k * 5;   // → 215  (close to #a855f7)
+        } else if (tRel < 0.78) {
+          // Mid arm: cyan
+          const k = (tRel - 0.45) / 0.33;
+          r = 165 - k * 159; // → 6
+          g = 85 + k * 97;   // → 182
+          b = 215 - k * 33;  // → 182 (close to #06b6d4... actually 06b6d4)
+        } else {
+          // Outer: dim blue-violet
+          const k = (tRel - 0.78) / 0.22;
+          r = 6 + k * 60;    // → 66
+          g = 182 - k * 130; // → 52
+          b = 182 - k * 80;  // → 102
+        }
+
+        // Brightness: bright in core, dim at edges
+        const brightness = (1 - tRel * 0.7) * (0.5 + rng() * 0.5);
+
+        particles.push({
+          radius,
+          angle,
+          baseAngle: angle,
+          orbitSpeed,
+          r: 0.4 + rng() * 1.2 + (tRel < 0.15 ? 0.8 : 0),
+          color: [r, g, b],
+          brightness,
+          twinkle: rng() * Math.PI * 2,
+          twinkleSpeed: 0.5 + rng() * 1.5,
+          // Small radial wobble for organic feel
+          wobbleAmp: rng() * 3,
+          wobbleSpeed: 0.3 + rng() * 0.6,
+          wobblePhase: rng() * Math.PI * 2,
+          // For shockwave displacement
+          dx: 0, dy: 0,
+        });
+      }
+
       seeded = true;
     };
 
@@ -380,314 +442,180 @@ export function NeuralField() {
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      mouse.tx = (e.clientX - rect.left) / rect.width;
-      mouse.ty = (e.clientY - rect.top) / rect.height;
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
       mouse.active = true;
     };
-    const onLeave = () => { mouse.active = false; mouse.tx = 0.5; mouse.ty = 0.5; };
+    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
 
     const onClick = (e) => {
-      // Fire a sync pulse through all 4 beams simultaneously
-      for (let i = 0; i < BEAMS.length; i++) {
-        pulses.push({ beamIdx: i, t: 0, speed: 0.022, life: 1 });
-      }
-      // Burst of sparkles at prism center
-      for (let i = 0; i < 30; i++) {
-        const a = rng() * Math.PI * 2;
-        const s = 1 + rng() * 3;
-        sparkles.push({
-          x: 0, y: 0, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-          life: 1, decay: 0.018 + rng() * 0.02, r: 1 + rng() * 1.6,
-          color: BEAMS[Math.floor(rng() * BEAMS.length)].color,
-        });
-      }
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+      // Supernova at click point
+      shockwaves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.9, life: 1, speed: 8 });
+      shockwaves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.6, life: 1, speed: 6 });
+      // Big flash
+      supernovaFlash = 1;
     };
 
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
     canvas.addEventListener("click", onClick);
 
-    const lerp = (a, b, t) => a + (b - a) * t;
-
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
       const t = (now - t0) * 0.001;
 
-      // smooth mouse follow
-      mouse.x += (mouse.tx - mouse.x) * 0.07;
-      mouse.y += (mouse.ty - mouse.y) * 0.07;
+      // ── MOTION-BLUR CLEAR (low-alpha fill = natural particle trails) ──
+      // Slightly higher alpha when supernova flashing for faster fade
+      ctx.fillStyle = `rgba(3,3,10,${0.10 + supernovaFlash * 0.15})`;
+      ctx.fillRect(0, 0, W, H);
 
-      // ── Background ──
-      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.7);
-      bg.addColorStop(0, "#0a0820");
-      bg.addColorStop(0.6, "#050410");
-      bg.addColorStop(1, "#03030a");
+      // ── Background gradient (very subtle, doesn't overwrite trails fully) ──
+      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.6);
+      bg.addColorStop(0, "rgba(20,10,40,0.04)");
+      bg.addColorStop(1, "rgba(3,3,10,0.04)");
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ── Stars (with parallax) ──
-      const px = (mouse.x - 0.5) * 16;
-      const py = (mouse.y - 0.5) * 10;
+      // ── Background stars (twinkle, parallax with cursor) ──
+      const px = mouse.active ? (mouse.x - W / 2) * 0.01 : 0;
+      const py = mouse.active ? (mouse.y - H / 2) * 0.01 : 0;
       for (const s of stars) {
         const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
-        const alpha = s.baseAlpha * (0.35 + tw * 0.65);
+        const alpha = s.baseAlpha * (0.3 + tw * 0.7);
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
         ctx.arc(s.x + px * s.depth, s.y + py * s.depth, s.r, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // ── Prism geometry ──
+      // ── Update + draw galaxy particles ──
       const cx = W * 0.5, cy = H * 0.5;
-      const prismSize = Math.min(W, H) * 0.13;
-      const rot = t * 0.25;
-      // Equilateral triangle vertices (pointing up)
-      const verts = [];
-      for (let i = 0; i < 3; i++) {
-        const a = rot + i * (Math.PI * 2 / 3) - Math.PI / 2;
-        verts.push({ x: cx + Math.cos(a) * prismSize, y: cy + Math.sin(a) * prismSize });
-      }
+      core.pulse = 0.85 + Math.sin(t * 1.5) * 0.15;
 
-      // ── Incoming beam (left side → prism center) ──
-      const inStart = { x: cx - W * 0.45, y: cy + Math.sin(t * 0.4) * 18 };
-      const inEnd = { x: cx - prismSize * 0.6, y: cy };
+      ctx.globalCompositeOperation = "lighter";
 
-      // Cursor lensing distortion on the incoming beam path
-      const lensX = mouse.active ? (mouse.x - 0.5) * 30 : 0;
-      const lensY = mouse.active ? (mouse.y - 0.5) * 20 : 0;
+      for (const p of particles) {
+        // Orbital motion (differential rotation)
+        p.angle += p.orbitSpeed * (dt / 16);
 
-      // Incoming beam glow (multi-pass for bloom)
-      ctx.globalCompositeOperation = "screen";
-      for (const width of [22, 12, 6, 2.5]) {
-        const alpha = width === 22 ? 0.06 : width === 12 ? 0.10 : width === 6 ? 0.18 : 0.85;
-        ctx.strokeStyle = width === 2.5 ? "rgba(255,255,255,0.85)" : `rgba(220,210,255,${alpha})`;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.moveTo(inStart.x, inStart.y);
-        ctx.quadraticCurveTo(
-          (inStart.x + inEnd.x) / 2 + lensX,
-          (inStart.y + inEnd.y) / 2 + lensY,
-          inEnd.x, inEnd.y
-        );
-        ctx.stroke();
-      }
+        // Radial wobble
+        const wobble = Math.sin(t * p.wobbleSpeed + p.wobblePhase) * p.wobbleAmp;
+        const r = p.radius + wobble;
 
-      // Incoming beam particles
-      for (const p of inParticles) {
-        p.t += p.speed * (dt / 16);
-        if (p.t > 1) p.t -= 1;
-        // quadratic bezier point
-        const mt = 1 - p.t;
-        const bx = mt * mt * inStart.x + 2 * mt * p.t * ((inStart.x + inEnd.x) / 2 + lensX) + p.t * p.t * inEnd.x;
-        const by = mt * mt * inStart.y + 2 * mt * p.t * ((inStart.y + inEnd.y) / 2 + lensY) + p.t * p.t * inEnd.y;
-        ctx.shadowColor = "rgba(255,255,255,1)";
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = `rgba(255,255,255,${0.7 + Math.sin(p.t * Math.PI) * 0.3})`;
-        ctx.beginPath();
-        ctx.arc(bx, by, p.r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      ctx.globalCompositeOperation = "source-over";
+        let x = cx + Math.cos(p.angle) * r;
+        let y = cy + Math.sin(p.angle) * r * 0.55; // squashed = tilted galaxy view
 
-      // ── Outgoing refracted beams ──
-      const beamLen = Math.min(W, H) * 0.42;
-      const cursorBend = mouse.active ? (mouse.x - 0.5) * 0.18 : 0;
-
-      for (let bi = 0; bi < BEAMS.length; bi++) {
-        const beam = BEAMS[bi];
-        // Slight breathing + cursor influence on beam angle
-        beam.angle = beam.baseAngle + Math.sin(t * 0.6 + bi) * 0.04 + cursorBend * (bi % 2 === 0 ? 1 : -1) * 0.3;
-
-        const endX = cx + Math.cos(beam.angle) * beamLen;
-        const endY = cy + Math.sin(beam.angle) * beamLen;
-        // Control point for slight curve (gives the beam an arc)
-        const midA = beam.angle + (bi % 2 === 0 ? 0.25 : -0.25);
-        const ctrlX = cx + Math.cos(midA) * beamLen * 0.55;
-        const ctrlY = cy + Math.sin(midA) * beamLen * 0.55;
-
-        const [r, g, b] = beam.color;
-
-        // Beam glow (multi-pass)
-        ctx.globalCompositeOperation = "screen";
-        for (const width of [26, 14, 7, 2.5]) {
-          const alpha = width === 26 ? 0.05 : width === 14 ? 0.10 : width === 7 ? 0.20 : 0.85;
-          ctx.strokeStyle = width === 2.5
-            ? `rgba(${Math.min(255, r + 80)},${Math.min(255, g + 80)},${Math.min(255, b + 80)},0.9)`
-            : `rgba(${r},${g},${b},${alpha})`;
-          ctx.lineWidth = width;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          ctx.quadraticCurveTo(ctrlX, ctrlY, endX, endY);
-          ctx.stroke();
+        // ── Cursor gravity well (pulls nearby particles) ──
+        if (mouse.active) {
+          const dx = mouse.x - x, dy = mouse.y - y;
+          const d = Math.hypot(dx, dy);
+          if (d < 140 && d > 0.5) {
+            const pull = (1 - d / 140) * 18;
+            x += (dx / d) * pull;
+            y += (dy / d) * pull;
+          }
         }
 
-        // Beam particles flowing outward
-        for (const p of beamParticles[bi]) {
-          p.t += p.speed * (dt / 16);
-          if (p.t > 1) p.t -= 1;
-          const mt = 1 - p.t;
-          const bx = mt * mt * cx + 2 * mt * p.t * ctrlX + p.t * p.t * endX;
-          const by = mt * mt * cy + 2 * mt * p.t * ctrlY + p.t * p.t * endY;
-          ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-          ctx.shadowBlur = 12;
-          ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(p.t * Math.PI + p.phase) * 0.4})`;
-          ctx.beginPath();
-          ctx.arc(bx, by, p.r, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
+        // ── Shockwave displacement ──
+        for (const sw of shockwaves) {
+          const dx = x - sw.x, dy = y - sw.y;
+          const d = Math.hypot(dx, dy);
+          const ringDist = Math.abs(d - sw.r);
+          if (ringDist < 50 && d > 0.5) {
+            const push = (1 - ringDist / 50) * sw.life * 40;
+            x += (dx / d) * push;
+            y += (dy / d) * push;
+          }
         }
-        ctx.globalCompositeOperation = "source-over";
 
-        // Label at beam end
-        const labelOffset = 26;
-        const lblX = endX + Math.cos(beam.angle) * labelOffset;
-        const lblY = endY + Math.sin(beam.angle) * labelOffset;
-        ctx.font = "11px 'JetBrains Mono', monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const tw = ctx.measureText(beam.label).width;
-        // pill background
-        ctx.fillStyle = "rgba(3,3,10,0.7)";
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`;
-        ctx.lineWidth = 1;
-        const pillW = tw + 18, pillH = 22;
-        const pillX = lblX - pillW / 2, pillY = lblY - pillH / 2;
+        // Twinkle
+        const tw = 0.6 + Math.sin(t * p.twinkleSpeed + p.twinkle) * 0.4;
+        const alpha = p.brightness * tw;
+
+        const [r2, g2, b2] = p.color;
+        ctx.fillStyle = `rgba(${r2},${g2},${b2},${alpha})`;
         ctx.beginPath();
-        ctx.arc(pillX + 8, pillY + 11, 11, Math.PI / 2, Math.PI * 1.5);
-        ctx.lineTo(pillX + pillW - 8, pillY);
-        ctx.arc(pillX + pillW - 8, pillY + 11, 11, Math.PI * 1.5, Math.PI / 2);
-        ctx.lineTo(pillX + 8, pillY + pillH);
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = `rgba(${r},${g},${b},1)`;
-        ctx.fillText(beam.label, lblX, lblY);
-      }
-
-      // ── Sync pulses (click-triggered, traveling along all 4 beams) ──
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = pulses.length - 1; i >= 0; i--) {
-        const p = pulses[i];
-        p.t += p.speed * (dt / 16);
-        p.life -= 0.008 * (dt / 16);
-        if (p.t >= 1 || p.life <= 0) { pulses.splice(i, 1); continue; }
-        const beam = BEAMS[p.beamIdx];
-        const endX = cx + Math.cos(beam.angle) * beamLen;
-        const endY = cy + Math.sin(beam.angle) * beamLen;
-        const midA = beam.angle + (p.beamIdx % 2 === 0 ? 0.25 : -0.25);
-        const ctrlX = cx + Math.cos(midA) * beamLen * 0.55;
-        const ctrlY = cy + Math.sin(midA) * beamLen * 0.55;
-        const mt = 1 - p.t;
-        const bx = mt * mt * cx + 2 * mt * p.t * ctrlX + p.t * p.t * endX;
-        const by = mt * mt * cy + 2 * mt * p.t * ctrlY + p.t * p.t * endY;
-        const [r, g, b] = beam.color;
-        // Big glowing pulse head
-        const pulseGrad = ctx.createRadialGradient(bx, by, 0, bx, by, 18);
-        pulseGrad.addColorStop(0, `rgba(255,255,255,${p.life})`);
-        pulseGrad.addColorStop(0.3, `rgba(${r},${g},${b},${p.life * 0.8})`);
-        pulseGrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-        ctx.fillStyle = pulseGrad;
-        ctx.fillRect(bx - 18, by - 18, 36, 36);
-      }
-      ctx.globalCompositeOperation = "source-over";
-
-      // ── Sparkles emission (from click burst) ──
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = sparkles.length - 1; i >= 0; i--) {
-        const sp = sparkles[i];
-        sp.x += sp.vx * (dt / 16);
-        sp.y += sp.vy * (dt / 16);
-        sp.vx *= 0.96; sp.vy *= 0.96;
-        sp.life -= sp.decay * (dt / 16);
-        if (sp.life <= 0) { sparkles.splice(i, 1); continue; }
-        const [r, g, b] = sp.color;
-        ctx.fillStyle = `rgba(${r},${g},${b},${sp.life})`;
-        ctx.beginPath();
-        ctx.arc(cx + sp.x, cy + sp.y, sp.r * sp.life, 0, Math.PI * 2);
+        ctx.arc(x, y, p.r, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── The crystal prism (drawn last, on top) ──
-      // Outer glow
+      // ── Galaxy core (multi-layer glow) ──
       ctx.globalCompositeOperation = "screen";
-      const outerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, prismSize * 2.5);
-      outerGlow.addColorStop(0, "rgba(168,85,247,0.35)");
-      outerGlow.addColorStop(0.5, "rgba(124,58,237,0.12)");
-      outerGlow.addColorStop(1, "rgba(124,58,237,0)");
-      ctx.fillStyle = outerGlow;
-      ctx.fillRect(cx - prismSize * 2.5, cy - prismSize * 2.5, prismSize * 5, prismSize * 5);
-      ctx.globalCompositeOperation = "source-over";
+      // Outer halo
+      const haloR = 90 * core.pulse;
+      const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, haloR);
+      halo.addColorStop(0, `rgba(255,240,220,${0.5 * core.pulse})`);
+      halo.addColorStop(0.3, `rgba(168,85,247,${0.25 * core.pulse})`);
+      halo.addColorStop(0.7, `rgba(124,58,237,${0.08 * core.pulse})`);
+      halo.addColorStop(1, "rgba(124,58,237,0)");
+      ctx.fillStyle = halo;
+      ctx.fillRect(cx - haloR, cy - haloR, haloR * 2, haloR * 2);
 
-      // Prism body — faceted glass with chromatic edges
-      ctx.beginPath();
-      ctx.moveTo(verts[0].x, verts[0].y);
-      ctx.lineTo(verts[1].x, verts[1].y);
-      ctx.lineTo(verts[2].x, verts[2].y);
-      ctx.closePath();
-
-      // Glass fill — subtle radial gradient
-      const glassGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, prismSize);
-      glassGrad.addColorStop(0, "rgba(255,255,255,0.35)");
-      glassGrad.addColorStop(0.5, "rgba(168,85,247,0.18)");
-      glassGrad.addColorStop(1, "rgba(124,58,237,0.30)");
-      ctx.fillStyle = glassGrad;
-      ctx.fill();
-
-      // Inner refraction lines (3 facet lines from center to each vertex)
-      ctx.strokeStyle = "rgba(255,255,255,0.18)";
-      ctx.lineWidth = 0.8;
-      for (const v of verts) {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(v.x, v.y);
-        ctx.stroke();
-      }
-
-      // Rainbow edge (chromatic dispersion along edges)
-      ctx.lineWidth = 2;
-      const edgeHue = (t * 30) % 360;
-      for (let i = 0; i < 3; i++) {
-        const v1 = verts[i], v2 = verts[(i + 1) % 3];
-        const hue = (edgeHue + i * 80) % 360;
-        ctx.strokeStyle = `hsla(${hue}, 85%, 65%, 0.7)`;
-        ctx.beginPath();
-        ctx.moveTo(v1.x, v1.y);
-        ctx.lineTo(v2.x, v2.y);
-        ctx.stroke();
-      }
-      // Crisp white inner edge
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(verts[0].x, verts[0].y);
-      ctx.lineTo(verts[1].x, verts[1].y);
-      ctx.lineTo(verts[2].x, verts[2].y);
-      ctx.closePath();
-      ctx.stroke();
-
-      // Bright vertex points
-      for (const v of verts) {
-        ctx.shadowColor = "rgba(255,255,255,1)";
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(v.x, v.y, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-
-      // Central core glow (the "intelligence" point)
-      ctx.globalCompositeOperation = "screen";
-      const corePulse = 0.7 + Math.sin(t * 2) * 0.3;
-      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 16);
-      coreGrad.addColorStop(0, `rgba(255,255,255,${corePulse})`);
-      coreGrad.addColorStop(0.4, `rgba(168,85,247,${corePulse * 0.6})`);
-      coreGrad.addColorStop(1, "rgba(168,85,247,0)");
+      // Inner bright core
+      const coreR = 22 * core.pulse;
+      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+      coreGrad.addColorStop(0, `rgba(255,255,255,${core.pulse})`);
+      coreGrad.addColorStop(0.4, `rgba(255,240,220,${0.8 * core.pulse})`);
+      coreGrad.addColorStop(1, "rgba(255,200,150,0)");
       ctx.fillStyle = coreGrad;
-      ctx.fillRect(cx - 16, cy - 16, 32, 32);
+      ctx.fillRect(cx - coreR, cy - coreR, coreR * 2, coreR * 2);
+
+      // Lens flare cross
+      const flareLen = 120 * core.pulse;
+      const flareGrad = ctx.createLinearGradient(cx - flareLen, cy, cx + flareLen, cy);
+      flareGrad.addColorStop(0, "rgba(255,255,255,0)");
+      flareGrad.addColorStop(0.5, `rgba(255,255,255,${0.35 * core.pulse})`);
+      flareGrad.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = flareGrad;
+      ctx.fillRect(cx - flareLen, cy - 1, flareLen * 2, 2);
+      const flareGradV = ctx.createLinearGradient(cx, cy - flareLen * 0.6, cx, cy + flareLen * 0.6);
+      flareGradV.addColorStop(0, "rgba(255,255,255,0)");
+      flareGradV.addColorStop(0.5, `rgba(255,255,255,${0.25 * core.pulse})`);
+      flareGradV.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = flareGradV;
+      ctx.fillRect(cx - 1, cy - flareLen * 0.6, 2, flareLen * 1.2);
+
       ctx.globalCompositeOperation = "source-over";
+
+      // ── Shockwave rings ──
+      ctx.globalCompositeOperation = "screen";
+      for (let i = shockwaves.length - 1; i >= 0; i--) {
+        const sw = shockwaves[i];
+        sw.r += sw.speed * (dt / 16);
+        sw.life -= 0.008 * (dt / 16);
+        if (sw.life <= 0 || sw.r > sw.max) { shockwaves.splice(i, 1); continue; }
+        // Bright ring
+        ctx.strokeStyle = `rgba(255,255,255,${sw.life * 0.45})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Purple glow ring
+        ctx.strokeStyle = `rgba(168,85,247,${sw.life * 0.35})`;
+        ctx.lineWidth = 10;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Cyan inner ring
+        ctx.strokeStyle = `rgba(6,182,212,${sw.life * 0.25})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(sw.x, sw.y, sw.r * 0.92, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ── Supernova flash overlay ──
+      if (supernovaFlash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${supernovaFlash * 0.15})`;
+        ctx.fillRect(0, 0, W, H);
+        supernovaFlash -= 0.025 * (dt / 16);
+        if (supernovaFlash < 0) supernovaFlash = 0;
+      }
 
       raf = requestAnimationFrame(tick);
     };
@@ -707,19 +635,19 @@ export function NeuralField() {
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> ONE MIND, FOUR MODES
+          <span className="dot" /> THE GRAVITY OF IDEAS
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          One beam of thought.{" "}
-          <span className="shimmer-text">Four paths of brilliance.</span>
+          Every thought{" "}
+          <span className="shimmer-text">finds its orbit.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Chat, Vision, Code and Research — refracted from a single intelligence. Move your cursor to bend the light, click to fire a sync pulse.
+          A galaxy of intelligence — thousands of ideas spinning around a single core. Drag your cursor to bend space, click to ignite a supernova.
         </p>
       </div>
 
       {/* Canvas */}
-      <div style={{ position: "relative", height: 520, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ position: "relative", height: 540, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
@@ -734,11 +662,11 @@ export function NeuralField() {
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            move to bend
+            drag to bend space
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            click to sync
+            click for supernova
           </span>
         </div>
       </div>
