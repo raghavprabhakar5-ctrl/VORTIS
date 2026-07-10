@@ -309,8 +309,9 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  SYNAPTIC AURORA — fully animated flow-field + aurora + hex mesh
-//  (replaces NeuralField) — no orbs, only ribbons / hexes / streams
+//  AURORA VALLEY — fully animated night-sky landscape
+//  (replaces NeuralField) — no neural / no orbs, only
+//  aurora curtains, stars, shooting stars, mountains & lake
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -322,104 +323,85 @@ export function NeuralField() {
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const mouse = { x: -9999, y: -9999, active: false };
+    const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
 
-    // THEME-RESTRICTED PALETTE — purple + cyan only
-    const PALETTE = [
-      [168, 85, 247],  // a855f7
-      [124, 58, 237],  // 7C3AED
-      [6, 182, 212],   // 06b6d4
-      [139, 92, 246],  // 8b5cf6
-    ];
-
-    let particles = [];
-    let hexes = [];
-    let pulses = [];
-    let shocks = [];
-    let ribbons = [];
-    let scanY = 0;
+    let stars = [];
+    let bigStars = [];
+    let shooters = [];
+    let mountains = [];
+    let auroras = [];
     let t0 = performance.now();
     let last = t0;
+    let lastShooter = 0;
+    let nextShooterDelay = 2200;
     let seeded = false;
 
-    let seed = 98765;
+    let seed = 424242;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
-    // ── Simple 2D value-noise (for flow-field) ──
-    const perm = new Uint8Array(512);
-    for (let i = 0; i < 256; i++) perm[i] = i;
-    for (let i = 255; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [perm[i], perm[j]] = [perm[j], perm[i]];
-    }
-    for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
-    const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
-    const lerp = (a, b, t) => a + (b - a) * t;
-    const grad = (h, x, y) => {
-      const g = h & 3;
-      const u = g < 2 ? x : y;
-      const v = g < 2 ? y : x;
-      return ((g & 1) ? -u : u) + ((g & 2) ? -v : v);
-    };
-    const noise = (x, y) => {
-      const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
-      x -= Math.floor(x); y -= Math.floor(y);
-      const u = fade(x), v = fade(y);
-      const A = perm[X] + Y, B = perm[X + 1] + Y;
-      return lerp(
-        lerp(grad(perm[A], x, y), grad(perm[B], x - 1, y), u),
-        lerp(grad(perm[A + 1], x, y - 1), grad(perm[B + 1], x - 1, y - 1), u),
-        v
-      );
+    const PALETTE = {
+      auroraA: [168, 85, 247],   // purple
+      auroraB: [124, 58, 237],   // deep violet
+      auroraC: [6, 182, 212],    // cyan
+      auroraD: [236, 72, 153],   // pink accent (sparingly)
+      mtnFar: [22, 16, 42],
+      mtnMid: [16, 12, 32],
+      mtnNear: [8, 6, 18],
+      lake: [6, 4, 16],
     };
 
     const init = () => {
-      // Flow-field particles
-      const PCOUNT = Math.min(700, Math.max(220, Math.floor(W * H / 1800)));
-      particles = Array.from({ length: PCOUNT }, () => {
-        const c = PALETTE[Math.floor(rng() * PALETTE.length)];
-        return {
-          x: rng() * W, y: rng() * H,
-          vx: 0, vy: 0,
-          life: rng() * 200,
-          maxLife: 140 + rng() * 200,
-          r: 0.5 + rng() * 1.4,
-          color: c,
-        };
-      });
-
-      // Hexagonal mesh nodes (NOT orbs)
-      hexes = [];
-      const SPACING = 115;
-      const ROWH = SPACING * 0.866;
-      for (let row = 0, y = SPACING / 2; y < H + SPACING; y += ROWH, row++) {
-        const offset = (row % 2) * (SPACING / 2);
-        for (let x = SPACING / 2 + offset; x < W + SPACING; x += SPACING) {
-          if (rng() < 0.45) continue; // sparse, breathable
-          hexes.push({
-            x, y,
-            r: 13 + rng() * 11,
-            phase: rng() * Math.PI * 2,
-            color: PALETTE[hexes.length % PALETTE.length],
-            activity: 0,
-            charge: rng(),
-            rot: rng() * Math.PI,
-            rotSpeed: (rng() - 0.5) * 0.012,
-            label: ['SYNC', 'NODE', 'CORE', 'EDGE', 'FLOW', 'MESH', 'GATE', 'WAVE'][hexes.length % 8],
-          });
-        }
-      }
-
-      // Aurora ribbons — long flowing horizontal bands, NOT orbs
-      ribbons = Array.from({ length: 4 }, (_, i) => ({
-        yBase: 0.18 + i * 0.20,
-        amp: 40 + rng() * 55,
-        freq: 0.003 + rng() * 0.004,
-        speed: 0.4 + rng() * 0.5,
-        thickness: 60 + rng() * 80,
-        color: PALETTE[i % PALETTE.length],
+      // ── Stars (small, dense, twinkling) ──
+      const STAR_COUNT = Math.min(280, Math.max(120, Math.floor(W * H / 2400)));
+      stars = Array.from({ length: STAR_COUNT }, () => ({
+        x: rng() * W,
+        y: rng() * H * 0.78, // above lake line
+        r: 0.3 + rng() * 0.9,
+        baseAlpha: 0.3 + rng() * 0.6,
+        twinkleSpeed: 0.5 + rng() * 1.8,
         phase: rng() * Math.PI * 2,
+        depth: 0.2 + rng() * 0.8, // for parallax
       }));
+
+      // ── Big sparkle stars (a few, with cross-shape glints) ──
+      bigStars = Array.from({ length: 6 }, () => ({
+        x: rng() * W,
+        y: rng() * H * 0.55,
+        r: 1.4 + rng() * 1.0,
+        baseAlpha: 0.6 + rng() * 0.4,
+        twinkleSpeed: 0.6 + rng() * 1.0,
+        phase: rng() * Math.PI * 2,
+        depth: 0.5 + rng() * 0.5,
+      }));
+
+      // ── Mountain layers (3 parallax silhouettes) ──
+      // Each layer is a polyline across the canvas, jagged using value-noise-ish sum of sines
+      const buildRange = (baseY, amp, seed1, freq) => {
+        const pts = [];
+        const step = 14;
+        for (let x = -20; x <= W + 20; x += step) {
+          const y = baseY
+            - Math.sin(x * freq + seed1) * amp
+            - Math.sin(x * freq * 2.3 + seed1 * 1.7) * amp * 0.4
+            - Math.sin(x * freq * 0.5 + seed1 * 0.6) * amp * 0.7;
+          pts.push({ x, y });
+        }
+        return pts;
+      };
+
+      mountains = [
+        { pts: buildRange(H * 0.78, 38, 1.3, 0.006), color: PALETTE.mtnFar, parallax: 0.04, depth: 0.3 },
+        { pts: buildRange(H * 0.88, 56, 2.7, 0.009), color: PALETTE.mtnMid, parallax: 0.09, depth: 0.5 },
+        { pts: buildRange(H * 0.97, 70, 4.1, 0.013), color: PALETTE.mtnNear, parallax: 0.16, depth: 0.8 },
+      ];
+
+      // ── Aurora curtains (4 flowing bands) ──
+      auroras = [
+        { yBase: H * 0.18, amp: 60, freq: 0.0035, speed: 0.35, thickness: 130, color: PALETTE.auroraA, phase: 0, intensity: 0.85 },
+        { yBase: H * 0.28, amp: 75, freq: 0.0028, speed: 0.28, thickness: 110, color: PALETTE.auroraC, phase: 1.7, intensity: 0.70 },
+        { yBase: H * 0.13, amp: 45, freq: 0.0045, speed: 0.45, thickness: 90,  color: PALETTE.auroraB, phase: 3.1, intensity: 0.65 },
+        { yBase: H * 0.36, amp: 50, freq: 0.0030, speed: 0.22, thickness: 80,  color: PALETTE.auroraD, phase: 4.5, intensity: 0.35 }, // pink accent, subtle
+      ];
 
       seeded = true;
     };
@@ -436,46 +418,181 @@ export function NeuralField() {
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-      mouse.active = true;
+      mouse.tx = (e.clientX - rect.left) / rect.width;
+      mouse.ty = (e.clientY - rect.top) / rect.height;
     };
-    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
-
-    const onClick = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-      // Hexagonal shockwave (NOT circular orb)
-      shocks.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.65, life: 1, rot: 0 });
-      shocks.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.45, life: 1, rot: Math.PI / 6, delay: 0.18 });
-      // Ignite nearby hexes & send pulses
-      for (const h of hexes) {
-        const d = Math.hypot(h.x - cx, h.y - cy);
-        if (d < 220) {
-          h.activity = Math.min(1.5, h.activity + 1.2);
-          const targets = hexes
-            .filter(o => o !== h && Math.hypot(o.x - h.x, o.y - h.y) < 300)
-            .sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))
-            .slice(0, 2);
-          for (const tg of targets) {
-            pulses.push({ from: h, to: tg, t: 0, speed: 0.012, color: h.color, trail: [] });
-          }
-        }
-      }
-    };
-
     canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
-    canvas.addEventListener("click", onClick);
 
-    const drawHex = (cx, cy, r, rot) => {
+    const spawnShooter = () => {
+      const fromLeft = rng() > 0.5;
+      const startX = fromLeft ? -40 : W + 40;
+      const startY = rng() * H * 0.4;
+      const angle = fromLeft
+        ? (Math.PI * 0.12 + rng() * Math.PI * 0.10)
+        : (Math.PI - Math.PI * 0.12 - rng() * Math.PI * 0.10);
+      const speed = 9 + rng() * 6;
+      shooters.push({
+        x: startX, y: startY,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        trail: [],
+        color: rng() > 0.5 ? PALETTE.auroraA : PALETTE.auroraC,
+      });
+    };
+
+    const drawStar = (s, t) => {
+      const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
+      const alpha = s.baseAlpha * (0.4 + tw * 0.6);
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
       ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = rot + i * Math.PI / 3;
-        const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+
+    const drawBigStar = (s, t) => {
+      const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
+      const alpha = s.baseAlpha * (0.5 + tw * 0.5);
+      const [r, g, b] = PALETTE.auroraC;
+      // glow
+      const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 6);
+      glow.addColorStop(0, `rgba(${r},${g},${b},${alpha * 0.6})`);
+      glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = glow;
+      ctx.fillRect(s.x - s.r * 6, s.y - s.r * 6, s.r * 12, s.r * 12);
+      // core
+      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+      // cross glint
+      ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.5})`;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(s.x - s.r * 5, s.y); ctx.lineTo(s.x + s.r * 5, s.y);
+      ctx.moveTo(s.x, s.y - s.r * 5); ctx.lineTo(s.x, s.y + s.r * 5);
+      ctx.stroke();
+    };
+
+    const drawAuroraCurtain = (a, t) => {
+      const [r, g, b] = a.color;
+      const px = (mouse.x - 0.5) * 18; // subtle parallax shift
+      // Build the curtain: top edge follows sine, bottom edge mirrors with thickness falloff
+      const grad = ctx.createLinearGradient(0, a.yBase - a.thickness, 0, a.yBase + a.thickness);
+      grad.addColorStop(0, `rgba(${r},${g},${b},0)`);
+      grad.addColorStop(0.45, `rgba(${r},${g},${b},${0.22 * a.intensity})`);
+      grad.addColorStop(0.6, `rgba(${r},${g},${b},${0.18 * a.intensity})`);
+      grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      // Top edge
+      for (let x = -20; x <= W + 20; x += 14) {
+        const y = a.yBase
+          + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
+          + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35
+          + Math.sin(x * a.freq * 0.5 + t * a.speed * 0.7) * a.amp * 0.5
+          - a.thickness * 0.5;
+        if (x === -20) ctx.moveTo(x + px, y); else ctx.lineTo(x + px, y);
+      }
+      // Bottom edge (reverse)
+      for (let x = W + 20; x >= -20; x -= 14) {
+        const y = a.yBase
+          + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
+          + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35
+          + Math.sin(x * a.freq * 0.5 + t * a.speed * 0.7) * a.amp * 0.5
+          + a.thickness * 0.5;
+        ctx.lineTo(x + px, y);
       }
       ctx.closePath();
+      ctx.fill();
+
+      // Bright leading edge (thin highlight along the top contour)
+      ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 * a.intensity})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let x = -20; x <= W + 20; x += 14) {
+        const y = a.yBase
+          + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
+          + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35
+          + Math.sin(x * a.freq * 0.5 + t * a.speed * 0.7) * a.amp * 0.5
+          - a.thickness * 0.18;
+        if (x === -20) ctx.moveTo(x + px, y); else ctx.lineTo(x + px, y);
+      }
+      ctx.stroke();
+    };
+
+    const drawMountains = (t) => {
+      for (const m of mountains) {
+        const px = (mouse.x - 0.5) * 30 * m.parallax;
+        ctx.fillStyle = m.color;
+        ctx.beginPath();
+        ctx.moveTo(m.pts[0].x + px, H);
+        for (const p of m.pts) ctx.lineTo(p.x + px, p.y);
+        ctx.lineTo(m.pts[m.pts.length - 1].x + px, H);
+        ctx.closePath();
+        ctx.fill();
+        // Subtle rim light along the top edge
+        ctx.strokeStyle = `rgba(168,85,247,${0.08 + m.depth * 0.05})`;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        for (let i = 0; i < m.pts.length; i++) {
+          const p = m.pts[i];
+          if (i === 0) ctx.moveTo(p.x + px, p.y);
+          else ctx.lineTo(p.x + px, p.y);
+        }
+        ctx.stroke();
+      }
+    };
+
+    const drawLake = (t) => {
+      const lakeTop = H * 0.92;
+      // Lake base
+      const lg = ctx.createLinearGradient(0, lakeTop, 0, H);
+      lg.addColorStop(0, "rgba(10,6,22,0.7)");
+      lg.addColorStop(1, "rgba(3,3,10,1)");
+      ctx.fillStyle = lg;
+      ctx.fillRect(0, lakeTop, W, H - lakeTop);
+
+      // Mirrored aurora reflection (flipped, with sinusoidal ripple distortion)
+      ctx.globalCompositeOperation = "screen";
+      for (const a of auroras) {
+        const [r, g, b] = a.color;
+        const grad = ctx.createLinearGradient(0, lakeTop, 0, H);
+        grad.addColorStop(0, `rgba(${r},${g},${b},${0.18 * a.intensity})`);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        const reflY = lakeTop + 4;
+        ctx.moveTo(-20, reflY);
+        for (let x = -20; x <= W + 20; x += 16) {
+          // Mirror y around lakeTop, then add horizontal ripple
+          const origY = a.yBase
+            + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
+            + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35;
+          const mirrorDist = lakeTop - origY;
+          const ripple = Math.sin(x * 0.02 + t * 1.4) * 4 + Math.sin(x * 0.06 + t * 2.1) * 2;
+          const y = reflY + Math.max(0, mirrorDist * 0.55) + ripple;
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(W + 20, reflY);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // Horizontal ripple lines on lake
+      ctx.strokeStyle = "rgba(255,255,255,0.04)";
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < 6; i++) {
+        const y = lakeTop + 4 + i * ((H - lakeTop) / 6);
+        const off = Math.sin(t * 1.2 + i * 0.7) * 6;
+        ctx.beginPath();
+        ctx.moveTo(0, y + off);
+        for (let x = 0; x <= W; x += 24) {
+          ctx.lineTo(x, y + off + Math.sin(x * 0.025 + t * 1.6 + i) * 1.2);
+        }
+        ctx.stroke();
+      }
     };
 
     const tick = (now) => {
@@ -483,246 +600,86 @@ export function NeuralField() {
       last = now;
       const t = (now - t0) * 0.001;
 
-      // trail-fade clear (subtle bloom)
-      ctx.fillStyle = "rgba(3,3,10,0.18)";
+      // smooth mouse follow
+      mouse.x += (mouse.tx - mouse.x) * 0.06;
+      mouse.y += (mouse.ty - mouse.y) * 0.06;
+
+      // Sky gradient background
+      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      sky.addColorStop(0, "#06040f");
+      sky.addColorStop(0.5, "#0a0820");
+      sky.addColorStop(0.85, "#0d0a22");
+      sky.addColorStop(1, "#050410");
+      ctx.fillStyle = sky;
       ctx.fillRect(0, 0, W, H);
 
-      // ─── AURORA RIBBONS (back layer) — flowing horizontal bands ───
+      // ── Stars (with parallax) ──
+      const px = (mouse.x - 0.5) * 14;
+      const py = (mouse.y - 0.5) * 8;
+      for (const s of stars) {
+        const sx = s.x + px * s.depth;
+        const sy = s.y + py * s.depth;
+        // temporarily set position for draw
+        const orig = { x: s.x, y: s.y };
+        s.x = sx; s.y = sy;
+        drawStar(s, t);
+        s.x = orig.x; s.y = orig.y;
+      }
+      for (const s of bigStars) {
+        const sx = s.x + px * s.depth;
+        const sy = s.y + py * s.depth;
+        const orig = { x: s.x, y: s.y };
+        s.x = sx; s.y = sy;
+        drawBigStar(s, t);
+        s.x = orig.x; s.y = orig.y;
+      }
+
+      // ── Aurora curtains (screen-blended for glow) ──
       ctx.globalCompositeOperation = "screen";
-      for (const rb of ribbons) {
-        const yMid = H * rb.yBase + Math.sin(t * rb.speed + rb.phase) * 30;
-        const [r, g, b] = rb.color;
-        const grad = ctx.createLinearGradient(0, yMid - rb.thickness, 0, yMid + rb.thickness);
-        grad.addColorStop(0, `rgba(${r},${g},${b},0)`);
-        grad.addColorStop(0.5, `rgba(${r},${g},${b},0.11)`);
-        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.moveTo(0, yMid);
-        for (let x = 0; x <= W; x += 16) {
-          const y = yMid
-            + Math.sin(x * rb.freq + t * rb.speed * 1.6 + rb.phase) * rb.amp
-            + Math.sin(x * rb.freq * 2.3 + t * rb.speed * 1.1) * rb.amp * 0.4;
-          ctx.lineTo(x, y);
-        }
-        ctx.lineTo(W, yMid + rb.thickness);
-        for (let x = W; x >= 0; x -= 16) {
-          const y = yMid
-            + Math.sin(x * rb.freq + t * rb.speed * 1.6 + rb.phase) * rb.amp
-            + Math.sin(x * rb.freq * 2.3 + t * rb.speed * 1.1) * rb.amp * 0.4
-            + rb.thickness;
-          ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fill();
-      }
+      for (const a of auroras) drawAuroraCurtain(a, t);
       ctx.globalCompositeOperation = "source-over";
 
-      // ─── HEX MESH CONNECTIONS (mid-back) ───
-      const LINK_DIST = 180;
-      ctx.lineWidth = 0.6;
-      for (let i = 0; i < hexes.length; i++) {
-        for (let j = i + 1; j < hexes.length; j++) {
-          const a = hexes[i], b = hexes[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < LINK_DIST) {
-            const alpha = (1 - d / LINK_DIST) * 0.18;
-            const [r, g, bl] = a.color;
-            ctx.strokeStyle = `rgba(${r},${g},${bl},${alpha})`;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
-            ctx.stroke();
-          }
-        }
+      // ── Shooting stars ──
+      if (now - lastShooter > nextShooterDelay) {
+        spawnShooter();
+        lastShooter = now;
+        nextShooterDelay = 1800 + rng() * 3500;
       }
-
-      // ─── FLOW-FIELD PARTICLES (curl-noise streams) ───
       ctx.globalCompositeOperation = "lighter";
-      for (const p of particles) {
-        const n = noise(p.x * 0.0025, p.y * 0.0025 + t * 0.05);
-        const angle = n * Math.PI * 4;
-        const speed = 0.9;
-        p.vx = lerp(p.vx, Math.cos(angle) * speed, 0.15);
-        p.vy = lerp(p.vy, Math.sin(angle) * speed, 0.15);
-
-        // mouse repulsion (wake)
-        if (mouse.active) {
-          const dx = p.x - mouse.x, dy = p.y - mouse.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 120 && d > 0.1) {
-            const f = (1 - d / 120) * 2.4;
-            p.vx += (dx / d) * f;
-            p.vy += (dy / d) * f;
-          }
-        }
-
-        // shock boost
-        for (const s of shocks) {
-          if (s.delay && s.delay > 0) continue;
-          const sd = Math.hypot(p.x - s.x, p.y - s.y);
-          if (Math.abs(sd - s.r) < 32) {
-            const f = s.life * 1.4;
-            const ang = Math.atan2(p.y - s.y, p.x - s.x);
-            p.vx += Math.cos(ang) * f;
-            p.vy += Math.sin(ang) * f;
-          }
-        }
-
-        p.x += p.vx * (dt / 16);
-        p.y += p.vy * (dt / 16);
-        p.life++;
-
-        // wrap & reset
-        if (p.x < -10) p.x = W + 10;
-        if (p.x > W + 10) p.x = -10;
-        if (p.y < -10) p.y = H + 10;
-        if (p.y > H + 10) p.y = -10;
-        if (p.life > p.maxLife) {
-          p.x = rng() * W; p.y = rng() * H; p.life = 0;
-          p.vx = 0; p.vy = 0;
-        }
-
-        const fadeP = Math.sin((p.life / p.maxLife) * Math.PI); // fade in/out
-        const [r, g, b] = p.color;
-        ctx.fillStyle = `rgba(${r},${g},${b},${0.65 * fadeP})`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalCompositeOperation = "source-over";
-
-      // ─── HEXAGONAL SHOCKWAVES (click ripples — NOT circular) ───
-      for (let i = shocks.length - 1; i >= 0; i--) {
-        const s = shocks[i];
-        if (s.delay && s.delay > 0) { s.delay -= dt / 1000; continue; }
-        s.r += 4.5 * (dt / 16);
-        s.life -= 0.012 * (dt / 16);
-        if (s.life <= 0 || s.r > s.max) { shocks.splice(i, 1); continue; }
-        const rot = (s.rot || 0) + t * 0.5;
-        ctx.strokeStyle = `rgba(168,85,247,${s.life * 0.5})`;
-        ctx.lineWidth = 2;
-        drawHex(s.x, s.y, s.r, rot);
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(6,182,212,${s.life * 0.25})`;
-        ctx.lineWidth = 1;
-        drawHex(s.x, s.y, s.r * 0.85, rot + Math.PI / 6);
-        ctx.stroke();
-      }
-
-      // ─── PULSES (traveling energy along mesh) ───
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = pulses.length - 1; i >= 0; i--) {
-        const p = pulses[i];
-        p.t += p.speed * (dt / 16);
-        if (p.t >= 1) { p.to.activity = Math.min(1.5, p.to.activity + 0.8); pulses.splice(i, 1); continue; }
-        const x = lerp(p.from.x, p.to.x, p.t);
-        const y = lerp(p.from.y, p.to.y, p.t);
-        p.trail.push({ x, y });
-        if (p.trail.length > 12) p.trail.shift();
-        const [r, g, b] = p.color;
-        for (let k = 0; k < p.trail.length; k++) {
-          const tp = p.trail[k];
-          const ta = (k / p.trail.length) * 0.6;
+      for (let i = shooters.length - 1; i >= 0; i--) {
+        const sh = shooters[i];
+        sh.x += sh.vx * (dt / 16);
+        sh.y += sh.vy * (dt / 16);
+        sh.life -= 0.012 * (dt / 16);
+        sh.trail.push({ x: sh.x, y: sh.y });
+        if (sh.trail.length > 18) sh.trail.shift();
+        const [r, g, b] = sh.color;
+        for (let k = 0; k < sh.trail.length; k++) {
+          const tp = sh.trail[k];
+          const ta = (k / sh.trail.length) * sh.life * 0.8;
           ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
           ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 1.5, 0, Math.PI * 2);
+          ctx.arc(tp.x, tp.y, 1 + (k / sh.trail.length) * 1.4, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 14;
-        ctx.fillStyle = "#fff";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = `rgba(255,255,255,${sh.life})`;
         ctx.beginPath();
-        ctx.arc(x, y, 2, 0, Math.PI * 2);
+        ctx.arc(sh.x, sh.y, 1.8, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
+        if (sh.life <= 0 || sh.x < -60 || sh.x > W + 60 || sh.y > H * 0.6) {
+          shooters.splice(i, 1);
+        }
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ─── HEX NODES (foreground — NOT orbs) ───
-      for (const h of hexes) {
-        h.rot += h.rotSpeed;
-        h.charge += 0.002 + h.activity * 0.004;
-        if (h.charge >= 1) {
-          const targets = hexes
-            .filter(o => o !== h && Math.hypot(o.x - h.x, o.y - h.y) < 220)
-            .sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))
-            .slice(0, 1);
-          for (const tg of targets) pulses.push({ from: h, to: tg, t: 0, speed: 0.01, color: h.color, trail: [] });
-          h.charge = 0;
-          h.activity = Math.min(1.5, h.activity + 0.4);
-        }
-        h.activity *= 0.96;
-        const pulse = 0.7 + Math.sin(t * 1.5 + h.phase) * 0.3;
-        const actBoost = h.activity;
-        const [r, g, b] = h.color;
+      // ── Mountains ──
+      drawMountains(t);
 
-        // activity halo (subtle radial — follows node, not a free-floating orb)
-        if (actBoost > 0.05) {
-          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 40);
-          halo.addColorStop(0, `rgba(${r},${g},${b},${0.35 * actBoost})`);
-          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          ctx.fillStyle = halo;
-          ctx.fillRect(h.x - 40, h.y - 40, 80, 80);
-        }
-
-        // rotating outer hex (dashed)
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.15)`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 5]);
-        drawHex(h.x, h.y, h.r + 8, h.rot);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // solid hex with glow
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 12 * pulse + 8 * actBoost;
-        ctx.fillStyle = `rgba(${r},${g},${b},${0.25 * pulse + 0.1 + actBoost * 0.3})`;
-        drawHex(h.x, h.y, h.r, h.rot);
-        ctx.fill();
-        ctx.strokeStyle = `rgba(${r},${g},${b},${0.7 * pulse + 0.2})`;
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // inner bright hex (counter-rotating)
-        ctx.fillStyle = `rgba(255,255,255,${0.5 + actBoost * 0.4})`;
-        drawHex(h.x, h.y, h.r * 0.35, -h.rot);
-        ctx.fill();
-
-        // label on hover
-        if (mouse.active) {
-          const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-          if (md < 90) {
-            const op = (1 - md / 90);
-            ctx.font = "10px 'JetBrains Mono', monospace";
-            const tw = ctx.measureText(h.label).width;
-            ctx.fillStyle = `rgba(3,3,10,${op * 0.85})`;
-            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r - 22, tw + 12, 16);
-            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-            ctx.textAlign = "center";
-            ctx.fillText(h.label, h.x, h.y - h.r - 11);
-          }
-        }
-      }
-
-      // ─── HORIZONTAL SCAN BAND ───
-      scanY += 0.6 * (dt / 16);
-      if (scanY > H + 60) scanY = -60;
-      const sg = ctx.createLinearGradient(0, scanY - 30, 0, scanY + 30);
-      sg.addColorStop(0, "rgba(124,58,237,0)");
-      sg.addColorStop(0.5, "rgba(124,58,237,0.06)");
-      sg.addColorStop(1, "rgba(124,58,237,0)");
-      ctx.fillStyle = sg;
-      ctx.fillRect(0, scanY - 30, W, 60);
-
-      // ─── CURSOR SPOTLIGHT (subtle, follows mouse — not an orb) ───
-      if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 200);
-        glow.addColorStop(0, "rgba(124,58,237,0.10)");
-        glow.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-      }
+      // ── Lake (with aurora reflection) ──
+      drawLake(t);
 
       raf = requestAnimationFrame(tick);
     };
@@ -732,58 +689,46 @@ export function NeuralField() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("mouseleave", onLeave);
-      canvas.removeEventListener("click", onClick);
     };
   }, []);
 
   return (
     <section ref={ref} className="section" style={{ padding: "60px 0 80px", position: "relative" }}>
-      <style>{`
-        @keyframes nfHexSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
-
       {/* Header — sits ABOVE the canvas */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> THE LIVING NETWORK
+          <span className="dot" /> THE NIGHT SHIFT
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          A field that{" "}
-          <span className="shimmer-text">thinks in waves.</span>
+          Built for the hours{" "}
+          <span className="shimmer-text">when you do your best work.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Aurora ribbons, flow-field currents and a hexagonal mesh — move your cursor to disturb the field, click to ignite it.
+          Aurora skies, shooting stars and a quiet valley — move your cursor across the horizon.
         </p>
       </div>
 
       {/* Canvas — clean, contained, with gradient fade at edges */}
-      <div style={{ position: "relative", height: 460, maxWidth: 1200, margin: "0 auto" }}>
-        {/* Edge fades */}
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 40, background: "linear-gradient(180deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 40, background: "linear-gradient(90deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 40, background: "linear-gradient(270deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-
+      <div style={{ position: "relative", height: 480, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
         />
 
-        {/* Hint at bottom — diamond-shaped markers, NOT orbs */}
+        {/* Hint at bottom — diamond markers, NOT orbs */}
         <div style={{
-          position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
+          position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)",
           display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
-          fontSize: 10, color: "rgba(255,255,255,0.3)",
+          fontSize: 10, color: "rgba(255,255,255,0.45)",
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            move to disturb
+            move for parallax
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            click to ignite
+            watch for shooting stars
           </span>
         </div>
       </div>
