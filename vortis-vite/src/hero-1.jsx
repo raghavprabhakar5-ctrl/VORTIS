@@ -309,10 +309,8 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  PARTICLE GALAXY — spiral arms orbiting a glowing core
-//  (replaces NeuralField) — thousands of particles, motion-blur
-//  trails, cursor gravity well, click-to-detonate supernova.
-//  Pure 2D canvas, no Three.js, no THREE.Clock.
+//  CONNECTION CONSTELLATION — Vortis at the center, people orbiting,
+//  live data beams flowing between them. Pure 2D canvas, no Three.js.
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -326,107 +324,58 @@ export function NeuralField() {
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
     const mouse = { x: -9999, y: -9999, active: false };
 
-    let stars = [];
-    let particles = [];
-    let core = null;
-    let shockwaves = [];
-    let supernovaFlash = 0;
+    let people = [];
+    let pulses = [];      // data packets traveling Vortis ↔ person
+    let ripples = [];     // click ripples
+    let bursts = [];      // connection-established bursts
+    let stats = { active: 0, total: 0 };
     let t0 = performance.now();
     let last = t0;
+    let lastSpawn = 0;
+    let lastPulse = 0;
     let seeded = false;
 
-    let seed = 99173;
+    let seed = 55543;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
+    const PALETTE = {
+      vortis: [168, 85, 247],    // purple
+      vortisDeep: [124, 58, 237],
+      cyan: [6, 182, 212],
+      warm: [251, 191, 36],      // amber for incoming packets
+      pink: [236, 72, 153],
+    };
+
+    const NAMES = ['Alex', 'Maya', 'Ken', 'Riya', 'Sam', 'Yuki', 'Leo', 'Zara', 'Dev', 'Nia', 'Kai', 'Aria', 'Theo', 'Lina', 'Jax', 'Mira', 'Reza', 'Iris', 'Noor', 'Eve', 'Tao', 'Sia', 'Omar', 'Luna', 'Finn', 'Ada', 'Ravi', 'Cleo', 'Ivan', 'Mina'];
+
     const init = () => {
-      // ── Background starfield (parallax, distinct from galaxy) ──
-      const STAR_COUNT = Math.min(220, Math.max(100, Math.floor(W * H / 3500)));
-      stars = Array.from({ length: STAR_COUNT }, () => ({
-        x: rng() * W,
-        y: rng() * H,
-        r: 0.2 + rng() * 1.0,
-        baseAlpha: 0.15 + rng() * 0.55,
-        twinkleSpeed: 0.3 + rng() * 1.4,
-        phase: rng() * Math.PI * 2,
-        depth: 0.1 + rng() * 0.9,
-      }));
-
-      // ── Galaxy parameters ──
       const cx = W * 0.5, cy = H * 0.5;
-      const maxR = Math.min(W, H) * 0.42;
-      const ARMS = 3;
-      const PARTICLE_COUNT = Math.min(4500, Math.max(2000, Math.floor(W * H / 90)));
-
-      core = { x: cx, y: cy, r: 18, pulse: 0 };
-
-      particles = [];
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
-        // Distribute particles along spiral arms with scatter
-        const arm = i % ARMS;
-        const armOffset = (arm / ARMS) * Math.PI * 2;
-
-        // Radius — bias toward center (more density inside)
-        const u = rng();
-        const radius = Math.pow(u, 0.7) * maxR + 8;
-
-        // Spiral tightness — log spiral
-        const spiralAngle = Math.log(radius / 8 + 1) * 2.2 + armOffset;
-
-        // Scatter perpendicular to arm (dust lane effect)
-        const scatter = (rng() - 0.5) * 0.5 * (1 - radius / maxR * 0.3);
-        const angle = spiralAngle + scatter;
-
-        // Differential rotation: inner orbits faster
-        const orbitSpeed = 0.0008 / (radius / maxR + 0.15);
-
-        // Color: white-hot core → purple mid → cyan outer → dim edge
-        const tRel = radius / maxR;
-        let r, g, b;
-        if (tRel < 0.15) {
-          // Core: white-yellow
-          r = 255; g = 245 + rng() * 10; b = 220 + rng() * 35;
-        } else if (tRel < 0.45) {
-          // Inner arm: purple-magenta
-          const k = (tRel - 0.15) / 0.30;
-          r = 255 - k * 90;  // → 165
-          g = 245 - k * 160; // → 85
-          b = 220 - k * 5;   // → 215  (close to #a855f7)
-        } else if (tRel < 0.78) {
-          // Mid arm: cyan
-          const k = (tRel - 0.45) / 0.33;
-          r = 165 - k * 159; // → 6
-          g = 85 + k * 97;   // → 182
-          b = 215 - k * 33;  // → 182 (close to #06b6d4... actually 06b6d4)
-        } else {
-          // Outer: dim blue-violet
-          const k = (tRel - 0.78) / 0.22;
-          r = 6 + k * 60;    // → 66
-          g = 182 - k * 130; // → 52
-          b = 182 - k * 80;  // → 102
-        }
-
-        // Brightness: bright in core, dim at edges
-        const brightness = (1 - tRel * 0.7) * (0.5 + rng() * 0.5);
-
-        particles.push({
-          radius,
-          angle,
+      const PEOPLE_COUNT = 16;
+      people = [];
+      for (let i = 0; i < PEOPLE_COUNT; i++) {
+        const angle = (i / PEOPLE_COUNT) * Math.PI * 2 + rng() * 0.2;
+        const orbitR = Math.min(W, H) * (0.28 + rng() * 0.14);
+        const dir = rng() > 0.5 ? 1 : -1;
+        people.push({
+          id: i,
+          name: NAMES[i % NAMES.length],
           baseAngle: angle,
-          orbitSpeed,
-          r: 0.4 + rng() * 1.2 + (tRel < 0.15 ? 0.8 : 0),
-          color: [r, g, b],
-          brightness,
-          twinkle: rng() * Math.PI * 2,
-          twinkleSpeed: 0.5 + rng() * 1.5,
-          // Small radial wobble for organic feel
-          wobbleAmp: rng() * 3,
-          wobbleSpeed: 0.3 + rng() * 0.6,
-          wobblePhase: rng() * Math.PI * 2,
-          // For shockwave displacement
-          dx: 0, dy: 0,
+          angle,
+          orbitR,
+          orbitSpeed: 0.00018 * dir * (0.7 + rng() * 0.6),
+          size: 10 + rng() * 6,
+          phase: rng() * Math.PI * 2,
+          pulseSpeed: 0.8 + rng() * 1.4,
+          color: i % 4 === 0 ? PALETTE.cyan : (i % 5 === 0 ? PALETTE.pink : PALETTE.vortis),
+          activity: 0,
+          hue: rng() * 360, // for avatar gradient
+          online: rng() > 0.15,
+          x: 0, y: 0, // computed each frame
+          label: '',
         });
       }
-
+      stats.total = 50284 + Math.floor(rng() * 200);
+      stats.active = 0;
       seeded = true;
     };
 
@@ -451,11 +400,19 @@ export function NeuralField() {
     const onClick = (e) => {
       const rect = canvas.getBoundingClientRect();
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-      // Supernova at click point
-      shockwaves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.9, life: 1, speed: 8 });
-      shockwaves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.6, life: 1, speed: 6 });
-      // Big flash
-      supernovaFlash = 1;
+      ripples.push({ x: cx, y: cy, r: 0, max: 220, life: 1 });
+      // Send a pulse from Vortis to the 3 nearest people
+      const center = { x: W * 0.5, y: H * 0.5 };
+      const nearby = people
+        .map(p => ({ p, d: Math.hypot(p.x - cx, p.y - cy) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 3)
+        .map(o => o.p);
+      for (const p of nearby) {
+        pulses.push({ from: center, to: p, t: 0, speed: 0.024, color: PALETTE.vortis, life: 1, dir: 'out' });
+        p.activity = Math.min(2, p.activity + 1);
+        bursts.push({ x: p.x, y: p.y, r: 0, max: 50, life: 1, color: p.color });
+      }
     };
 
     canvas.addEventListener("mousemove", onMove);
@@ -467,155 +424,339 @@ export function NeuralField() {
       last = now;
       const t = (now - t0) * 0.001;
 
-      // ── MOTION-BLUR CLEAR (low-alpha fill = natural particle trails) ──
-      // Slightly higher alpha when supernova flashing for faster fade
-      ctx.fillStyle = `rgba(3,3,10,${0.10 + supernovaFlash * 0.15})`;
-      ctx.fillRect(0, 0, W, H);
+      // ── Update people positions ──
+      const cx = W * 0.5, cy = H * 0.5;
+      let activeCount = 0;
+      for (const p of people) {
+        p.angle += p.orbitSpeed * (dt / 16);
+        p.x = cx + Math.cos(p.angle) * p.orbitR;
+        p.y = cy + Math.sin(p.angle) * p.orbitR * 0.62; // tilted orbit
+        p.activity *= 0.97;
+        p.phase += 0.02 * p.pulseSpeed * (dt / 16);
+        if (p.activity > 0.1 || (Math.sin(t * 0.5 + p.id) > 0.3 && p.online)) activeCount++;
+      }
+      stats.active = activeCount;
 
-      // ── Background gradient (very subtle, doesn't overwrite trails fully) ──
-      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.6);
-      bg.addColorStop(0, "rgba(20,10,40,0.04)");
-      bg.addColorStop(1, "rgba(3,3,10,0.04)");
+      // ── Auto-spawn data pulses between Vortis and random people ──
+      if (now - lastPulse > 380) {
+        lastPulse = now;
+        const p = people[Math.floor(rng() * people.length)];
+        const center = { x: cx, y: cy };
+        if (rng() > 0.45) {
+          // Outgoing: Vortis → person (purple)
+          pulses.push({ from: center, to: p, t: 0, speed: 0.018 + rng() * 0.012, color: PALETTE.vortis, life: 1, dir: 'out' });
+        } else {
+          // Incoming: person → Vortis (amber)
+          pulses.push({ from: { x: p.x, y: p.y }, to: { x: cx, y: cy }, t: 0, speed: 0.018 + rng() * 0.012, color: PALETTE.warm, life: 1, dir: 'in', attachTo: p });
+        }
+      }
+
+      // ── Background ──
+      const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.7);
+      bg.addColorStop(0, "#0c0820");
+      bg.addColorStop(0.5, "#06040f");
+      bg.addColorStop(1, "#03030a");
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ── Background stars (twinkle, parallax with cursor) ──
-      const px = mouse.active ? (mouse.x - W / 2) * 0.01 : 0;
-      const py = mouse.active ? (mouse.y - H / 2) * 0.01 : 0;
-      for (const s of stars) {
-        const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
-        const alpha = s.baseAlpha * (0.3 + tw * 0.7);
-        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-        ctx.beginPath();
-        ctx.arc(s.x + px * s.depth, s.y + py * s.depth, s.r, 0, Math.PI * 2);
-        ctx.fill();
+      // ── Cursor spotlight (subtle) ──
+      if (mouse.active) {
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 160);
+        glow.addColorStop(0, "rgba(124,58,237,0.10)");
+        glow.addColorStop(1, "rgba(124,58,237,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, W, H);
       }
 
-      // ── Update + draw galaxy particles ──
-      const cx = W * 0.5, cy = H * 0.5;
-      core.pulse = 0.85 + Math.sin(t * 1.5) * 0.15;
+      // ── Orbit rings (faint guides) ──
+      ctx.strokeStyle = "rgba(124,58,237,0.06)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.min(W, H) * 0.28, Math.min(W, H) * 0.28 * 0.62, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, Math.min(W, H) * 0.42, Math.min(W, H) * 0.42 * 0.62, 0, 0, Math.PI * 2);
+      ctx.stroke();
 
+      // ── Connection beams: Vortis ↔ each person (multi-pass glow) ──
+      ctx.globalCompositeOperation = "screen";
+      for (const p of people) {
+        if (!p.online) continue;
+        const [r, g, b] = p.color;
+        // Beam strength depends on activity + a slow breathing
+        const baseAlpha = 0.05 + p.activity * 0.20;
+        const breath = 0.5 + Math.sin(t * 0.6 + p.phase) * 0.5;
+        const alpha = baseAlpha * (0.4 + breath * 0.6);
+
+        // Multi-pass glow
+        for (const width of [8, 4, 1.5]) {
+          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * (width === 8 ? 0.25 : width === 4 ? 0.5 : 1)})`;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          // Slight curve using control point perpendicular to line
+          const mx = (cx + p.x) / 2, my = (cy + p.y) / 2;
+          const dx = p.x - cx, dy = p.y - cy;
+          const len = Math.hypot(dx, dy) || 1;
+          const off = Math.sin(t * 0.4 + p.id) * 12;
+          ctx.quadraticCurveTo(mx - dy / len * off, my + dx / len * off, p.x, p.y);
+          ctx.stroke();
+        }
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ── Data pulses (traveling packets along beams) ──
       ctx.globalCompositeOperation = "lighter";
-
-      for (const p of particles) {
-        // Orbital motion (differential rotation)
-        p.angle += p.orbitSpeed * (dt / 16);
-
-        // Radial wobble
-        const wobble = Math.sin(t * p.wobbleSpeed + p.wobblePhase) * p.wobbleAmp;
-        const r = p.radius + wobble;
-
-        let x = cx + Math.cos(p.angle) * r;
-        let y = cy + Math.sin(p.angle) * r * 0.55; // squashed = tilted galaxy view
-
-        // ── Cursor gravity well (pulls nearby particles) ──
-        if (mouse.active) {
-          const dx = mouse.x - x, dy = mouse.y - y;
-          const d = Math.hypot(dx, dy);
-          if (d < 140 && d > 0.5) {
-            const pull = (1 - d / 140) * 18;
-            x += (dx / d) * pull;
-            y += (dy / d) * pull;
-          }
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const pu = pulses[i];
+        // If incoming and attached to a person, update source position
+        let fromX = pu.from.x, fromY = pu.from.y;
+        if (pu.dir === 'in' && pu.attachTo) {
+          fromX = pu.attachTo.x; fromY = pu.attachTo.y;
         }
-
-        // ── Shockwave displacement ──
-        for (const sw of shockwaves) {
-          const dx = x - sw.x, dy = y - sw.y;
-          const d = Math.hypot(dx, dy);
-          const ringDist = Math.abs(d - sw.r);
-          if (ringDist < 50 && d > 0.5) {
-            const push = (1 - ringDist / 50) * sw.life * 40;
-            x += (dx / d) * push;
-            y += (dy / d) * push;
+        const toX = pu.to.x, toY = pu.to.y;
+        pu.t += pu.speed * (dt / 16);
+        pu.life = 1 - pu.t;
+        if (pu.t >= 1) {
+          pulses.splice(i, 1);
+          // On arrival: if outgoing, trigger activity on person + burst
+          if (pu.dir === 'out') {
+            pu.to.activity = Math.min(2, pu.to.activity + 1);
+            bursts.push({ x: pu.to.x, y: pu.to.y, r: 0, max: 38, life: 1, color: pu.color });
           }
+          continue;
         }
+        // Quadratic curve point (same curve as beam)
+        const mx = (fromX + toX) / 2, my = (fromY + toY) / 2;
+        const dx = toX - fromX, dy = toY - fromY;
+        const len = Math.hypot(dx, dy) || 1;
+        const off = Math.sin(t * 0.4 + (pu.to.id || 0)) * 12;
+        const ctrlX = mx - dy / len * off, ctrlY = my + dx / len * off;
+        const mt = 1 - pu.t;
+        const px2 = mt * mt * fromX + 2 * mt * pu.t * ctrlX + pu.t * pu.t * toX;
+        const py2 = mt * mt * fromY + 2 * mt * pu.t * ctrlY + pu.t * pu.t * toY;
 
-        // Twinkle
-        const tw = 0.6 + Math.sin(t * p.twinkleSpeed + p.twinkle) * 0.4;
-        const alpha = p.brightness * tw;
-
-        const [r2, g2, b2] = p.color;
-        ctx.fillStyle = `rgba(${r2},${g2},${b2},${alpha})`;
+        const [r, g, b] = pu.color;
+        // Trail
+        for (let k = 0; k < 8; k++) {
+          const tk = Math.max(0, pu.t - k * 0.02);
+          const mtk = 1 - tk;
+          const tx = mtk * mtk * fromX + 2 * mtk * tk * ctrlX + tk * tk * toX;
+          const ty = mtk * mtk * fromY + 2 * mtk * tk * ctrlY + tk * tk * toY;
+          const ta = (1 - k / 8) * pu.life * 0.5;
+          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
+          ctx.beginPath();
+          ctx.arc(tx, ty, 1 + (1 - k / 8) * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Head
+        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = "#fff";
         ctx.beginPath();
-        ctx.arc(x, y, p.r, 0, Math.PI * 2);
+        ctx.arc(px2, py2, 2.5, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Galaxy core (multi-layer glow) ──
+      // ── Connection-established bursts ──
       ctx.globalCompositeOperation = "screen";
-      // Outer halo
-      const haloR = 90 * core.pulse;
-      const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, haloR);
-      halo.addColorStop(0, `rgba(255,240,220,${0.5 * core.pulse})`);
-      halo.addColorStop(0.3, `rgba(168,85,247,${0.25 * core.pulse})`);
-      halo.addColorStop(0.7, `rgba(124,58,237,${0.08 * core.pulse})`);
-      halo.addColorStop(1, "rgba(124,58,237,0)");
-      ctx.fillStyle = halo;
-      ctx.fillRect(cx - haloR, cy - haloR, haloR * 2, haloR * 2);
-
-      // Inner bright core
-      const coreR = 22 * core.pulse;
-      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-      coreGrad.addColorStop(0, `rgba(255,255,255,${core.pulse})`);
-      coreGrad.addColorStop(0.4, `rgba(255,240,220,${0.8 * core.pulse})`);
-      coreGrad.addColorStop(1, "rgba(255,200,150,0)");
-      ctx.fillStyle = coreGrad;
-      ctx.fillRect(cx - coreR, cy - coreR, coreR * 2, coreR * 2);
-
-      // Lens flare cross
-      const flareLen = 120 * core.pulse;
-      const flareGrad = ctx.createLinearGradient(cx - flareLen, cy, cx + flareLen, cy);
-      flareGrad.addColorStop(0, "rgba(255,255,255,0)");
-      flareGrad.addColorStop(0.5, `rgba(255,255,255,${0.35 * core.pulse})`);
-      flareGrad.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = flareGrad;
-      ctx.fillRect(cx - flareLen, cy - 1, flareLen * 2, 2);
-      const flareGradV = ctx.createLinearGradient(cx, cy - flareLen * 0.6, cx, cy + flareLen * 0.6);
-      flareGradV.addColorStop(0, "rgba(255,255,255,0)");
-      flareGradV.addColorStop(0.5, `rgba(255,255,255,${0.25 * core.pulse})`);
-      flareGradV.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = flareGradV;
-      ctx.fillRect(cx - 1, cy - flareLen * 0.6, 2, flareLen * 1.2);
-
-      ctx.globalCompositeOperation = "source-over";
-
-      // ── Shockwave rings ──
-      ctx.globalCompositeOperation = "screen";
-      for (let i = shockwaves.length - 1; i >= 0; i--) {
-        const sw = shockwaves[i];
-        sw.r += sw.speed * (dt / 16);
-        sw.life -= 0.008 * (dt / 16);
-        if (sw.life <= 0 || sw.r > sw.max) { shockwaves.splice(i, 1); continue; }
-        // Bright ring
-        ctx.strokeStyle = `rgba(255,255,255,${sw.life * 0.45})`;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
-        ctx.stroke();
-        // Purple glow ring
-        ctx.strokeStyle = `rgba(168,85,247,${sw.life * 0.35})`;
-        ctx.lineWidth = 10;
-        ctx.beginPath();
-        ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2);
-        ctx.stroke();
-        // Cyan inner ring
-        ctx.strokeStyle = `rgba(6,182,212,${sw.life * 0.25})`;
+      for (let i = bursts.length - 1; i >= 0; i--) {
+        const b = bursts[i];
+        b.r += 2.2 * (dt / 16);
+        b.life -= 0.03 * (dt / 16);
+        if (b.life <= 0 || b.r > b.max) { bursts.splice(i, 1); continue; }
+        const [r, g, bl] = b.color;
+        ctx.strokeStyle = `rgba(${r},${g},${bl},${b.life * 0.6})`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(sw.x, sw.y, sw.r * 0.92, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Supernova flash overlay ──
-      if (supernovaFlash > 0) {
-        ctx.fillStyle = `rgba(255,255,255,${supernovaFlash * 0.15})`;
-        ctx.fillRect(0, 0, W, H);
-        supernovaFlash -= 0.025 * (dt / 16);
-        if (supernovaFlash < 0) supernovaFlash = 0;
+      // ── Click ripples ──
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const r = ripples[i];
+        r.r += 4 * (dt / 16);
+        r.life -= 0.015 * (dt / 16);
+        if (r.life <= 0 || r.r > r.max) { ripples.splice(i, 1); continue; }
+        ctx.strokeStyle = `rgba(168,85,247,${r.life * 0.4})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.stroke();
       }
+
+      // ── People nodes (orbiting) ──
+      for (const p of people) {
+        const pulse = 0.7 + Math.sin(p.phase) * 0.3;
+        const actBoost = p.activity;
+        const [r, g, b] = p.color;
+        const size = p.size * (1 + actBoost * 0.3);
+
+        // Activity halo
+        if (actBoost > 0.05) {
+          const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 36);
+          halo.addColorStop(0, `rgba(${r},${g},${b},${0.4 * actBoost})`);
+          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
+          ctx.fillStyle = halo;
+          ctx.fillRect(p.x - 36, p.y - 36, 72, 72);
+        }
+
+        // Rotating dashed ring
+        ctx.strokeStyle = `rgba(${r},${g},${b},0.25)`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size + 6, p.phase, p.phase + Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Avatar circle (gradient)
+        const ag = ctx.createRadialGradient(p.x - size * 0.3, p.y - size * 0.3, 0, p.x, p.y, size);
+        ag.addColorStop(0, `hsla(${p.hue}, 70%, 65%, 1)`);
+        ag.addColorStop(1, `hsla(${p.hue}, 70%, 35%, 1)`);
+        ctx.fillStyle = ag;
+        ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
+        ctx.shadowBlur = 8 + actBoost * 8;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Inner initial letter
+        ctx.fillStyle = "rgba(255,255,255,0.95)";
+        ctx.font = `${Math.floor(size * 0.9)}px 'Space Grotesk', sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(p.name[0], p.x, p.y);
+
+        // Online status dot
+        if (p.online) {
+          ctx.fillStyle = "#10b981";
+          ctx.strokeStyle = "#03030a";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(p.x + size * 0.65, p.y + size * 0.65, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+
+        // Label on hover
+        if (mouse.active) {
+          const md = Math.hypot(p.x - mouse.x, p.y - mouse.y);
+          if (md < 60) {
+            const op = (1 - md / 60);
+            ctx.font = "10px 'JetBrains Mono', monospace";
+            const tw = ctx.measureText(p.name).width;
+            ctx.fillStyle = `rgba(3,3,10,${op * 0.85})`;
+            ctx.fillRect(p.x - tw / 2 - 6, p.y - size - 22, tw + 12, 16);
+            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
+            ctx.fillText(p.name, p.x, p.y - size - 11);
+          }
+        }
+      }
+
+      // ── Vortis core (center) ──
+      const corePulse = 0.85 + Math.sin(t * 1.2) * 0.15;
+      // Outer aura
+      ctx.globalCompositeOperation = "screen";
+      const auraR = 80 * corePulse;
+      const aura = ctx.createRadialGradient(cx, cy, 0, cx, cy, auraR);
+      aura.addColorStop(0, `rgba(168,85,247,${0.45 * corePulse})`);
+      aura.addColorStop(0.4, `rgba(124,58,237,${0.2 * corePulse})`);
+      aura.addColorStop(1, "rgba(124,58,237,0)");
+      ctx.fillStyle = aura;
+      ctx.fillRect(cx - auraR, cy - auraR, auraR * 2, auraR * 2);
+      ctx.globalCompositeOperation = "source-over";
+
+      // Rotating outer ring
+      ctx.strokeStyle = "rgba(168,85,247,0.4)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.arc(cx, cy, 32, t * 0.6, t * 0.6 + Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Core circle
+      const coreSize = 22 * corePulse;
+      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize);
+      coreGrad.addColorStop(0, "#fff");
+      coreGrad.addColorStop(0.3, "#e9d5ff");
+      coreGrad.addColorStop(0.7, "#a855f7");
+      coreGrad.addColorStop(1, "#7c3aed");
+      ctx.fillStyle = coreGrad;
+      ctx.shadowColor = "rgba(168,85,247,1)";
+      ctx.shadowBlur = 24 * corePulse;
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreSize, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Vortis "V" mark in center
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(cx - 6, cy - 6);
+      ctx.lineTo(cx, cy + 7);
+      ctx.lineTo(cx + 6, cy - 6);
+      ctx.stroke();
+
+      // ── Live stat chips (overlay) ──
+      ctx.font = "10px 'JetBrains Mono', monospace";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      // Active now
+      const stat1 = `${stats.active} ACTIVE NOW`;
+      const sw1 = ctx.measureText(stat1).width;
+      ctx.fillStyle = "rgba(3,3,10,0.6)";
+      ctx.strokeStyle = "rgba(16,185,129,0.4)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.rect(16, 16, sw1 + 24, 26);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#10b981";
+      ctx.beginPath();
+      ctx.arc(28, 29, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillText(stat1, 38, 22);
+
+      // Total users
+      const stat2 = `${stats.total.toLocaleString()} TOTAL USERS`;
+      const sw2 = ctx.measureText(stat2).width;
+      ctx.fillStyle = "rgba(3,3,10,0.6)";
+      ctx.strokeStyle = "rgba(168,85,247,0.4)";
+      ctx.beginPath();
+      ctx.rect(16, 50, sw2 + 24, 26);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#a855f7";
+      ctx.beginPath();
+      ctx.arc(28, 63, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillText(stat2, 38, 56);
+
+      // Packets/sec counter (top-right)
+      const pps = Math.floor(8 + Math.sin(t * 2) * 4 + rng() * 3);
+      const stat3 = `${pps} PACKETS / SEC`;
+      const sw3 = ctx.measureText(stat3).width;
+      ctx.fillStyle = "rgba(3,3,10,0.6)";
+      ctx.strokeStyle = "rgba(6,182,212,0.4)";
+      ctx.textAlign = "right";
+      ctx.beginPath();
+      ctx.rect(W - sw3 - 40, 16, sw3 + 24, 26);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = "#06b6d4";
+      ctx.beginPath();
+      ctx.arc(W - 28, 29, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillText(stat3, W - 38, 22);
 
       raf = requestAnimationFrame(tick);
     };
@@ -635,14 +776,14 @@ export function NeuralField() {
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> THE GRAVITY OF IDEAS
+          <span className="dot" /> LIVING NETWORK
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          Every thought{" "}
-          <span className="shimmer-text">finds its orbit.</span>
+          Connected to{" "}
+          <span className="shimmer-text">every mind that matters.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          A galaxy of intelligence — thousands of ideas spinning around a single core. Drag your cursor to bend space, click to ignite a supernova.
+          Vortis sits at the center — thoughts flow in, intelligence flows out, in real time. Hover a node to see who's connected, click anywhere to broadcast.
         </p>
       </div>
 
@@ -662,11 +803,11 @@ export function NeuralField() {
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            drag to bend space
+            hover to identify
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            click for supernova
+            click to broadcast
           </span>
         </div>
       </div>
