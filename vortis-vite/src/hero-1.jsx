@@ -2253,22 +2253,20 @@ function About() {
           margin: "0 0 24px", letterSpacing: "-0.03em", lineHeight: 1.15,
           opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(24px)", transition: "all 0.8s 0.1s ease",
         }}>
-          Built for people who{" "}
-          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>think fast.</span>
+          One surface.{" "}
+          <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Every capability.</span>
         </h2>
 
         <p style={{
           fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.8, maxWidth: 680, margin: "0 auto 56px",
           opacity: inView ? 1 : 0, transition: "opacity 0.8s 0.2s ease",
         }}>
-          Vortis started with a simple frustration: switching between four different AI tools to get one job done.
-          So we built a single surface that thinks, searches, codes, sees, and remembers — all at once. No tab-switching,
-          no context loss, no compromise.
+          We built Vortis on a simple idea: intelligence shouldn't be scattered across a dozen browser tabs.
+          Chat, search, code, vision, and research all live in one place, sharing the same context, so nothing
+          gets lost between tools. It's the assistant we always wanted — so we built it, and we're inviting you in.
         </p>
 
-        <div style={{
-          display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24, maxWidth: 720, margin: "0 auto",
-        }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24, maxWidth: 720, margin: "0 auto" }}>
           {stats.map((s, i) => (
             <div key={s.label} style={{
               opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(20px)",
@@ -2637,7 +2635,6 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
           <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
         </div>
         <Logos />
-        <About />
         <BentoGrid />
         <NeuralField />
         <Showcase />
@@ -2645,6 +2642,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         <DashboardPreview />
         <Testimonials />
         <Pricing />
+        <About />
         <FAQ />
         <CTA onLogin={onLogin} />
         <Footer />
