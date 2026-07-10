@@ -312,106 +312,469 @@ function Nav({ onLogin }) {
 //  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
+  const canvasRef = useRef(null);
   const [ref, inView] = useInView(0.15);
-  const containerRef = useRef(null);
-  const [parallax, setParallax] = useState({ x: 0, y: 0 });
 
-  // Mouse parallax (subtle, transform-only — safe)
   useEffect(() => {
-    const el = containerRef.current; if (!el) return;
-    const onMove = (e) => {
-      const r = el.getBoundingClientRect();
-      const px = (e.clientX - r.left) / r.width - 0.5;
-      const py = (e.clientY - r.top) / r.height - 0.5;
-      setParallax({ x: px * 15, y: py * 15 });
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    let raf, W = 0, H = 0;
+    const mouse = { x: -9999, y: -9999, active: false };
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+    let hubs = [];
+    let dust = [];
+    let pulses = [];
+    let ripples = [];
+    let waves = [];
+    let scanAngle = 0;
+    let seeded = false;
+    let lastWave = 0;
+    let last = performance.now();
+
+    // THEME-RESTRICTED PALETTE — purple + cyan only
+    const PALETTE = [
+      [168, 85, 247],  // purple (a855f7)
+      [124, 58, 237],  // deep purple (7C3AED)
+      [6, 182, 212],   // cyan (06b6d4)
+      [139, 92, 246],  // violet (8b5cf6)
+    ];
+
+    const LABELS = ['neural', 'vision', 'code', 'memory', 'search', 'voice', 'graph', 'vector', 'stream', 'cache'];
+
+    let seedState = 12345;
+    const rng = () => { seedState = (seedState * 1664525 + 1013904223) % 4294967296; return seedState / 4294967296; };
+
+    const makeParticles = () => {
+      const HUB_COUNT = 11;  // fewer hubs = less clutter
+      hubs = Array.from({ length: HUB_COUNT }, (_, i) => {
+        const c = PALETTE[i % PALETTE.length];
+        return {
+          x: rng() * W, y: rng() * H,
+          z: 0.4 + rng() * 0.6,
+          vx: (rng() - 0.5) * 0.12,
+          vy: (rng() - 0.5) * 0.12,
+          r: 3 + rng() * 3,
+          phase: rng() * Math.PI * 2,
+          color: c,
+          charge: 0,
+          activity: 0,
+          label: LABELS[i % LABELS.length],
+          restX: 0, restY: 0,
+        };
+      });
+      hubs.forEach(h => { h.restX = h.x; h.restY = h.y; });
+
+      const DUST_COUNT = 120;  // fewer dust particles
+      dust = Array.from({ length: DUST_COUNT }, () => {
+        const z = 0.2 + rng() * 0.8;
+        const c = PALETTE[Math.floor(rng() * PALETTE.length)];
+        return {
+          x: rng() * W, y: rng() * H, z,
+          vx: (rng() - 0.5) * 0.25 * z,
+          vy: (rng() - 0.5) * 0.25 * z,
+          r: 0.4 + z * 1.5,
+          color: c,
+          twinkle: rng() * Math.PI * 2,
+          twinkleSpeed: 0.02 + rng() * 0.03,
+        };
+      });
+      seeded = true;
     };
-    const onLeave = () => setParallax({ x: 0, y: 0 });
-    el.addEventListener("mousemove", onMove);
-    el.addEventListener("mouseleave", onLeave);
+
+    const resize = () => {
+      W = canvas.offsetWidth; H = canvas.offsetHeight;
+      canvas.width = W * DPR; canvas.height = H * DPR;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(DPR, DPR);
+      if (!seeded && W > 0 && H > 0) makeParticles();
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const onMove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+      mouse.active = true;
+    };
+    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
+
+    const onClick = (e) => {
+      if (!mouse.active) return;
+      let nearest = null, nd = Infinity;
+      for (const h of hubs) {
+        const d = Math.hypot(h.x - mouse.x, h.y - mouse.y);
+        if (d < nd) { nd = d; nearest = h; }
+      }
+      if (nearest && nd < 300) {
+        nearest.charge = 1.5;
+        nearest.activity = 1.5;
+        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 160, color: nearest.color, life: 1 });
+        waves.push({ x: nearest.x, y: nearest.y, r: 0, max: Math.max(W, H) * 0.6, color: nearest.color, life: 1 });
+      }
+      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 100, color: [255, 255, 255], life: 1 });
+    };
+
+    canvas.addEventListener("mousemove", onMove);
+    canvas.addEventListener("mouseleave", onLeave);
+    canvas.addEventListener("click", onClick);
+
+    const spawnPulse = (fromHub, toHub) => {
+      pulses.push({
+        from: fromHub, to: toHub, t: 0,
+        speed: 0.007 + rng() * 0.006,
+        color: fromHub.color, trail: [],
+      });
+    };
+
+    const bezierPoint = (p0, p1, p2, t) => {
+      const mt = 1 - t;
+      return {
+        x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+        y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+      };
+    };
+    const controlPoint = (a, b) => {
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const off = Math.sin((a.x + a.y) * 0.008) * 30;
+      return { x: mx - dy / len * off, y: my + dx / len * off };
+    };
+
+    const HUB_LINK_DIST = 340;
+
+    const tick = (now) => {
+      const dt = Math.min(now - last, 32);
+      last = now;
+      // trail-fade clear (bloom accumulation)
+      ctx.fillStyle = "rgba(3,3,10,0.2)";
+      ctx.fillRect(0, 0, W, H);
+
+      // Mouse aura — purple only, subtle
+      if (mouse.active) {
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 240);
+        glow.addColorStop(0, "rgba(124,58,237,0.12)");
+        glow.addColorStop(1, "rgba(124,58,237,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // Periodic energy wave every ~6s (slower = calmer)
+      if (now - lastWave > 6000 && hubs.length > 0) {
+        const h = hubs[Math.floor(rng() * hubs.length)];
+        waves.push({ x: h.x, y: h.y, r: 0, max: Math.max(W, H) * 0.7, color: h.color, life: 1 });
+        lastWave = now;
+      }
+
+      // Radar sweep — single beam, slower
+      scanAngle += 0.003;
+      const cx = W / 2, cy = H / 2;
+      if (ctx.createConicGradient) {
+        const sweepGrad = ctx.createConicGradient(scanAngle, cx, cy);
+        sweepGrad.addColorStop(0, "rgba(124,58,237,0.06)");
+        sweepGrad.addColorStop(0.04, "rgba(124,58,237,0)");
+        sweepGrad.addColorStop(1, "rgba(124,58,237,0)");
+        ctx.fillStyle = sweepGrad;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // Update hubs (spring physics)
+      for (const h of hubs) {
+        h.vx += (h.restX - h.x) * 0.0006;
+        h.vy += (h.restY - h.y) * 0.0006;
+        h.x += h.vx * (dt / 16);
+        h.y += h.vy * (dt / 16);
+        h.vx *= 0.99; h.vy *= 0.99;
+        if (h.x < 40) { h.x = 40; h.vx *= -0.5; h.restX = 60 + rng() * 40; }
+        if (h.x > W - 40) { h.x = W - 40; h.vx *= -0.5; h.restX = W - 60 - rng() * 40; }
+        if (h.y < 40) { h.y = 40; h.vy *= -0.5; h.restY = 60 + rng() * 40; }
+        if (h.y > H - 40) { h.y = H - 40; h.vy *= -0.5; h.restY = H - 60 - rng() * 40; }
+
+        // mouse repulsion (gentler)
+        if (mouse.active) {
+          const dx = h.x - mouse.x, dy = h.y - mouse.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 180 && d > 0.1) {
+            const f = (1 - d / 180) * 0.8;
+            h.vx += (dx / d) * f * 0.04;
+            h.vy += (dy / d) * f * 0.04;
+          }
+        }
+
+        // charge builds (slower = calmer)
+        h.charge += (0.001 + h.activity * 0.004) * (dt / 16);
+        if (h.charge >= 1) {
+          const candidates = hubs
+            .filter(o => o !== h)
+            .map(o => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
+            .filter(c => c.d < HUB_LINK_DIST)
+            .sort((a, b) => a.d - b.d)
+            .slice(0, 2);
+          for (const c of candidates) spawnPulse(h, c.o);
+          ripples.push({ x: h.x, y: h.y, r: 0, max: 60, color: h.color, life: 0.6 });
+          h.charge = 0;
+          h.activity = Math.min(1.5, h.activity + 0.5);
+        }
+        h.activity *= 0.95;
+        h.phase += 0.02;
+      }
+
+      // Connections
+      const connections = [];
+      for (let i = 0; i < hubs.length; i++) {
+        for (let j = i + 1; j < hubs.length; j++) {
+          const a = hubs[i], b = hubs[j];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d < HUB_LINK_DIST) connections.push({ a, b, d, cp: controlPoint(a, b) });
+        }
+      }
+
+      // Waves
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const w = waves[i];
+        w.r += 2.5 * (dt / 16);
+        w.life -= 0.003 * (dt / 16);
+        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
+        const [r, g, b] = w.color;
+        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.1})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.35})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Draw connections (bloom + flow + wave boost)
+      for (const c of connections) {
+        const { a, b, d, cp } = c;
+        let alpha = (1 - d / HUB_LINK_DIST) * 0.32;
+        const depthFactor = Math.min(a.z, b.z);
+        alpha *= 0.5 + depthFactor * 0.5;
+
+        // wave boost
+        let waveBoost = 0;
+        const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+        for (const w of waves) {
+          const wd = Math.hypot(midX - w.x, midY - w.y);
+          if (Math.abs(wd - w.r) < 40) {
+            waveBoost += w.life * (1 - Math.abs(wd - w.r) / 40) * 0.6;
+          }
+        }
+
+        const [r, g, bC] = a.color;
+        const baseWidth = 0.5 + depthFactor * 0.6;
+
+        // outer soft glow
+        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.05 + waveBoost * 0.08})`;
+        ctx.lineWidth = baseWidth * 6;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+        // medium
+        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.15 + waveBoost * 0.15})`;
+        ctx.lineWidth = baseWidth * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+        // bright core (gradient)
+        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+        grad.addColorStop(0, `rgba(${a.color[0]},${a.color[1]},${a.color[2]},${alpha})`);
+        grad.addColorStop(1, `rgba(${b.color[0]},${b.color[1]},${b.color[2]},${alpha})`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = baseWidth + waveBoost;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+
+        // flowing dashed energy
+        ctx.strokeStyle = `rgba(255,255,255,${(alpha + waveBoost) * 0.5})`;
+        ctx.lineWidth = 0.4;
+        ctx.setLineDash([2, 14]);
+        ctx.lineDashOffset = -now * 0.04;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // mouse proximity highlight
+        if (mouse.active) {
+          const md = Math.hypot(midX - mouse.x, midY - mouse.y);
+          if (md < 140) {
+            const boost = (1 - md / 140) * 0.4;
+            ctx.strokeStyle = `rgba(168,85,247,${boost})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Pulses (traveling energy packets)
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.t += p.speed * (dt / 16);
+        if (p.t >= 1) {
+          p.to.activity = Math.min(1.5, p.to.activity + 0.5);
+          pulses.splice(i, 1);
+          continue;
+        }
+        const cp = controlPoint(p.from, p.to);
+        const pos = bezierPoint(p.from, cp, p.to, p.t);
+        p.trail.push({ x: pos.x, y: pos.y });
+        if (p.trail.length > 14) p.trail.shift();
+
+        const [r, g, b] = p.color;
+        for (let k = 0; k < p.trail.length; k++) {
+          const tp = p.trail[k];
+          const ta = (k / p.trail.length) * 0.6;
+          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
+          ctx.beginPath();
+          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // glowing head
+        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+        ctx.shadowBlur = 16;
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // Ripples
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const rp = ripples[i];
+        rp.r += 1.6 * (dt / 16);
+        rp.life -= 0.012 * (dt / 16);
+        if (rp.life <= 0 || rp.r > rp.max) { ripples.splice(i, 1); continue; }
+        const [r, g, b] = rp.color;
+        ctx.strokeStyle = `rgba(${r},${g},${b},${rp.life * 0.4})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Dust drift + parallax
+      for (const p of dust) {
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+        p.twinkle += p.twinkleSpeed;
+
+        if (mouse.active) {
+          // parallax removed for calm — just drift
+        }
+
+        const tw = 0.3 + Math.sin(p.twinkle) * 0.3;
+        const [r, g, b] = p.color;
+        ctx.globalAlpha = (0.2 + p.z * 0.5) * tw;
+        ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      // Hubs (depth-sorted)
+      const sortedHubs = [...hubs].sort((a, b) => a.z - b.z);
+      for (const h of sortedHubs) {
+        const pulse = 0.7 + Math.sin(now * 0.0015 + h.phase) * 0.3;
+        const actBoost = h.activity;
+        const depthScale = 0.6 + h.z * 0.6;
+        const [r, g, b] = h.color;
+
+        // activity halo
+        if (actBoost > 0.05) {
+          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 40);
+          halo.addColorStop(0, `rgba(${r},${g},${b},${0.3 * actBoost})`);
+          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
+          ctx.fillStyle = halo;
+          ctx.fillRect(h.x - 40, h.y - 40, 80, 80);
+        }
+
+        // charge ring
+        if (h.charge > 0.1) {
+          ctx.strokeStyle = `rgba(${r},${g},${b},${h.charge * 0.5})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, (h.r + 7) * depthScale, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // rotating dashed ring
+        const ringR = (h.r + 6) * depthScale;
+        ctx.strokeStyle = `rgba(${r},${g},${b},0.15)`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 6]);
+        ctx.lineDashOffset = -now * 0.015;
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // glow + core
+        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+        ctx.shadowBlur = 18 * pulse + 8 * actBoost;
+        ctx.fillStyle = `rgba(${r},${g},${b},${0.85 * pulse + 0.15})`;
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * depthScale, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // white-hot center
+        ctx.fillStyle = `rgba(255,255,255,${0.4 + actBoost * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * depthScale * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // label on hover
+        if (mouse.active) {
+          const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
+          if (md < 100) {
+            const op = (1 - md / 100);
+            ctx.font = "10px 'JetBrains Mono', monospace";
+            const tw = ctx.measureText(h.label).width;
+            ctx.fillStyle = `rgba(3,3,10,${op * 0.8})`;
+            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r * depthScale - 22, tw + 12, 16);
+            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
+            ctx.textAlign = "center";
+            ctx.fillText(h.label, h.x, h.y - h.r * depthScale - 11);
+          }
+        }
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
     return () => {
-      el.removeEventListener("mousemove", onMove);
-      el.removeEventListener("mouseleave", onLeave);
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", resize);
+      canvas.removeEventListener("mousemove", onMove);
+      canvas.removeEventListener("mouseleave", onLeave);
+      canvas.removeEventListener("click", onClick);
     };
   }, []);
 
-  // ── Logo config: 11 arms vortex ──
-  const ARMS = 11;
-  const LOGO_CX = 500;
-  const LOGO_CY = 300;
-  const LOGO_CORE_R = 16;       // white core radius
-  const LOGO_HALO_R = 26;       // violet halo ring radius
-  const ARM_LENGTH = 70;        // arm length from center
-  const ARM_CURVE = 22;         // curve offset for vortex swirl
-
-  // Generate the 11 arm-tip positions (where wires connect)
-  const armTips = Array.from({ length: ARMS }, (_, i) => {
-    const angle = (i / ARMS) * Math.PI * 2 - Math.PI / 2; // start at top
-    const tipX = LOGO_CX + Math.cos(angle) * ARM_LENGTH;
-    const tipY = LOGO_CY + Math.sin(angle) * ARM_LENGTH;
-    return { id: i, angle, tipX, tipY, color: i % 2 === 0 ? "#9d4edd" : "#14b8a6" };
-  });
-
-  // ── Outer source nodes (services feeding energy into the logo) ──
-  const sources = [
-    { id: "github",   label: "GitHub",   x: 120, y: 140, color: "#9d4edd", armIndex: 1 },
-    { id: "notion",   label: "Notion",   x: 880, y: 140, color: "#14b8a6", armIndex: 3 },
-    { id: "postgres", label: "Postgres", x: 90,  y: 300, color: "#9d4edd", armIndex: 5 },
-    { id: "apis",     label: "APIs",     x: 910, y: 300, color: "#14b8a6", armIndex: 7 },
-    { id: "slack",    label: "Slack",    x: 150, y: 470, color: "#9d4edd", armIndex: 9 },
-    { id: "repos",    label: "Repos",    x: 850, y: 470, color: "#14b8a6", armIndex: 0 },
-    { id: "voice",    label: "Voice",    x: 300, y: 90,  color: "#14b8a6", armIndex: 2 },
-    { id: "vision",   label: "Vision",   x: 700, y: 90,  color: "#9d4edd", armIndex: 4 },
-    { id: "memory",   label: "Memory",   x: 300, y: 520, color: "#9d4edd", armIndex: 6 },
-    { id: "search",   label: "Search",   x: 700, y: 520, color: "#14b8a6", armIndex: 8 },
-  ];
-
-  // Build curved path from each source to its target arm-tip
-  const wires = sources.map(s => {
-    const tip = armTips[s.armIndex];
-    const mx = (s.x + tip.tipX) / 2;
-    const my = (s.y + tip.tipY) / 2;
-    const dx = tip.tipX - s.x;
-    const dy = tip.tipY - s.y;
-    // perpendicular offset for curve
-    const off = Math.sin(s.armIndex * 1.3) * 40;
-    const cpX = mx - dy * 0.12 + off * 0.2;
-    const cpY = my + dx * 0.12 + off * 0.2;
-    const d = `M${s.x},${s.y} Q${cpX},${cpY} ${tip.tipX},${tip.tipY}`;
-    return { source: s, tip, d, delay: s.armIndex * 0.35, dur: 2.8 + (s.armIndex % 3) * 0.4 };
-  });
-
-  // Floating ambient particles
-  const particles = Array.from({ length: 18 }, (_, i) => ({
-    x: 100 + Math.random() * 800,
-    y: 80 + Math.random() * 440,
-    r: 0.7 + Math.random() * 1.4,
-    delay: Math.random() * 6,
-    dur: 7 + Math.random() * 6,
-    color: Math.random() > 0.5 ? "#9d4edd" : "#14b8a6",
-  }));
-
   return (
-    <section ref={ref} className="section" style={{ padding: "80px 40px 60px", position: "relative", overflow: "hidden" }}>
+    <section ref={ref} className="section" style={{ padding: "60px 0 80px", position: "relative" }}>
       <style>{`
-        @keyframes nfDraw { from { stroke-dashoffset: 800; } to { stroke-dashoffset: 0; } }
-        @keyframes nfFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
-        @keyframes nfCoreBreathe { 0%,100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.08); opacity: 1; } }
-        @keyframes nfHaloSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes nfHaloSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-        @keyframes nfArmGlow { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
-        @keyframes nfNodePulse { 0%,100% { opacity: .6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
-        @keyframes nfRingExpand { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.8); opacity: 0; } }
-        @keyframes nfFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-        @keyframes nfParticleDrift { 0%,100% { transform: translate(0,0); opacity: .3; } 50% { transform: translate(10px,-12px); opacity: .7; } }
-        @keyframes nfOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(25px,-20px); } }
-        @keyframes nfSurge { 0%,90%,100% { opacity: 0; } 92%,96% { opacity: 1; } }
+        @keyframes nfShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
       `}</style>
 
-      {/* Ambient orb behind everything */}
-      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 700, height: 500, background: "radial-gradient(ellipse, rgba(124,58,237,0.08), rgba(6,182,212,0.04) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "nfOrbDrift 18s ease-in-out infinite" }} />
-
-      {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 30 }}>
+      {/* Header — uses your utility classes, sits ABOVE the canvas */}
+      <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
           <span className="dot" /> THE NETWORK
         </div>
@@ -420,241 +783,43 @@ export function NeuralField() {
           <span className="shimmer-text">A billion connections.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Every source feeds into one intelligence. This is how Vortis charges.
+          Move your cursor through the network — this is how Vortis connects your world.
         </p>
       </div>
 
-      {/* ── Main SVG stage ── */}
-      <div ref={containerRef} style={{
-        maxWidth: 1000, margin: "0 auto", position: "relative",
-        transform: `translate(${parallax.x * 0.4}px, ${parallax.y * 0.4}px)`,
-        transition: "transform 0.3s cubic-bezier(.2,.7,.3,1)",
-      }}>
-        <svg viewBox="0 0 1000 600" style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}>
+      {/* Canvas — clean, contained, with gradient fade at top/bottom */}
+      <div style={{ position: "relative", height: 440, maxWidth: 1200, margin: "0 auto" }}>
+        {/* Top fade into canvas */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 40, background: "linear-gradient(180deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
+        {/* Bottom fade out of canvas */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
+        {/* Side fades */}
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 40, background: "linear-gradient(90deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 40, background: "linear-gradient(270deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
 
-          <defs>
-            {/* Glow filters */}
-            <filter id="nfGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2.5" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-            <filter id="nfGlowBig" x="-100%" y="-100%" width="300%" height="300%">
-              <feGaussianBlur stdDeviation="7" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
-            <filter id="nfGlowHuge" x="-150%" y="-150%" width="400%" height="400%">
-              <feGaussianBlur stdDeviation="14" result="blur" />
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "absolute", inset: 0,
+            width: "100%", height: "100%",
+            cursor: "crosshair",
+          }}
+        />
 
-            {/* Wire gradient: source color → logo color */}
-            <linearGradient id="wireGradV" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#9d4edd" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity="0.8" />
-            </linearGradient>
-            <linearGradient id="wireGradT" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity="0.8" />
-            </linearGradient>
-
-            {/* Logo arm gradient: violet at center → dark blue at tip */}
-            <linearGradient id="armGrad" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#9d4edd" />
-              <stop offset="100%" stopColor="#1e3a8a" />
-            </linearGradient>
-
-            {/* Logo core radial gradient */}
-            <radialGradient id="coreGrad">
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="60%" stopColor="#ffffff" />
-              <stop offset="100%" stopColor="#9d4edd" />
-            </radialGradient>
-
-            {/* Surge overlay gradient (flares the whole logo periodically) */}
-            <radialGradient id="surgeGrad">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
-              <stop offset="50%" stopColor="#9d4edd" stopOpacity="0.5" />
-              <stop offset="100%" stopColor="#9d4edd" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          {/* ── WIRES: source → logo arm-tips ── */}
-          {wires.map((w, i) => (
-            <g key={`wire-${i}`}>
-              {/* soft glow underlay */}
-              <path d={w.d} stroke={w.source.color} strokeWidth="5" fill="none" strokeLinecap="round" opacity="0.08" />
-              {/* main line — self-draws on scroll */}
-              <path
-                d={w.d}
-                stroke={w.source.color === "#9d4edd" ? "url(#wireGradV)" : "url(#wireGradT)"}
-                strokeWidth="1.1"
-                fill="none"
-                strokeLinecap="round"
-                strokeDasharray="800"
-                strokeDashoffset={inView ? "0" : "800"}
-                style={{ transition: `stroke-dashoffset 1.8s ease ${i * 0.08}s` }}
-              />
-              {/* flowing dashed energy traveling INTO logo */}
-              <path
-                d={w.d}
-                stroke="rgba(255,255,255,0.55)"
-                strokeWidth="0.6"
-                fill="none"
-                strokeLinecap="round"
-                strokeDasharray="3 14"
-                style={{ animation: inView ? `nfFlow ${1.6 + (i % 3) * 0.3}s linear infinite` : "none", animationDelay: `${i * 0.15}s` }}
-              />
-            </g>
-          ))}
-
-          {/* ── TRAVELING ENERGY PULSES (white dots moving source → logo) ── */}
-          {wires.map((w, i) => (
-            <circle key={`pulse-${i}`} r="3" fill="#ffffff" filter="url(#nfGlow)">
-              <animateMotion
-                dur={`${w.dur}s`}
-                repeatCount="indefinite"
-                begin={`${w.delay}s`}
-                path={w.d}
-              />
-              <animate attributeName="opacity" values="0;1;1;0" dur={`${w.dur}s`} repeatCount="indefinite" begin={`${w.delay}s`} />
-              <animate attributeName="r" values="2;3.5;2" dur={`${w.dur}s`} repeatCount="indefinite" begin={`${w.delay}s`} />
-            </circle>
-          ))}
-
-          {/* ── AMBIENT FLOATING PARTICLES ── */}
-          {particles.map((p, i) => (
-            <circle
-              key={`particle-${i}`}
-              cx={p.x} cy={p.y} r={p.r}
-              fill={p.color}
-              opacity="0.4"
-              style={{
-                animation: `nfParticleDrift ${p.dur}s ease-in-out infinite`,
-                animationDelay: `${p.delay}s`,
-                filter: "url(#nfGlow)",
-              }}
-            />
-          ))}
-
-          {/* ── OUTER SOURCE NODES ── */}
-          {sources.map((s, i) => (
-            <g key={`source-${s.id}`} style={{ animation: `nfNodePulse ${3 + i * 0.25}s ease-in-out infinite`, animationDelay: `${i * 0.3}s`, transformOrigin: `${s.x}px ${s.y}px`, transformBox: "fill-box" }}>
-              {/* expanding ring */}
-              <circle cx={s.x} cy={s.y} r="9" fill="none" stroke={s.color} strokeWidth="0.8" opacity="0.25" style={{ animation: `nfRingExpand 3.5s ease-out infinite`, animationDelay: `${i * 0.4}s`, transformOrigin: `${s.x}px ${s.y}px` }} />
-              {/* soft glow */}
-              <circle cx={s.x} cy={s.y} r="8" fill={s.color} opacity="0.2" filter="url(#nfGlowBig)" />
-              {/* core */}
-              <circle cx={s.x} cy={s.y} r="4.5" fill={s.color} filter="url(#nfGlow)" />
-              {/* white center */}
-              <circle cx={s.x} cy={s.y} r="2" fill="#ffffff" opacity="0.95" />
-              {/* label */}
-              <text
-                x={s.x} y={s.y - 16}
-                textAnchor="middle"
-                fill={s.color}
-                fontSize="9"
-                fontFamily="'JetBrains Mono', monospace"
-                opacity="0.7"
-                style={{ letterSpacing: "0.08em" }}
-              >{s.label}</text>
-            </g>
-          ))}
-
-          {/* ════════════════════════════════════════════════════════════
-              THE VORTIS LOGO — at the center, charged by the wires
-              ════════════════════════════════════════════════════════════ */}
-          <g style={{ transformOrigin: `${LOGO_CX}px ${LOGO_CY}px`, transformBox: "fill-box" }}>
-
-            {/* Surge flare — periodically lights up the whole logo */}
-            <circle cx={LOGO_CX} cy={LOGO_CY} r="90" fill="url(#surgeGrad)" filter="url(#nfGlowHuge)" style={{ animation: "nfSurge 7s ease-in-out infinite" }} />
-
-            {/* Expanding radar pings from logo */}
-            <circle cx={LOGO_CX} cy={LOGO_CY} r="40" fill="none" stroke="#9d4edd" strokeWidth="1" opacity="0.4" style={{ animation: "nfRingExpand 3.5s ease-out infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }} />
-            <circle cx={LOGO_CX} cy={LOGO_CY} r="40" fill="none" stroke="#14b8a6" strokeWidth="1" opacity="0.3" style={{ animation: "nfRingExpand 3.5s ease-out infinite", animationDelay: "1.7s", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }} />
-
-            {/* Outer rotating dashed ring with orbiting dots */}
-            <g style={{ animation: "nfHaloSpin 22s linear infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }}>
-              <circle cx={LOGO_CX} cy={LOGO_CY} r="48" fill="none" stroke="rgba(157,78,221,0.2)" strokeWidth="0.8" strokeDasharray="4 8" />
-              <circle cx={LOGO_CX} cy={LOGO_CY - 48} r="2.5" fill="#9d4edd" filter="url(#nfGlow)" />
-            </g>
-            {/* Reverse ring */}
-            <g style={{ animation: "nfHaloSpinRev 18s linear infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }}>
-              <circle cx={LOGO_CX} cy={LOGO_CY} r="38" fill="none" stroke="rgba(20,184,166,0.2)" strokeWidth="0.8" strokeDasharray="3 6" />
-              <circle cx={LOGO_CX + 38} cy={LOGO_CY} r="2" fill="#14b8a6" filter="url(#nfGlow)" />
-            </g>
-
-            {/* ── 11 vortex arms (the logo's spiraling arms) ── */}
-            {armTips.map((arm, i) => {
-              // Each arm: curved path from center to tip, with vortex swirl
-              const startX = LOGO_CX + Math.cos(arm.angle) * LOGO_HALO_R;
-              const startY = LOGO_CY + Math.sin(arm.angle) * LOGO_HALO_R;
-              // control point offset perpendicular for swirl
-              const midX = (startX + arm.tipX) / 2;
-              const midY = (startY + arm.tipY) / 2;
-              const perpX = -Math.sin(arm.angle) * ARM_CURVE;
-              const perpY = Math.cos(arm.angle) * ARM_CURVE;
-              const cpX = midX + perpX;
-              const cpY = midY + perpY;
-              const armD = `M${startX},${startY} Q${cpX},${cpY} ${arm.tipX},${arm.tipY}`;
-              return (
-                <g key={`arm-${i}`}>
-                  {/* arm glow underlay */}
-                  <path d={armD} stroke={arm.color} strokeWidth="4" fill="none" strokeLinecap="round" opacity="0.15" filter="url(#nfGlow)" />
-                  {/* main arm — pulses as energy arrives */}
-                  <path
-                    d={armD}
-                    stroke="url(#armGrad)"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                    style={{
-                      animation: `nfArmGlow ${2.4 + (i % 3) * 0.4}s ease-in-out infinite`,
-                      animationDelay: `${i * 0.3}s`,
-                      filter: "url(#nfGlow)",
-                    }}
-                  />
-                  {/* arm-tip node */}
-                  <circle cx={arm.tipX} cy={arm.tipY} r="3.5" fill={arm.color} filter="url(#nfGlow)" style={{ animation: `nfNodePulse ${2.6 + (i % 3) * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.25}s`, transformOrigin: `${arm.tipX}px ${arm.tipY}px` }} />
-                  <circle cx={arm.tipX} cy={arm.tipY} r="1.5" fill="#ffffff" opacity="0.95" />
-                </g>
-              );
-            })}
-
-            {/* ── Violet halo ring ── */}
-            <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_HALO_R} fill="none" stroke="#9d4edd" strokeWidth="1.5" opacity="0.7" filter="url(#nfGlow)" />
-
-            {/* ── White core (breathing) ── */}
-            <g style={{ animation: "nfCoreBreathe 2.5s ease-in-out infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }}>
-              {/* outer glow */}
-              <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_CORE_R + 6} fill="#9d4edd" opacity="0.3" filter="url(#nfGlowHuge)" />
-              {/* core */}
-              <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_CORE_R} fill="url(#coreGrad)" filter="url(#nfGlowBig)" />
-              {/* hot white center */}
-              <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_CORE_R * 0.55} fill="#ffffff" opacity="0.98" />
-              {/* shine */}
-              <ellipse cx={LOGO_CX - 4} cy={LOGO_CY - 4} rx="5" ry="3" fill="#ffffff" opacity="0.6" />
-            </g>
-          </g>
-        </svg>
-
-        {/* Bottom hint chips */}
+        {/* Subtle hint at bottom */}
         <div style={{
-          position: "absolute", bottom: -10, left: "50%", transform: "translateX(-50%)",
-          display: "flex", gap: 16, pointerEvents: "none",
+          position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
+          display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
           fontSize: 10, color: "rgba(255,255,255,0.3)",
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#9d4edd", boxShadow: "0 0 6px #9d4edd" }} />
-            10 sources
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#a855f7" }} />
+            move to influence
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14b8a6", boxShadow: "0 0 6px #14b8a6" }} />
-            11-arm vortex
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "nfNodePulse 1.5s ease-in-out infinite" }} />
-            charging
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4" }} />
+            click to ignite
           </span>
         </div>
       </div>
