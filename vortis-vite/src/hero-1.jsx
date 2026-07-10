@@ -58,6 +58,14 @@ body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 .shimmer-text{background:linear-gradient(90deg,#fff 0%,#a855f7 25%,#fff 50%,#06b6d4 75%,#fff 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 4s linear infinite}
 .gradient-border{position:relative}
 .gradient-border::before{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(135deg,rgba(124,58,237,.6),rgba(168,85,247,.4),rgba(6,182,212,.6));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+
+.section{padding:100px 40px;position:relative}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.06);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(168,85,247,0.85);font-family:'JetBrains Mono',monospace}
+.eyebrow .dot{width:7px;height:7px;border-radius:50%;background:#a855f7;animation:pulse 2s ease-in-out infinite}
+.h-section{font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:clamp(28px,4.5vw,48px);margin:0;letter-spacing:-0.03em;line-height:1.15;color:#fff}
+.h-sub{font-size:16px;color:rgba(255,255,255,0.45);max-width:520px;line-height:1.7}
+.reveal{opacity:0;transition:opacity 0.8s ease}
+.reveal.in{opacity:1}
 `;
 
 function StyleInjector() {
@@ -310,36 +318,63 @@ export function NeuralField() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let raf, W, H;
-    const mouse = { x: -9999, y: -9999, active: false };
+    let raf, W = 0, H = 0;
+    const mouse = { x: -9999, y: -9999, active: false, vx: 0, vy: 0, lx: 0, ly: 0 };
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+    // ── Hubs: the bright nodes that form the backbone ──
     let hubs = [];
+    // ── Dust: small depth-layered particles ──
     let dust = [];
+    // ── Pulses: energy packets traveling along connections ──
+    let pulses = [];
+    // ── Ripples: expanding rings from clicks / hub discharges ──
+    let ripples = [];
+    // ── Scan angle for the periodic radar sweep ──
+    let scanAngle = 0;
     let seeded = false;
+    let lastDischarge = 0;
+    let last = performance.now();
+
+    const PALETTE = [
+      [167, 139, 250], // purple
+      [34, 211, 238],  // cyan
+      [236, 72, 153],  // pink
+      [245, 158, 11],  // gold
+      [99, 102, 241],  // indigo
+    ];
 
     const makeParticles = () => {
-      const HUB_COUNT = 8;
-      hubs = Array.from({ length: HUB_COUNT }, () => ({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        vx: (Math.random() - 0.5) * 0.14,
-        vy: (Math.random() - 0.5) * 0.14,
-        r: Math.random() * 2.5 + 4,
-        phase: Math.random() * Math.PI * 2,
-        hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
-      }));
-
-      const DUST_COUNT = 110;
-      dust = Array.from({ length: DUST_COUNT }, () => {
-        const z = 0.25 + Math.random() * 0.75;
+      const HUB_COUNT = 14;
+      hubs = Array.from({ length: HUB_COUNT }, (_, i) => {
+        const c = PALETTE[i % PALETTE.length];
         return {
           x: Math.random() * W,
           y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.2 * z,
-          vy: (Math.random() - 0.5) * 0.2 * z,
+          vx: (Math.random() - 0.5) * 0.18,
+          vy: (Math.random() - 0.5) * 0.18,
+          r: 3 + Math.random() * 3,
+          phase: Math.random() * Math.PI * 2,
+          color: c,
+          charge: 0,            // builds up; releases as a pulse when > 1
+          activity: 0,          // spikes when a pulse arrives / passes
+          label: ['neural','vision','code','memory','search','voice','graph','vector','stream','cache','edge','gpu','auth','sync'][i % 14],
+        };
+      });
+
+      const DUST_COUNT = 140;
+      dust = Array.from({ length: DUST_COUNT }, () => {
+        const z = 0.2 + Math.random() * 0.8;
+        const c = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+        return {
+          x: Math.random() * W,
+          y: Math.random() * H,
+          vx: (Math.random() - 0.5) * 0.25 * z,
+          vy: (Math.random() - 0.5) * 0.25 * z,
           z,
-          r: 0.6 + z * 1.3,
-          hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
+          r: 0.5 + z * 1.6,
+          color: c,
+          twinkle: Math.random() * Math.PI * 2,
         };
       });
       seeded = true;
@@ -357,106 +392,315 @@ export function NeuralField() {
     resize();
     window.addEventListener("resize", resize);
 
+    // ── Mouse tracking with velocity ──
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
+      mouse.lx = mouse.x;
+      mouse.ly = mouse.y;
       mouse.x = e.clientX - rect.left;
       mouse.y = e.clientY - rect.top;
+      mouse.vx = mouse.x - mouse.lx;
+      mouse.vy = mouse.y - mouse.ly;
       mouse.active = true;
     };
-    const onLeave = () => { mouse.active = false; };
+    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
+
+    // ── Click: spawn a connection burst from the nearest hub ──
+    const onClick = (e) => {
+      if (!mouse.active) return;
+      // find nearest hub and discharge it
+      let nearest = null, nd = Infinity;
+      for (const h of hubs) {
+        const d = Math.hypot(h.x - mouse.x, h.y - mouse.y);
+        if (d < nd) { nd = d; nearest = h; }
+      }
+      if (nearest && nd < 300) {
+        nearest.charge = 1.4;
+        nearest.activity = 1.5;
+        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 180, color: nearest.color, life: 1 });
+      }
+      // ambient ripple at click point
+      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 120, color: [255,255,255], life: 1 });
+    };
+
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
+    canvas.addEventListener("click", onClick);
 
-    const HUB_LINK_DIST = 420;
-    const DUST_LINK_DIST = 160;
+    // ── Spawn a pulse along a random connection ──
+    const spawnPulse = (fromHub, toHub) => {
+      pulses.push({
+        from: fromHub,
+        to: toHub,
+        t: 0,
+        speed: 0.008 + Math.random() * 0.01,
+        color: fromHub.color,
+        trail: [],
+      });
+    };
 
-    let last = performance.now();
+    // ── Quadratic bezier point helper (slight curve for organic feel) ──
+    const bezierPoint = (p0, p1, p2, t) => {
+      const mt = 1 - t;
+      return {
+        x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
+        y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
+      };
+    };
+    // control point = midpoint + perpendicular offset
+    const controlPoint = (a, b) => {
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const off = (Math.sin((a.x + a.y) * 0.01) * 30); // deterministic curve direction
+      return { x: mx - dy / len * off, y: my + dx / len * off };
+    };
+
+    const HUB_LINK_DIST = 360;
+
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
       ctx.clearRect(0, 0, W, H);
 
+      // ── Mouse aura (soft glow that follows cursor) ──
       if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 240);
-        glow.addColorStop(0, "rgba(139,92,246,0.12)");
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 260);
+        glow.addColorStop(0, "rgba(139,92,246,0.16)");
+        glow.addColorStop(0.5, "rgba(236,72,153,0.06)");
         glow.addColorStop(1, "rgba(139,92,246,0)");
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, W, H);
       }
 
+      // ── Periodic radar sweep ──
+      scanAngle += 0.006;
+      const cx = W / 2, cy = H / 2;
+      const sweepGrad = ctx.createConicGradient
+        ? ctx.createConicGradient(scanAngle, cx, cy)
+        : null;
+      if (sweepGrad) {
+        sweepGrad.addColorStop(0, "rgba(167,139,250,0.10)");
+        sweepGrad.addColorStop(0.05, "rgba(167,139,250,0)");
+        sweepGrad.addColorStop(1, "rgba(167,139,250,0)");
+        ctx.fillStyle = sweepGrad;
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // ── Update hubs ──
       for (const h of hubs) {
         h.x += h.vx * (dt / 16);
         h.y += h.vy * (dt / 16);
-        if (h.x < 0 || h.x > W) h.vx *= -1;
-        if (h.y < 0 || h.y > H) h.vy *= -1;
+        if (h.x < 40 || h.x > W - 40) h.vx *= -1;
+        if (h.y < 40 || h.y > H - 40) h.vy *= -1;
+
+        // mouse repulsion (cursor pushes hubs gently)
         if (mouse.active) {
-          const dx = mouse.x - h.x, dy = mouse.y - h.y;
+          const dx = h.x - mouse.x, dy = h.y - mouse.y;
           const d = Math.hypot(dx, dy);
-          if (d < 220) { h.x += dx * 0.004; h.y += dy * 0.004; }
+          if (d < 180 && d > 0.1) {
+            const f = (1 - d / 180) * 0.6;
+            h.x += (dx / d) * f;
+            h.y += (dy / d) * f;
+          }
         }
+
+        // charge builds over time, faster when active
+        h.charge += (0.0015 + h.activity * 0.004) * (dt / 16);
+        if (h.charge >= 1) {
+          // discharge: fire pulses to 1-2 nearby hubs
+          const candidates = hubs
+            .filter((o) => o !== h)
+            .map((o) => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
+            .filter((c) => c.d < HUB_LINK_DIST)
+            .sort((a, b) => a.d - b.d)
+            .slice(0, 2);
+          for (const c of candidates) spawnPulse(h, c.o);
+          ripples.push({ x: h.x, y: h.y, r: 0, max: 60, color: h.color, life: 0.6 });
+          h.charge = 0;
+          h.activity = Math.min(1.5, h.activity + 0.5);
+        }
+        // activity decays
+        h.activity *= 0.96;
+        h.phase += 0.02;
       }
 
-      // Hub-to-hub backbone links — the "web" structure
+      // ── Draw hub-to-hub bezier connections (backbone) ──
+      // Pre-compute connection list so we can also use it for pulse paths
+      const connections = [];
       for (let i = 0; i < hubs.length; i++) {
         for (let j = i + 1; j < hubs.length; j++) {
           const a = hubs[i], b = hubs[j];
           const d = Math.hypot(a.x - b.x, a.y - b.y);
           if (d < HUB_LINK_DIST) {
-            const alpha = (1 - d / HUB_LINK_DIST) * 0.5;
-            ctx.strokeStyle = `rgba(168,85,247,${alpha})`;
-            ctx.lineWidth = 1;
+            connections.push({ a, b, d, cp: controlPoint(a, b) });
+          }
+        }
+      }
+
+      for (const c of connections) {
+        const { a, b, d, cp } = c;
+        const alpha = (1 - d / HUB_LINK_DIST) * 0.35;
+        // base line — gradient between the two hub colors
+        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+        grad.addColorStop(0, `rgba(${a.color[0]},${a.color[1]},${a.color[2]},${alpha})`);
+        grad.addColorStop(1, `rgba(${b.color[0]},${b.color[1]},${b.color[2]},${alpha})`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+
+        // flowing dashed overlay (energy moving)
+        const flowAlpha = alpha * 0.6;
+        ctx.strokeStyle = `rgba(255,255,255,${flowAlpha})`;
+        ctx.lineWidth = 0.5;
+        ctx.setLineDash([3, 14]);
+        ctx.lineDashOffset = -now * 0.04;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // mouse proximity highlight — connections near cursor glow brighter
+        if (mouse.active) {
+          const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+          const md = Math.hypot(midX - mouse.x, midY - mouse.y);
+          if (md < 140) {
+            const boost = (1 - md / 140) * 0.5;
+            ctx.strokeStyle = `rgba(255,255,255,${boost})`;
+            ctx.lineWidth = 1.2;
             ctx.beginPath();
             ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
+            ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
             ctx.stroke();
           }
         }
       }
 
-      // Dust drifts, links to its nearest hub
+      // ── Update + draw pulses (traveling energy packets) ──
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.t += p.speed * (dt / 16);
+        if (p.t >= 1) {
+          // arrived: boost destination hub activity
+          p.to.activity = Math.min(1.5, p.to.activity + 0.6);
+          pulses.splice(i, 1);
+          continue;
+        }
+        const cp = controlPoint(p.from, p.to);
+        const pos = bezierPoint(p.from, cp, p.to, p.t);
+        // push to trail
+        p.trail.push({ x: pos.x, y: pos.y });
+        if (p.trail.length > 14) p.trail.shift();
+
+        // draw trail
+        for (let k = 0; k < p.trail.length; k++) {
+          const tp = p.trail[k];
+          const ta = (k / p.trail.length) * 0.8;
+          ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},${ta})`;
+          ctx.beginPath();
+          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // bright head
+        ctx.shadowColor = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},1)`;
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // ── Update + draw ripples ──
+      for (let i = ripples.length - 1; i >= 0; i--) {
+        const r = ripples[i];
+        r.r += 1.8 * (dt / 16);
+        r.life -= 0.012 * (dt / 16);
+        if (r.life <= 0 || r.r > r.max) { ripples.splice(i, 1); continue; }
+        ctx.strokeStyle = `rgba(${r.color[0]},${r.color[1]},${r.color[2]},${r.life * 0.5})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // ── Dust drift + parallax with mouse ──
       for (const p of dust) {
         p.x += p.vx * (dt / 16);
         p.y += p.vy * (dt / 16);
-        if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0 || p.y > H) p.vy *= -1;
+        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+        p.twinkle += 0.03;
 
-        let nearest = null, nearestD = Infinity;
-        for (const h of hubs) {
-          const d = Math.hypot(p.x - h.x, p.y - h.y);
-          if (d < nearestD) { nearestD = d; nearest = h; }
+        // parallax: deeper particles drift opposite to mouse
+        if (mouse.active) {
+          p.x += mouse.vx * 0.02 * (1 - p.z);
+          p.y += mouse.vy * 0.02 * (1 - p.z);
         }
-        if (nearest && nearestD < DUST_LINK_DIST) {
-          const alpha = (1 - nearestD / DUST_LINK_DIST) * 0.45 * p.z;
-          const grad = ctx.createLinearGradient(p.x, p.y, nearest.x, nearest.y);
-          grad.addColorStop(0, `rgba(${p.hue},0)`);
-          grad.addColorStop(1, `rgba(${nearest.hue},${alpha})`);
-          ctx.strokeStyle = grad;
-          ctx.lineWidth = 0.7 * p.z;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(nearest.x, nearest.y);
-          ctx.stroke();
-        }
-      }
 
-      for (const p of dust) {
-        ctx.globalAlpha = 0.4 + p.z * 0.45;
-        ctx.fillStyle = `rgba(${p.hue},0.85)`;
+        const tw = 0.4 + Math.sin(p.twinkle) * 0.3;
+        ctx.globalAlpha = (0.3 + p.z * 0.5) * tw;
+        ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},0.9)`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
 
+      // ── Draw hubs (on top) with glow + activity halo ──
       for (const h of hubs) {
-        const pulse = 0.6 + Math.sin(now * 0.0012 + h.phase) * 0.4;
-        ctx.shadowColor = `rgba(${h.hue},0.9)`;
-        ctx.shadowBlur = 16 * pulse;
-        ctx.fillStyle = `rgba(${h.hue},${0.9 * pulse + 0.1})`;
+        const pulse = 0.7 + Math.sin(now * 0.0015 + h.phase) * 0.3;
+        const actBoost = h.activity;
+
+        // outer halo when active
+        if (actBoost > 0.05) {
+          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 40);
+          halo.addColorStop(0, `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${0.3 * actBoost})`);
+          halo.addColorStop(1, `rgba(${h.color[0]},${h.color[1]},${h.color[2]},0)`);
+          ctx.fillStyle = halo;
+          ctx.fillRect(h.x - 40, h.y - 40, 80, 80);
+        }
+
+        // charge ring (fills up as charge approaches 1)
+        if (h.charge > 0.1) {
+          ctx.strokeStyle = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${h.charge * 0.5})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(h.x, h.y, h.r + 6, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
+          ctx.stroke();
+        }
+
+        // core
+        ctx.shadowColor = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},0.9)`;
+        ctx.shadowBlur = 18 * pulse + 10 * actBoost;
+        ctx.fillStyle = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${0.85 * pulse + 0.15})`;
         ctx.beginPath();
-        ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
+        ctx.arc(h.x, h.y, h.r + actBoost * 1.5, 0, Math.PI * 2);
         ctx.fill();
+
+        // white hot center
         ctx.shadowBlur = 0;
+        ctx.fillStyle = `rgba(255,255,255,${0.5 + actBoost * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // label appears when near mouse
+        if (mouse.active) {
+          const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
+          if (md < 110) {
+            const op = (1 - md / 110);
+            ctx.font = "10px 'JetBrains Mono', monospace";
+            ctx.fillStyle = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${op})`;
+            ctx.textAlign = "center";
+            ctx.fillText(h.label, h.x, h.y - h.r - 10);
+          }
+        }
       }
 
       raf = requestAnimationFrame(tick);
@@ -468,26 +712,104 @@ export function NeuralField() {
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("mouseleave", onLeave);
+      canvas.removeEventListener("click", onClick);
     };
   }, []);
 
   return (
-    <section ref={ref} style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}>
-      <div style={{ position: "relative", height: 480, maxWidth: 1300, margin: "0 auto" }}>
-        <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }} />
-        <div style={{
-          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", pointerEvents: "none",
-          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
-          transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
-        }}>
-          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(30px,5vw,58px)", margin: "0 0 14px", letterSpacing: "-0.03em", textAlign: "center", textShadow: "0 0 60px rgba(3,3,10,0.9)" }}>
+    <section
+      ref={ref}
+      style={{
+        position: "relative",
+        zIndex: 1,
+        borderTop: "1px solid rgba(255,255,255,0.04)",
+        padding: "40px 0 0",
+      }}
+    >
+      <div style={{ position: "relative", height: 520, maxWidth: 1300, margin: "0 auto" }}>
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            cursor: "crosshair",
+          }}
+        />
+
+        {/* Centered headline overlay */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            opacity: inView ? 1 : 0,
+            transform: inView ? "translateY(0)" : "translateY(30px)",
+            transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: "'Space Grotesk',sans-serif",
+              fontWeight: 900,
+              fontSize: "clamp(30px,5vw,58px)",
+              margin: "0 0 14px",
+              letterSpacing: "-0.03em",
+              textAlign: "center",
+              textShadow: "0 0 60px rgba(3,3,10,0.95), 0 0 30px rgba(3,3,10,0.9)",
+            }}
+          >
             One mind.{" "}
-            <span style={{ background: "linear-gradient(90deg,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>A billion connections.</span>
+            <span
+              style={{
+                background: "linear-gradient(90deg,#a855f7,#06B6D4)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
+              A billion connections.
+            </span>
           </h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.45)", margin: 0, textAlign: "center", maxWidth: 460, lineHeight: 1.7, textShadow: "0 0 30px rgba(3,3,10,0.9)" }}>
+          <p
+            style={{
+              fontSize: 16,
+              color: "rgba(255,255,255,0.55)",
+              margin: "0 0 8px",
+              textAlign: "center",
+              maxWidth: 480,
+              lineHeight: 1.7,
+              textShadow: "0 0 30px rgba(3,3,10,0.95)",
+            }}
+          >
             Move your cursor through the network — this is how Vortis connects your world.
           </p>
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              marginTop: 8,
+              fontSize: 11,
+              color: "rgba(255,255,255,0.35)",
+              fontFamily: "'JetBrains Mono', monospace",
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+              textShadow: "0 0 20px rgba(3,3,10,0.95)",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#a78bfa", boxShadow: "0 0 8px #a78bfa" }} />
+              move to influence
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ec4899", boxShadow: "0 0 8px #ec4899" }} />
+              click to ignite
+            </span>
+          </div>
         </div>
       </div>
     </section>
