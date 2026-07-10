@@ -5,7 +5,7 @@ import {
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
   BarChart3, Wifi, ChevronDown, Star, Award, Crown,
   Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
-  TrendingUp, Clock, Database, Search, Palette
+  TrendingUp, Clock, Database, Search, Palette, Mic
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════
@@ -300,18 +300,6 @@ function Nav({ onLogin }) {
 // ══════════════════════════════════════════════════════════════════
 //  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
 // ══════════════════════════════════════════════════════════════════
-function useInView(threshold = 0.12) {
-  const ref = useRef(null);
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    if (!ref.current) return;
-    const obs = new IntersectionObserver(([e]) => e.isIntersecting && setInView(true), { threshold });
-    obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [threshold]);
-  return [ref, inView];
-}
- 
 export function NeuralField() {
   const canvasRef = useRef(null);
   const [ref, inView] = useInView(0.15);
@@ -1374,11 +1362,49 @@ function SearchTileVisual() {
   );
 }
 
+function VoiceTileVisual() {
+  const [level, setLevel] = useState(0.3);
+  useEffect(() => {
+    const id = setInterval(() => setLevel(0.25 + Math.random() * 0.75), 220);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, paddingTop: 4 }}>
+      <div style={{
+        width: 72, height: 72, borderRadius: "50%", position: "relative",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "radial-gradient(circle, rgba(124,58,237,0.35), transparent 70%)",
+        animation: "pulse 2s ease-in-out infinite",
+      }}>
+        <div style={{
+          width: 48, height: 48, borderRadius: "50%",
+          background: "linear-gradient(135deg,#7C3AED,#a855f7)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 0 24px rgba(168,85,247,0.5)",
+        }}>
+          <Mic size={20} color="#fff" />
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 20 }}>
+        {[0,1,2,3,4,5,6].map(i => (
+          <div key={i} style={{
+            width: 3, borderRadius: 2, background: "#a855f7",
+            height: `${8 + Math.abs(Math.sin(i + level * 5)) * level * 20}px`,
+            transition: "height 0.15s ease",
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BentoGrid() {
   const [ref, inView] = useInView(0.08);
 
   const tiles = [
     { color: "6,182,212", icon: Globe, title: "Live Web Search", desc: "Real-time results from across the internet, with sources.", visual: <SearchTileVisual /> },
+    { color: "124,58,237", icon: Phone, title: "Voice Mode", desc: "Talk naturally — real-time voice conversations, no typing.", visual: <VoiceTileVisual /> },
     { color: "124,58,237", icon: Code2, title: "Code Mastery", desc: "Writes, debugs and refactors like a principal engineer.", visual: <CodeTileVisual /> },
     {
       color: "99,102,241", icon: Eye, title: "Vision AI", desc: "Reads screenshots, photos and charts like you do.",
@@ -1546,6 +1572,7 @@ function HowItWorks() {
 const DEMO_TABS = [
   { id: "chat", name: "AI Chat", icon: MessageSquare, color: "124,58,237" },
   { id: "code", name: "Code", icon: Code2, color: "6,182,212" },
+  { id: "voice", name: "Voice Call", icon: Phone, color: "124,58,237" },
   { id: "search", name: "Web Search", icon: Globe, color: "168,85,247" },
   { id: "image", name: "Image Gen", icon: ImageIcon, color: "251,191,36" },
   { id: "research", name: "Deep Research", icon: Microscope, color: "6,182,212" },
@@ -1581,6 +1608,16 @@ const DEMO_CONTENT = {
       { n: 14, t: "code",   text: `}` },
     ]
   },
+
+  voice: {
+  transcript: [
+    { role: "user", text: "Hey, what's the weather like for my trip tomorrow?" },
+    { role: "ai", text: "Checking now — sunny, high of 72°F, light breeze. Good day to travel." },
+    { role: "user", text: "Perfect, can you also remind me to pack a jacket for evening?" },
+    { role: "ai", text: "Done — I'll remind you tonight at 8pm." },
+  ]
+},
+
   search: {
     query: "Latest breakthroughs in fusion energy 2026",
     results: [
@@ -1635,6 +1672,7 @@ function DemoPanel({ tabId, color }) {
     if (tabId === "code") {
       const id = setInterval(() => setCodeLines(l => Math.min(l + 1, data.lines.length)), 120);
       return () => clearInterval(id);
+    
     }
     if (tabId === "search") {
       const id = setTimeout(() => setSearchDone(true), 1200);
@@ -1704,6 +1742,44 @@ function DemoPanel({ tabId, color }) {
       </div>
     </div>
   );
+
+  //Voice call
+  if (tabId === "voice") return (
+  <div style={{ padding: 20, height: "100%", display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "16px 0" }}>
+      <div style={{
+        width: 64, height: 64, borderRadius: "50%",
+        background: `radial-gradient(circle, rgba(${rgb},0.4), transparent 70%)`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        animation: "pulse 1.8s ease-in-out infinite",
+      }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: "50%",
+          background: `linear-gradient(135deg,rgb(${rgb}),#a855f7)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <Mic size={18} color="#fff" />
+        </div>
+      </div>
+      <span style={{ fontSize: 11, color: `rgb(${rgb})`, fontFamily: "'JetBrains Mono',monospace" }}>LIVE CALL · 00:42</span>
+    </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, overflowY: "auto" }}>
+      {data.transcript.map((m, i) => (
+        <div key={i} style={{
+          display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start",
+          opacity: tick > i * 1.3 ? 1 : 0, transition: "opacity 0.4s ease",
+        }}>
+          <div style={{
+            maxWidth: "80%", padding: "8px 13px", fontSize: 12.5, lineHeight: 1.5,
+            borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
+            background: m.role === "user" ? `linear-gradient(135deg,rgb(${rgb}),rgba(${rgb},0.8))` : "rgba(255,255,255,0.06)",
+            color: m.role === "user" ? "#fff" : "rgba(255,255,255,0.8)",
+          }}>{m.text}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
 
   // SEARCH
   if (tabId === "search") return (
