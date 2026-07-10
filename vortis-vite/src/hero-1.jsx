@@ -2467,7 +2467,7 @@ function ConnectDemo({ c, active }) {
           <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', animation: 'howPulse 1.5s ease-in-out infinite' }} />
           6 connected
         </span>
-        <span style={{ color }}>indexing complete</span>
+        <span style={{ color: c }}>indexing complete</span>
       </div>
     </div>
   );
