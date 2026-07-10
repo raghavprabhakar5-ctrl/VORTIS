@@ -309,8 +309,9 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  CONNECTION CONSTELLATION — Vortis at the center, people orbiting,
-//  live data beams flowing between them. Pure 2D canvas, no Three.js.
+//  LIGHT SILK — flowing ribbons of light that weave through each other
+//  (replaces NeuralField) — pure visual beauty, no concept overhead.
+//  Pure 2D canvas, no Three.js, no THREE.Clock.
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -322,60 +323,68 @@ export function NeuralField() {
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const mouse = { x: -9999, y: -9999, active: false };
+    const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, active: false };
 
-    let people = [];
-    let pulses = [];      // data packets traveling Vortis ↔ person
-    let ripples = [];     // click ripples
-    let bursts = [];      // connection-established bursts
-    let stats = { active: 0, total: 0 };
+    let ribbons = [];
+    let sparkles = [];
+    let waves = [];
     let t0 = performance.now();
     let last = t0;
-    let lastSpawn = 0;
-    let lastPulse = 0;
+    let lastSparkle = 0;
     let seeded = false;
 
-    let seed = 55543;
+    let seed = 24681;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
-    const PALETTE = {
-      vortis: [168, 85, 247],    // purple
-      vortisDeep: [124, 58, 237],
-      cyan: [6, 182, 212],
-      warm: [251, 191, 36],      // amber for incoming packets
-      pink: [236, 72, 153],
-    };
-
-    const NAMES = ['Alex', 'Maya', 'Ken', 'Riya', 'Sam', 'Yuki', 'Leo', 'Zara', 'Dev', 'Nia', 'Kai', 'Aria', 'Theo', 'Lina', 'Jax', 'Mira', 'Reza', 'Iris', 'Noor', 'Eve', 'Tao', 'Sia', 'Omar', 'Luna', 'Finn', 'Ada', 'Ravi', 'Cleo', 'Ivan', 'Mina'];
+    // Palette — purple/cyan/violet only
+    const COLORS = [
+      { a: [168, 85, 247],  b: [124, 58, 237] },  // purple → deep violet
+      { a: [6, 182, 212],   b: [59, 130, 246] },  // cyan → blue
+      { a: [236, 72, 153],  b: [168, 85, 247] },  // pink → purple
+      { a: [139, 92, 246],  b: [6, 182, 212] },   // violet → cyan
+      { a: [217, 70, 239],  b: [124, 58, 237] },  // fuchsia → violet
+      { a: [56, 189, 248],  b: [168, 85, 247] },  // sky → purple
+      { a: [192, 132, 252], b: [6, 182, 212] },   // light violet → cyan
+    ];
 
     const init = () => {
-      const cx = W * 0.5, cy = H * 0.5;
-      const PEOPLE_COUNT = 16;
-      people = [];
-      for (let i = 0; i < PEOPLE_COUNT; i++) {
-        const angle = (i / PEOPLE_COUNT) * Math.PI * 2 + rng() * 0.2;
-        const orbitR = Math.min(W, H) * (0.28 + rng() * 0.14);
-        const dir = rng() > 0.5 ? 1 : -1;
-        people.push({
-          id: i,
-          name: NAMES[i % NAMES.length],
-          baseAngle: angle,
-          angle,
-          orbitR,
-          orbitSpeed: 0.00018 * dir * (0.7 + rng() * 0.6),
-          size: 10 + rng() * 6,
+      const RIBBON_COUNT = 7;
+      ribbons = [];
+      for (let i = 0; i < RIBBON_COUNT; i++) {
+        const c = COLORS[i % COLORS.length];
+        ribbons.push({
+          // Anchor Y across the canvas — spread vertically
+          baseY: H * (0.15 + (i / RIBBON_COUNT) * 0.7),
+          // Amplitude of the wave
+          amp: 50 + rng() * 70,
+          // Frequency of the wave
+          freq: 0.004 + rng() * 0.005,
+          // Speed of horizontal flow
+          speed: 0.4 + rng() * 0.5,
+          // Phase offset
           phase: rng() * Math.PI * 2,
-          pulseSpeed: 0.8 + rng() * 1.4,
-          color: i % 4 === 0 ? PALETTE.cyan : (i % 5 === 0 ? PALETTE.pink : PALETTE.vortis),
-          activity: 0,
-          hue: rng() * 360, // for avatar gradient
-          online: rng() > 0.15,
-          x: 0, y: 0, // computed each frame
-          label: '',
+          // Secondary modulation (gives organic curl)
+          modFreq: 0.0015 + rng() * 0.002,
+          modAmp: 25 + rng() * 35,
+          modSpeed: 0.25 + rng() * 0.35,
+          modPhase: rng() * Math.PI * 2,
+          // Ribbon thickness
+          thickness: 18 + rng() * 28,
+          // Z-depth (for layering)
+          depth: 0.3 + rng() * 0.7,
+          // Color pair
+          colorA: c.a,
+          colorB: c.b,
+          // Overall alpha (depth-dependent)
+          alpha: 0.5 + rng() * 0.4,
+          // Vertical drift
+          driftPhase: rng() * Math.PI * 2,
+          driftSpeed: 0.15 + rng() * 0.2,
+          driftAmp: 20 + rng() * 30,
         });
       }
-      stats.total = 50284 + Math.floor(rng() * 200);
-      stats.active = 0;
+      sparkles = [];
+      waves = [];
       seeded = true;
     };
 
@@ -391,27 +400,27 @@ export function NeuralField() {
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
+      mouse.tx = (e.clientX - rect.left) / rect.width;
+      mouse.ty = (e.clientY - rect.top) / rect.height;
       mouse.active = true;
     };
-    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
+    const onLeave = () => { mouse.active = false; mouse.tx = 0.5; mouse.ty = 0.5; };
 
     const onClick = (e) => {
       const rect = canvas.getBoundingClientRect();
       const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-      ripples.push({ x: cx, y: cy, r: 0, max: 220, life: 1 });
-      // Send a pulse from Vortis to the 3 nearest people
-      const center = { x: W * 0.5, y: H * 0.5 };
-      const nearby = people
-        .map(p => ({ p, d: Math.hypot(p.x - cx, p.y - cy) }))
-        .sort((a, b) => a.d - b.d)
-        .slice(0, 3)
-        .map(o => o.p);
-      for (const p of nearby) {
-        pulses.push({ from: center, to: p, t: 0, speed: 0.024, color: PALETTE.vortis, life: 1, dir: 'out' });
-        p.activity = Math.min(2, p.activity + 1);
-        bursts.push({ x: p.x, y: p.y, r: 0, max: 50, life: 1, color: p.color });
+      // Wave pulse radiating from click
+      waves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H), life: 1, speed: 7 });
+      waves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.7, life: 1, speed: 5 });
+      // Burst of sparkles
+      for (let i = 0; i < 24; i++) {
+        const a = rng() * Math.PI * 2;
+        const s = 1.5 + rng() * 3;
+        sparkles.push({
+          x: cx, y: cy, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+          life: 1, decay: 0.015 + rng() * 0.02, r: 1 + rng() * 1.8,
+          color: COLORS[Math.floor(rng() * COLORS.length)].a,
+        });
       }
     };
 
@@ -419,344 +428,173 @@ export function NeuralField() {
     canvas.addEventListener("mouseleave", onLeave);
     canvas.addEventListener("click", onClick);
 
+    // Sample a ribbon's Y at a given x and time
+    const sampleY = (r, x, t) => {
+      const drift = Math.sin(t * r.driftSpeed + r.driftPhase) * r.driftAmp;
+      const main = Math.sin(x * r.freq + t * r.speed + r.phase) * r.amp;
+      const mod = Math.sin(x * r.modFreq + t * r.modSpeed + r.modPhase) * r.modAmp;
+      return r.baseY + drift + main + mod;
+    };
+
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
       const t = (now - t0) * 0.001;
 
-      // ── Update people positions ──
-      const cx = W * 0.5, cy = H * 0.5;
-      let activeCount = 0;
-      for (const p of people) {
-        p.angle += p.orbitSpeed * (dt / 16);
-        p.x = cx + Math.cos(p.angle) * p.orbitR;
-        p.y = cy + Math.sin(p.angle) * p.orbitR * 0.62; // tilted orbit
-        p.activity *= 0.97;
-        p.phase += 0.02 * p.pulseSpeed * (dt / 16);
-        if (p.activity > 0.1 || (Math.sin(t * 0.5 + p.id) > 0.3 && p.online)) activeCount++;
-      }
-      stats.active = activeCount;
+      // Smooth mouse follow
+      mouse.x += (mouse.tx - mouse.x) * 0.06;
+      mouse.y += (mouse.ty - mouse.y) * 0.06;
+      const mInfluence = mouse.active ? 1 : 0;
 
-      // ── Auto-spawn data pulses between Vortis and random people ──
-      if (now - lastPulse > 380) {
-        lastPulse = now;
-        const p = people[Math.floor(rng() * people.length)];
-        const center = { x: cx, y: cy };
-        if (rng() > 0.45) {
-          // Outgoing: Vortis → person (purple)
-          pulses.push({ from: center, to: p, t: 0, speed: 0.018 + rng() * 0.012, color: PALETTE.vortis, life: 1, dir: 'out' });
-        } else {
-          // Incoming: person → Vortis (amber)
-          pulses.push({ from: { x: p.x, y: p.y }, to: { x: cx, y: cy }, t: 0, speed: 0.018 + rng() * 0.012, color: PALETTE.warm, life: 1, dir: 'in', attachTo: p });
-        }
-      }
+      // ── MOTION-BLUR CLEAR (low-alpha fill = natural silk trails) ──
+      ctx.fillStyle = "rgba(3,3,10,0.14)";
+      ctx.fillRect(0, 0, W, H);
 
-      // ── Background ──
-      const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, W * 0.7);
-      bg.addColorStop(0, "#0c0820");
-      bg.addColorStop(0.5, "#06040f");
-      bg.addColorStop(1, "#03030a");
+      // ── Soft background gradient ──
+      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.7);
+      bg.addColorStop(0, "rgba(20,10,40,0.025)");
+      bg.addColorStop(1, "rgba(3,3,10,0.025)");
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ── Cursor spotlight (subtle) ──
-      if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 160);
-        glow.addColorStop(0, "rgba(124,58,237,0.10)");
-        glow.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-      }
+      // ── Cursor disturbance field (gentle pull on nearby ribbon points) ──
+      const mx = mouse.x * W;
+      const my = mouse.y * H;
 
-      // ── Orbit rings (faint guides) ──
-      ctx.strokeStyle = "rgba(124,58,237,0.06)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, Math.min(W, H) * 0.28, Math.min(W, H) * 0.28 * 0.62, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(cx, cy, Math.min(W, H) * 0.42, Math.min(W, H) * 0.42 * 0.62, 0, 0, Math.PI * 2);
-      ctx.stroke();
+      // ── Sort ribbons by depth (back to front) ──
+      const sorted = [...ribbons].sort((a, b) => a.depth - b.depth);
 
-      // ── Connection beams: Vortis ↔ each person (multi-pass glow) ──
+      // ── Draw each ribbon as a filled band between two offset curves ──
       ctx.globalCompositeOperation = "screen";
-      for (const p of people) {
-        if (!p.online) continue;
-        const [r, g, b] = p.color;
-        // Beam strength depends on activity + a slow breathing
-        const baseAlpha = 0.05 + p.activity * 0.20;
-        const breath = 0.5 + Math.sin(t * 0.6 + p.phase) * 0.5;
-        const alpha = baseAlpha * (0.4 + breath * 0.6);
+      for (const r of sorted) {
+        const depthScale = 0.55 + r.depth * 0.45; // farther = smaller
+        const thickness = r.thickness * depthScale;
 
-        // Multi-pass glow
-        for (const width of [8, 4, 1.5]) {
-          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * (width === 8 ? 0.25 : width === 4 ? 0.5 : 1)})`;
-          ctx.lineWidth = width;
-          ctx.beginPath();
-          ctx.moveTo(cx, cy);
-          // Slight curve using control point perpendicular to line
-          const mx = (cx + p.x) / 2, my = (cy + p.y) / 2;
-          const dx = p.x - cx, dy = p.y - cy;
-          const len = Math.hypot(dx, dy) || 1;
-          const off = Math.sin(t * 0.4 + p.id) * 12;
-          ctx.quadraticCurveTo(mx - dy / len * off, my + dx / len * off, p.x, p.y);
-          ctx.stroke();
-        }
-      }
-      ctx.globalCompositeOperation = "source-over";
+        // Build top and bottom edges of the ribbon
+        const step = 14;
+        const points = [];
+        for (let x = -30; x <= W + 30; x += step) {
+          let y = sampleY(r, x, t);
 
-      // ── Data pulses (traveling packets along beams) ──
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = pulses.length - 1; i >= 0; i--) {
-        const pu = pulses[i];
-        // If incoming and attached to a person, update source position
-        let fromX = pu.from.x, fromY = pu.from.y;
-        if (pu.dir === 'in' && pu.attachTo) {
-          fromX = pu.attachTo.x; fromY = pu.attachTo.y;
-        }
-        const toX = pu.to.x, toY = pu.to.y;
-        pu.t += pu.speed * (dt / 16);
-        pu.life = 1 - pu.t;
-        if (pu.t >= 1) {
-          pulses.splice(i, 1);
-          // On arrival: if outgoing, trigger activity on person + burst
-          if (pu.dir === 'out') {
-            pu.to.activity = Math.min(2, pu.to.activity + 1);
-            bursts.push({ x: pu.to.x, y: pu.to.y, r: 0, max: 38, life: 1, color: pu.color });
+          // Cursor pull — only when active
+          if (mInfluence > 0) {
+            const dx = x - mx, dy = y - my;
+            const d = Math.hypot(dx, dy);
+            if (d < 200 && d > 0.5) {
+              const pull = (1 - d / 200) * 35 * mInfluence;
+              y += (dy / d) * pull * 0.6;
+            }
           }
-          continue;
-        }
-        // Quadratic curve point (same curve as beam)
-        const mx = (fromX + toX) / 2, my = (fromY + toY) / 2;
-        const dx = toX - fromX, dy = toY - fromY;
-        const len = Math.hypot(dx, dy) || 1;
-        const off = Math.sin(t * 0.4 + (pu.to.id || 0)) * 12;
-        const ctrlX = mx - dy / len * off, ctrlY = my + dx / len * off;
-        const mt = 1 - pu.t;
-        const px2 = mt * mt * fromX + 2 * mt * pu.t * ctrlX + pu.t * pu.t * toX;
-        const py2 = mt * mt * fromY + 2 * mt * pu.t * ctrlY + pu.t * pu.t * toY;
 
-        const [r, g, b] = pu.color;
-        // Trail
-        for (let k = 0; k < 8; k++) {
-          const tk = Math.max(0, pu.t - k * 0.02);
-          const mtk = 1 - tk;
-          const tx = mtk * mtk * fromX + 2 * mtk * tk * ctrlX + tk * tk * toX;
-          const ty = mtk * mtk * fromY + 2 * mtk * tk * ctrlY + tk * tk * toY;
-          const ta = (1 - k / 8) * pu.life * 0.5;
-          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
-          ctx.beginPath();
-          ctx.arc(tx, ty, 1 + (1 - k / 8) * 2, 0, Math.PI * 2);
-          ctx.fill();
+          // Wave pulse displacement
+          for (const w of waves) {
+            const dx = x - w.x, dy = y - w.y;
+            const d = Math.hypot(dx, dy);
+            const ringDist = Math.abs(d - w.r);
+            if (ringDist < 60 && d > 0.5) {
+              const push = (1 - ringDist / 60) * w.life * 50;
+              y += (dy / d) * push;
+            }
+          }
+
+          points.push({ x, y });
         }
-        // Head
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 14;
-        ctx.fillStyle = "#fff";
+
+        // Draw ribbon as a filled path between offset curves
+        const [ra, ga, ba] = r.colorA;
+        const [rb, gb, bb] = r.colorB;
+
+        // Top edge (thickness/2 above)
+        const topPts = points.map(p => ({ x: p.x, y: p.y - thickness / 2 }));
+        // Bottom edge (thickness/2 below)
+        const botPts = points.map(p => ({ x: p.x, y: p.y + thickness / 2 }));
+
+        // Gradient fill along x (colorA → colorB)
+        const grad = ctx.createLinearGradient(0, 0, W, 0);
+        grad.addColorStop(0,    `rgba(${ra},${ga},${ba},${r.alpha * depthScale * 0.55})`);
+        grad.addColorStop(0.5,  `rgba(${rb},${gb},${bb},${r.alpha * depthScale * 0.85})`);
+        grad.addColorStop(1,    `rgba(${ra},${ga},${ba},${r.alpha * depthScale * 0.55})`);
+
+        // ── Multi-pass glow: wide soft → medium → crisp core ──
+        // Pass 1: wide soft glow (outer halo)
+        ctx.shadowColor = `rgba(${rb},${gb},${bb},${r.alpha * 0.7})`;
+        ctx.shadowBlur = 28 * depthScale;
+        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(px2, py2, 2.5, 0, Math.PI * 2);
+        ctx.moveTo(topPts[0].x, topPts[0].y);
+        for (let i = 1; i < topPts.length; i++) ctx.lineTo(topPts[i].x, topPts[i].y);
+        for (let i = botPts.length - 1; i >= 0; i--) ctx.lineTo(botPts[i].x, botPts[i].y);
+        ctx.closePath();
         ctx.fill();
         ctx.shadowBlur = 0;
+
+        // Pass 2: bright centerline (the actual light streak)
+        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.35})`;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
+
+        // Pass 3: thin bright highlight along center (subtle white sheen)
+        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.15})`;
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y - thickness * 0.15);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y - thickness * 0.15);
+        ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Connection-established bursts ──
+      // ── Auto-spawn drifting sparkles along random ribbon points ──
+      if (now - lastSparkle > 90) {
+        lastSparkle = now;
+        const r = ribbons[Math.floor(rng() * ribbons.length)];
+        const x = rng() * W;
+        const y = sampleY(r, x, t);
+        sparkles.push({
+          x, y, vx: (rng() - 0.5) * 0.6, vy: -0.3 - rng() * 0.5,
+          life: 1, decay: 0.012 + rng() * 0.015, r: 0.8 + rng() * 1.2,
+          color: rng() > 0.5 ? r.colorA : r.colorB,
+        });
+      }
+
+      // ── Update + draw sparkles ──
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const sp = sparkles[i];
+        sp.x += sp.vx * (dt / 16);
+        sp.y += sp.vy * (dt / 16);
+        sp.vx *= 0.985; sp.vy *= 0.985;
+        sp.life -= sp.decay * (dt / 16);
+        if (sp.life <= 0) { sparkles.splice(i, 1); continue; }
+        const [r, g, b] = sp.color;
+        ctx.fillStyle = `rgba(${r},${g},${b},${sp.life * 0.85})`;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.r * sp.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ── Click wave rings (subtle, screen-blended) ──
       ctx.globalCompositeOperation = "screen";
-      for (let i = bursts.length - 1; i >= 0; i--) {
-        const b = bursts[i];
-        b.r += 2.2 * (dt / 16);
-        b.life -= 0.03 * (dt / 16);
-        if (b.life <= 0 || b.r > b.max) { bursts.splice(i, 1); continue; }
-        const [r, g, bl] = b.color;
-        ctx.strokeStyle = `rgba(${r},${g},${bl},${b.life * 0.6})`;
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const w = waves[i];
+        w.r += w.speed * (dt / 16);
+        w.life -= 0.008 * (dt / 16);
+        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
+        ctx.strokeStyle = `rgba(255,255,255,${w.life * 0.25})`;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(168,85,247,${w.life * 0.18})`;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
         ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
-
-      // ── Click ripples ──
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const r = ripples[i];
-        r.r += 4 * (dt / 16);
-        r.life -= 0.015 * (dt / 16);
-        if (r.life <= 0 || r.r > r.max) { ripples.splice(i, 1); continue; }
-        ctx.strokeStyle = `rgba(168,85,247,${r.life * 0.4})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // ── People nodes (orbiting) ──
-      for (const p of people) {
-        const pulse = 0.7 + Math.sin(p.phase) * 0.3;
-        const actBoost = p.activity;
-        const [r, g, b] = p.color;
-        const size = p.size * (1 + actBoost * 0.3);
-
-        // Activity halo
-        if (actBoost > 0.05) {
-          const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 36);
-          halo.addColorStop(0, `rgba(${r},${g},${b},${0.4 * actBoost})`);
-          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          ctx.fillStyle = halo;
-          ctx.fillRect(p.x - 36, p.y - 36, 72, 72);
-        }
-
-        // Rotating dashed ring
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.25)`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 5]);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size + 6, p.phase, p.phase + Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Avatar circle (gradient)
-        const ag = ctx.createRadialGradient(p.x - size * 0.3, p.y - size * 0.3, 0, p.x, p.y, size);
-        ag.addColorStop(0, `hsla(${p.hue}, 70%, 65%, 1)`);
-        ag.addColorStop(1, `hsla(${p.hue}, 70%, 35%, 1)`);
-        ctx.fillStyle = ag;
-        ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
-        ctx.shadowBlur = 8 + actBoost * 8;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        // Inner initial letter
-        ctx.fillStyle = "rgba(255,255,255,0.95)";
-        ctx.font = `${Math.floor(size * 0.9)}px 'Space Grotesk', sans-serif`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(p.name[0], p.x, p.y);
-
-        // Online status dot
-        if (p.online) {
-          ctx.fillStyle = "#10b981";
-          ctx.strokeStyle = "#03030a";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(p.x + size * 0.65, p.y + size * 0.65, 3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        }
-
-        // Label on hover
-        if (mouse.active) {
-          const md = Math.hypot(p.x - mouse.x, p.y - mouse.y);
-          if (md < 60) {
-            const op = (1 - md / 60);
-            ctx.font = "10px 'JetBrains Mono', monospace";
-            const tw = ctx.measureText(p.name).width;
-            ctx.fillStyle = `rgba(3,3,10,${op * 0.85})`;
-            ctx.fillRect(p.x - tw / 2 - 6, p.y - size - 22, tw + 12, 16);
-            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-            ctx.fillText(p.name, p.x, p.y - size - 11);
-          }
-        }
-      }
-
-      // ── Vortis core (center) ──
-      const corePulse = 0.85 + Math.sin(t * 1.2) * 0.15;
-      // Outer aura
-      ctx.globalCompositeOperation = "screen";
-      const auraR = 80 * corePulse;
-      const aura = ctx.createRadialGradient(cx, cy, 0, cx, cy, auraR);
-      aura.addColorStop(0, `rgba(168,85,247,${0.45 * corePulse})`);
-      aura.addColorStop(0.4, `rgba(124,58,237,${0.2 * corePulse})`);
-      aura.addColorStop(1, "rgba(124,58,237,0)");
-      ctx.fillStyle = aura;
-      ctx.fillRect(cx - auraR, cy - auraR, auraR * 2, auraR * 2);
-      ctx.globalCompositeOperation = "source-over";
-
-      // Rotating outer ring
-      ctx.strokeStyle = "rgba(168,85,247,0.4)";
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 6]);
-      ctx.beginPath();
-      ctx.arc(cx, cy, 32, t * 0.6, t * 0.6 + Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Core circle
-      const coreSize = 22 * corePulse;
-      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreSize);
-      coreGrad.addColorStop(0, "#fff");
-      coreGrad.addColorStop(0.3, "#e9d5ff");
-      coreGrad.addColorStop(0.7, "#a855f7");
-      coreGrad.addColorStop(1, "#7c3aed");
-      ctx.fillStyle = coreGrad;
-      ctx.shadowColor = "rgba(168,85,247,1)";
-      ctx.shadowBlur = 24 * corePulse;
-      ctx.beginPath();
-      ctx.arc(cx, cy, coreSize, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.shadowBlur = 0;
-
-      // Vortis "V" mark in center
-      ctx.strokeStyle = "rgba(255,255,255,0.95)";
-      ctx.lineWidth = 2;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(cx - 6, cy - 6);
-      ctx.lineTo(cx, cy + 7);
-      ctx.lineTo(cx + 6, cy - 6);
-      ctx.stroke();
-
-      // ── Live stat chips (overlay) ──
-      ctx.font = "10px 'JetBrains Mono', monospace";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      // Active now
-      const stat1 = `${stats.active} ACTIVE NOW`;
-      const sw1 = ctx.measureText(stat1).width;
-      ctx.fillStyle = "rgba(3,3,10,0.6)";
-      ctx.strokeStyle = "rgba(16,185,129,0.4)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.rect(16, 16, sw1 + 24, 26);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#10b981";
-      ctx.beginPath();
-      ctx.arc(28, 29, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillText(stat1, 38, 22);
-
-      // Total users
-      const stat2 = `${stats.total.toLocaleString()} TOTAL USERS`;
-      const sw2 = ctx.measureText(stat2).width;
-      ctx.fillStyle = "rgba(3,3,10,0.6)";
-      ctx.strokeStyle = "rgba(168,85,247,0.4)";
-      ctx.beginPath();
-      ctx.rect(16, 50, sw2 + 24, 26);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#a855f7";
-      ctx.beginPath();
-      ctx.arc(28, 63, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillText(stat2, 38, 56);
-
-      // Packets/sec counter (top-right)
-      const pps = Math.floor(8 + Math.sin(t * 2) * 4 + rng() * 3);
-      const stat3 = `${pps} PACKETS / SEC`;
-      const sw3 = ctx.measureText(stat3).width;
-      ctx.fillStyle = "rgba(3,3,10,0.6)";
-      ctx.strokeStyle = "rgba(6,182,212,0.4)";
-      ctx.textAlign = "right";
-      ctx.beginPath();
-      ctx.rect(W - sw3 - 40, 16, sw3 + 24, 26);
-      ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#06b6d4";
-      ctx.beginPath();
-      ctx.arc(W - 28, 29, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillText(stat3, W - 38, 22);
 
       raf = requestAnimationFrame(tick);
     };
@@ -776,19 +614,19 @@ export function NeuralField() {
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> LIVING NETWORK
+          <span className="dot" /> FLUID INTELLIGENCE
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          Connected to{" "}
-          <span className="shimmer-text">every mind that matters.</span>
+          Thought, made{" "}
+          <span className="shimmer-text">visible.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Vortis sits at the center — thoughts flow in, intelligence flows out, in real time. Hover a node to see who's connected, click anywhere to broadcast.
+          Move your cursor through the silk — click to send a ripple through the flow.
         </p>
       </div>
 
       {/* Canvas */}
-      <div style={{ position: "relative", height: 540, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ position: "relative", height: 480, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
@@ -803,11 +641,11 @@ export function NeuralField() {
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            hover to identify
+            move to disturb
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            click to broadcast
+            click to ripple
           </span>
         </div>
       </div>
