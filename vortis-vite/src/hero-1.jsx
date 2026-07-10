@@ -300,114 +300,165 @@ function Nav({ onLogin }) {
 // ══════════════════════════════════════════════════════════════════
 //  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
 // ══════════════════════════════════════════════════════════════════
-function NeuralField() {
+function useInView(threshold = 0.12) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    if (!ref.current) return;
+    const obs = new IntersectionObserver(([e]) => e.isIntersecting && setInView(true), { threshold });
+    obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return [ref, inView];
+}
+ 
+export function NeuralField() {
   const canvasRef = useRef(null);
   const [ref, inView] = useInView(0.15);
-
+ 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     let raf, W, H;
-    const mouse = { x: -9999, y: -9999 };
+    const mouse = { x: -9999, y: -9999, active: false };
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-
+ 
     const resize = () => {
-      W = canvas.offsetWidth; H = canvas.offsetHeight;
-      canvas.width = W * DPR; canvas.height = H * DPR;
+      W = canvas.offsetWidth;
+      H = canvas.offsetHeight;
+      canvas.width = W * DPR;
+      canvas.height = H * DPR;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(DPR, DPR);
     };
     resize();
     window.addEventListener("resize", resize);
-
-    // Particles
-    const N = 70;
-    const pts = Array.from({ length: N }, () => ({
-      x: Math.random() * 1600, y: Math.random() * 500,
-      vx: (Math.random() - 0.5) * 0.35, vy: (Math.random() - 0.5) * 0.35,
-      r: Math.random() * 1.8 + 0.8,
+ 
+    // ── Hub nodes: few, large, slow, softly pulsing ──
+    const HUB_COUNT = 6;
+    const hubs = Array.from({ length: HUB_COUNT }, () => ({
+      x: Math.random() * 1600,
+      y: Math.random() * 500,
+      vx: (Math.random() - 0.5) * 0.12,
+      vy: (Math.random() - 0.5) * 0.12,
+      r: Math.random() * 2.5 + 3.5,
+      phase: Math.random() * Math.PI * 2,
       hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
     }));
-
+ 
+    // ── Dust: many, small, varying depth for parallax ──
+    const DUST_COUNT = 90;
+    const dust = Array.from({ length: DUST_COUNT }, () => {
+      const z = 0.25 + Math.random() * 0.75; // depth: 0 far, 1 near
+      return {
+        x: Math.random() * 1600,
+        y: Math.random() * 500,
+        vx: (Math.random() - 0.5) * 0.18 * z,
+        vy: (Math.random() - 0.5) * 0.18 * z,
+        z,
+        r: 0.5 + z * 1.2,
+        hue: Math.random() > 0.5 ? "168,85,247" : "6,182,212",
+      };
+    });
+ 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
       mouse.x = e.clientX - rect.left;
       mouse.y = e.clientY - rect.top;
+      mouse.active = true;
     };
-    const onLeave = () => { mouse.x = -9999; mouse.y = -9999; };
+    const onLeave = () => {
+      mouse.active = false;
+    };
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
-
-    const LINK_DIST = 130;
-    const MOUSE_DIST = 180;
-
-    const tick = () => {
+ 
+    const LINK_DIST = 150;
+ 
+    let last = performance.now();
+    const tick = (now) => {
+      const dt = Math.min(now - last, 32);
+      last = now;
       ctx.clearRect(0, 0, W, H);
-
-      for (const p of pts) {
-        // Gentle drift
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > W) p.vx *= -1;
-        if (p.y < 0 || p.y > H) p.vy *= -1;
-
-        // Pull softly toward cursor
-        const dx = mouse.x - p.x, dy = mouse.y - p.y;
-        const md = Math.hypot(dx, dy);
-        if (md < MOUSE_DIST) {
-          p.x += dx * 0.012;
-          p.y += dy * 0.012;
-        }
+ 
+      // Soft ambient light pooling around the cursor
+      if (mouse.active) {
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 220);
+        glow.addColorStop(0, "rgba(139,92,246,0.10)");
+        glow.addColorStop(1, "rgba(139,92,246,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, W, H);
       }
-
-      // Links between close particles
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const a = pts[i], b = pts[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < LINK_DIST) {
-            // Lines near the mouse glow brighter
-            const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-            const mdist = Math.hypot(mouse.x - mx, mouse.y - my);
-            const boost = mdist < MOUSE_DIST ? (1 - mdist / MOUSE_DIST) * 0.5 : 0;
-            const alpha = (1 - d / LINK_DIST) * 0.22 + boost;
-            ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
-            ctx.lineWidth = boost > 0.1 ? 1.2 : 0.6;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.lineTo(b.x, b.y);
-            ctx.stroke();
+ 
+      // Move hubs (bounce off edges, gentle drift)
+      for (const h of hubs) {
+        h.x += h.vx * (dt / 16);
+        h.y += h.vy * (dt / 16);
+        if (h.x < 0 || h.x > W) h.vx *= -1;
+        if (h.y < 0 || h.y > H) h.vy *= -1;
+        if (mouse.active) {
+          const dx = mouse.x - h.x, dy = mouse.y - h.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 200) {
+            h.x += dx * 0.004;
+            h.y += dy * 0.004;
           }
         }
       }
-
-      // Links from cursor to nearby particles
-      for (const p of pts) {
-        const d = Math.hypot(mouse.x - p.x, mouse.y - p.y);
-        if (d < MOUSE_DIST) {
-          ctx.strokeStyle = `rgba(6,182,212,${(1 - d / MOUSE_DIST) * 0.5})`;
-          ctx.lineWidth = 0.8;
+ 
+      // Move dust, then link each to its single nearest hub only
+      for (const p of dust) {
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+ 
+        let nearest = null, nearestD = Infinity;
+        for (const h of hubs) {
+          const d = Math.hypot(p.x - h.x, p.y - h.y);
+          if (d < nearestD) { nearestD = d; nearest = h; }
+        }
+        if (nearest && nearestD < LINK_DIST) {
+          const alpha = (1 - nearestD / LINK_DIST) * 0.35 * p.z;
+          const grad = ctx.createLinearGradient(p.x, p.y, nearest.x, nearest.y);
+          grad.addColorStop(0, `rgba(${p.hue},0)`);
+          grad.addColorStop(1, `rgba(${nearest.hue},${alpha})`);
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 0.6 * p.z;
           ctx.beginPath();
-          ctx.moveTo(mouse.x, mouse.y);
-          ctx.lineTo(p.x, p.y);
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(nearest.x, nearest.y);
           ctx.stroke();
         }
       }
-
-      // Particles on top
-      for (const p of pts) {
-        ctx.fillStyle = `rgba(${p.hue},0.9)`;
-        ctx.shadowColor = `rgba(${p.hue},0.8)`;
-        ctx.shadowBlur = 6;
+ 
+      // Draw dust (behind hubs, dimmer/smaller for depth)
+      for (const p of dust) {
+        ctx.globalAlpha = 0.35 + p.z * 0.4;
+        ctx.fillStyle = `rgba(${p.hue},0.8)`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+ 
+      // Draw hubs on top: soft glow + bright core, gentle pulse
+      for (const h of hubs) {
+        const pulse = 0.6 + Math.sin(now * 0.0012 + h.phase) * 0.4;
+        ctx.shadowColor = `rgba(${h.hue},0.9)`;
+        ctx.shadowBlur = 14 * pulse;
+        ctx.fillStyle = `rgba(${h.hue},${0.85 * pulse + 0.15})`;
+        ctx.beginPath();
+        ctx.arc(h.x, h.y, h.r, 0, Math.PI * 2);
+        ctx.fill();
         ctx.shadowBlur = 0;
       }
-
+ 
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-
+ 
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
@@ -415,30 +466,62 @@ function NeuralField() {
       canvas.removeEventListener("mouseleave", onLeave);
     };
   }, []);
-
+ 
   return (
-    <section ref={ref} style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}>
+    <section
+      ref={ref}
+      style={{ position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", padding: "40px 0 0" }}
+    >
       <div style={{ position: "relative", height: 480, maxWidth: 1300, margin: "0 auto" }}>
         <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }} />
-
-        {/* Centered copy floating over the field */}
-        <div style={{
-          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-          alignItems: "center", justifyContent: "center", pointerEvents: "none",
-          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
-          transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
-        }}>
-          <h2 style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
-            fontSize: "clamp(30px,5vw,58px)", margin: "0 0 14px", letterSpacing: "-0.03em",
-            textAlign: "center", textShadow: "0 0 60px rgba(3,3,10,0.9)",
-          }}>
+ 
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+            opacity: inView ? 1 : 0,
+            transform: inView ? "translateY(0)" : "translateY(30px)",
+            transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: "'Space Grotesk',sans-serif",
+              fontWeight: 900,
+              fontSize: "clamp(30px,5vw,58px)",
+              margin: "0 0 14px",
+              letterSpacing: "-0.03em",
+              textAlign: "center",
+              textShadow: "0 0 60px rgba(3,3,10,0.9)",
+            }}
+          >
             One mind.{" "}
-            <span style={{ background: "linear-gradient(90deg,#a855f7,#06B6D4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            <span
+              style={{
+                background: "linear-gradient(90deg,#a855f7,#06B6D4)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}
+            >
               A billion connections.
             </span>
           </h2>
-          <p style={{ fontSize: 16, color: "rgba(255,255,255,0.45)", margin: 0, textAlign: "center", maxWidth: 460, lineHeight: 1.7, textShadow: "0 0 30px rgba(3,3,10,0.9)" }}>
+          <p
+            style={{
+              fontSize: 16,
+              color: "rgba(255,255,255,0.45)",
+              margin: 0,
+              textAlign: "center",
+              maxWidth: 460,
+              lineHeight: 1.7,
+              textShadow: "0 0 30px rgba(3,3,10,0.9)",
+            }}
+          >
             Move your cursor through the network — this is how Vortis connects your world.
           </p>
         </div>
@@ -446,7 +529,8 @@ function NeuralField() {
     </section>
   );
 }
-
+ 
+export default NeuralField;
 
 // ══════════════════════════════════════════════════════════════════
 //  HERO
