@@ -2547,24 +2547,6 @@ function CTA({ onLogin }) {
     { w: 90,  h: 56,  top: '2%',  left: '46%', delay: 3.5, dur: 21, rot: -8, color: '245,158,11', label: 'sync' },
   ];
 
-  // Marquee pill content
-  const marqueeLeft = [
-    { icon: '⚡', t: '12ms latency' },
-    { icon: '🔒', t: 'SOC 2 Type II' },
-    { icon: '🌍', t: '14 regions' },
-    { icon: '🚀', t: 'GPT-5 class' },
-    { icon: '💬', t: '24/7 support' },
-    { icon: '♾️', t: 'Unlimited projects' },
-  ];
-  const marqueeRight = [
-    { icon: '✦', t: '99.99% uptime' },
-    { icon: '★', t: '4.9/5 rating' },
-    { icon: '◆', t: '120k+ builders' },
-    { icon: '◉', t: 'Realtime collab' },
-    { icon: '⬢', t: 'Multi-agent' },
-    { icon: '✓', t: 'Type-safe' },
-  ];
-
   return (
     <section
       ref={ref}
