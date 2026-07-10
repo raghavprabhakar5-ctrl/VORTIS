@@ -59,7 +59,7 @@ body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 .gradient-border{position:relative}
 .gradient-border::before{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:linear-gradient(135deg,rgba(124,58,237,.6),rgba(168,85,247,.4),rgba(6,182,212,.6));-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
 
-.section{padding:100px 40px;position:relative}
+.section{padding:100px 40px;position:relative;scroll-margin-top:90px}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;border:1px solid rgba(139,92,246,0.3);background:rgba(139,92,246,0.06);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(168,85,247,0.85);font-family:'JetBrains Mono',monospace}
 .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:#a855f7;animation:pulse 2s ease-in-out infinite}
 .h-section{font-family:'Space Grotesk',sans-serif;font-weight:900;font-size:clamp(28px,4.5vw,48px);margin:0;letter-spacing:-0.03em;line-height:1.15;color:#fff}
