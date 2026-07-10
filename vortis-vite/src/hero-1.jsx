@@ -5,7 +5,7 @@ import {
   Shield, Cpu, Layers, ArrowRight, Sparkles, Lock,
   BarChart3, Wifi, ChevronDown, Star, Award, Crown,
   Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
-  TrendingUp, Clock, Database, Search, Palette, Mic
+  TrendingUp, Clock, Database, Search, Palette, Mic, Phone
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════
