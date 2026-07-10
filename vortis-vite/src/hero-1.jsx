@@ -517,8 +517,6 @@ export function NeuralField() {
     </section>
   );
 }
- 
-export default NeuralField;
 
 // ══════════════════════════════════════════════════════════════════
 //  HERO
