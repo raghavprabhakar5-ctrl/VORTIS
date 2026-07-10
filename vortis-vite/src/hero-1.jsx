@@ -309,8 +309,9 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  LIQUID METAL CHROME — metaball field with env-mapped reflections
-//  (replaces NeuralField) — no neural / no orbs, just molten chrome
+//  LIQUID CHROME BLOB — iridescent molten metal over a mirror floor
+//  (replaces NeuralField) — matches the purple→blue gradient + chrome
+//  blob + reflective surface aesthetic
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -330,17 +331,23 @@ export function NeuralField() {
     let FW = 0, FH = 0;
     let imgData = null;
     let fdata = null;
-    const DOWNSCALE = 5;
+    const DOWNSCALE = 4;
 
-    // ── Bloom canvas (full-res) ──
+    // ── Reflection canvas (flipped copy of the field for the floor) ──
+    const reflectCanvas = document.createElement("canvas");
+    const rctx = reflectCanvas.getContext("2d");
+
+    // ── Bloom canvas ──
     const bloomCanvas = document.createElement("canvas");
     const bctx = bloomCanvas.getContext("2d");
 
     let balls = [];
     let drips = [];
+    let bubbles = [];
     let t0 = performance.now();
     let last = t0;
     let lastDrip = 0;
+    let lastBubble = 0;
     let seeded = false;
 
     let seed = 77777;
@@ -351,41 +358,80 @@ export function NeuralField() {
       FH = Math.max(40, Math.ceil(H / DOWNSCALE));
       fieldCanvas.width = FW;
       fieldCanvas.height = FH;
+      reflectCanvas.width = W;
+      reflectCanvas.height = H;
       bloomCanvas.width = W;
       bloomCanvas.height = H;
       imgData = fctx.createImageData(FW, FH);
       fdata = imgData.data;
 
+      // The blob lives in the TOP half (above the mirror floor)
+      // Floor line is at ~62% of canvas height
+      const blobCY = FH * 0.30;
+      const blobCX = FW * 0.50;
+
       balls = [];
-      const cx = FW * 0.5, cy = FH * 0.5;
-      // Central ball
+      // Big central mass
       balls.push({
-        x: cx, y: cy, ox: cx, oy: cy,
-        r: 42, currentR: 42,
-        phase: 0, speed: 0.3,
+        x: blobCX, y: blobCY, ox: blobCX, oy: blobCY,
+        r: 48, currentR: 48,
+        phase: 0, speed: 0.25,
         orbitR: 0, orbitAngle: 0, orbitSpeed: 0,
         rMorph: 0,
+        wobble: 0.6,
       });
-      // Orbital balls
-      const count = 6;
-      for (let i = 0; i < count; i++) {
-        const angle = (i / count) * Math.PI * 2;
-        const orbit = 16 + rng() * 14;
-        balls.push({
-          x: cx + Math.cos(angle) * orbit,
-          y: cy + Math.sin(angle) * orbit,
-          ox: cx + Math.cos(angle) * orbit,
-          oy: cy + Math.sin(angle) * orbit,
-          r: 26 + rng() * 18,
-          currentR: 30,
+      // Satellite that creates a tunnel/indent on the right
+      balls.push({
+        x: blobCX + 42, y: blobCY + 8, ox: blobCX + 42, oy: blobCY + 8,
+        r: 26, currentR: 26,
+        phase: 1.5, speed: 0.35,
+        orbitR: 42, orbitAngle: 0, orbitSpeed: 0.18,
+        rMorph: 1.2,
+        wobble: 1.0,
+      });
+      // Small offset mass on the left
+      balls.push({
+        x: blobCX - 38, y: blobCY + 14, ox: blobCX - 38, oy: blobCY + 14,
+        r: 30, currentR: 30,
+        phase: 2.8, speed: 0.30,
+        orbitR: 38, orbitAngle: Math.PI, orbitSpeed: 0.20,
+        rMorph: 0.8,
+        wobble: 0.9,
+      });
+      // Top bulge
+      balls.push({
+        x: blobCX - 6, y: blobCY - 38, ox: blobCX - 6, oy: blobCY - 38,
+        r: 28, currentR: 28,
+        phase: 4.1, speed: 0.42,
+        orbitR: 24, orbitAngle: -Math.PI / 2, orbitSpeed: 0.25,
+        rMorph: 1.5,
+        wobble: 1.1,
+      });
+      // Bottom-left drip bulge
+      balls.push({
+        x: blobCX - 22, y: blobCY + 42, ox: blobCX - 22, oy: blobCY + 42,
+        r: 22, currentR: 22,
+        phase: 5.4, speed: 0.38,
+        orbitR: 28, orbitAngle: Math.PI / 2.3, orbitSpeed: 0.22,
+        rMorph: 1.0,
+        wobble: 1.2,
+      });
+
+      // Floating iridescent bubbles around the blob (small accents)
+      bubbles = [];
+      for (let i = 0; i < 14; i++) {
+        bubbles.push({
+          x: rng() * W,
+          y: rng() * H * 0.7,
+          r: 2 + rng() * 5,
+          vx: (rng() - 0.5) * 0.15,
+          vy: -0.05 - rng() * 0.18,
           phase: rng() * Math.PI * 2,
-          speed: 0.3 + rng() * 0.5,
-          orbitR: orbit,
-          orbitAngle: angle,
-          orbitSpeed: 0.15 + rng() * 0.25,
-          rMorph: rng() * Math.PI * 2,
+          twinkleSpeed: 0.5 + rng() * 1.5,
+          depth: 0.3 + rng() * 0.7,
         });
       }
+
       seeded = true;
     };
 
@@ -409,55 +455,70 @@ export function NeuralField() {
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
 
-    // ── Environment map: chrome reflection look ──
-    // Given surface normal (nx, ny), return reflected [r, g, b]
-    const sampleEnv = (nx, ny, t) => {
-      // ny < 0 = top of blob = reflects bright sky
-      // ny > 0 = bottom of blob = reflects dark ground
-      const sky = (1 - (ny + 1) * 0.5); // 1 = sky, 0 = ground
+    // ── Environment map: purple→blue gradient reflection with bold iridescence ──
+    const sampleEnv = (nx, ny, t, curvature) => {
+      // ny < 0 = top of blob = reflects bright purple-pink sky
+      // ny > 0 = bottom of blob = reflects deep blue floor
+      const sky = (1 - (ny + 1) * 0.5); // 1 = sky, 0 = floor
 
       let r, g, b;
       if (sky > 0.5) {
+        // Sky: deep purple → magenta
         const k = (sky - 0.5) * 2;
-        r = 190 + k * 65;
-        g = 175 + k * 75;
-        b = 225 + k * 30;
+        r = 100 + k * 110;
+        g = 30 + k * 30;
+        b = 140 + k * 90;
       } else {
+        // Floor: deep blue → black
         const k = sky * 2;
-        r = 18 + k * 172;
-        g = 12 + k * 163;
-        b = 35 + k * 190;
+        r = 10 + k * 30;
+        g = 15 + k * 25;
+        b = 50 + k * 80;
       }
 
-      // Sharp horizon band (the chrome hallmark)
-      const hProx = 1 - Math.abs(sky - 0.5) * 9;
+      // Sharp horizon band (the chrome hallmark) — bright magenta where sky meets floor
+      const hProx = 1 - Math.abs(sky - 0.5) * 8;
       if (hProx > 0) {
-        r += hProx * 70;
-        g += hProx * 65;
-        b += hProx * 55;
+        r += hProx * 120;
+        g += hProx * 50;
+        b += hProx * 110;
       }
 
       // Horizontal streaks (polished metal)
-      const streak = Math.sin(ny * 14 + nx * 2.5) * 0.5 + 0.5;
-      r += streak * 22;
-      g += streak * 18;
-      b += streak * 28;
+      const streak = Math.sin(ny * 18 + nx * 3) * 0.5 + 0.5;
+      r += streak * 25;
+      g += streak * 20;
+      b += streak * 35;
 
-      // Specular highlight 1 (upper-left, warm white)
+      // BOLD iridescent rainbow sheen — strongest at high-curvature edges
+      // curvature is the gradient magnitude (analytic), higher = sharper bend = more rainbow
+      const iridBase = Math.min(1, curvature * 1.2);
+      const iridPos = (nx * 0.4 + ny * 0.2 + t * 0.06) % 1;
+      const ip = iridPos < 0 ? iridPos + 1 : iridPos;
+      // Multi-band rainbow
+      const band1 = Math.cos(ip * Math.PI * 2) * 0.5 + 0.5;
+      const band2 = Math.cos((ip + 0.33) * Math.PI * 2) * 0.5 + 0.5;
+      const band3 = Math.cos((ip + 0.66) * Math.PI * 2) * 0.5 + 0.5;
+      const iridStrength = iridBase * 120;
+      r += band1 * iridStrength;
+      g += band2 * iridStrength;
+      b += band3 * iridStrength;
+
+      // Specular highlight 1 (upper-left, warm white-magenta)
       const l1x = -0.6, l1y = -0.55;
       const d1 = Math.hypot(nx - l1x, ny - l1y);
-      const spec1 = Math.exp(-d1 * d1 * 6) * 230;
+      const spec1 = Math.exp(-d1 * d1 * 5) * 250;
       r += spec1;
-      g += spec1 * 0.95;
-      b += spec1 * 0.82;
+      g += spec1 * 0.9;
+      b += spec1 * 0.95;
 
       // Specular highlight 2 (upper-right, cyan)
       const l2x = 0.55, l2y = -0.6;
       const d2 = Math.hypot(nx - l2x, ny - l2y);
-      const spec2 = Math.exp(-d2 * d2 * 7) * 190;
-      r += spec2 * 0.25;
-      g += spec2 * 0.75;
-      b += spec2;
+      const spec2 = Math.exp(-d2 * d2 * 6) * 200;
+      r += spec2 * 0.3;
+      g += spec2 * 0.8;
+      b += spec2 * 1.0;
 
       return [r, g, b];
     };
@@ -468,29 +529,30 @@ export function NeuralField() {
       const t = (now - t0) * 0.001;
 
       // ── Update balls: orbit + morph ──
-      const cx = FW * 0.5, cy = FH * 0.5;
+      const cx = FW * 0.5, cy = FH * 0.30;
       for (const b of balls) {
-        b.orbitAngle += b.orbitSpeed * 0.015 * (dt / 16);
-        const morphR = b.orbitR + Math.sin(t * 0.4 + b.rMorph) * 7;
-        const morphAmount = 1 + Math.sin(t * b.speed + b.phase) * 0.18;
+        b.orbitAngle += b.orbitSpeed * 0.018 * (dt / 16);
+        const morphR = b.orbitR + Math.sin(t * 0.4 + b.rMorph) * 8 * b.wobble;
+        const morphAmount = 1 + Math.sin(t * b.speed + b.phase) * 0.20 * b.wobble;
         b.ox = cx + Math.cos(b.orbitAngle) * morphR;
-        b.oy = cy + Math.sin(b.orbitAngle) * morphR * 0.72;
+        b.oy = cy + Math.sin(b.orbitAngle) * morphR * 0.75;
         b.x += (b.ox - b.x) * 0.08;
         b.y += (b.oy - b.y) * 0.08;
         b.currentR = b.r * morphAmount;
       }
 
       // ── Spawn drips ──
-      if (now - lastDrip > 1800 + rng() * 2500) {
+      if (now - lastDrip > 1600 + rng() * 2200) {
         lastDrip = now;
+        // Drips come from the bottom-most ball
         const sorted = [...balls].sort((a, b) => b.y - a.y);
         const src = sorted[0];
         drips.push({
-          x: src.x + (rng() - 0.5) * 10,
+          x: src.x + (rng() - 0.5) * 12,
           y: src.y,
-          vx: (rng() - 0.5) * 0.4,
-          vy: 0.15 + rng() * 0.2,
-          r: 12 + rng() * 7,
+          vx: (rng() - 0.5) * 0.5,
+          vy: 0.18 + rng() * 0.22,
+          r: 10 + rng() * 6,
           life: 1,
         });
       }
@@ -498,20 +560,20 @@ export function NeuralField() {
       // ── Update drips ──
       for (let i = drips.length - 1; i >= 0; i--) {
         const d = drips[i];
-        d.vy += 0.012 * (dt / 16);
+        d.vy += 0.014 * (dt / 16);
         d.x += d.vx * (dt / 16);
         d.y += d.vy * (dt / 16);
         d.life -= 0.006 * (dt / 16);
-        d.r *= 0.999;
+        d.r *= 0.9985;
         if (d.life <= 0 || d.y > FH + 20) drips.splice(i, 1);
       }
 
       // ── Mouse in field coords ──
       const mfx = mouse.active ? mouse.x / DOWNSCALE : -9999;
       const mfy = mouse.active ? mouse.y / DOWNSCALE : -9999;
-      const MOUSE_R2 = 50 * 50;
+      const MOUSE_R2 = 55 * 55;
 
-      // ── Build active ball list (flat for speed) ──
+      // ── Build active ball list ──
       const activeBalls = [];
       for (const b of balls) activeBalls.push({ x: b.x, y: b.y, r2: b.currentR * b.currentR });
       for (const d of drips) activeBalls.push({ x: d.x, y: d.y, r2: d.r * d.r * d.life });
@@ -536,7 +598,6 @@ export function NeuralField() {
             const d2 = dx * dx + dy * dy + 1;
             const r2 = b.r2;
             field += r2 / d2;
-            // analytic gradient
             const factor = -2 * r2 / (d2 * d2);
             gx += factor * dx;
             gy += factor * dy;
@@ -547,38 +608,28 @@ export function NeuralField() {
             const dx = px - mfx;
             const dy = py - mfy;
             const d2 = dx * dx + dy * dy + 1;
-            field -= MOUSE_R2 / d2 * 0.8;
+            field -= MOUSE_R2 / d2 * 0.7;
           }
 
           if (field > THRESHOLD) {
             const glen = Math.sqrt(gx * gx + gy * gy) + 0.0001;
             const nx = gx / glen;
             const ny = gy / glen;
+            const curvature = glen; // magnitude of gradient = how sharp the bend
 
-            const env = sampleEnv(nx, ny, t);
+            const env = sampleEnv(nx, ny, t, curvature);
 
             // Edge factor: 0 at boundary, 1 deep inside
             const edge = Math.min(1, (field - THRESHOLD) / 1.5);
-            const core = 0.25 + edge * 0.75; // dark rim (Fresnel)
+            const core = 0.30 + edge * 0.70; // dark rim (Fresnel)
 
             // Chromatic aberration at edges
-            const aberr = (1 - edge) * 45;
-
-            // Rainbow sheen sweep (moving oil-slick band)
-            const sheenPos = ((px / FW) * 2 - t * 0.3);
-            const sp = sheenPos - Math.floor(sheenPos);
-            const sheenDist = Math.abs(sp - 0.5);
-            const sheen = Math.exp(-sheenDist * sheenDist * 22) * 55;
-            const hue = (px / FW + t * 0.08);
-            const hp = hue - Math.floor(hue);
-            const sheenR = sheen * (0.5 + 0.5 * Math.cos(hp * Math.PI * 2));
-            const sheenG = sheen * (0.5 + 0.5 * Math.cos((hp + 0.33) * Math.PI * 2));
-            const sheenB = sheen * (0.5 + 0.5 * Math.cos((hp + 0.66) * Math.PI * 2));
+            const aberr = (1 - edge) * 50;
 
             const idx = (py * FW + px) * 4;
-            fdata[idx]     = Math.min(255, Math.max(0, (env[0] + sheenR + aberr) * core));
-            fdata[idx + 1] = Math.min(255, Math.max(0, (env[1] + sheenG) * core));
-            fdata[idx + 2] = Math.min(255, Math.max(0, (env[2] + sheenB - aberr) * core));
+            fdata[idx]     = Math.min(255, Math.max(0, (env[0] + aberr) * core));
+            fdata[idx + 1] = Math.min(255, Math.max(0, env[1] * core));
+            fdata[idx + 2] = Math.min(255, Math.max(0, (env[2] - aberr) * core));
             fdata[idx + 3] = 255;
           }
         }
@@ -591,42 +642,134 @@ export function NeuralField() {
       // ════════════════════════════════════════
       ctx.clearRect(0, 0, W, H);
 
-      // Background: dark radial gradient
-      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.65);
-      bg.addColorStop(0, "#0d0a1e");
-      bg.addColorStop(0.6, "#06040f");
-      bg.addColorStop(1, "#03030a");
+      // ── Background: STRONG purple → blue gradient (matches reference) ──
+      const bg = ctx.createLinearGradient(0, 0, W, H);
+      bg.addColorStop(0, "#2a0d4a");    // deep purple (top-left)
+      bg.addColorStop(0.4, "#1a0838");  // dark violet
+      bg.addColorStop(0.75, "#0a1438"); // navy
+      bg.addColorStop(1, "#050d28");    // deep blue (bottom-right)
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // Faint environment strips (suggest the room being reflected)
-      const envStripTop = ctx.createLinearGradient(0, 0, 0, H * 0.3);
-      envStripTop.addColorStop(0, "rgba(168,85,247,0.04)");
-      envStripTop.addColorStop(1, "rgba(168,85,247,0)");
-      ctx.fillStyle = envStripTop;
-      ctx.fillRect(0, 0, W, H * 0.3);
+      // Soft purple ambient glow behind the blob (radial, behind blob only)
+      const ambient = ctx.createRadialGradient(W * 0.5, H * 0.32, 0, W * 0.5, H * 0.32, W * 0.45);
+      ambient.addColorStop(0, "rgba(168,85,247,0.18)");
+      ambient.addColorStop(0.5, "rgba(124,58,237,0.08)");
+      ambient.addColorStop(1, "rgba(124,58,237,0)");
+      ctx.fillStyle = ambient;
+      ctx.fillRect(0, 0, W, H);
 
-      const envStripBot = ctx.createLinearGradient(0, H * 0.7, 0, H);
-      envStripBot.addColorStop(0, "rgba(6,182,212,0)");
-      envStripBot.addColorStop(1, "rgba(6,182,212,0.03)");
-      ctx.fillStyle = envStripBot;
-      ctx.fillRect(0, H * 0.7, W, H * 0.3);
+      // ── Floating iridescent bubbles (small accents, NOT background orbs) ──
+      ctx.globalCompositeOperation = "screen";
+      for (const bb of bubbles) {
+        bb.x += bb.vx * (dt / 16);
+        bb.y += bb.vy * (dt / 16);
+        bb.phase += bb.twinkleSpeed * 0.02 * (dt / 16);
+        // wrap
+        if (bb.y < -10) { bb.y = H * 0.7; bb.x = rng() * W; }
+        if (bb.x < -10) bb.x = W + 10;
+        if (bb.x > W + 10) bb.x = -10;
 
-      // Draw chrome blob (smooth upscale)
+        const tw = 0.4 + Math.sin(bb.phase) * 0.4 + 0.2;
+        const r = bb.r;
+        // Iridescent rim
+        const hue = (bb.phase * 0.5) % 1;
+        const hr = Math.cos(hue * Math.PI * 2) * 0.5 + 0.5;
+        const hg = Math.cos((hue + 0.33) * Math.PI * 2) * 0.5 + 0.5;
+        const hb = Math.cos((hue + 0.66) * Math.PI * 2) * 0.5 + 0.5;
+        const glow = ctx.createRadialGradient(bb.x, bb.y, 0, bb.x, bb.y, r * 3);
+        glow.addColorStop(0, `rgba(${Math.floor(200 + hr * 55)},${Math.floor(150 + hg * 80)},${Math.floor(220 + hb * 35)},${0.7 * tw})`);
+        glow.addColorStop(0.4, `rgba(${Math.floor(168)},${Math.floor(85)},${Math.floor(247)},${0.3 * tw})`);
+        glow.addColorStop(1, "rgba(124,58,237,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(bb.x - r * 3, bb.y - r * 3, r * 6, r * 6);
+        // bright core
+        ctx.fillStyle = `rgba(255,255,255,${0.6 * tw})`;
+        ctx.beginPath();
+        ctx.arc(bb.x, bb.y, r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ── Draw chrome blob (smooth upscale) ──
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       ctx.drawImage(fieldCanvas, 0, 0, W, H);
 
-      // Bloom pass (glow on highlights)
+      // ── Bloom pass on the chrome blob ──
       bctx.clearRect(0, 0, W, H);
-      bctx.filter = "blur(14px) brightness(1.4)";
+      bctx.filter = "blur(12px) brightness(1.35)";
       bctx.drawImage(fieldCanvas, 0, 0, W, H);
       bctx.filter = "none";
       ctx.globalCompositeOperation = "screen";
-      ctx.globalAlpha = 0.55;
+      ctx.globalAlpha = 0.65;
       ctx.drawImage(bloomCanvas, 0, 0);
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
+
+      // ── Mirror floor (below the blob) ──
+      const floorY = H * 0.62;
+
+      // Build the reflection: flipped copy of the field canvas, ripple-distorted
+      rctx.clearRect(0, 0, W, H);
+      rctx.save();
+      rctx.translate(0, floorY * 2);
+      rctx.scale(1, -1);
+      rctx.imageSmoothingEnabled = true;
+      rctx.imageSmoothingQuality = "high";
+      rctx.drawImage(fieldCanvas, 0, 0, W, H);
+      rctx.restore();
+
+      // Draw the reflection with vertical fade (further down = dimmer)
+      // We use a gradient mask via globalAlpha and composite
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, floorY, W, H - floorY);
+      ctx.clip();
+
+      // Ripple distortion via horizontal slices
+      const sliceCount = 28;
+      const sliceH = (H - floorY) / sliceCount;
+      ctx.globalAlpha = 0.55;
+      ctx.globalCompositeOperation = "screen";
+      for (let i = 0; i < sliceCount; i++) {
+        const sy = floorY + i * sliceH;
+        const t2 = i / sliceCount;
+        const ripple = Math.sin(t * 1.8 + i * 0.5) * (3 + t2 * 8);
+        const alpha = 0.55 * (1 - t2 * 0.85);
+        ctx.globalAlpha = alpha;
+        ctx.drawImage(
+          reflectCanvas,
+          0, sy * DPR, W * DPR, sliceH * DPR,
+          ripple, sy, W, sliceH
+        );
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      ctx.restore();
+
+      // Floor surface line + ripple highlights
+      ctx.strokeStyle = "rgba(168,85,247,0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, floorY);
+      ctx.lineTo(W, floorY);
+      ctx.stroke();
+
+      // Horizontal ripple lines on the floor (perspective)
+      ctx.strokeStyle = "rgba(255,255,255,0.05)";
+      ctx.lineWidth = 0.5;
+      for (let i = 1; i < 8; i++) {
+        const yRel = i / 8;
+        const y = floorY + yRel * yRel * (H - floorY);
+        const off = Math.sin(t * 1.4 + i * 0.6) * 4;
+        ctx.beginPath();
+        ctx.moveTo(0, y + off);
+        for (let x = 0; x <= W; x += 20) {
+          ctx.lineTo(x, y + off + Math.sin(x * 0.02 + t * 1.8 + i) * 1.5);
+        }
+        ctx.stroke();
+      }
 
       raf = requestAnimationFrame(tick);
     };
@@ -657,17 +800,17 @@ export function NeuralField() {
       </div>
 
       {/* Canvas */}
-      <div style={{ position: "relative", height: 460, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ position: "relative", height: 500, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
         />
 
-        {/* Hint at bottom — diamond markers, NOT orbs */}
+        {/* Hint at bottom — diamond markers */}
         <div style={{
           position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)",
           display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
-          fontSize: 10, color: "rgba(255,255,255,0.45)",
+          fontSize: 10, color: "rgba(255,255,255,0.55)",
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
