@@ -309,9 +309,8 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  AURORA VALLEY — fully animated night-sky landscape
-//  (replaces NeuralField) — no neural / no orbs, only
-//  aurora curtains, stars, shooting stars, mountains & lake
+//  LIQUID METAL CHROME — metaball field with env-mapped reflections
+//  (replaces NeuralField) — no neural / no orbs, just molten chrome
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -323,86 +322,70 @@ export function NeuralField() {
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5 };
+    const mouse = { x: -9999, y: -9999, active: false };
 
-    let stars = [];
-    let bigStars = [];
-    let shooters = [];
-    let mountains = [];
-    let auroras = [];
+    // ── Low-res field canvas for per-pixel metaball computation ──
+    const fieldCanvas = document.createElement("canvas");
+    const fctx = fieldCanvas.getContext("2d");
+    let FW = 0, FH = 0;
+    let imgData = null;
+    let fdata = null;
+    const DOWNSCALE = 5;
+
+    // ── Bloom canvas (full-res) ──
+    const bloomCanvas = document.createElement("canvas");
+    const bctx = bloomCanvas.getContext("2d");
+
+    let balls = [];
+    let drips = [];
     let t0 = performance.now();
     let last = t0;
-    let lastShooter = 0;
-    let nextShooterDelay = 2200;
+    let lastDrip = 0;
     let seeded = false;
 
-    let seed = 424242;
+    let seed = 77777;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
-    const PALETTE = {
-      auroraA: [168, 85, 247],   // purple
-      auroraB: [124, 58, 237],   // deep violet
-      auroraC: [6, 182, 212],    // cyan
-      auroraD: [236, 72, 153],   // pink accent (sparingly)
-      mtnFar: [22, 16, 42],
-      mtnMid: [16, 12, 32],
-      mtnNear: [8, 6, 18],
-      lake: [6, 4, 16],
-    };
-
     const init = () => {
-      // ── Stars (small, dense, twinkling) ──
-      const STAR_COUNT = Math.min(280, Math.max(120, Math.floor(W * H / 2400)));
-      stars = Array.from({ length: STAR_COUNT }, () => ({
-        x: rng() * W,
-        y: rng() * H * 0.78, // above lake line
-        r: 0.3 + rng() * 0.9,
-        baseAlpha: 0.3 + rng() * 0.6,
-        twinkleSpeed: 0.5 + rng() * 1.8,
-        phase: rng() * Math.PI * 2,
-        depth: 0.2 + rng() * 0.8, // for parallax
-      }));
+      FW = Math.max(80, Math.ceil(W / DOWNSCALE));
+      FH = Math.max(40, Math.ceil(H / DOWNSCALE));
+      fieldCanvas.width = FW;
+      fieldCanvas.height = FH;
+      bloomCanvas.width = W;
+      bloomCanvas.height = H;
+      imgData = fctx.createImageData(FW, FH);
+      fdata = imgData.data;
 
-      // ── Big sparkle stars (a few, with cross-shape glints) ──
-      bigStars = Array.from({ length: 6 }, () => ({
-        x: rng() * W,
-        y: rng() * H * 0.55,
-        r: 1.4 + rng() * 1.0,
-        baseAlpha: 0.6 + rng() * 0.4,
-        twinkleSpeed: 0.6 + rng() * 1.0,
-        phase: rng() * Math.PI * 2,
-        depth: 0.5 + rng() * 0.5,
-      }));
-
-      // ── Mountain layers (3 parallax silhouettes) ──
-      // Each layer is a polyline across the canvas, jagged using value-noise-ish sum of sines
-      const buildRange = (baseY, amp, seed1, freq) => {
-        const pts = [];
-        const step = 14;
-        for (let x = -20; x <= W + 20; x += step) {
-          const y = baseY
-            - Math.sin(x * freq + seed1) * amp
-            - Math.sin(x * freq * 2.3 + seed1 * 1.7) * amp * 0.4
-            - Math.sin(x * freq * 0.5 + seed1 * 0.6) * amp * 0.7;
-          pts.push({ x, y });
-        }
-        return pts;
-      };
-
-      mountains = [
-        { pts: buildRange(H * 0.78, 38, 1.3, 0.006), color: PALETTE.mtnFar, parallax: 0.04, depth: 0.3 },
-        { pts: buildRange(H * 0.88, 56, 2.7, 0.009), color: PALETTE.mtnMid, parallax: 0.09, depth: 0.5 },
-        { pts: buildRange(H * 0.97, 70, 4.1, 0.013), color: PALETTE.mtnNear, parallax: 0.16, depth: 0.8 },
-      ];
-
-      // ── Aurora curtains (4 flowing bands) ──
-      auroras = [
-        { yBase: H * 0.18, amp: 60, freq: 0.0035, speed: 0.35, thickness: 130, color: PALETTE.auroraA, phase: 0, intensity: 0.85 },
-        { yBase: H * 0.28, amp: 75, freq: 0.0028, speed: 0.28, thickness: 110, color: PALETTE.auroraC, phase: 1.7, intensity: 0.70 },
-        { yBase: H * 0.13, amp: 45, freq: 0.0045, speed: 0.45, thickness: 90,  color: PALETTE.auroraB, phase: 3.1, intensity: 0.65 },
-        { yBase: H * 0.36, amp: 50, freq: 0.0030, speed: 0.22, thickness: 80,  color: PALETTE.auroraD, phase: 4.5, intensity: 0.35 }, // pink accent, subtle
-      ];
-
+      balls = [];
+      const cx = FW * 0.5, cy = FH * 0.5;
+      // Central ball
+      balls.push({
+        x: cx, y: cy, ox: cx, oy: cy,
+        r: 42, currentR: 42,
+        phase: 0, speed: 0.3,
+        orbitR: 0, orbitAngle: 0, orbitSpeed: 0,
+        rMorph: 0,
+      });
+      // Orbital balls
+      const count = 6;
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2;
+        const orbit = 16 + rng() * 14;
+        balls.push({
+          x: cx + Math.cos(angle) * orbit,
+          y: cy + Math.sin(angle) * orbit,
+          ox: cx + Math.cos(angle) * orbit,
+          oy: cy + Math.sin(angle) * orbit,
+          r: 26 + rng() * 18,
+          currentR: 30,
+          phase: rng() * Math.PI * 2,
+          speed: 0.3 + rng() * 0.5,
+          orbitR: orbit,
+          orbitAngle: angle,
+          orbitSpeed: 0.15 + rng() * 0.25,
+          rMorph: rng() * Math.PI * 2,
+        });
+      }
       seeded = true;
     };
 
@@ -418,181 +401,65 @@ export function NeuralField() {
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      mouse.tx = (e.clientX - rect.left) / rect.width;
-      mouse.ty = (e.clientY - rect.top) / rect.height;
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+      mouse.active = true;
     };
+    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
     canvas.addEventListener("mousemove", onMove);
+    canvas.addEventListener("mouseleave", onLeave);
 
-    const spawnShooter = () => {
-      const fromLeft = rng() > 0.5;
-      const startX = fromLeft ? -40 : W + 40;
-      const startY = rng() * H * 0.4;
-      const angle = fromLeft
-        ? (Math.PI * 0.12 + rng() * Math.PI * 0.10)
-        : (Math.PI - Math.PI * 0.12 - rng() * Math.PI * 0.10);
-      const speed = 9 + rng() * 6;
-      shooters.push({
-        x: startX, y: startY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        trail: [],
-        color: rng() > 0.5 ? PALETTE.auroraA : PALETTE.auroraC,
-      });
-    };
+    // ── Environment map: chrome reflection look ──
+    // Given surface normal (nx, ny), return reflected [r, g, b]
+    const sampleEnv = (nx, ny, t) => {
+      // ny < 0 = top of blob = reflects bright sky
+      // ny > 0 = bottom of blob = reflects dark ground
+      const sky = (1 - (ny + 1) * 0.5); // 1 = sky, 0 = ground
 
-    const drawStar = (s, t) => {
-      const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
-      const alpha = s.baseAlpha * (0.4 + tw * 0.6);
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-    };
-
-    const drawBigStar = (s, t) => {
-      const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
-      const alpha = s.baseAlpha * (0.5 + tw * 0.5);
-      const [r, g, b] = PALETTE.auroraC;
-      // glow
-      const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 6);
-      glow.addColorStop(0, `rgba(${r},${g},${b},${alpha * 0.6})`);
-      glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = glow;
-      ctx.fillRect(s.x - s.r * 6, s.y - s.r * 6, s.r * 12, s.r * 12);
-      // core
-      ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-      // cross glint
-      ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.5})`;
-      ctx.lineWidth = 0.6;
-      ctx.beginPath();
-      ctx.moveTo(s.x - s.r * 5, s.y); ctx.lineTo(s.x + s.r * 5, s.y);
-      ctx.moveTo(s.x, s.y - s.r * 5); ctx.lineTo(s.x, s.y + s.r * 5);
-      ctx.stroke();
-    };
-
-    const drawAuroraCurtain = (a, t) => {
-      const [r, g, b] = a.color;
-      const px = (mouse.x - 0.5) * 18; // subtle parallax shift
-      // Build the curtain: top edge follows sine, bottom edge mirrors with thickness falloff
-      const grad = ctx.createLinearGradient(0, a.yBase - a.thickness, 0, a.yBase + a.thickness);
-      grad.addColorStop(0, `rgba(${r},${g},${b},0)`);
-      grad.addColorStop(0.45, `rgba(${r},${g},${b},${0.22 * a.intensity})`);
-      grad.addColorStop(0.6, `rgba(${r},${g},${b},${0.18 * a.intensity})`);
-      grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      // Top edge
-      for (let x = -20; x <= W + 20; x += 14) {
-        const y = a.yBase
-          + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
-          + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35
-          + Math.sin(x * a.freq * 0.5 + t * a.speed * 0.7) * a.amp * 0.5
-          - a.thickness * 0.5;
-        if (x === -20) ctx.moveTo(x + px, y); else ctx.lineTo(x + px, y);
+      let r, g, b;
+      if (sky > 0.5) {
+        const k = (sky - 0.5) * 2;
+        r = 190 + k * 65;
+        g = 175 + k * 75;
+        b = 225 + k * 30;
+      } else {
+        const k = sky * 2;
+        r = 18 + k * 172;
+        g = 12 + k * 163;
+        b = 35 + k * 190;
       }
-      // Bottom edge (reverse)
-      for (let x = W + 20; x >= -20; x -= 14) {
-        const y = a.yBase
-          + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
-          + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35
-          + Math.sin(x * a.freq * 0.5 + t * a.speed * 0.7) * a.amp * 0.5
-          + a.thickness * 0.5;
-        ctx.lineTo(x + px, y);
-      }
-      ctx.closePath();
-      ctx.fill();
 
-      // Bright leading edge (thin highlight along the top contour)
-      ctx.strokeStyle = `rgba(${r},${g},${b},${0.35 * a.intensity})`;
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      for (let x = -20; x <= W + 20; x += 14) {
-        const y = a.yBase
-          + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
-          + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35
-          + Math.sin(x * a.freq * 0.5 + t * a.speed * 0.7) * a.amp * 0.5
-          - a.thickness * 0.18;
-        if (x === -20) ctx.moveTo(x + px, y); else ctx.lineTo(x + px, y);
+      // Sharp horizon band (the chrome hallmark)
+      const hProx = 1 - Math.abs(sky - 0.5) * 9;
+      if (hProx > 0) {
+        r += hProx * 70;
+        g += hProx * 65;
+        b += hProx * 55;
       }
-      ctx.stroke();
-    };
 
-    const drawMountains = (t) => {
-      for (const m of mountains) {
-        const px = (mouse.x - 0.5) * 30 * m.parallax;
-        ctx.fillStyle = m.color;
-        ctx.beginPath();
-        ctx.moveTo(m.pts[0].x + px, H);
-        for (const p of m.pts) ctx.lineTo(p.x + px, p.y);
-        ctx.lineTo(m.pts[m.pts.length - 1].x + px, H);
-        ctx.closePath();
-        ctx.fill();
-        // Subtle rim light along the top edge
-        ctx.strokeStyle = `rgba(168,85,247,${0.08 + m.depth * 0.05})`;
-        ctx.lineWidth = 0.8;
-        ctx.beginPath();
-        for (let i = 0; i < m.pts.length; i++) {
-          const p = m.pts[i];
-          if (i === 0) ctx.moveTo(p.x + px, p.y);
-          else ctx.lineTo(p.x + px, p.y);
-        }
-        ctx.stroke();
-      }
-    };
+      // Horizontal streaks (polished metal)
+      const streak = Math.sin(ny * 14 + nx * 2.5) * 0.5 + 0.5;
+      r += streak * 22;
+      g += streak * 18;
+      b += streak * 28;
 
-    const drawLake = (t) => {
-      const lakeTop = H * 0.92;
-      // Lake base
-      const lg = ctx.createLinearGradient(0, lakeTop, 0, H);
-      lg.addColorStop(0, "rgba(10,6,22,0.7)");
-      lg.addColorStop(1, "rgba(3,3,10,1)");
-      ctx.fillStyle = lg;
-      ctx.fillRect(0, lakeTop, W, H - lakeTop);
+      // Specular highlight 1 (upper-left, warm white)
+      const l1x = -0.6, l1y = -0.55;
+      const d1 = Math.hypot(nx - l1x, ny - l1y);
+      const spec1 = Math.exp(-d1 * d1 * 6) * 230;
+      r += spec1;
+      g += spec1 * 0.95;
+      b += spec1 * 0.82;
 
-      // Mirrored aurora reflection (flipped, with sinusoidal ripple distortion)
-      ctx.globalCompositeOperation = "screen";
-      for (const a of auroras) {
-        const [r, g, b] = a.color;
-        const grad = ctx.createLinearGradient(0, lakeTop, 0, H);
-        grad.addColorStop(0, `rgba(${r},${g},${b},${0.18 * a.intensity})`);
-        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        const reflY = lakeTop + 4;
-        ctx.moveTo(-20, reflY);
-        for (let x = -20; x <= W + 20; x += 16) {
-          // Mirror y around lakeTop, then add horizontal ripple
-          const origY = a.yBase
-            + Math.sin(x * a.freq + t * a.speed + a.phase) * a.amp
-            + Math.sin(x * a.freq * 2.3 + t * a.speed * 1.4 + a.phase) * a.amp * 0.35;
-          const mirrorDist = lakeTop - origY;
-          const ripple = Math.sin(x * 0.02 + t * 1.4) * 4 + Math.sin(x * 0.06 + t * 2.1) * 2;
-          const y = reflY + Math.max(0, mirrorDist * 0.55) + ripple;
-          ctx.lineTo(x, y);
-        }
-        ctx.lineTo(W + 20, reflY);
-        ctx.closePath();
-        ctx.fill();
-      }
-      ctx.globalCompositeOperation = "source-over";
+      // Specular highlight 2 (upper-right, cyan)
+      const l2x = 0.55, l2y = -0.6;
+      const d2 = Math.hypot(nx - l2x, ny - l2y);
+      const spec2 = Math.exp(-d2 * d2 * 7) * 190;
+      r += spec2 * 0.25;
+      g += spec2 * 0.75;
+      b += spec2;
 
-      // Horizontal ripple lines on lake
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i < 6; i++) {
-        const y = lakeTop + 4 + i * ((H - lakeTop) / 6);
-        const off = Math.sin(t * 1.2 + i * 0.7) * 6;
-        ctx.beginPath();
-        ctx.moveTo(0, y + off);
-        for (let x = 0; x <= W; x += 24) {
-          ctx.lineTo(x, y + off + Math.sin(x * 0.025 + t * 1.6 + i) * 1.2);
-        }
-        ctx.stroke();
-      }
+      return [r, g, b];
     };
 
     const tick = (now) => {
@@ -600,86 +467,166 @@ export function NeuralField() {
       last = now;
       const t = (now - t0) * 0.001;
 
-      // smooth mouse follow
-      mouse.x += (mouse.tx - mouse.x) * 0.06;
-      mouse.y += (mouse.ty - mouse.y) * 0.06;
+      // ── Update balls: orbit + morph ──
+      const cx = FW * 0.5, cy = FH * 0.5;
+      for (const b of balls) {
+        b.orbitAngle += b.orbitSpeed * 0.015 * (dt / 16);
+        const morphR = b.orbitR + Math.sin(t * 0.4 + b.rMorph) * 7;
+        const morphAmount = 1 + Math.sin(t * b.speed + b.phase) * 0.18;
+        b.ox = cx + Math.cos(b.orbitAngle) * morphR;
+        b.oy = cy + Math.sin(b.orbitAngle) * morphR * 0.72;
+        b.x += (b.ox - b.x) * 0.08;
+        b.y += (b.oy - b.y) * 0.08;
+        b.currentR = b.r * morphAmount;
+      }
 
-      // Sky gradient background
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, "#06040f");
-      sky.addColorStop(0.5, "#0a0820");
-      sky.addColorStop(0.85, "#0d0a22");
-      sky.addColorStop(1, "#050410");
-      ctx.fillStyle = sky;
+      // ── Spawn drips ──
+      if (now - lastDrip > 1800 + rng() * 2500) {
+        lastDrip = now;
+        const sorted = [...balls].sort((a, b) => b.y - a.y);
+        const src = sorted[0];
+        drips.push({
+          x: src.x + (rng() - 0.5) * 10,
+          y: src.y,
+          vx: (rng() - 0.5) * 0.4,
+          vy: 0.15 + rng() * 0.2,
+          r: 12 + rng() * 7,
+          life: 1,
+        });
+      }
+
+      // ── Update drips ──
+      for (let i = drips.length - 1; i >= 0; i--) {
+        const d = drips[i];
+        d.vy += 0.012 * (dt / 16);
+        d.x += d.vx * (dt / 16);
+        d.y += d.vy * (dt / 16);
+        d.life -= 0.006 * (dt / 16);
+        d.r *= 0.999;
+        if (d.life <= 0 || d.y > FH + 20) drips.splice(i, 1);
+      }
+
+      // ── Mouse in field coords ──
+      const mfx = mouse.active ? mouse.x / DOWNSCALE : -9999;
+      const mfy = mouse.active ? mouse.y / DOWNSCALE : -9999;
+      const MOUSE_R2 = 50 * 50;
+
+      // ── Build active ball list (flat for speed) ──
+      const activeBalls = [];
+      for (const b of balls) activeBalls.push({ x: b.x, y: b.y, r2: b.currentR * b.currentR });
+      for (const d of drips) activeBalls.push({ x: d.x, y: d.y, r2: d.r * d.r * d.life });
+
+      const THRESHOLD = 1.0;
+      const ballCount = activeBalls.length;
+      const useMouse = mouse.active;
+
+      // Clear field image
+      fdata.fill(0);
+
+      // ── Per-pixel metaball field + chrome shading ──
+      for (let py = 0; py < FH; py++) {
+        for (let px = 0; px < FW; px++) {
+          let field = 0;
+          let gx = 0, gy = 0;
+
+          for (let bi = 0; bi < ballCount; bi++) {
+            const b = activeBalls[bi];
+            const dx = px - b.x;
+            const dy = py - b.y;
+            const d2 = dx * dx + dy * dy + 1;
+            const r2 = b.r2;
+            field += r2 / d2;
+            // analytic gradient
+            const factor = -2 * r2 / (d2 * d2);
+            gx += factor * dx;
+            gy += factor * dy;
+          }
+
+          // Mouse repulsor (dent)
+          if (useMouse) {
+            const dx = px - mfx;
+            const dy = py - mfy;
+            const d2 = dx * dx + dy * dy + 1;
+            field -= MOUSE_R2 / d2 * 0.8;
+          }
+
+          if (field > THRESHOLD) {
+            const glen = Math.sqrt(gx * gx + gy * gy) + 0.0001;
+            const nx = gx / glen;
+            const ny = gy / glen;
+
+            const env = sampleEnv(nx, ny, t);
+
+            // Edge factor: 0 at boundary, 1 deep inside
+            const edge = Math.min(1, (field - THRESHOLD) / 1.5);
+            const core = 0.25 + edge * 0.75; // dark rim (Fresnel)
+
+            // Chromatic aberration at edges
+            const aberr = (1 - edge) * 45;
+
+            // Rainbow sheen sweep (moving oil-slick band)
+            const sheenPos = ((px / FW) * 2 - t * 0.3);
+            const sp = sheenPos - Math.floor(sheenPos);
+            const sheenDist = Math.abs(sp - 0.5);
+            const sheen = Math.exp(-sheenDist * sheenDist * 22) * 55;
+            const hue = (px / FW + t * 0.08);
+            const hp = hue - Math.floor(hue);
+            const sheenR = sheen * (0.5 + 0.5 * Math.cos(hp * Math.PI * 2));
+            const sheenG = sheen * (0.5 + 0.5 * Math.cos((hp + 0.33) * Math.PI * 2));
+            const sheenB = sheen * (0.5 + 0.5 * Math.cos((hp + 0.66) * Math.PI * 2));
+
+            const idx = (py * FW + px) * 4;
+            fdata[idx]     = Math.min(255, Math.max(0, (env[0] + sheenR + aberr) * core));
+            fdata[idx + 1] = Math.min(255, Math.max(0, (env[1] + sheenG) * core));
+            fdata[idx + 2] = Math.min(255, Math.max(0, (env[2] + sheenB - aberr) * core));
+            fdata[idx + 3] = 255;
+          }
+        }
+      }
+
+      fctx.putImageData(imgData, 0, 0);
+
+      // ════════════════════════════════════════
+      //  RENDER TO MAIN CANVAS
+      // ════════════════════════════════════════
+      ctx.clearRect(0, 0, W, H);
+
+      // Background: dark radial gradient
+      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.65);
+      bg.addColorStop(0, "#0d0a1e");
+      bg.addColorStop(0.6, "#06040f");
+      bg.addColorStop(1, "#03030a");
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ── Stars (with parallax) ──
-      const px = (mouse.x - 0.5) * 14;
-      const py = (mouse.y - 0.5) * 8;
-      for (const s of stars) {
-        const sx = s.x + px * s.depth;
-        const sy = s.y + py * s.depth;
-        // temporarily set position for draw
-        const orig = { x: s.x, y: s.y };
-        s.x = sx; s.y = sy;
-        drawStar(s, t);
-        s.x = orig.x; s.y = orig.y;
-      }
-      for (const s of bigStars) {
-        const sx = s.x + px * s.depth;
-        const sy = s.y + py * s.depth;
-        const orig = { x: s.x, y: s.y };
-        s.x = sx; s.y = sy;
-        drawBigStar(s, t);
-        s.x = orig.x; s.y = orig.y;
-      }
+      // Faint environment strips (suggest the room being reflected)
+      const envStripTop = ctx.createLinearGradient(0, 0, 0, H * 0.3);
+      envStripTop.addColorStop(0, "rgba(168,85,247,0.04)");
+      envStripTop.addColorStop(1, "rgba(168,85,247,0)");
+      ctx.fillStyle = envStripTop;
+      ctx.fillRect(0, 0, W, H * 0.3);
 
-      // ── Aurora curtains (screen-blended for glow) ──
+      const envStripBot = ctx.createLinearGradient(0, H * 0.7, 0, H);
+      envStripBot.addColorStop(0, "rgba(6,182,212,0)");
+      envStripBot.addColorStop(1, "rgba(6,182,212,0.03)");
+      ctx.fillStyle = envStripBot;
+      ctx.fillRect(0, H * 0.7, W, H * 0.3);
+
+      // Draw chrome blob (smooth upscale)
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(fieldCanvas, 0, 0, W, H);
+
+      // Bloom pass (glow on highlights)
+      bctx.clearRect(0, 0, W, H);
+      bctx.filter = "blur(14px) brightness(1.4)";
+      bctx.drawImage(fieldCanvas, 0, 0, W, H);
+      bctx.filter = "none";
       ctx.globalCompositeOperation = "screen";
-      for (const a of auroras) drawAuroraCurtain(a, t);
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(bloomCanvas, 0, 0);
+      ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
-
-      // ── Shooting stars ──
-      if (now - lastShooter > nextShooterDelay) {
-        spawnShooter();
-        lastShooter = now;
-        nextShooterDelay = 1800 + rng() * 3500;
-      }
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = shooters.length - 1; i >= 0; i--) {
-        const sh = shooters[i];
-        sh.x += sh.vx * (dt / 16);
-        sh.y += sh.vy * (dt / 16);
-        sh.life -= 0.012 * (dt / 16);
-        sh.trail.push({ x: sh.x, y: sh.y });
-        if (sh.trail.length > 18) sh.trail.shift();
-        const [r, g, b] = sh.color;
-        for (let k = 0; k < sh.trail.length; k++) {
-          const tp = sh.trail[k];
-          const ta = (k / sh.trail.length) * sh.life * 0.8;
-          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
-          ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 1 + (k / sh.trail.length) * 1.4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 12;
-        ctx.fillStyle = `rgba(255,255,255,${sh.life})`;
-        ctx.beginPath();
-        ctx.arc(sh.x, sh.y, 1.8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        if (sh.life <= 0 || sh.x < -60 || sh.x > W + 60 || sh.y > H * 0.6) {
-          shooters.splice(i, 1);
-        }
-      }
-      ctx.globalCompositeOperation = "source-over";
-
-      // ── Mountains ──
-      drawMountains(t);
-
-      // ── Lake (with aurora reflection) ──
-      drawLake(t);
 
       raf = requestAnimationFrame(tick);
     };
@@ -689,27 +636,28 @@ export function NeuralField() {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("mousemove", onMove);
+      canvas.removeEventListener("mouseleave", onLeave);
     };
   }, []);
 
   return (
     <section ref={ref} className="section" style={{ padding: "60px 0 80px", position: "relative" }}>
-      {/* Header — sits ABOVE the canvas */}
+      {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> THE NIGHT SHIFT
+          <span className="dot" /> MOLTEN INTELLIGENCE
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          Built for the hours{" "}
-          <span className="shimmer-text">when you do your best work.</span>
+          Shapes itself{" "}
+          <span className="shimmer-text">to your every move.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Aurora skies, shooting stars and a quiet valley — move your cursor across the horizon.
+          A living chrome surface — drag your cursor through it and watch it morph, drip, and reflect.
         </p>
       </div>
 
-      {/* Canvas — clean, contained, with gradient fade at edges */}
-      <div style={{ position: "relative", height: 480, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
+      {/* Canvas */}
+      <div style={{ position: "relative", height: 460, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
@@ -724,11 +672,11 @@ export function NeuralField() {
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            move for parallax
+            drag to dent
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            watch for shooting stars
+            watch it morph
           </span>
         </div>
       </div>
