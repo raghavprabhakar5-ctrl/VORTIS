@@ -1883,9 +1883,9 @@ function HowItWorks() {
 
       {/* Header */}
       <div
-        className={`reveal ${inView ? 'in' : ''}`}
-        style={{ textAlign: 'center', marginBottom: 70 }}
-      >
+       className={`reveal ${inView ? 'in' : ''}`}
+       style={{ textAlign: 'center', marginBottom: 110 }}
+          >
         <div className="eyebrow" style={{ marginBottom: 18 }}>
           <span className="dot" /> HOW IT WORKS
         </div>
@@ -1893,17 +1893,17 @@ function HowItWorks() {
           From idea to live
           <br />
           <span
-            style={{
-              background:
-                'linear-gradient(110deg,#a78bfa,#22d3ee,#ec4899,#a78bfa)',
-              backgroundSize: '200% auto',
-              WebkitBackgroundClip: 'text',
-              backgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              animation: 'hiwShimmer 5s linear infinite',
-            }}
-          >
-            in four moves.
+  style={{
+    background:
+      'linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)',
+    backgroundSize: '200% auto',
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    animation: 'hiwShimmer 5s linear infinite',
+  }}
+>
+  in four moves.
           </span>
         </h2>
         <p
