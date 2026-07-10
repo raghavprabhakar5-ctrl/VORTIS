@@ -309,7 +309,8 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
+//  SYNAPTIC AURORA — fully animated flow-field + aurora + hex mesh
+//  (replaces NeuralField) — no orbs, only ribbons / hexes / streams
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -320,66 +321,106 @@ export function NeuralField() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
-    const mouse = { x: -9999, y: -9999, active: false };
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-    let hubs = [];
-    let dust = [];
-    let pulses = [];
-    let ripples = [];
-    let waves = [];
-    let scanAngle = 0;
-    let seeded = false;
-    let lastWave = 0;
-    let last = performance.now();
+    const mouse = { x: -9999, y: -9999, active: false };
 
     // THEME-RESTRICTED PALETTE — purple + cyan only
     const PALETTE = [
-      [168, 85, 247],  // purple (a855f7)
-      [124, 58, 237],  // deep purple (7C3AED)
-      [6, 182, 212],   // cyan (06b6d4)
-      [139, 92, 246],  // violet (8b5cf6)
+      [168, 85, 247],  // a855f7
+      [124, 58, 237],  // 7C3AED
+      [6, 182, 212],   // 06b6d4
+      [139, 92, 246],  // 8b5cf6
     ];
 
-    const LABELS = ['neural', 'vision', 'code', 'memory', 'search', 'voice', 'graph', 'vector', 'stream', 'cache'];
+    let particles = [];
+    let hexes = [];
+    let pulses = [];
+    let shocks = [];
+    let ribbons = [];
+    let scanY = 0;
+    let t0 = performance.now();
+    let last = t0;
+    let seeded = false;
 
-    let seedState = 12345;
-    const rng = () => { seedState = (seedState * 1664525 + 1013904223) % 4294967296; return seedState / 4294967296; };
+    let seed = 98765;
+    const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
-    const makeParticles = () => {
-      const HUB_COUNT = 11;  // fewer hubs = less clutter
-      hubs = Array.from({ length: HUB_COUNT }, (_, i) => {
-        const c = PALETTE[i % PALETTE.length];
-        return {
-          x: rng() * W, y: rng() * H,
-          z: 0.4 + rng() * 0.6,
-          vx: (rng() - 0.5) * 0.12,
-          vy: (rng() - 0.5) * 0.12,
-          r: 3 + rng() * 3,
-          phase: rng() * Math.PI * 2,
-          color: c,
-          charge: 0,
-          activity: 0,
-          label: LABELS[i % LABELS.length],
-          restX: 0, restY: 0,
-        };
-      });
-      hubs.forEach(h => { h.restX = h.x; h.restY = h.y; });
+    // ── Simple 2D value-noise (for flow-field) ──
+    const perm = new Uint8Array(512);
+    for (let i = 0; i < 256; i++) perm[i] = i;
+    for (let i = 255; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [perm[i], perm[j]] = [perm[j], perm[i]];
+    }
+    for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
+    const fade = t => t * t * t * (t * (t * 6 - 15) + 10);
+    const lerp = (a, b, t) => a + (b - a) * t;
+    const grad = (h, x, y) => {
+      const g = h & 3;
+      const u = g < 2 ? x : y;
+      const v = g < 2 ? y : x;
+      return ((g & 1) ? -u : u) + ((g & 2) ? -v : v);
+    };
+    const noise = (x, y) => {
+      const X = Math.floor(x) & 255, Y = Math.floor(y) & 255;
+      x -= Math.floor(x); y -= Math.floor(y);
+      const u = fade(x), v = fade(y);
+      const A = perm[X] + Y, B = perm[X + 1] + Y;
+      return lerp(
+        lerp(grad(perm[A], x, y), grad(perm[B], x - 1, y), u),
+        lerp(grad(perm[A + 1], x, y - 1), grad(perm[B + 1], x - 1, y - 1), u),
+        v
+      );
+    };
 
-      const DUST_COUNT = 120;  // fewer dust particles
-      dust = Array.from({ length: DUST_COUNT }, () => {
-        const z = 0.2 + rng() * 0.8;
+    const init = () => {
+      // Flow-field particles
+      const PCOUNT = Math.min(700, Math.max(220, Math.floor(W * H / 1800)));
+      particles = Array.from({ length: PCOUNT }, () => {
         const c = PALETTE[Math.floor(rng() * PALETTE.length)];
         return {
-          x: rng() * W, y: rng() * H, z,
-          vx: (rng() - 0.5) * 0.25 * z,
-          vy: (rng() - 0.5) * 0.25 * z,
-          r: 0.4 + z * 1.5,
+          x: rng() * W, y: rng() * H,
+          vx: 0, vy: 0,
+          life: rng() * 200,
+          maxLife: 140 + rng() * 200,
+          r: 0.5 + rng() * 1.4,
           color: c,
-          twinkle: rng() * Math.PI * 2,
-          twinkleSpeed: 0.02 + rng() * 0.03,
         };
       });
+
+      // Hexagonal mesh nodes (NOT orbs)
+      hexes = [];
+      const SPACING = 115;
+      const ROWH = SPACING * 0.866;
+      for (let row = 0, y = SPACING / 2; y < H + SPACING; y += ROWH, row++) {
+        const offset = (row % 2) * (SPACING / 2);
+        for (let x = SPACING / 2 + offset; x < W + SPACING; x += SPACING) {
+          if (rng() < 0.45) continue; // sparse, breathable
+          hexes.push({
+            x, y,
+            r: 13 + rng() * 11,
+            phase: rng() * Math.PI * 2,
+            color: PALETTE[hexes.length % PALETTE.length],
+            activity: 0,
+            charge: rng(),
+            rot: rng() * Math.PI,
+            rotSpeed: (rng() - 0.5) * 0.012,
+            label: ['SYNC', 'NODE', 'CORE', 'EDGE', 'FLOW', 'MESH', 'GATE', 'WAVE'][hexes.length % 8],
+          });
+        }
+      }
+
+      // Aurora ribbons — long flowing horizontal bands, NOT orbs
+      ribbons = Array.from({ length: 4 }, (_, i) => ({
+        yBase: 0.18 + i * 0.20,
+        amp: 40 + rng() * 55,
+        freq: 0.003 + rng() * 0.004,
+        speed: 0.4 + rng() * 0.5,
+        thickness: 60 + rng() * 80,
+        color: PALETTE[i % PALETTE.length],
+        phase: rng() * Math.PI * 2,
+      }));
+
       seeded = true;
     };
 
@@ -388,7 +429,7 @@ export function NeuralField() {
       canvas.width = W * DPR; canvas.height = H * DPR;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(DPR, DPR);
-      if (!seeded && W > 0 && H > 0) makeParticles();
+      if (W > 0 && H > 0) init();
     };
     resize();
     window.addEventListener("resize", resize);
@@ -402,356 +443,285 @@ export function NeuralField() {
     const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
 
     const onClick = (e) => {
-      if (!mouse.active) return;
-      let nearest = null, nd = Infinity;
-      for (const h of hubs) {
-        const d = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-        if (d < nd) { nd = d; nearest = h; }
+      const rect = canvas.getBoundingClientRect();
+      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
+      // Hexagonal shockwave (NOT circular orb)
+      shocks.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.65, life: 1, rot: 0 });
+      shocks.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.45, life: 1, rot: Math.PI / 6, delay: 0.18 });
+      // Ignite nearby hexes & send pulses
+      for (const h of hexes) {
+        const d = Math.hypot(h.x - cx, h.y - cy);
+        if (d < 220) {
+          h.activity = Math.min(1.5, h.activity + 1.2);
+          const targets = hexes
+            .filter(o => o !== h && Math.hypot(o.x - h.x, o.y - h.y) < 300)
+            .sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))
+            .slice(0, 2);
+          for (const tg of targets) {
+            pulses.push({ from: h, to: tg, t: 0, speed: 0.012, color: h.color, trail: [] });
+          }
+        }
       }
-      if (nearest && nd < 300) {
-        nearest.charge = 1.5;
-        nearest.activity = 1.5;
-        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 160, color: nearest.color, life: 1 });
-        waves.push({ x: nearest.x, y: nearest.y, r: 0, max: Math.max(W, H) * 0.6, color: nearest.color, life: 1 });
-      }
-      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 100, color: [255, 255, 255], life: 1 });
     };
 
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
     canvas.addEventListener("click", onClick);
 
-    const spawnPulse = (fromHub, toHub) => {
-      pulses.push({
-        from: fromHub, to: toHub, t: 0,
-        speed: 0.007 + rng() * 0.006,
-        color: fromHub.color, trail: [],
-      });
+    const drawHex = (cx, cy, r, rot) => {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = rot + i * Math.PI / 3;
+        const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
     };
-
-    const bezierPoint = (p0, p1, p2, t) => {
-      const mt = 1 - t;
-      return {
-        x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
-        y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
-      };
-    };
-    const controlPoint = (a, b) => {
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const off = Math.sin((a.x + a.y) * 0.008) * 30;
-      return { x: mx - dy / len * off, y: my + dx / len * off };
-    };
-
-    const HUB_LINK_DIST = 340;
 
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
-      // trail-fade clear (bloom accumulation)
-      ctx.fillStyle = "rgba(3,3,10,0.2)";
+      const t = (now - t0) * 0.001;
+
+      // trail-fade clear (subtle bloom)
+      ctx.fillStyle = "rgba(3,3,10,0.18)";
       ctx.fillRect(0, 0, W, H);
 
-      // Mouse aura — purple only, subtle
-      if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 240);
-        glow.addColorStop(0, "rgba(124,58,237,0.12)");
-        glow.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // Periodic energy wave every ~6s (slower = calmer)
-      if (now - lastWave > 6000 && hubs.length > 0) {
-        const h = hubs[Math.floor(rng() * hubs.length)];
-        waves.push({ x: h.x, y: h.y, r: 0, max: Math.max(W, H) * 0.7, color: h.color, life: 1 });
-        lastWave = now;
-      }
-
-      // Radar sweep — single beam, slower
-      scanAngle += 0.003;
-      const cx = W / 2, cy = H / 2;
-      if (ctx.createConicGradient) {
-        const sweepGrad = ctx.createConicGradient(scanAngle, cx, cy);
-        sweepGrad.addColorStop(0, "rgba(124,58,237,0.06)");
-        sweepGrad.addColorStop(0.04, "rgba(124,58,237,0)");
-        sweepGrad.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = sweepGrad;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // Update hubs (spring physics)
-      for (const h of hubs) {
-        h.vx += (h.restX - h.x) * 0.0006;
-        h.vy += (h.restY - h.y) * 0.0006;
-        h.x += h.vx * (dt / 16);
-        h.y += h.vy * (dt / 16);
-        h.vx *= 0.99; h.vy *= 0.99;
-        if (h.x < 40) { h.x = 40; h.vx *= -0.5; h.restX = 60 + rng() * 40; }
-        if (h.x > W - 40) { h.x = W - 40; h.vx *= -0.5; h.restX = W - 60 - rng() * 40; }
-        if (h.y < 40) { h.y = 40; h.vy *= -0.5; h.restY = 60 + rng() * 40; }
-        if (h.y > H - 40) { h.y = H - 40; h.vy *= -0.5; h.restY = H - 60 - rng() * 40; }
-
-        // mouse repulsion (gentler)
-        if (mouse.active) {
-          const dx = h.x - mouse.x, dy = h.y - mouse.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 180 && d > 0.1) {
-            const f = (1 - d / 180) * 0.8;
-            h.vx += (dx / d) * f * 0.04;
-            h.vy += (dy / d) * f * 0.04;
-          }
+      // ─── AURORA RIBBONS (back layer) — flowing horizontal bands ───
+      ctx.globalCompositeOperation = "screen";
+      for (const rb of ribbons) {
+        const yMid = H * rb.yBase + Math.sin(t * rb.speed + rb.phase) * 30;
+        const [r, g, b] = rb.color;
+        const grad = ctx.createLinearGradient(0, yMid - rb.thickness, 0, yMid + rb.thickness);
+        grad.addColorStop(0, `rgba(${r},${g},${b},0)`);
+        grad.addColorStop(0.5, `rgba(${r},${g},${b},0.11)`);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(0, yMid);
+        for (let x = 0; x <= W; x += 16) {
+          const y = yMid
+            + Math.sin(x * rb.freq + t * rb.speed * 1.6 + rb.phase) * rb.amp
+            + Math.sin(x * rb.freq * 2.3 + t * rb.speed * 1.1) * rb.amp * 0.4;
+          ctx.lineTo(x, y);
         }
-
-        // charge builds (slower = calmer)
-        h.charge += (0.001 + h.activity * 0.004) * (dt / 16);
-        if (h.charge >= 1) {
-          const candidates = hubs
-            .filter(o => o !== h)
-            .map(o => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
-            .filter(c => c.d < HUB_LINK_DIST)
-            .sort((a, b) => a.d - b.d)
-            .slice(0, 2);
-          for (const c of candidates) spawnPulse(h, c.o);
-          ripples.push({ x: h.x, y: h.y, r: 0, max: 60, color: h.color, life: 0.6 });
-          h.charge = 0;
-          h.activity = Math.min(1.5, h.activity + 0.5);
+        ctx.lineTo(W, yMid + rb.thickness);
+        for (let x = W; x >= 0; x -= 16) {
+          const y = yMid
+            + Math.sin(x * rb.freq + t * rb.speed * 1.6 + rb.phase) * rb.amp
+            + Math.sin(x * rb.freq * 2.3 + t * rb.speed * 1.1) * rb.amp * 0.4
+            + rb.thickness;
+          ctx.lineTo(x, y);
         }
-        h.activity *= 0.95;
-        h.phase += 0.02;
+        ctx.closePath();
+        ctx.fill();
       }
+      ctx.globalCompositeOperation = "source-over";
 
-      // Connections
-      const connections = [];
-      for (let i = 0; i < hubs.length; i++) {
-        for (let j = i + 1; j < hubs.length; j++) {
-          const a = hubs[i], b = hubs[j];
+      // ─── HEX MESH CONNECTIONS (mid-back) ───
+      const LINK_DIST = 180;
+      ctx.lineWidth = 0.6;
+      for (let i = 0; i < hexes.length; i++) {
+        for (let j = i + 1; j < hexes.length; j++) {
+          const a = hexes[i], b = hexes[j];
           const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < HUB_LINK_DIST) connections.push({ a, b, d, cp: controlPoint(a, b) });
-        }
-      }
-
-      // Waves
-      for (let i = waves.length - 1; i >= 0; i--) {
-        const w = waves[i];
-        w.r += 2.5 * (dt / 16);
-        w.life -= 0.003 * (dt / 16);
-        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
-        const [r, g, b] = w.color;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.1})`;
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.35})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Draw connections (bloom + flow + wave boost)
-      for (const c of connections) {
-        const { a, b, d, cp } = c;
-        let alpha = (1 - d / HUB_LINK_DIST) * 0.32;
-        const depthFactor = Math.min(a.z, b.z);
-        alpha *= 0.5 + depthFactor * 0.5;
-
-        // wave boost
-        let waveBoost = 0;
-        const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
-        for (const w of waves) {
-          const wd = Math.hypot(midX - w.x, midY - w.y);
-          if (Math.abs(wd - w.r) < 40) {
-            waveBoost += w.life * (1 - Math.abs(wd - w.r) / 40) * 0.6;
-          }
-        }
-
-        const [r, g, bC] = a.color;
-        const baseWidth = 0.5 + depthFactor * 0.6;
-
-        // outer soft glow
-        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.05 + waveBoost * 0.08})`;
-        ctx.lineWidth = baseWidth * 6;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        // medium
-        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.15 + waveBoost * 0.15})`;
-        ctx.lineWidth = baseWidth * 2.5;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        // bright core (gradient)
-        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-        grad.addColorStop(0, `rgba(${a.color[0]},${a.color[1]},${a.color[2]},${alpha})`);
-        grad.addColorStop(1, `rgba(${b.color[0]},${b.color[1]},${b.color[2]},${alpha})`);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = baseWidth + waveBoost;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-
-        // flowing dashed energy
-        ctx.strokeStyle = `rgba(255,255,255,${(alpha + waveBoost) * 0.5})`;
-        ctx.lineWidth = 0.4;
-        ctx.setLineDash([2, 14]);
-        ctx.lineDashOffset = -now * 0.04;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // mouse proximity highlight
-        if (mouse.active) {
-          const md = Math.hypot(midX - mouse.x, midY - mouse.y);
-          if (md < 140) {
-            const boost = (1 - md / 140) * 0.4;
-            ctx.strokeStyle = `rgba(168,85,247,${boost})`;
-            ctx.lineWidth = 1;
+          if (d < LINK_DIST) {
+            const alpha = (1 - d / LINK_DIST) * 0.18;
+            const [r, g, bl] = a.color;
+            ctx.strokeStyle = `rgba(${r},${g},${bl},${alpha})`;
             ctx.beginPath();
-            ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+            ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
             ctx.stroke();
           }
         }
       }
 
-      // Pulses (traveling energy packets)
+      // ─── FLOW-FIELD PARTICLES (curl-noise streams) ───
+      ctx.globalCompositeOperation = "lighter";
+      for (const p of particles) {
+        const n = noise(p.x * 0.0025, p.y * 0.0025 + t * 0.05);
+        const angle = n * Math.PI * 4;
+        const speed = 0.9;
+        p.vx = lerp(p.vx, Math.cos(angle) * speed, 0.15);
+        p.vy = lerp(p.vy, Math.sin(angle) * speed, 0.15);
+
+        // mouse repulsion (wake)
+        if (mouse.active) {
+          const dx = p.x - mouse.x, dy = p.y - mouse.y;
+          const d = Math.hypot(dx, dy);
+          if (d < 120 && d > 0.1) {
+            const f = (1 - d / 120) * 2.4;
+            p.vx += (dx / d) * f;
+            p.vy += (dy / d) * f;
+          }
+        }
+
+        // shock boost
+        for (const s of shocks) {
+          if (s.delay && s.delay > 0) continue;
+          const sd = Math.hypot(p.x - s.x, p.y - s.y);
+          if (Math.abs(sd - s.r) < 32) {
+            const f = s.life * 1.4;
+            const ang = Math.atan2(p.y - s.y, p.x - s.x);
+            p.vx += Math.cos(ang) * f;
+            p.vy += Math.sin(ang) * f;
+          }
+        }
+
+        p.x += p.vx * (dt / 16);
+        p.y += p.vy * (dt / 16);
+        p.life++;
+
+        // wrap & reset
+        if (p.x < -10) p.x = W + 10;
+        if (p.x > W + 10) p.x = -10;
+        if (p.y < -10) p.y = H + 10;
+        if (p.y > H + 10) p.y = -10;
+        if (p.life > p.maxLife) {
+          p.x = rng() * W; p.y = rng() * H; p.life = 0;
+          p.vx = 0; p.vy = 0;
+        }
+
+        const fadeP = Math.sin((p.life / p.maxLife) * Math.PI); // fade in/out
+        const [r, g, b] = p.color;
+        ctx.fillStyle = `rgba(${r},${g},${b},${0.65 * fadeP})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ─── HEXAGONAL SHOCKWAVES (click ripples — NOT circular) ───
+      for (let i = shocks.length - 1; i >= 0; i--) {
+        const s = shocks[i];
+        if (s.delay && s.delay > 0) { s.delay -= dt / 1000; continue; }
+        s.r += 4.5 * (dt / 16);
+        s.life -= 0.012 * (dt / 16);
+        if (s.life <= 0 || s.r > s.max) { shocks.splice(i, 1); continue; }
+        const rot = (s.rot || 0) + t * 0.5;
+        ctx.strokeStyle = `rgba(168,85,247,${s.life * 0.5})`;
+        ctx.lineWidth = 2;
+        drawHex(s.x, s.y, s.r, rot);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(6,182,212,${s.life * 0.25})`;
+        ctx.lineWidth = 1;
+        drawHex(s.x, s.y, s.r * 0.85, rot + Math.PI / 6);
+        ctx.stroke();
+      }
+
+      // ─── PULSES (traveling energy along mesh) ───
+      ctx.globalCompositeOperation = "lighter";
       for (let i = pulses.length - 1; i >= 0; i--) {
         const p = pulses[i];
         p.t += p.speed * (dt / 16);
-        if (p.t >= 1) {
-          p.to.activity = Math.min(1.5, p.to.activity + 0.5);
-          pulses.splice(i, 1);
-          continue;
-        }
-        const cp = controlPoint(p.from, p.to);
-        const pos = bezierPoint(p.from, cp, p.to, p.t);
-        p.trail.push({ x: pos.x, y: pos.y });
-        if (p.trail.length > 14) p.trail.shift();
-
+        if (p.t >= 1) { p.to.activity = Math.min(1.5, p.to.activity + 0.8); pulses.splice(i, 1); continue; }
+        const x = lerp(p.from.x, p.to.x, p.t);
+        const y = lerp(p.from.y, p.to.y, p.t);
+        p.trail.push({ x, y });
+        if (p.trail.length > 12) p.trail.shift();
         const [r, g, b] = p.color;
         for (let k = 0; k < p.trail.length; k++) {
           const tp = p.trail[k];
           const ta = (k / p.trail.length) * 0.6;
           ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
           ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2, 0, Math.PI * 2);
+          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 1.5, 0, Math.PI * 2);
           ctx.fill();
         }
-        // glowing head
         ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 14;
         ctx.fillStyle = "#fff";
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 2.2, 0, Math.PI * 2);
+        ctx.arc(x, y, 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       }
+      ctx.globalCompositeOperation = "source-over";
 
-      // Ripples
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const rp = ripples[i];
-        rp.r += 1.6 * (dt / 16);
-        rp.life -= 0.012 * (dt / 16);
-        if (rp.life <= 0 || rp.r > rp.max) { ripples.splice(i, 1); continue; }
-        const [r, g, b] = rp.color;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${rp.life * 0.4})`;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Dust drift + parallax
-      for (const p of dust) {
-        p.x += p.vx * (dt / 16);
-        p.y += p.vy * (dt / 16);
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        p.twinkle += p.twinkleSpeed;
-
-        if (mouse.active) {
-          // parallax removed for calm — just drift
+      // ─── HEX NODES (foreground — NOT orbs) ───
+      for (const h of hexes) {
+        h.rot += h.rotSpeed;
+        h.charge += 0.002 + h.activity * 0.004;
+        if (h.charge >= 1) {
+          const targets = hexes
+            .filter(o => o !== h && Math.hypot(o.x - h.x, o.y - h.y) < 220)
+            .sort((a, b) => Math.hypot(a.x - h.x, a.y - h.y) - Math.hypot(b.x - h.x, b.y - h.y))
+            .slice(0, 1);
+          for (const tg of targets) pulses.push({ from: h, to: tg, t: 0, speed: 0.01, color: h.color, trail: [] });
+          h.charge = 0;
+          h.activity = Math.min(1.5, h.activity + 0.4);
         }
-
-        const tw = 0.3 + Math.sin(p.twinkle) * 0.3;
-        const [r, g, b] = p.color;
-        ctx.globalAlpha = (0.2 + p.z * 0.5) * tw;
-        ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      // Hubs (depth-sorted)
-      const sortedHubs = [...hubs].sort((a, b) => a.z - b.z);
-      for (const h of sortedHubs) {
-        const pulse = 0.7 + Math.sin(now * 0.0015 + h.phase) * 0.3;
+        h.activity *= 0.96;
+        const pulse = 0.7 + Math.sin(t * 1.5 + h.phase) * 0.3;
         const actBoost = h.activity;
-        const depthScale = 0.6 + h.z * 0.6;
         const [r, g, b] = h.color;
 
-        // activity halo
+        // activity halo (subtle radial — follows node, not a free-floating orb)
         if (actBoost > 0.05) {
           const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 40);
-          halo.addColorStop(0, `rgba(${r},${g},${b},${0.3 * actBoost})`);
+          halo.addColorStop(0, `rgba(${r},${g},${b},${0.35 * actBoost})`);
           halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
           ctx.fillStyle = halo;
           ctx.fillRect(h.x - 40, h.y - 40, 80, 80);
         }
 
-        // charge ring
-        if (h.charge > 0.1) {
-          ctx.strokeStyle = `rgba(${r},${g},${b},${h.charge * 0.5})`;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(h.x, h.y, (h.r + 7) * depthScale, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // rotating dashed ring
-        const ringR = (h.r + 6) * depthScale;
+        // rotating outer hex (dashed)
         ctx.strokeStyle = `rgba(${r},${g},${b},0.15)`;
         ctx.lineWidth = 1;
-        ctx.setLineDash([3, 6]);
-        ctx.lineDashOffset = -now * 0.015;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, ringR, 0, Math.PI * 2);
+        ctx.setLineDash([3, 5]);
+        drawHex(h.x, h.y, h.r + 8, h.rot);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // glow + core
+        // solid hex with glow
         ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 18 * pulse + 8 * actBoost;
-        ctx.fillStyle = `rgba(${r},${g},${b},${0.85 * pulse + 0.15})`;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * depthScale, 0, Math.PI * 2);
+        ctx.shadowBlur = 12 * pulse + 8 * actBoost;
+        ctx.fillStyle = `rgba(${r},${g},${b},${0.25 * pulse + 0.1 + actBoost * 0.3})`;
+        drawHex(h.x, h.y, h.r, h.rot);
         ctx.fill();
+        ctx.strokeStyle = `rgba(${r},${g},${b},${0.7 * pulse + 0.2})`;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
         ctx.shadowBlur = 0;
 
-        // white-hot center
-        ctx.fillStyle = `rgba(255,255,255,${0.4 + actBoost * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * depthScale * 0.4, 0, Math.PI * 2);
+        // inner bright hex (counter-rotating)
+        ctx.fillStyle = `rgba(255,255,255,${0.5 + actBoost * 0.4})`;
+        drawHex(h.x, h.y, h.r * 0.35, -h.rot);
         ctx.fill();
 
         // label on hover
         if (mouse.active) {
           const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-          if (md < 100) {
-            const op = (1 - md / 100);
+          if (md < 90) {
+            const op = (1 - md / 90);
             ctx.font = "10px 'JetBrains Mono', monospace";
             const tw = ctx.measureText(h.label).width;
-            ctx.fillStyle = `rgba(3,3,10,${op * 0.8})`;
-            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r * depthScale - 22, tw + 12, 16);
+            ctx.fillStyle = `rgba(3,3,10,${op * 0.85})`;
+            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r - 22, tw + 12, 16);
             ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
             ctx.textAlign = "center";
-            ctx.fillText(h.label, h.x, h.y - h.r * depthScale - 11);
+            ctx.fillText(h.label, h.x, h.y - h.r - 11);
           }
         }
+      }
+
+      // ─── HORIZONTAL SCAN BAND ───
+      scanY += 0.6 * (dt / 16);
+      if (scanY > H + 60) scanY = -60;
+      const sg = ctx.createLinearGradient(0, scanY - 30, 0, scanY + 30);
+      sg.addColorStop(0, "rgba(124,58,237,0)");
+      sg.addColorStop(0.5, "rgba(124,58,237,0.06)");
+      sg.addColorStop(1, "rgba(124,58,237,0)");
+      ctx.fillStyle = sg;
+      ctx.fillRect(0, scanY - 30, W, 60);
+
+      // ─── CURSOR SPOTLIGHT (subtle, follows mouse — not an orb) ───
+      if (mouse.active) {
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 200);
+        glow.addColorStop(0, "rgba(124,58,237,0.10)");
+        glow.addColorStop(1, "rgba(124,58,237,0)");
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, W, H);
       }
 
       raf = requestAnimationFrame(tick);
@@ -770,43 +740,37 @@ export function NeuralField() {
   return (
     <section ref={ref} className="section" style={{ padding: "60px 0 80px", position: "relative" }}>
       <style>{`
-        @keyframes nfShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @keyframes nfHexSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
 
-      {/* Header — uses your utility classes, sits ABOVE the canvas */}
+      {/* Header — sits ABOVE the canvas */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> THE NETWORK
+          <span className="dot" /> THE LIVING NETWORK
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          One mind.{" "}
-          <span className="shimmer-text">A billion connections.</span>
+          A field that{" "}
+          <span className="shimmer-text">thinks in waves.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Move your cursor through the network — this is how Vortis connects your world.
+          Aurora ribbons, flow-field currents and a hexagonal mesh — move your cursor to disturb the field, click to ignite it.
         </p>
       </div>
 
-      {/* Canvas — clean, contained, with gradient fade at top/bottom */}
-      <div style={{ position: "relative", height: 440, maxWidth: 1200, margin: "0 auto" }}>
-        {/* Top fade into canvas */}
+      {/* Canvas — clean, contained, with gradient fade at edges */}
+      <div style={{ position: "relative", height: 460, maxWidth: 1200, margin: "0 auto" }}>
+        {/* Edge fades */}
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 40, background: "linear-gradient(180deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        {/* Bottom fade out of canvas */}
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 40, background: "linear-gradient(0deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
-        {/* Side fades */}
         <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: 40, background: "linear-gradient(90deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, width: 40, background: "linear-gradient(270deg, #03030a, transparent)", zIndex: 2, pointerEvents: "none" }} />
 
         <canvas
           ref={canvasRef}
-          style={{
-            position: "absolute", inset: 0,
-            width: "100%", height: "100%",
-            cursor: "crosshair",
-          }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair" }}
         />
 
-        {/* Subtle hint at bottom */}
+        {/* Hint at bottom — diamond-shaped markers, NOT orbs */}
         <div style={{
           position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
           display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
@@ -814,11 +778,11 @@ export function NeuralField() {
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#a855f7" }} />
-            move to influence
+            <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
+            move to disturb
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4" }} />
+            <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
             click to ignite
           </span>
         </div>
@@ -3469,43 +3433,226 @@ function FAQ() {
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
   const [showPicker, setShowPicker] = useState(false);
+  const [ripples, setRipples] = useState([]);
+  const [count, setCount] = useState(0);
+
+  // Count-up animation when section enters view
+  useEffect(() => {
+    if (!inView) return;
+    let raf;
+    const start = performance.now();
+    const DUR = 1800;
+    const TARGET = 50284;
+    const animate = (now) => {
+      const t = Math.min(1, (now - start) / DUR);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setCount(Math.floor(TARGET * eased));
+      if (t < 1) raf = requestAnimationFrame(animate);
+    };
+    raf = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(raf);
+  }, [inView]);
+
+  const handleClick = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const id = Date.now() + Math.random();
+    setRipples(rs => [...rs, { id, x, y }]);
+    setTimeout(() => setRipples(rs => rs.filter(r => r.id !== id)), 700);
+    setTimeout(() => setShowPicker(true), 220);
+  };
+
   return (
-    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center" }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124,58,237,0.07), transparent)", pointerEvents: "none" }} />
-      <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
+    <section ref={ref} style={{ padding: "120px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center", overflow: "hidden" }}>
+      <style>{`
+        @keyframes ctaAurora {
+          0%,100% { transform: translateX(-25%) translateY(0); opacity: 0.55; }
+          50%     { transform: translateX(25%) translateY(-20px); opacity: 1; }
+        }
+        @keyframes ctaAurora2 {
+          0%,100% { transform: translateX(20%) translateY(0); opacity: 0.45; }
+          50%     { transform: translateX(-20%) translateY(20px); opacity: 0.9; }
+        }
+        @keyframes ctaGridScroll {
+          from { background-position: 0 0; }
+          to   { background-position: 0 40px; }
+        }
+        @keyframes ctaBorderSpin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+        @keyframes ctaShimmer {
+          0%   { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        @keyframes ctaRipple {
+          from { transform: translate(-50%,-50%) scale(0); opacity: 0.55; }
+          to   { transform: translate(-50%,-50%) scale(4); opacity: 0; }
+        }
+        @keyframes ctaArrow {
+          0%,100% { transform: translateX(0); }
+          50%     { transform: translateX(4px); }
+        }
+        @keyframes ctaBar {
+          0%,100% { transform: scaleY(0.25); }
+          50%     { transform: scaleY(1); }
+        }
+      `}</style>
+
+      {/* Animated background layers — ribbons + grid floor, NO orbs */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
+        {/* Aurora ribbon 1 (purple) */}
+        <div style={{
+          position: "absolute", top: "-15%", left: "-10%", width: "120%", height: "55%",
+          background: "linear-gradient(90deg, transparent, rgba(124,58,237,0.20), transparent)",
+          filter: "blur(60px)",
+          animation: "ctaAurora 8s ease-in-out infinite",
+        }} />
+        {/* Aurora ribbon 2 (cyan) */}
+        <div style={{
+          position: "absolute", bottom: "-15%", right: "-10%", width: "120%", height: "55%",
+          background: "linear-gradient(90deg, transparent, rgba(6,182,212,0.16), transparent)",
+          filter: "blur(60px)",
+          animation: "ctaAurora2 9s ease-in-out infinite",
+        }} />
+        {/* Animated perspective grid floor (lines, not orbs) */}
+        <div style={{
+          position: "absolute", bottom: 0, left: "-20%", right: "-20%", height: "45%",
+          backgroundImage:
+            "linear-gradient(rgba(124,58,237,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.10) 1px, transparent 1px)",
+          backgroundSize: "40px 40px",
+          transform: "perspective(400px) rotateX(62deg)",
+          transformOrigin: "bottom center",
+          maskImage: "linear-gradient(transparent, #000 60%)",
+          WebkitMaskImage: "linear-gradient(transparent, #000 60%)",
+          animation: "ctaGridScroll 2s linear infinite",
+        }} />
+        {/* Subtle top scan line */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: 1,
+          background: "linear-gradient(90deg, transparent, rgba(168,85,247,0.5), transparent)",
+        }} />
+      </div>
+
+      <div style={{ maxWidth: 720, margin: "0 auto", position: "relative" }}>
         <div style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)", transition: "all 0.8s ease" }}>
-          <div style={{ fontSize: 52, marginBottom: 20 }}>✦</div>
+
+          {/* Animated audio-bar accent (vertical bars, NOT orbs) */}
+          <div style={{ display: "flex", gap: 4, justifyContent: "center", marginBottom: 24, height: 28, alignItems: "flex-end" }}>
+            {[0,1,2,3,4,5,6,7,8,9,10,11].map(i => (
+              <span key={i} style={{
+                width: 3, height: "100%",
+                background: `linear-gradient(180deg, ${i % 2 ? "#a855f7" : "#06b6d4"}, ${i % 2 ? "#7C3AED" : "#0891b2"})`,
+                borderRadius: 2,
+                animation: `ctaBar 1.2s ease-in-out ${i * 0.08}s infinite`,
+                transformOrigin: "bottom",
+              }} />
+            ))}
+          </div>
+
           <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(32px,6vw,62px)", margin: "0 0 20px", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
             Start thinking{" "}
-            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>faster.</span>
+            <span style={{
+              background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4,#a855f7,#7C3AED)",
+              backgroundSize: "200% auto",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+              animation: "ctaShimmer 4s linear infinite",
+            }}>faster.</span>
           </h2>
-          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 40 }}>
-            Join 50,000+ professionals who use Vortis every day. Free to start.
+          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.5)", lineHeight: 1.7, marginBottom: 12 }}>
+            Join{" "}
+            <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, color: "#fff" }}>
+              {count.toLocaleString()}+
+            </span>{" "}
+            professionals who use Vortis every day. Free to start.
           </p>
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.3)", marginBottom: 40, fontFamily: "'JetBrains Mono',monospace", letterSpacing: "0.05em" }}>
+            no credit card · 14-day pro trial · cancel anytime
+          </p>
+
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <button onClick={() => setShowPicker(true)} style={{
-              padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-              background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-              position: "relative",
-              boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
+
+            {/* Primary button — rotating conic-gradient border + shimmer sweep + click ripples */}
+            <div style={{ position: "relative", padding: 3, borderRadius: 99, overflow: "hidden", display: "inline-block" }}>
+              {/* Rotating gradient border */}
+              <div style={{
+                position: "absolute", top: "-100%", left: "-100%",
+                width: "300%", height: "300%",
+                background: "conic-gradient(from 0deg, #7C3AED, #a855f7, #06b6d4, #a855f7, #7C3AED)",
+                animation: "ctaBorderSpin 4s linear infinite",
+              }} />
+              <button
+                onClick={handleClick}
+                style={{
+                  position: "relative",
+                  padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
+                  background: "#0a0820", color: "#fff",
+                  border: "none", cursor: "pointer",
+                  display: "flex", alignItems: "center", gap: 8,
+                  overflow: "hidden",
+                  transition: "transform 0.25s ease, box-shadow 0.25s ease",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.5), 0 16px 50px rgba(124,58,237,0.3)"; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "none"; }}
+              >
+                {/* Click ripples (small, on-button — not free-floating orbs) */}
+                {ripples.map(r => (
+                  <span key={r.id} style={{
+                    position: "absolute",
+                    left: r.x, top: r.y,
+                    width: 14, height: 14, borderRadius: "50%",
+                    background: "rgba(255,255,255,0.6)",
+                    animation: "ctaRipple 0.7s ease-out forwards",
+                    pointerEvents: "none",
+                  }} />
+                ))}
+                {/* Shimmer sweep overlay */}
+                <span style={{
+                  position: "absolute", inset: 0,
+                  background: "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%)",
+                  backgroundSize: "200% 100%",
+                  animation: "ctaShimmer 3s linear infinite",
+                  pointerEvents: "none",
+                }} />
+                <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
+                <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
+                <ArrowRight size={16} style={{ position: "relative", zIndex: 1, animation: "ctaArrow 1.6s ease-in-out infinite" }} />
+              </button>
+            </div>
+
+            {/* Secondary link button */}
+            <a href="#capabilities" style={{
+              padding: "16px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
+              border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
+              background: "rgba(255,255,255,0.04)", textDecoration: "none",
+              display: "inline-flex", alignItems: "center", gap: 8,
               transition: "all 0.25s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
-            >
-              <span style={{
-                position: "absolute", inset: -3, borderRadius: 99,
-                border: "3px solid #c4b5fd",
-                animation: "radarPing 1.6s ease-out infinite",
-                pointerEvents: "none",
-              }} />
-              <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
-              <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
-            </button>
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(139,92,246,0.08)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+            >Talk to Sales</a>
+          </div>
+
+          {/* Trust badges row */}
+          <div style={{ display: "flex", gap: 32, justifyContent: "center", marginTop: 56, flexWrap: "wrap" }}>
+            {[
+              { icon: Shield, label: "SOC 2 Type II" },
+              { icon: Lock, label: "End-to-end encrypted" },
+              { icon: Zap, label: "99.9% uptime SLA" },
+            ].map((b, i) => {
+              const Ic = b.icon;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(10px)", transition: `all 0.6s ${0.4 + i * 0.1}s ease` }}>
+                  <Ic size={14} style={{ color: "rgba(168,85,247,0.85)" }} />
+                  <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", fontFamily: "'JetBrains Mono',monospace", letterSpacing: "0.05em" }}>{b.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
+
       {showPicker && (
         <AuthPicker
           onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
