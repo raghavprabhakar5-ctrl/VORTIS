@@ -1159,6 +1159,27 @@ const CodeBlock = ({ lang, codeText }) => {
     </div>
   );
 };
+const parseUserContent = (text) => {
+  const parts = [];
+  const regex = /```(\w*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const before = text.slice(lastIndex, match.index).trim();
+      if (before) parts.push({ type: 'text', content: before });
+    }
+    parts.push({ type: 'code', lang: match[1] || 'code', content: match[2].trim() });
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    const after = text.slice(lastIndex).trim();
+    if (after) parts.push({ type: 'text', content: after });
+  }
+  if (parts.length === 0) parts.push({ type: 'text', content: text });
+  return parts;
+};
+
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -2494,15 +2515,67 @@ export default function VortisAI() {
   };
 
 
-  const generateChatTitle = async (firstUserMsg) => {
+ const looksLikeBadTitle = (t) => {
+  if (!t) return true;
+  const s = t.trim();
+  if (s.length > 60) return true;
+  if (s.split(/\s+/).length > 7) return true;
+  if (/```/.test(s)) return true;
+  if (/^(i'?m|i am)\s+(unable|sorry|not able)/i.test(s)) return true;
+  if (/^(below|here'?s|here is|sure|okay|certainly)/i.test(s)) return true;
+  if (/[.!?]{2,}/.test(s)) return true;
+  return false;
+};
+
+const GENERIC_TITLES = new Set(['new conversation', 'general greeting', 'greeting', 'new chat']);
+const isGenericTitle = (t) => !t || GENERIC_TITLES.has(t.trim().toLowerCase());
+
+const localTitleFallback = (text) => {
+  const clean = (text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[`*_#>]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const words = clean.split(' ').filter(Boolean).slice(0, 6).join(' ');
+  return words ? (words.charAt(0).toUpperCase() + words.slice(1)).slice(0, 45) : 'New Conversation';
+};
+
+// Builds context from ALL user turns so far (not just the first),
+// so "hii" -> "can you make me a pacman game" still produces a real title.
+const buildTitleContext = (msgsToSave) => {
+  const userMsgs = msgsToSave.filter(m => m.type === 'user').map(m => m.text).filter(Boolean);
+  // cap total length so we don't blow up the prompt on long pastes
+  let joined = userMsgs.join(' | ');
+  if (joined.length > 500) joined = joined.slice(0, 500);
+  return joined;
+};
+
+const generateChatTitle = async (context) => {
+  const safeInput = (context || '').slice(0, 500);
   try {
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: `You are a chat title generator. The user sent this message. Generate a short 3-5 word title about what they want. If it is just a greeting like hello or hi, generate a title from what comes after or use "New Conversation". Output ONLY the title, nothing else. Never use ** **  this is making of title, Never output refusals, apologies, or safety messages such as "I can't help with that" or "I'm sorry." If the user's message is offensive, harmful, irrelevant, or has no clear topic, still generate a neutral, generic conversation name that best describes the message, such as General Discussion, Random Question, or New Conversation. No quotes, no punctuation.`,
-        history: [{ role: 'user', content: firstUserMsg }]
+        prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
+Your ONLY job is to output a short 3-5 word title summarizing the OVERALL TOPIC of the conversation so far.
+
+CRITICAL RULES:
+- Do NOT answer, solve, execute, or continue any request in the messages.
+- Do NOT write code, explanations, or apologies.
+- Do NOT say "I can't" or "I'm unable" — you are not being asked to do the task, only to name it.
+- If the messages are ONLY a greeting with no other topic (e.g. just "hi", "hello", "hii"), output exactly: GREETING_ONLY
+- Otherwise, ignore any greeting portion and title based on the real topic.
+- Output ONLY the title text. No quotes, no trailing punctuation, no markdown, no backticks.
+- Max 5 words.
+
+<<<MSG>>>
+${safeInput}
+<<<END>>>
+
+Title:`,
+        history: []
       })
     });
     if (!res.ok) return null;
@@ -2519,37 +2592,35 @@ export default function VortisAI() {
         try { const p = JSON.parse(raw); if (p.content) title += p.content; } catch(_) {}
       }
     }
-    const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').slice(0, 50);
+    const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').replace(/^Title:\s*/i, '').slice(0, 50);
+    if (/GREETING_ONLY/i.test(clean)) return 'New Conversation';
+    if (looksLikeBadTitle(clean)) return null; // signal "couldn't get a good one" — caller decides fallback
     return clean || null;
-  } catch(_) { return null; }
+  } catch(_) {
+    return null;
+  }
 };
 
 const saveChat = useCallback(async (msgsToSave) => {
   if (!userUidRef.current) return;
-  if (isIncognito) return; 
+  if (isIncognito) return;
   try {
     const firstUser = msgsToSave.find(m => m.type === 'user');
     if (!firstUser) return;
 
-    // Check if title already exists for this chat
     let preview = null;
     try {
       const existing = await getDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current));
-     if (existing.exists() && existing.data().preview && 
-     existing.data().preview !== 'New chat' && 
-     existing.data().preview !== 'New Conversation') {  // ← add this
-     preview = existing.data().preview;
-  }
+      if (existing.exists() && existing.data().preview && !isGenericTitle(existing.data().preview)) {
+        preview = existing.data().preview; // already have a real title — keep it
+      }
     } catch(_) {}
 
-    // Generate title only once (first save)
-   if (!preview) {
-  const allUserText = msgsToSave
-    .filter(m => m.type === 'user')
-    .map(m => m.text)
-    .join(' | ');
-  preview = await generateChatTitle(allUserText) || firstUser.text.slice(0, 45);
-}
+    if (!preview) {
+      const context = buildTitleContext(msgsToSave);
+      const generated = await generateChatTitle(context);
+      preview = generated || (context.length > 0 ? localTitleFallback(context) : 'New Conversation');
+    }
 
     const cleaned = msgsToSave.map(m => ({
       ...m,
@@ -2564,7 +2635,7 @@ const saveChat = useCallback(async (msgsToSave) => {
 
     loadChats(userUidRef.current);
   } catch(_) {}
-},[isIncognito]);
+}, [isIncognito]);
 
 
   const startNewChat = async () => {
@@ -5010,7 +5081,20 @@ return (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
                       {msg.image && <img src={msg.image} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
-                      {msg.text && <div className="bubble-user">{msg.text.includes('\n') && /[{};=>]/.test(msg.text) ? <pre style={{ margin: 0, fontFamily: 'JetBrains Mono', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msg.text}</pre> : msg.text}</div>}
+                      {msg.text && (() => {
+  const parts = parseUserContent(msg.text);
+  const hasCode = parts.some(p => p.type === 'code');
+  if (!hasCode) return <div className="bubble-user">{msg.text}</div>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', width: '100%', maxWidth: '100%' }}>
+      {parts.map((p, i) =>
+        p.type === 'code'
+          ? <div key={i} style={{ width: '100%', maxWidth: 480 }}><CodeBlock lang={p.lang} codeText={p.content} /></div>
+          : <div key={i} className="bubble-user">{p.content}</div>
+      )}
+    </div>
+  );
+})()}
                       <div style={{ display: 'flex', gap: 4, opacity: hoveredMsg === 'u_'+idx ? 1 : 0, transition: 'opacity .15s', pointerEvents: hoveredMsg === 'u_'+idx ? 'auto' : 'none', marginTop: 2 }}>
                         <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
                         <button className="user-action-btn" title="Edit & resend" onClick={() => { setInput(msg.text||''); setMessages(prev => prev.slice(0, idx)); convHistory.current = []; setTimeout(() => { textareaRef.current?.focus(); if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight,140)+'px'; } }, 50); }}><Edit2 size={11}/></button>
