@@ -309,243 +309,275 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// LiveOps — interactive constellation 
+//  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
 // ══════════════════════════════════════════════════════════════════
-export function LiveOps() {
+export function NeuralField() {
   const [ref, inView] = useInView(0.15);
-  const [events, setEvents] = useState([]);
-  const [tick, setTick] = useState(0);
+  const svgRef = useRef(null);
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
 
-  // Generate live events
+  // Mouse parallax — simple, safe, transform-only
   useEffect(() => {
-    if (!inView) return;
-    const templates = [
-      { type: 'deploy',  text: 'Build deployed to edge',     meta: 'team-vortex · 14 regions',  color: '124,58,237', icon: 'rocket' },
-      { type: 'signup',  text: 'New workspace created',      meta: 'alex@lumio.io',             color: '6,182,212',  icon: 'user' },
-      { type: 'agent',   text: 'Agent completed task',       meta: 'code-gen · 2.4s · 8.2k tok',color: '168,85,247', icon: 'spark' },
-      { type: 'query',   text: 'Semantic search executed',   meta: '1,204 results · 38ms',      color: '6,182,212',  icon: 'search' },
-      { type: 'voice',   text: 'Voice transcription done',   meta: '24s audio · 99.2% acc',     color: '124,58,237', icon: 'mic' },
-      { type: 'build',   text: 'Preview shipped',            meta: 'commit 5bf50c0 · 60fps',    color: '168,85,247', icon: 'code' },
-      { type: 'upgrade', text: 'Team upgraded to Pro',       meta: 'northstar.co · 5 seats',    color: '6,182,212',  icon: 'star' },
-      { type: 'vision',  text: 'Image analysis complete',    meta: '7 objects · 240ms',         color: '124,58,237', icon: 'eye' },
-    ];
-    let id = 0;
-    const push = () => {
-      const t = templates[Math.floor(Math.random() * templates.length)];
-      setEvents(prev => [{ ...t, id: id++, time: Date.now() }, ...prev].slice(0, 6));
+    const el = svgRef.current; if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width - 0.5;
+      const py = (e.clientY - r.top) / r.height - 0.5;
+      setParallax({ x: px * 20, y: py * 20 });
     };
-    push(); push(); push();
-    const interval = setInterval(push, 1800);
-    return () => clearInterval(interval);
-  }, [inView]);
+    const onLeave = () => setParallax({ x: 0, y: 0 });
+    el.addEventListener("mousemove", onMove);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mousemove", onMove);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, []);
 
-  // Pulse tick for sparklines
-  useEffect(() => {
-    if (!inView) return;
-    const id = setInterval(() => setTick(t => t + 1), 1200);
-    return () => clearInterval(id);
-  }, [inView]);
-
-  const stats = [
-    { value: 120, suffix: 'K+', label: 'Active builders',   color: '124,58,237', decimals: 0 },
-    { value: 99.99, suffix: '%', label: 'Uptime SLA',        color: '6,182,212',  decimals: 2 },
-    { value: 12, suffix: 'ms',  label: 'P99 latency',        color: '168,85,247', decimals: 0 },
-    { value: 2.4, suffix: 'M',  label: 'Tokens / sec',       color: '6,182,212',  decimals: 1 },
+  // Node positions (percentages of viewBox 1000x500)
+  const nodes = [
+    { id: 0, x: 500, y: 250, label: "core",     big: true,  color: "#a855f7" }, // center
+    { id: 1, x: 180, y: 120, label: "vision",   color: "#06b6d4" },
+    { id: 2, x: 820, y: 120, label: "code",     color: "#a855f7" },
+    { id: 3, x: 120, y: 320, label: "memory",   color: "#06b6d4" },
+    { id: 4, x: 880, y: 320, label: "search",   color: "#a855f7" },
+    { id: 5, x: 300, y: 80,  label: "voice",    color: "#06b6d4" },
+    { id: 6, x: 700, y: 80,  label: "graph",    color: "#a855f7" },
+    { id: 7, x: 350, y: 420, label: "stream",   color: "#06b6d4" },
+    { id: 8, x: 650, y: 420, label: "vector",   color: "#a855f7" },
+    { id: 9, x: 500, y: 80,  label: "neural",   color: "#06b6d4" },
+    { id: 10, x: 500, y: 420, label: "cache",   color: "#a855f7" },
   ];
 
+  // Connections from core to each outer node
+  const connections = nodes.filter(n => !n.big).map(n => ({ from: nodes[0], to: n }));
+
+  // Floating particles
+  const particles = Array.from({ length: 24 }, (_, i) => ({
+    x: Math.random() * 1000,
+    y: Math.random() * 500,
+    r: 0.8 + Math.random() * 1.6,
+    delay: Math.random() * 6,
+    dur: 6 + Math.random() * 8,
+    color: Math.random() > 0.5 ? "#a855f7" : "#06b6d4",
+  }));
+
+  // Energy pulses traveling along connections (staggered)
+  const pulses = connections.map((c, i) => ({
+    from: c.from, to: c.to, delay: i * 0.4, dur: 3 + (i % 3),
+  }));
+
   return (
-    <section ref={ref} className="section reveal" style={{ padding: "80px 40px" }}>
+    <section ref={ref} className="section" style={{ padding: "80px 40px", position: "relative", overflow: "hidden" }}>
       <style>{`
-        @keyframes opsSlideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes opsDotPulse { 0%,100% { opacity: .4; transform: scale(1); } 50% { opacity: 1; transform: scale(1.2); } }
-        @keyframes opsBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
-        @keyframes opsShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
-        @keyframes opsOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px,-15px); } }
+        @keyframes ncDraw { from { stroke-dashoffset: 1000; } to { stroke-dashoffset: 0; } }
+        @keyframes ncPulse { 0%,100% { opacity: .6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+        @keyframes ncCoreBreathe { 0%,100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.06); opacity: 1; } }
+        @keyframes ncDotTravel { 0% { offset-distance: 0%; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
+        @keyframes ncFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes ncParticleDrift { 0% { transform: translate(0,0); opacity: 0; } 15% { opacity: .6; } 85% { opacity: .6; } 100% { transform: translate(var(--dx,30px), var(--dy,-40px)); opacity: 0; } }
+        @keyframes ncRingExpand { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.5); opacity: 0; } }
+        @keyframes ncSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes ncSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes ncShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @keyframes ncOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(25px,-20px); } }
       `}</style>
 
       {/* Ambient orb */}
-      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 600, height: 400, background: "radial-gradient(ellipse, rgba(124,58,237,0.06), transparent 70%)", filter: "blur(70px)", pointerEvents: "none", animation: "opsOrbDrift 18s ease-in-out infinite" }} />
+      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 700, height: 500, background: "radial-gradient(ellipse, rgba(124,58,237,0.07), rgba(6,182,212,0.03) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "ncOrbDrift 18s ease-in-out infinite" }} />
 
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 50 }}>
+      <div style={{ textAlign: "center", marginBottom: 40 }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> LIVE OPERATIONS
+          <span className="dot" /> THE NETWORK
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          Built for scale.{" "}
-          <span className="shimmer-text">Trusted in production.</span>
+          One mind.{" "}
+          <span className="shimmer-text">A billion connections.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Real teams shipping real products, right now. This is Vortis in motion.
+          Every agent, every modality, every data source — orchestrated as one living mesh.
         </p>
       </div>
 
-      {/* Dashboard layout: stats row + live feed */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }} className="ops-grid">
+      {/* SVG Constellation */}
+      <div ref={svgRef} style={{
+        maxWidth: 1100, margin: "0 auto", position: "relative",
+        transform: `translate(${parallax.x * 0.3}px, ${parallax.y * 0.3}px)`,
+        transition: "transform 0.3s cubic-bezier(.2,.7,.3,1)",
+      }}>
+        <svg viewBox="0 0 1000 500" style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}>
 
-        {/* LEFT — metric cards 2x2 */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-          {stats.map((s, i) => (
-            <MetricCard key={i} stat={s} index={i} inView={inView} tick={tick} />
+          {/* ── Glow filter ── */}
+          <defs>
+            <filter id="ncGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id="ncGlowBig" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="8" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <linearGradient id="ncLinePurple" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#a855f7" stopOpacity="0.6" />
+              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.4" />
+            </linearGradient>
+            <radialGradient id="ncCoreGrad">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="30%" stopColor="#a855f7" />
+              <stop offset="70%" stopColor="#7C3AED" />
+              <stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+
+          {/* ── Connections (self-drawing on scroll) ── */}
+          {connections.map((c, i) => {
+            // curved path from core to node
+            const mx = (c.from.x + c.to.x) / 2;
+            const my = (c.from.y + c.to.y) / 2;
+            const dx = c.to.x - c.from.x;
+            const dy = c.to.y - c.from.y;
+            const off = Math.sin(i * 1.7) * 30;
+            const cx = mx - dy * 0.08;
+            const cy = my + dx * 0.08 + off * 0.3;
+            const d = `M${c.from.x},${c.from.y} Q${cx},${cy} ${c.to.x},${c.to.y}`;
+            return (
+              <g key={`conn-${i}`}>
+                {/* soft glow underlay */}
+                <path d={d} stroke="rgba(124,58,237,0.08)" strokeWidth="6" fill="none" strokeLinecap="round" />
+                {/* main line — draws on scroll */}
+                <path
+                  d={d}
+                  stroke="url(#ncLinePurple)"
+                  strokeWidth="1.2"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray="1000"
+                  strokeDashoffset={inView ? "0" : "1000"}
+                  style={{ transition: `stroke-dashoffset 1.8s ease ${i * 0.1}s` }}
+                />
+                {/* flowing dashed energy */}
+                <path
+                  d={d}
+                  stroke="rgba(255,255,255,0.4)"
+                  strokeWidth="0.6"
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray="2 12"
+                  style={{ animation: inView ? `ncDraw ${4 + i * 0.3}s linear infinite` : "none", animationDelay: `${i * 0.2}s` }}
+                />
+              </g>
+            );
+          })}
+
+          {/* ── Traveling energy pulses ── */}
+          {pulses.map((p, i) => {
+            const mx = (p.from.x + p.to.x) / 2;
+            const my = (p.from.y + p.to.y) / 2;
+            const dx = p.to.x - p.from.x;
+            const dy = p.to.y - p.from.y;
+            const off = Math.sin(i * 1.7) * 30;
+            const cx = mx - dy * 0.08;
+            const cy = my + dx * 0.08 + off * 0.3;
+            const pathD = `M${p.from.x},${p.from.y} Q${cx},${cy} ${p.to.x},${p.to.y}`;
+            return (
+              <circle key={`pulse-${i}`} r="3" fill="#ffffff" filter="url(#ncGlow)">
+                <animateMotion
+                  dur={`${p.dur}s`}
+                  repeatCount="indefinite"
+                  begin={`${p.delay}s`}
+                  path={pathD}
+                />
+                <animate attributeName="opacity" values="0;1;1;0" dur={`${p.dur}s`} repeatCount="indefinite" begin={`${p.delay}s`} />
+              </circle>
+            );
+          })}
+
+          {/* ── Floating particles ── */}
+          {particles.map((p, i) => (
+            <circle
+              key={`particle-${i}`}
+              cx={p.x} cy={p.y} r={p.r}
+              fill={p.color}
+              opacity="0.4"
+              style={{
+                animation: `ncFloat ${p.dur}s ease-in-out infinite`,
+                animationDelay: `${p.delay}s`,
+                filter: "url(#ncGlow)",
+              }}
+            />
           ))}
-        </div>
 
-        {/* RIGHT — live event feed */}
-        <div className="gradient-border" style={{
-          borderRadius: 18, background: "rgba(255,255,255,0.015)",
-          padding: 0, overflow: "hidden", position: "relative",
+          {/* ── Outer nodes ── */}
+          {nodes.filter(n => !n.big).map((n, i) => (
+            <g key={`node-${n.id}`} style={{ animation: `ncPulse ${3 + i * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.4}s`, transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" }}>
+              {/* expanding ring */}
+              <circle cx={n.x} cy={n.y} r="8" fill="none" stroke={n.color} strokeWidth="0.8" opacity="0.3" style={{ animation: `ncRingExpand 3s ease-out infinite`, animationDelay: `${i * 0.5}s`, transformOrigin: `${n.x}px ${n.y}px` }} />
+              {/* glow */}
+              <circle cx={n.x} cy={n.y} r="7" fill={n.color} opacity="0.25" filter="url(#ncGlowBig)" />
+              {/* core */}
+              <circle cx={n.x} cy={n.y} r="4" fill={n.color} filter="url(#ncGlow)" />
+              {/* white center */}
+              <circle cx={n.x} cy={n.y} r="1.8" fill="#ffffff" opacity="0.9" />
+              {/* label */}
+              <text x={n.x} y={n.y - 14} textAnchor="middle" fill={n.color} fontSize="9" fontFamily="'JetBrains Mono', monospace" opacity="0.7" style={{ letterSpacing: "0.1em" }}>{n.label}</text>
+            </g>
+          ))}
+
+          {/* ── Central core ── */}
+          <g style={{ transformOrigin: "500px 250px", transformBox: "fill-box" }}>
+            {/* outer rotating ring with dots */}
+            <g style={{ animation: "ncSpin 20s linear infinite", transformOrigin: "500px 250px" }}>
+              <circle cx="500" cy="250" r="40" fill="none" stroke="rgba(168,85,247,0.2)" strokeWidth="0.8" strokeDasharray="4 8" />
+              <circle cx="500" cy="210" r="2.5" fill="#a855f7" filter="url(#ncGlow)" />
+            </g>
+            {/* reverse ring */}
+            <g style={{ animation: "ncSpinRev 16s linear infinite", transformOrigin: "500px 250px" }}>
+              <circle cx="500" cy="250" r="30" fill="none" stroke="rgba(6,182,212,0.2)" strokeWidth="0.8" strokeDasharray="3 6" />
+              <circle cx="530" cy="250" r="2" fill="#06b6d4" filter="url(#ncGlow)" />
+            </g>
+            {/* breathing core */}
+            <g style={{ animation: "ncCoreBreathe 3s ease-in-out infinite", transformOrigin: "500px 250px" }}>
+              <circle cx="500" cy="250" r="22" fill="url(#ncCoreGrad)" filter="url(#ncGlowBig)" />
+              <circle cx="500" cy="250" r="14" fill="#a855f7" opacity="0.8" filter="url(#ncGlow)" />
+              <circle cx="500" cy="250" r="6" fill="#ffffff" opacity="0.95" />
+            </g>
+            {/* expanding radar pings */}
+            <circle cx="500" cy="250" r="22" fill="none" stroke="#a855f7" strokeWidth="1" opacity="0.5" style={{ animation: "ncRingExpand 3s ease-out infinite", transformOrigin: "500px 250px" }} />
+            <circle cx="500" cy="250" r="22" fill="none" stroke="#06b6d4" strokeWidth="1" opacity="0.4" style={{ animation: "ncRingExpand 3s ease-out infinite", animationDelay: "1.5s", transformOrigin: "500px 250px" }} />
+          </g>
+        </svg>
+
+        {/* Bottom hint chips */}
+        <div style={{
+          position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
+          display: "flex", gap: 16, pointerEvents: "none",
+          fontSize: 10, color: "rgba(255,255,255,0.3)",
+          fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
-          {/* Feed header */}
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)",
-            background: "rgba(255,255,255,0.02)",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e", animation: "opsDotPulse 1.5s ease-in-out infinite" }} />
-              <span style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.8)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em" }}>LIVE ACTIVITY</span>
-            </div>
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>vortis ▸ stream</span>
-          </div>
-
-          {/* Feed body */}
-          <div style={{ padding: "12px", minHeight: 320, display: "flex", flexDirection: "column", gap: 8 }}>
-            {events.length === 0 && (
-              <div style={{ padding: 20, textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>
-                Connecting to stream…
-              </div>
-            )}
-            {events.map((ev, i) => {
-              const [r, g, b] = ev.color.split(",");
-              return (
-                <div key={ev.id} style={{
-                  display: "flex", alignItems: "center", gap: 12,
-                  padding: "11px 14px", borderRadius: 10,
-                  background: i === 0 ? `rgba(${r},${g},${b},0.06)` : "rgba(255,255,255,0.015)",
-                  border: `1px solid ${i === 0 ? `rgba(${r},${g},${b},0.2)` : "rgba(255,255,255,0.04)"}`,
-                  animation: i === 0 ? "opsSlideIn 0.4s ease" : "none",
-                  transition: "all 0.3s ease",
-                }}>
-                  {/* Icon dot */}
-                  <div style={{
-                    width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                    background: `rgba(${r},${g},${b},0.12)`,
-                    border: `1px solid rgba(${r},${g},${b},0.25)`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${r},${g},${b})`, boxShadow: `0 0 6px rgb(${r},${g},${b})` }} />
-                  </div>
-                  {/* Text */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "rgba(255,255,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ev.text}</div>
-                    <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace", marginTop: 1 }}>{ev.meta}</div>
-                  </div>
-                  {/* Time */}
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>
-                    {i === 0 ? "now" : `${i * 2 + 1}s`}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Feed footer */}
-          <div style={{
-            padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.05)",
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace",
-            background: "rgba(255,255,255,0.02)",
-          }}>
-            <span>2,847 events / min</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#22c55e" }} />
-              all systems operational
-            </span>
-          </div>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 6px #a855f7" }} />
+            11 nodes
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4", boxShadow: "0 0 6px #06b6d4" }} />
+            live mesh
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "ncPulse 1.5s ease-in-out infinite" }} />
+            synced
+          </span>
         </div>
       </div>
-
-      <style>{`
-        @media (max-width: 880px) { .ops-grid { grid-template-columns: 1fr !important; } }
-      `}</style>
     </section>
   );
 }
-
-function MetricCard({ stat, index, inView, tick }) {
-  const [ref, cardInView] = useInView(0.3);
-  const count = useCountUp(stat.value, 2200, cardInView, stat.decimals);
-  const [r, g, b] = stat.color.split(",");
-
-  // Generate sparkline points that shift each tick
-  const points = Array.from({ length: 12 }, (_, i) => ({
-    x: i * (100 / 11),
-    y: 30 - Math.sin(i * 0.5 + tick * 0.3 + index) * 8 - Math.random() * 4 - (i / 12) * 6,
-  }));
-  const pathD = points.reduce((acc, p, i) => i === 0 ? `M${p.x},${p.y}` : `${acc} L${p.x},${p.y}`, "");
-
-  return (
-    <div
-      ref={ref}
-      className="gradient-border"
-      style={{
-        padding: "22px 20px", borderRadius: 16,
-        background: "rgba(255,255,255,0.015)",
-        position: "relative", overflow: "hidden",
-        opacity: cardInView ? 1 : 0,
-        transform: cardInView ? "translateY(0)" : "translateY(20px)",
-        transition: `all 0.7s ease ${index * 0.1}s`,
-      }}
-    >
-      {/* Top gradient line */}
-      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, rgba(${r},${g},${b},0.5), transparent)` }} />
-
-      {/* Label + dot */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-          {stat.label}
-        </div>
-        <span style={{ width: 5, height: 5, borderRadius: "50%", background: `rgb(${r},${g},${b})`, boxShadow: `0 0 6px rgb(${r},${g},${b})`, animation: "opsDotPulse 2s ease-in-out infinite" }} />
-      </div>
-
-      {/* Big number */}
-      <div style={{
-        fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800,
-        fontSize: "clamp(26px,3.5vw,38px)", letterSpacing: "-0.03em", lineHeight: 1,
-        color: `rgb(${r},${g},${b})`, marginBottom: 12,
-        textShadow: `0 0 24px rgba(${r},${g},${b},0.25)`,
-      }}>
-        {count}{stat.suffix}
-      </div>
-
-      {/* Sparkline */}
-      <svg viewBox="0 0 100 30" preserveAspectRatio="none" style={{ width: "100%", height: 28 }}>
-        <defs>
-          <linearGradient id={`sparkG${index}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={`rgb(${r},${g},${b})`} stopOpacity="0.3" />
-            <stop offset="100%" stopColor={`rgb(${r},${g},${b})`} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        <path d={`${pathD} L100,30 L0,30 Z`} fill={`url(#sparkG${index})`} />
-        <path d={pathD} stroke={`rgb(${r},${g},${b})`} strokeWidth="1.2" fill="none" strokeLinecap="round" strokeLinejoin="round" opacity="0.8" />
-        {/* End dot */}
-        <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="1.5" fill={`rgb(${r},${g},${b})`} />
-      </svg>
-
-      {/* Wave bars in corner */}
-      <div style={{ position: "absolute", bottom: 12, right: 14, display: "flex", gap: 2, alignItems: "flex-end", height: 10 }}>
-        {[...Array(3)].map((_, j) => (
-          <div key={j} style={{
-            width: 2, height: "100%", background: `rgba(${r},${g},${b},0.4)`, borderRadius: 1,
-            transformOrigin: "bottom", animation: `opsBarWave ${0.8 + j * 0.2}s ease-in-out infinite`,
-            animationDelay: `${j * 0.1}s`,
-          }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 
 // ══════════════════════════════════════════════════════════════════
 //  HERO
@@ -3194,7 +3226,7 @@ function CTA({ onLogin }) {
   const [showPicker, setShowPicker] = useState(false);
   const btnRef = useRef(null);
 
-  // Magnetic button (subtle)
+  // Magnetic button
   useEffect(() => {
     const el = btnRef.current; if (!el) return;
     const onWinMove = (e) => {
@@ -3216,35 +3248,36 @@ function CTA({ onLogin }) {
     <section ref={ref} className="section reveal" style={{ padding: "100px 40px 120px", position: "relative", overflow: "hidden" }}>
       <style>{`
         @keyframes ctaShine { 0% { left: -100%; } 100% { left: 200%; } }
-        @keyframes ctaBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
         @keyframes ctaOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-25px,18px); } }
-        @keyframes ctaFadeUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes ctaDotPulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+        @keyframes ctaDotPulse { 0%,100% { opacity: .4; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
+        @keyframes ctaBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+        @keyframes ctaFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes ctaFloatRev { 0%,100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+        @keyframes ctaProgress { 0% { width: 0%; } 100% { width: 100%; } }
+        @keyframes ctaScan { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
+        @keyframes ctaFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
       {/* Ambient orb */}
-      <div style={{ position: "absolute", top: "30%", left: "40%", width: 600, height: 450, background: "radial-gradient(ellipse, rgba(124,58,237,0.08), rgba(6,182,212,0.04) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "ctaOrbDrift 16s ease-in-out infinite" }} />
+      <div style={{ position: "absolute", top: "25%", left: "35%", width: 650, height: 480, background: "radial-gradient(ellipse, rgba(124,58,237,0.09), rgba(6,182,212,0.04) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "ctaOrbDrift 16s ease-in-out infinite" }} />
 
       {/* Split layout */}
       <div style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }} className="cta-split">
 
-        {/* LEFT — copy + button */}
+        {/* ── LEFT: copy + button ── */}
         <div style={{
           opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
           transition: "all 0.8s cubic-bezier(.2,.7,.3,1)",
         }}>
-          {/* Eyebrow */}
           <div className="eyebrow" style={{ marginBottom: 20 }}>
             <span className="dot" /> READY WHEN YOU ARE
           </div>
 
-          {/* Headline */}
           <h2 className="h-section" style={{ fontSize: "clamp(34px,5vw,56px)", marginBottom: 18 }}>
             Start thinking{" "}
             <span className="shimmer-text">faster.</span>
           </h2>
 
-          {/* Subtext */}
           <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.65, maxWidth: 480, marginBottom: 32 }}>
             Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction. Ship your first feature in under 30 minutes.
           </p>
@@ -3255,26 +3288,25 @@ function CTA({ onLogin }) {
               ref={btnRef}
               onClick={() => setShowPicker(true)}
               style={{
-                padding: "15px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
+                padding: "16px 36px", borderRadius: 99, fontSize: 16, fontWeight: 700,
                 background: "linear-gradient(135deg, #7C3AED, #8b5cf6)", color: "#fff",
                 border: "none", cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 8,
+                display: "inline-flex", alignItems: "center", gap: 9,
                 position: "relative", overflow: "hidden",
-                boxShadow: "0 0 36px rgba(124,58,237,0.4), 0 10px 28px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)",
+                boxShadow: "0 0 40px rgba(124,58,237,0.4), 0 12px 32px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)",
                 transition: "box-shadow .3s ease",
               }}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.6), 0 14px 40px rgba(124,58,237,0.32), inset 0 1px 0 rgba(255,255,255,0.3)"; }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 36px rgba(124,58,237,0.4), 0 10px 28px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)"; }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 64px rgba(124,58,237,0.6), 0 16px 44px rgba(124,58,237,0.32), inset 0 1px 0 rgba(255,255,255,0.3)"; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.4), 0 12px 32px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)"; }}
             >
-              {/* Shine sweep */}
               <span style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)", animation: "ctaShine 3.5s ease-in-out infinite", pointerEvents: "none" }} />
-              <Zap size={17} style={{ position: "relative", zIndex: 1 }} />
+              <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
               <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
               <ArrowRight size={16} style={{ position: "relative", zIndex: 1 }} />
             </button>
           </div>
 
-          {/* Trust chips — clean single row */}
+          {/* Trust chips */}
           <div style={{
             display: "flex", gap: 18, flexWrap: "wrap",
             fontSize: 12, color: "rgba(255,255,255,0.4)",
@@ -3289,12 +3321,12 @@ function CTA({ onLogin }) {
           </div>
         </div>
 
-        {/* RIGHT — terminal mockup */}
+        {/* ── RIGHT: animated product preview ── */}
         <div style={{
           opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
           transition: "all 0.8s cubic-bezier(.2,.7,.3,1) 0.15s",
         }}>
-          <TerminalMockup />
+          <PreviewPanel inView={inView} />
         </div>
       </div>
 
@@ -3313,125 +3345,223 @@ function CTA({ onLogin }) {
   );
 }
 
-// ── Animated terminal mockup ──
-function TerminalMockup() {
-  const [lines, setLines] = useState([]);
-  const [typed, setTyped] = useState("");
-
-  const script = [
-    { type: "cmd",   text: "npx vortis create my-app",     delay: 0 },
-    { type: "out",   text: "✓ Initializing Vortis workspace",  delay: 600, color: "6,182,212" },
-    { type: "out",   text: "✓ Connecting to 6 services",      delay: 1100, color: "6,182,212" },
-    { type: "out",   text: "✓ Indexing 12.4k documents",      delay: 1600, color: "6,182,212" },
-    { type: "out",   text: "✓ Agents online (4 parallel)",    delay: 2100, color: "168,85,247" },
-    { type: "cmd",   text: "vortis build \"dashboard with MRR\"", delay: 2800 },
-    { type: "out",   text: "→ orchestrating agents…",          delay: 3300, color: "168,85,247" },
-    { type: "out",   text: "→ code-gen · search · vision",     delay: 3700, color: "168,85,247" },
-    { type: "out",   text: "✓ Built in 11.2s · 8,247 tokens",  delay: 4400, color: "6,182,212" },
-    { type: "out",   text: "✓ Deployed to 14 regions",         delay: 4900, color: "6,182,212" },
-    { type: "live",  text: "",                                  delay: 5400 },
-  ];
-
-  useEffect(() => {
-    setLines([]); setTyped("");
-    const timeouts = [];
-    script.forEach((s, i) => {
-      timeouts.push(setTimeout(() => {
-        if (s.type === "cmd") {
-          // typewriter for commands
-          setTyped("");
-          let charIdx = 0;
-          const charInterval = setInterval(() => {
-            charIdx++;
-            setTyped(s.text.slice(0, charIdx));
-            if (charIdx >= s.text.length) {
-              clearInterval(charInterval);
-              setTimeout(() => {
-                setLines(prev => [...prev, s]);
-                setTyped("");
-              }, 300);
-            }
-          }, 45);
-        } else {
-          setLines(prev => [...prev, s]);
-        }
-      }, s.delay));
-    });
-    // Loop
-    const loop = setTimeout(() => {
-      // restart by re-mounting via key change — handled by parent
-    }, 7000);
-    return () => { timeouts.forEach(clearTimeout); clearTimeout(loop); };
-  }, []);
+// ── Animated product preview panel ──
+function PreviewPanel({ inView }) {
+  const users = useCountUp(84213, 2200, inView);
+  const queries = useCountUp(2400000, 2200, inView);
+  const latency = useCountUp(12, 2200, inView);
 
   return (
-    <div className="gradient-border" style={{
-      borderRadius: 16, overflow: "hidden",
-      background: "rgba(3,3,10,0.85)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-      boxShadow: "0 30px 80px -20px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.1)",
-    }}>
-      {/* Terminal header */}
+    <div style={{ position: "relative" }}>
+      {/* Floating badges around panel */}
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.05)",
-        background: "rgba(255,255,255,0.02)",
+        position: "absolute", top: -16, right: -12, zIndex: 3,
+        animation: "ctaFloat 5s ease-in-out infinite",
       }}>
-        <div style={{ display: "flex", gap: 6 }}>
-          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#ff5f57" }} />
-          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#febc2e" }} />
-          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#28c840" }} />
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>
-          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "ctaDotPulse 1.5s ease-in-out infinite" }} />
-          vortis · zsh
+        <div style={{
+          padding: "8px 14px", borderRadius: 10,
+          background: "rgba(15,12,30,0.85)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+          border: "1px solid rgba(6,182,212,0.3)",
+          boxShadow: "0 0 24px rgba(6,182,212,0.15)",
+          display: "flex", alignItems: "center", gap: 8,
+          fontSize: 11, fontWeight: 600, color: "#06b6d4",
+          fontFamily: "'JetBrains Mono', monospace",
+        }}>
+          <Shield size={13} />
+          SOC 2
         </div>
       </div>
 
-      {/* Terminal body */}
       <div style={{
-        padding: "18px 20px", minHeight: 320, maxHeight: 320, overflow: "hidden",
-        fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5, lineHeight: 1.75,
+        position: "absolute", bottom: -14, left: -12, zIndex: 3,
+        animation: "ctaFloatRev 6s ease-in-out infinite", animationDelay: "0.5s",
       }}>
-        {lines.map((l, i) => (
-          <div key={i} style={{
-            animation: "ctaFadeUp 0.3s ease",
-            color: l.type === "cmd" ? "#fff" : `rgb(${l.color || "168,85,247"})`,
-            display: "flex", gap: 8,
+        <div style={{
+          padding: "8px 14px", borderRadius: 10,
+          background: "rgba(15,12,30,0.85)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+          border: "1px solid rgba(168,85,247,0.3)",
+          boxShadow: "0 0 24px rgba(168,85,247,0.15)",
+          display: "flex", alignItems: "center", gap: 8,
+          fontSize: 11, fontWeight: 600, color: "#a855f7",
+          fontFamily: "'JetBrains Mono', monospace",
+        }}>
+          <Cpu size={13} />
+          GPT-5 class
+        </div>
+      </div>
+
+      {/* Main panel */}
+      <div className="gradient-border" style={{
+        borderRadius: 18, overflow: "hidden",
+        background: "linear-gradient(160deg, rgba(15,12,30,0.7), rgba(3,3,10,0.9))",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        boxShadow: "0 30px 80px -20px rgba(0,0,0,0.6)",
+        position: "relative",
+      }}>
+        {/* Panel header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)",
+        }}>
+          <div style={{ display: "flex", gap: 5 }}>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff5f57" }} />
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#febc2e" }} />
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#28c840" }} />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "ctaDotPulse 1.5s ease-in-out infinite" }} />
+            vortis · dashboard
+          </div>
+        </div>
+
+        {/* Panel body */}
+        <div style={{ padding: 20 }}>
+          {/* Top metric row */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+            {[
+              { label: "USERS", value: users, color: "#a855f7", icon: Users },
+              { label: "QUERIES", value: queries, color: "#06b6d4", icon: BarChart3 },
+              { label: "LATENCY", value: `${latency}ms`, color: "#a855f7", icon: Zap },
+            ].map((m, i) => {
+              const Icon = m.icon;
+              return (
+                <div key={i} style={{
+                  padding: "12px 12px", borderRadius: 10,
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  animation: `ctaFadeUp 0.5s ease`, animationDelay: `${0.3 + i * 0.1}s`, animationFillMode: "both",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em" }}>{m.label}</span>
+                    <Icon size={11} style={{ color: m.color }} />
+                  </div>
+                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: m.color, letterSpacing: "-0.02em" }}>
+                    {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Live chart card */}
+          <div style={{
+            padding: 16, borderRadius: 12,
+            background: "rgba(255,255,255,0.015)",
+            border: "1px solid rgba(255,255,255,0.05)",
+            position: "relative", overflow: "hidden",
+            marginBottom: 14,
           }}>
-            {l.type === "cmd" && <span style={{ color: "#a855f7" }}>$</span>}
-            <span>{l.text}</span>
-          </div>
-        ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>Throughput</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>last 30 days</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#22c55e", fontFamily: "'JetBrains Mono', monospace" }}>
+                <TrendingUp size={11} />
+                +24%
+              </div>
+            </div>
 
-        {/* Current typing line */}
-        {typed && (
-          <div style={{ color: "#fff", display: "flex", gap: 8 }}>
-            <span style={{ color: "#a855f7" }}>$</span>
-            <span>{typed}<span style={{ display: "inline-block", width: 7, height: 13, background: "#a855f7", marginLeft: 1, verticalAlign: "middle", animation: "ctaBlink 0.8s steps(2) infinite" }} /></span>
-          </div>
-        )}
+            {/* Self-drawing SVG chart */}
+            <svg viewBox="0 0 280 80" style={{ width: "100%", height: 70 }}>
+              <defs>
+                <linearGradient id="ctaChartG" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity="0.4" />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
+                </linearGradient>
+                <linearGradient id="ctaChartLine" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#a855f7" />
+                  <stop offset="100%" stopColor="#06b6d4" />
+                </linearGradient>
+              </defs>
+              {/* Grid lines */}
+              {[20, 40, 60].map(y => (
+                <line key={y} x1="0" y1={y} x2="280" y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" strokeDasharray="2 3" />
+              ))}
+              {/* Area fill */}
+              <path
+                d="M0,60 L20,55 L40,48 L60,52 L80,40 L100,38 L120,30 L140,32 L160,22 L180,25 L200,18 L220,20 L240,12 L260,14 L280,8 L280,80 L0,80 Z"
+                fill="url(#ctaChartG)"
+              />
+              {/* Line — draws on scroll */}
+              <path
+                d="M0,60 L20,55 L40,48 L60,52 L80,40 L100,38 L120,30 L140,32 L160,22 L180,25 L200,18 L220,20 L240,12 L260,14 L280,8"
+                stroke="url(#ctaChartLine)"
+                strokeWidth="1.5"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeDasharray="600"
+                strokeDashoffset={inView ? "0" : "600"}
+                style={{ transition: "stroke-dashoffset 2.2s ease 0.3s" }}
+              />
+              {/* End point with pulse */}
+              <circle cx="280" cy="8" r="2.5" fill="#06b6d4">
+                <animate attributeName="r" from="2.5" to="5" dur="1.5s" repeatCount="indefinite" />
+                <animate attributeName="opacity" from="1" to="0" dur="1.5s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="280" cy="8" r="2.5" fill="#06b6d4" />
+            </svg>
 
-        {/* Live cursor at end */}
-        {lines.length >= 9 && (
-          <div style={{ color: "#fff", display: "flex", gap: 8, marginTop: 4 }}>
-            <span style={{ color: "#a855f7" }}>$</span>
-            <span style={{ display: "inline-block", width: 7, height: 13, background: "#a855f7", animation: "ctaBlink 0.8s steps(2) infinite" }} />
+            {/* Scan line overlay */}
+            <div style={{
+              position: "absolute", left: 0, right: 0, top: 0, height: 2,
+              background: "linear-gradient(90deg, transparent, rgba(168,85,247,0.6), transparent)",
+              animation: "ctaScan 4s ease-in-out infinite", pointerEvents: "none",
+            }} />
           </div>
-        )}
-      </div>
 
-      {/* Status bar */}
-      <div style={{
-        padding: "8px 16px", borderTop: "1px solid rgba(255,255,255,0.05)",
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace",
-        background: "rgba(255,255,255,0.02)",
-      }}>
-        <span>main · 5bf50c0</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ width: 4, height: 4, borderRadius: "50%", background: "#22c55e" }} />
-          live
-        </span>
+          {/* Deploy progress */}
+          <div style={{
+            padding: "12px 14px", borderRadius: 10,
+            background: "rgba(255,255,255,0.015)",
+            border: "1px solid rgba(255,255,255,0.05)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                <Rocket size={12} style={{ color: "#a855f7" }} />
+                <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.7)" }}>Deploying to edge</span>
+              </div>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>14 / 14 regions</span>
+            </div>
+            <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)", overflow: "hidden", position: "relative" }}>
+              <div style={{
+                height: "100%", borderRadius: 2,
+                background: "linear-gradient(90deg, #a855f7, #06b6d4)",
+                boxShadow: "0 0 8px rgba(168,85,247,0.5)",
+                width: inView ? "100%" : "0%",
+                transition: "width 2s ease 0.5s",
+              }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 8, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>
+              <span>✓ compiled</span>
+              <span>✓ tested</span>
+              <span>✓ bundled</span>
+              <span style={{ color: "#22c55e" }}>● live</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Panel footer with wave bars */}
+        <div style={{
+          padding: "8px 18px", borderTop: "1px solid rgba(255,255,255,0.05)",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          background: "rgba(255,255,255,0.02)",
+        }}>
+          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>2,847 events/min</span>
+          <div style={{ display: "flex", gap: 2, alignItems: "flex-end", height: 12 }}>
+            {[...Array(6)].map((_, j) => (
+              <div key={j} style={{
+                width: 2, height: "100%",
+                background: j % 2 === 0 ? "#a855f7" : "#06b6d4",
+                borderRadius: 1, opacity: 0.6,
+                transformOrigin: "bottom",
+                animation: `ctaBarWave ${0.7 + j * 0.12}s ease-in-out infinite`,
+                animationDelay: `${j * 0.08}s`,
+              }} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -3506,7 +3636,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         </div>
         <Logos />
         <BentoGrid />
-        <LiveOps/>
+        <NeuralField />
         <Showcase />
         <HowItWorks />
         <DashboardPreview />
