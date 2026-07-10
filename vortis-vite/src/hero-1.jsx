@@ -310,8 +310,9 @@ function Nav({ onLogin }) {
 
 // ══════════════════════════════════════════════════════════════════
 //  LIGHT SILK — flowing ribbons of light that weave through each other
-//  (replaces NeuralField) — pure visual beauty, no concept overhead.
-//  Pure 2D canvas, no Three.js, no THREE.Clock.
+//  (replaces NeuralField) — pure visual beauty, no interaction.
+//  Enhanced: more ribbons, finer curves, depth-of-field, ambient
+//  particles, vignette, slow color drift. Pure 2D canvas, no Three.js.
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -323,11 +324,10 @@ export function NeuralField() {
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, active: false };
 
     let ribbons = [];
     let sparkles = [];
-    let waves = [];
+    let dust = [];
     let t0 = performance.now();
     let last = t0;
     let lastSparkle = 0;
@@ -336,7 +336,7 @@ export function NeuralField() {
     let seed = 24681;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
-    // Palette — purple/cyan/violet only
+    // Palette — purple/cyan/violet/pink only
     const COLORS = [
       { a: [168, 85, 247],  b: [124, 58, 237] },  // purple → deep violet
       { a: [6, 182, 212],   b: [59, 130, 246] },  // cyan → blue
@@ -345,46 +345,59 @@ export function NeuralField() {
       { a: [217, 70, 239],  b: [124, 58, 237] },  // fuchsia → violet
       { a: [56, 189, 248],  b: [168, 85, 247] },  // sky → purple
       { a: [192, 132, 252], b: [6, 182, 212] },   // light violet → cyan
+      { a: [124, 58, 237],  b: [236, 72, 153] },  // violet → pink
+      { a: [59, 130, 246],  b: [217, 70, 239] },  // blue → fuchsia
+      { a: [6, 182, 212],   b: [192, 132, 252] }, // cyan → light violet
     ];
 
     const init = () => {
-      const RIBBON_COUNT = 7;
+      const RIBBON_COUNT = 11;
       ribbons = [];
       for (let i = 0; i < RIBBON_COUNT; i++) {
         const c = COLORS[i % COLORS.length];
         ribbons.push({
-          // Anchor Y across the canvas — spread vertically
-          baseY: H * (0.15 + (i / RIBBON_COUNT) * 0.7),
-          // Amplitude of the wave
-          amp: 50 + rng() * 70,
-          // Frequency of the wave
-          freq: 0.004 + rng() * 0.005,
-          // Speed of horizontal flow
-          speed: 0.4 + rng() * 0.5,
-          // Phase offset
+          baseY: H * (0.10 + (i / RIBBON_COUNT) * 0.80 + (rng() - 0.5) * 0.05),
+          amp: 45 + rng() * 80,
+          freq: 0.0035 + rng() * 0.0055,
+          speed: 0.35 + rng() * 0.55,
           phase: rng() * Math.PI * 2,
-          // Secondary modulation (gives organic curl)
-          modFreq: 0.0015 + rng() * 0.002,
-          modAmp: 25 + rng() * 35,
-          modSpeed: 0.25 + rng() * 0.35,
+          modFreq: 0.0013 + rng() * 0.0022,
+          modAmp: 22 + rng() * 40,
+          modSpeed: 0.22 + rng() * 0.38,
           modPhase: rng() * Math.PI * 2,
-          // Ribbon thickness
-          thickness: 18 + rng() * 28,
-          // Z-depth (for layering)
-          depth: 0.3 + rng() * 0.7,
-          // Color pair
+          thickness: 14 + rng() * 32,
+          depth: 0.25 + rng() * 0.75,
           colorA: c.a,
           colorB: c.b,
-          // Overall alpha (depth-dependent)
-          alpha: 0.5 + rng() * 0.4,
-          // Vertical drift
+          alpha: 0.55 + rng() * 0.40,
           driftPhase: rng() * Math.PI * 2,
-          driftSpeed: 0.15 + rng() * 0.2,
-          driftAmp: 20 + rng() * 30,
+          driftSpeed: 0.12 + rng() * 0.22,
+          driftAmp: 18 + rng() * 35,
+          // Color drift: shifts the gradient stops over time
+          colorShift: rng() * Math.PI * 2,
+          colorShiftSpeed: 0.05 + rng() * 0.08,
         });
       }
+
+      // Ambient floating dust (slow drifting motes for atmosphere)
+      const DUST_COUNT = Math.min(70, Math.max(30, Math.floor(W * H / 14000)));
+      dust = Array.from({ length: DUST_COUNT }, () => {
+        const c = COLORS[Math.floor(rng() * COLORS.length)];
+        return {
+          x: rng() * W,
+          y: rng() * H,
+          r: 0.4 + rng() * 1.3,
+          vx: (rng() - 0.5) * 0.18,
+          vy: (rng() - 0.5) * 0.12,
+          phase: rng() * Math.PI * 2,
+          twinkleSpeed: 0.3 + rng() * 1.2,
+          baseAlpha: 0.15 + rng() * 0.5,
+          color: c.a,
+          depth: 0.2 + rng() * 0.8,
+        };
+      });
+
       sparkles = [];
-      waves = [];
       seeded = true;
     };
 
@@ -397,36 +410,6 @@ export function NeuralField() {
     };
     resize();
     window.addEventListener("resize", resize);
-
-    const onMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouse.tx = (e.clientX - rect.left) / rect.width;
-      mouse.ty = (e.clientY - rect.top) / rect.height;
-      mouse.active = true;
-    };
-    const onLeave = () => { mouse.active = false; mouse.tx = 0.5; mouse.ty = 0.5; };
-
-    const onClick = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-      // Wave pulse radiating from click
-      waves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H), life: 1, speed: 7 });
-      waves.push({ x: cx, y: cy, r: 0, max: Math.max(W, H) * 0.7, life: 1, speed: 5 });
-      // Burst of sparkles
-      for (let i = 0; i < 24; i++) {
-        const a = rng() * Math.PI * 2;
-        const s = 1.5 + rng() * 3;
-        sparkles.push({
-          x: cx, y: cy, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-          life: 1, decay: 0.015 + rng() * 0.02, r: 1 + rng() * 1.8,
-          color: COLORS[Math.floor(rng() * COLORS.length)].a,
-        });
-      }
-    };
-
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
-    canvas.addEventListener("click", onClick);
 
     // Sample a ribbon's Y at a given x and time
     const sampleY = (r, x, t) => {
@@ -441,84 +424,86 @@ export function NeuralField() {
       last = now;
       const t = (now - t0) * 0.001;
 
-      // Smooth mouse follow
-      mouse.x += (mouse.tx - mouse.x) * 0.06;
-      mouse.y += (mouse.ty - mouse.y) * 0.06;
-      const mInfluence = mouse.active ? 1 : 0;
-
       // ── MOTION-BLUR CLEAR (low-alpha fill = natural silk trails) ──
-      ctx.fillStyle = "rgba(3,3,10,0.14)";
+      ctx.fillStyle = "rgba(3,3,10,0.13)";
       ctx.fillRect(0, 0, W, H);
 
-      // ── Soft background gradient ──
+      // ── Soft pulsing background glow ──
+      const bgPulse = 0.5 + Math.sin(t * 0.3) * 0.5;
       const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.7);
-      bg.addColorStop(0, "rgba(20,10,40,0.025)");
-      bg.addColorStop(1, "rgba(3,3,10,0.025)");
+      bg.addColorStop(0, `rgba(28,14,55,${0.04 + bgPulse * 0.02})`);
+      bg.addColorStop(0.6, `rgba(14,8,30,${0.02})`);
+      bg.addColorStop(1, "rgba(3,3,10,0.02)");
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // ── Cursor disturbance field (gentle pull on nearby ribbon points) ──
-      const mx = mouse.x * W;
-      const my = mouse.y * H;
+      // ── Ambient dust (behind ribbons, parallax depth) ──
+      ctx.globalCompositeOperation = "screen";
+      for (const d of dust) {
+        d.x += d.vx * (dt / 16);
+        d.y += d.vy * (dt / 16);
+        d.phase += d.twinkleSpeed * 0.02 * (dt / 16);
+        if (d.x < -5) d.x = W + 5;
+        if (d.x > W + 5) d.x = -5;
+        if (d.y < -5) d.y = H + 5;
+        if (d.y > H + 5) d.y = -5;
+        const tw = 0.4 + Math.sin(d.phase) * 0.5 + 0.1;
+        const alpha = d.baseAlpha * tw * (0.4 + d.depth * 0.6);
+        const [r, g, b] = d.color;
+        const dr = d.r * (0.5 + d.depth * 0.5);
+        // Soft glow
+        const glow = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, dr * 4);
+        glow.addColorStop(0, `rgba(${r},${g},${b},${alpha * 0.7})`);
+        glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = glow;
+        ctx.fillRect(d.x - dr * 4, d.y - dr * 4, dr * 8, dr * 8);
+        // Bright core
+        ctx.fillStyle = `rgba(255,255,255,${alpha * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, dr * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
 
       // ── Sort ribbons by depth (back to front) ──
       const sorted = [...ribbons].sort((a, b) => a.depth - b.depth);
 
-      // ── Draw each ribbon as a filled band between two offset curves ──
+      // ── Draw each ribbon ──
       ctx.globalCompositeOperation = "screen";
       for (const r of sorted) {
-        const depthScale = 0.55 + r.depth * 0.45; // farther = smaller
+        const depthScale = 0.55 + r.depth * 0.45;
         const thickness = r.thickness * depthScale;
+        // Depth-of-field: far ribbons get blur
+        const blurAmount = (1 - r.depth) * 6;
 
-        // Build top and bottom edges of the ribbon
-        const step = 14;
+        const step = 10; // finer curve resolution
         const points = [];
         for (let x = -30; x <= W + 30; x += step) {
-          let y = sampleY(r, x, t);
-
-          // Cursor pull — only when active
-          if (mInfluence > 0) {
-            const dx = x - mx, dy = y - my;
-            const d = Math.hypot(dx, dy);
-            if (d < 200 && d > 0.5) {
-              const pull = (1 - d / 200) * 35 * mInfluence;
-              y += (dy / d) * pull * 0.6;
-            }
-          }
-
-          // Wave pulse displacement
-          for (const w of waves) {
-            const dx = x - w.x, dy = y - w.y;
-            const d = Math.hypot(dx, dy);
-            const ringDist = Math.abs(d - w.r);
-            if (ringDist < 60 && d > 0.5) {
-              const push = (1 - ringDist / 60) * w.life * 50;
-              y += (dy / d) * push;
-            }
-          }
-
+          const y = sampleY(r, x, t);
           points.push({ x, y });
         }
 
-        // Draw ribbon as a filled path between offset curves
         const [ra, ga, ba] = r.colorA;
         const [rb, gb, bb] = r.colorB;
 
-        // Top edge (thickness/2 above)
+        // Color shift: oscillate gradient stops over time
+        const shift = Math.sin(t * r.colorShiftSpeed + r.colorShift);
+        const stop1 = Math.max(0, Math.min(1, 0.0 + shift * 0.12));
+        const stop2 = Math.max(0, Math.min(1, 0.5 + shift * 0.08));
+        const stop3 = Math.max(0, Math.min(1, 1.0 - shift * 0.12));
+
+        const grad = ctx.createLinearGradient(0, 0, W, 0);
+        grad.addColorStop(stop1, `rgba(${ra},${ga},${ba},${r.alpha * depthScale * 0.50})`);
+        grad.addColorStop(stop2, `rgba(${rb},${gb},${bb},${r.alpha * depthScale * 0.90})`);
+        grad.addColorStop(stop3, `rgba(${ra},${ga},${ba},${r.alpha * depthScale * 0.50})`);
+
+        // Build top and bottom edges
         const topPts = points.map(p => ({ x: p.x, y: p.y - thickness / 2 }));
-        // Bottom edge (thickness/2 below)
         const botPts = points.map(p => ({ x: p.x, y: p.y + thickness / 2 }));
 
-        // Gradient fill along x (colorA → colorB)
-        const grad = ctx.createLinearGradient(0, 0, W, 0);
-        grad.addColorStop(0,    `rgba(${ra},${ga},${ba},${r.alpha * depthScale * 0.55})`);
-        grad.addColorStop(0.5,  `rgba(${rb},${gb},${bb},${r.alpha * depthScale * 0.85})`);
-        grad.addColorStop(1,    `rgba(${ra},${ga},${ba},${r.alpha * depthScale * 0.55})`);
-
-        // ── Multi-pass glow: wide soft → medium → crisp core ──
-        // Pass 1: wide soft glow (outer halo)
-        ctx.shadowColor = `rgba(${rb},${gb},${bb},${r.alpha * 0.7})`;
-        ctx.shadowBlur = 28 * depthScale;
+        // ── Pass 1: wide soft glow (outer halo) ──
+        ctx.shadowColor = `rgba(${rb},${gb},${bb},${r.alpha * 0.75})`;
+        ctx.shadowBlur = (28 + blurAmount) * depthScale;
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.moveTo(topPts[0].x, topPts[0].y);
@@ -528,35 +513,61 @@ export function NeuralField() {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Pass 2: bright centerline (the actual light streak)
-        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.35})`;
-        ctx.lineWidth = 1.2;
+        // ── Pass 2: medium glow (inner halo) ──
+        ctx.shadowColor = `rgba(${rb},${gb},${bb},${r.alpha * 0.5})`;
+        ctx.shadowBlur = 14 * depthScale;
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        const topPts2 = points.map(p => ({ x: p.x, y: p.y - thickness * 0.3 }));
+        const botPts2 = points.map(p => ({ x: p.x, y: p.y + thickness * 0.3 }));
+        ctx.moveTo(topPts2[0].x, topPts2[0].y);
+        for (let i = 1; i < topPts2.length; i++) ctx.lineTo(topPts2[i].x, topPts2[i].y);
+        for (let i = botPts2.length - 1; i >= 0; i--) ctx.lineTo(botPts2[i].x, botPts2[i].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // ── Pass 3: bright centerline (the actual light streak) ──
+        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.40})`;
+        ctx.lineWidth = 1.4;
+        ctx.lineCap = "round";
         ctx.beginPath();
         ctx.moveTo(points[0].x, points[0].y);
         for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
         ctx.stroke();
 
-        // Pass 3: thin bright highlight along center (subtle white sheen)
-        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.15})`;
+        // ── Pass 4: thin sheen highlight offset above center ──
+        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.18})`;
         ctx.lineWidth = 0.6;
         ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y - thickness * 0.15);
-        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y - thickness * 0.15);
+        ctx.moveTo(points[0].x, points[0].y - thickness * 0.18);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y - thickness * 0.18);
+        ctx.stroke();
+
+        // ── Pass 5: thin sheen highlight offset below center ──
+        ctx.strokeStyle = `rgba(255,255,255,${r.alpha * depthScale * 0.10})`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y + thickness * 0.18);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y + thickness * 0.18);
         ctx.stroke();
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Auto-spawn drifting sparkles along random ribbon points ──
-      if (now - lastSparkle > 90) {
+      // ── Auto-spawn drifting sparkles along ribbon points ──
+      if (now - lastSparkle > 70) {
         lastSparkle = now;
-        const r = ribbons[Math.floor(rng() * ribbons.length)];
-        const x = rng() * W;
-        const y = sampleY(r, x, t);
-        sparkles.push({
-          x, y, vx: (rng() - 0.5) * 0.6, vy: -0.3 - rng() * 0.5,
-          life: 1, decay: 0.012 + rng() * 0.015, r: 0.8 + rng() * 1.2,
-          color: rng() > 0.5 ? r.colorA : r.colorB,
-        });
+        // Spawn 2 per cycle for richer particle field
+        for (let k = 0; k < 2; k++) {
+          const r = ribbons[Math.floor(rng() * ribbons.length)];
+          const x = rng() * W;
+          const y = sampleY(r, x, t);
+          sparkles.push({
+            x, y, vx: (rng() - 0.5) * 0.5, vy: -0.2 - rng() * 0.45,
+            life: 1, decay: 0.010 + rng() * 0.014, r: 0.7 + rng() * 1.3,
+            color: rng() > 0.5 ? r.colorA : r.colorB,
+          });
+        }
       }
 
       // ── Update + draw sparkles ──
@@ -569,32 +580,26 @@ export function NeuralField() {
         sp.life -= sp.decay * (dt / 16);
         if (sp.life <= 0) { sparkles.splice(i, 1); continue; }
         const [r, g, b] = sp.color;
-        ctx.fillStyle = `rgba(${r},${g},${b},${sp.life * 0.85})`;
+        // Glow
+        const glow = ctx.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, sp.r * 5 * sp.life);
+        glow.addColorStop(0, `rgba(${r},${g},${b},${sp.life * 0.7})`);
+        glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = glow;
+        ctx.fillRect(sp.x - sp.r * 5, sp.y - sp.r * 5, sp.r * 10, sp.r * 10);
+        // Core
+        ctx.fillStyle = `rgba(255,255,255,${sp.life * 0.8})`;
         ctx.beginPath();
-        ctx.arc(sp.x, sp.y, sp.r * sp.life, 0, Math.PI * 2);
+        ctx.arc(sp.x, sp.y, sp.r * sp.life * 0.6, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Click wave rings (subtle, screen-blended) ──
-      ctx.globalCompositeOperation = "screen";
-      for (let i = waves.length - 1; i >= 0; i--) {
-        const w = waves[i];
-        w.r += w.speed * (dt / 16);
-        w.life -= 0.008 * (dt / 16);
-        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
-        ctx.strokeStyle = `rgba(255,255,255,${w.life * 0.25})`;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(168,85,247,${w.life * 0.18})`;
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.globalCompositeOperation = "source-over";
+      // ── Vignette (darken edges for cinematic framing) ──
+      const vig = ctx.createRadialGradient(W * 0.5, H * 0.5, W * 0.35, W * 0.5, H * 0.5, W * 0.75);
+      vig.addColorStop(0, "rgba(0,0,0,0)");
+      vig.addColorStop(1, "rgba(0,0,0,0.55)");
+      ctx.fillStyle = vig;
+      ctx.fillRect(0, 0, W, H);
 
       raf = requestAnimationFrame(tick);
     };
@@ -603,9 +608,6 @@ export function NeuralField() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", resize);
-      canvas.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("mouseleave", onLeave);
-      canvas.removeEventListener("click", onClick);
     };
   }, []);
 
@@ -621,33 +623,16 @@ export function NeuralField() {
           <span className="shimmer-text">visible.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Move your cursor through the silk — click to send a ripple through the flow.
+          Intelligence in motion — a living surface of light and flow.
         </p>
       </div>
 
-      {/* Canvas */}
+      {/* Canvas — no cursor interaction, pure ambient animation */}
       <div style={{ position: "relative", height: 480, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }}
         />
-
-        {/* Hint at bottom */}
-        <div style={{
-          position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)",
-          display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
-          fontSize: 10, color: "rgba(255,255,255,0.45)",
-          fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
-        }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            move to disturb
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            click to ripple
-          </span>
-        </div>
       </div>
     </section>
   );
