@@ -309,9 +309,9 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  LIQUID CHROME BLOB — iridescent molten metal over a mirror floor
-//  (replaces NeuralField) — matches the purple→blue gradient + chrome
-//  blob + reflective surface aesthetic
+//  INTELLIGENCE PRISM — one beam in, four capabilities out
+//  (replaces NeuralField) — matches Vortis AI theme:
+//  purple/cyan palette, dark bg, "Chat/Vision/Code/Research unified"
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const canvasRef = useRef(null);
@@ -323,115 +323,48 @@ export function NeuralField() {
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
-    const mouse = { x: -9999, y: -9999, active: false };
+    const mouse = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, active: false };
 
-    // ── Low-res field canvas for per-pixel metaball computation ──
-    const fieldCanvas = document.createElement("canvas");
-    const fctx = fieldCanvas.getContext("2d");
-    let FW = 0, FH = 0;
-    let imgData = null;
-    let fdata = null;
-    const DOWNSCALE = 4;
-
-    // ── Reflection canvas (flipped copy of the field for the floor) ──
-    const reflectCanvas = document.createElement("canvas");
-    const rctx = reflectCanvas.getContext("2d");
-
-    // ── Bloom canvas ──
-    const bloomCanvas = document.createElement("canvas");
-    const bctx = bloomCanvas.getContext("2d");
-
-    let balls = [];
-    let drips = [];
-    let bubbles = [];
+    let stars = [];
+    let pulses = [];      // click-triggered sync pulses traveling along beams
+    let sparkles = [];    // emission sparkles at the prism faces
     let t0 = performance.now();
     let last = t0;
-    let lastDrip = 0;
-    let lastBubble = 0;
     let seeded = false;
 
-    let seed = 77777;
+    let seed = 31337;
     const rng = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
 
+    // The 4 refracted beams — one per Vortis capability
+    const BEAMS = [
+      { label: "CHAT",     color: [168, 85, 247],  angle: -1.05, baseAngle: -1.05 },  // purple, upper
+      { label: "VISION",   color: [6, 182, 212],   angle: -0.35, baseAngle: -0.35 },  // cyan, upper-right
+      { label: "CODE",     color: [236, 72, 153],  angle:  0.35, baseAngle:  0.35 },  // magenta, lower-right
+      { label: "RESEARCH", color: [59, 130, 246],  angle:  1.05, baseAngle:  1.05 },  // blue, lower
+    ];
+
+    // Particles flowing along each beam
+    let beamParticles = BEAMS.map(() => Array.from({ length: 22 }, () => ({
+      t: rng(), speed: 0.0035 + rng() * 0.004, r: 1 + rng() * 1.6, phase: rng() * Math.PI * 2,
+    })));
+
+    // Incoming beam particles (white)
+    let inParticles = Array.from({ length: 18 }, () => ({
+      t: rng(), speed: 0.005 + rng() * 0.004, r: 1 + rng() * 1.4,
+    }));
+
     const init = () => {
-      FW = Math.max(80, Math.ceil(W / DOWNSCALE));
-      FH = Math.max(40, Math.ceil(H / DOWNSCALE));
-      fieldCanvas.width = FW;
-      fieldCanvas.height = FH;
-      reflectCanvas.width = W;
-      reflectCanvas.height = H;
-      bloomCanvas.width = W;
-      bloomCanvas.height = H;
-      imgData = fctx.createImageData(FW, FH);
-      fdata = imgData.data;
-
-      // The blob lives in the TOP half (above the mirror floor)
-      // Floor line is at ~62% of canvas height
-      const blobCY = FH * 0.30;
-      const blobCX = FW * 0.50;
-
-      balls = [];
-      // Big central mass
-      balls.push({
-        x: blobCX, y: blobCY, ox: blobCX, oy: blobCY,
-        r: 48, currentR: 48,
-        phase: 0, speed: 0.25,
-        orbitR: 0, orbitAngle: 0, orbitSpeed: 0,
-        rMorph: 0,
-        wobble: 0.6,
-      });
-      // Satellite that creates a tunnel/indent on the right
-      balls.push({
-        x: blobCX + 42, y: blobCY + 8, ox: blobCX + 42, oy: blobCY + 8,
-        r: 26, currentR: 26,
-        phase: 1.5, speed: 0.35,
-        orbitR: 42, orbitAngle: 0, orbitSpeed: 0.18,
-        rMorph: 1.2,
-        wobble: 1.0,
-      });
-      // Small offset mass on the left
-      balls.push({
-        x: blobCX - 38, y: blobCY + 14, ox: blobCX - 38, oy: blobCY + 14,
-        r: 30, currentR: 30,
-        phase: 2.8, speed: 0.30,
-        orbitR: 38, orbitAngle: Math.PI, orbitSpeed: 0.20,
-        rMorph: 0.8,
-        wobble: 0.9,
-      });
-      // Top bulge
-      balls.push({
-        x: blobCX - 6, y: blobCY - 38, ox: blobCX - 6, oy: blobCY - 38,
-        r: 28, currentR: 28,
-        phase: 4.1, speed: 0.42,
-        orbitR: 24, orbitAngle: -Math.PI / 2, orbitSpeed: 0.25,
-        rMorph: 1.5,
-        wobble: 1.1,
-      });
-      // Bottom-left drip bulge
-      balls.push({
-        x: blobCX - 22, y: blobCY + 42, ox: blobCX - 22, oy: blobCY + 42,
-        r: 22, currentR: 22,
-        phase: 5.4, speed: 0.38,
-        orbitR: 28, orbitAngle: Math.PI / 2.3, orbitSpeed: 0.22,
-        rMorph: 1.0,
-        wobble: 1.2,
-      });
-
-      // Floating iridescent bubbles around the blob (small accents)
-      bubbles = [];
-      for (let i = 0; i < 14; i++) {
-        bubbles.push({
-          x: rng() * W,
-          y: rng() * H * 0.7,
-          r: 2 + rng() * 5,
-          vx: (rng() - 0.5) * 0.15,
-          vy: -0.05 - rng() * 0.18,
-          phase: rng() * Math.PI * 2,
-          twinkleSpeed: 0.5 + rng() * 1.5,
-          depth: 0.3 + rng() * 0.7,
-        });
-      }
-
+      // Sparse starfield
+      const STAR_COUNT = Math.min(160, Math.max(80, Math.floor(W * H / 5000)));
+      stars = Array.from({ length: STAR_COUNT }, () => ({
+        x: rng() * W,
+        y: rng() * H,
+        r: 0.3 + rng() * 1.1,
+        baseAlpha: 0.2 + rng() * 0.6,
+        twinkleSpeed: 0.4 + rng() * 1.6,
+        phase: rng() * Math.PI * 2,
+        depth: 0.2 + rng() * 0.8,
+      }));
       seeded = true;
     };
 
@@ -447,329 +380,314 @@ export function NeuralField() {
 
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
+      mouse.tx = (e.clientX - rect.left) / rect.width;
+      mouse.ty = (e.clientY - rect.top) / rect.height;
       mouse.active = true;
     };
-    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
+    const onLeave = () => { mouse.active = false; mouse.tx = 0.5; mouse.ty = 0.5; };
+
+    const onClick = (e) => {
+      // Fire a sync pulse through all 4 beams simultaneously
+      for (let i = 0; i < BEAMS.length; i++) {
+        pulses.push({ beamIdx: i, t: 0, speed: 0.022, life: 1 });
+      }
+      // Burst of sparkles at prism center
+      for (let i = 0; i < 30; i++) {
+        const a = rng() * Math.PI * 2;
+        const s = 1 + rng() * 3;
+        sparkles.push({
+          x: 0, y: 0, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+          life: 1, decay: 0.018 + rng() * 0.02, r: 1 + rng() * 1.6,
+          color: BEAMS[Math.floor(rng() * BEAMS.length)].color,
+        });
+      }
+    };
+
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
+    canvas.addEventListener("click", onClick);
 
-    // ── Environment map: purple→blue gradient reflection with bold iridescence ──
-    const sampleEnv = (nx, ny, t, curvature) => {
-      // ny < 0 = top of blob = reflects bright purple-pink sky
-      // ny > 0 = bottom of blob = reflects deep blue floor
-      const sky = (1 - (ny + 1) * 0.5); // 1 = sky, 0 = floor
-
-      let r, g, b;
-      if (sky > 0.5) {
-        // Sky: deep purple → magenta
-        const k = (sky - 0.5) * 2;
-        r = 100 + k * 110;
-        g = 30 + k * 30;
-        b = 140 + k * 90;
-      } else {
-        // Floor: deep blue → black
-        const k = sky * 2;
-        r = 10 + k * 30;
-        g = 15 + k * 25;
-        b = 50 + k * 80;
-      }
-
-      // Sharp horizon band (the chrome hallmark) — bright magenta where sky meets floor
-      const hProx = 1 - Math.abs(sky - 0.5) * 8;
-      if (hProx > 0) {
-        r += hProx * 120;
-        g += hProx * 50;
-        b += hProx * 110;
-      }
-
-      // Horizontal streaks (polished metal)
-      const streak = Math.sin(ny * 18 + nx * 3) * 0.5 + 0.5;
-      r += streak * 25;
-      g += streak * 20;
-      b += streak * 35;
-
-      // BOLD iridescent rainbow sheen — strongest at high-curvature edges
-      // curvature is the gradient magnitude (analytic), higher = sharper bend = more rainbow
-      const iridBase = Math.min(1, curvature * 1.2);
-      const iridPos = (nx * 0.4 + ny * 0.2 + t * 0.06) % 1;
-      const ip = iridPos < 0 ? iridPos + 1 : iridPos;
-      // Multi-band rainbow
-      const band1 = Math.cos(ip * Math.PI * 2) * 0.5 + 0.5;
-      const band2 = Math.cos((ip + 0.33) * Math.PI * 2) * 0.5 + 0.5;
-      const band3 = Math.cos((ip + 0.66) * Math.PI * 2) * 0.5 + 0.5;
-      const iridStrength = iridBase * 120;
-      r += band1 * iridStrength;
-      g += band2 * iridStrength;
-      b += band3 * iridStrength;
-
-      // Specular highlight 1 (upper-left, warm white-magenta)
-      const l1x = -0.6, l1y = -0.55;
-      const d1 = Math.hypot(nx - l1x, ny - l1y);
-      const spec1 = Math.exp(-d1 * d1 * 5) * 250;
-      r += spec1;
-      g += spec1 * 0.9;
-      b += spec1 * 0.95;
-
-      // Specular highlight 2 (upper-right, cyan)
-      const l2x = 0.55, l2y = -0.6;
-      const d2 = Math.hypot(nx - l2x, ny - l2y);
-      const spec2 = Math.exp(-d2 * d2 * 6) * 200;
-      r += spec2 * 0.3;
-      g += spec2 * 0.8;
-      b += spec2 * 1.0;
-
-      return [r, g, b];
-    };
+    const lerp = (a, b, t) => a + (b - a) * t;
 
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
       const t = (now - t0) * 0.001;
 
-      // ── Update balls: orbit + morph ──
-      const cx = FW * 0.5, cy = FH * 0.30;
-      for (const b of balls) {
-        b.orbitAngle += b.orbitSpeed * 0.018 * (dt / 16);
-        const morphR = b.orbitR + Math.sin(t * 0.4 + b.rMorph) * 8 * b.wobble;
-        const morphAmount = 1 + Math.sin(t * b.speed + b.phase) * 0.20 * b.wobble;
-        b.ox = cx + Math.cos(b.orbitAngle) * morphR;
-        b.oy = cy + Math.sin(b.orbitAngle) * morphR * 0.75;
-        b.x += (b.ox - b.x) * 0.08;
-        b.y += (b.oy - b.y) * 0.08;
-        b.currentR = b.r * morphAmount;
-      }
+      // smooth mouse follow
+      mouse.x += (mouse.tx - mouse.x) * 0.07;
+      mouse.y += (mouse.ty - mouse.y) * 0.07;
 
-      // ── Spawn drips ──
-      if (now - lastDrip > 1600 + rng() * 2200) {
-        lastDrip = now;
-        // Drips come from the bottom-most ball
-        const sorted = [...balls].sort((a, b) => b.y - a.y);
-        const src = sorted[0];
-        drips.push({
-          x: src.x + (rng() - 0.5) * 12,
-          y: src.y,
-          vx: (rng() - 0.5) * 0.5,
-          vy: 0.18 + rng() * 0.22,
-          r: 10 + rng() * 6,
-          life: 1,
-        });
-      }
-
-      // ── Update drips ──
-      for (let i = drips.length - 1; i >= 0; i--) {
-        const d = drips[i];
-        d.vy += 0.014 * (dt / 16);
-        d.x += d.vx * (dt / 16);
-        d.y += d.vy * (dt / 16);
-        d.life -= 0.006 * (dt / 16);
-        d.r *= 0.9985;
-        if (d.life <= 0 || d.y > FH + 20) drips.splice(i, 1);
-      }
-
-      // ── Mouse in field coords ──
-      const mfx = mouse.active ? mouse.x / DOWNSCALE : -9999;
-      const mfy = mouse.active ? mouse.y / DOWNSCALE : -9999;
-      const MOUSE_R2 = 55 * 55;
-
-      // ── Build active ball list ──
-      const activeBalls = [];
-      for (const b of balls) activeBalls.push({ x: b.x, y: b.y, r2: b.currentR * b.currentR });
-      for (const d of drips) activeBalls.push({ x: d.x, y: d.y, r2: d.r * d.r * d.life });
-
-      const THRESHOLD = 1.0;
-      const ballCount = activeBalls.length;
-      const useMouse = mouse.active;
-
-      // Clear field image
-      fdata.fill(0);
-
-      // ── Per-pixel metaball field + chrome shading ──
-      for (let py = 0; py < FH; py++) {
-        for (let px = 0; px < FW; px++) {
-          let field = 0;
-          let gx = 0, gy = 0;
-
-          for (let bi = 0; bi < ballCount; bi++) {
-            const b = activeBalls[bi];
-            const dx = px - b.x;
-            const dy = py - b.y;
-            const d2 = dx * dx + dy * dy + 1;
-            const r2 = b.r2;
-            field += r2 / d2;
-            const factor = -2 * r2 / (d2 * d2);
-            gx += factor * dx;
-            gy += factor * dy;
-          }
-
-          // Mouse repulsor (dent)
-          if (useMouse) {
-            const dx = px - mfx;
-            const dy = py - mfy;
-            const d2 = dx * dx + dy * dy + 1;
-            field -= MOUSE_R2 / d2 * 0.7;
-          }
-
-          if (field > THRESHOLD) {
-            const glen = Math.sqrt(gx * gx + gy * gy) + 0.0001;
-            const nx = gx / glen;
-            const ny = gy / glen;
-            const curvature = glen; // magnitude of gradient = how sharp the bend
-
-            const env = sampleEnv(nx, ny, t, curvature);
-
-            // Edge factor: 0 at boundary, 1 deep inside
-            const edge = Math.min(1, (field - THRESHOLD) / 1.5);
-            const core = 0.30 + edge * 0.70; // dark rim (Fresnel)
-
-            // Chromatic aberration at edges
-            const aberr = (1 - edge) * 50;
-
-            const idx = (py * FW + px) * 4;
-            fdata[idx]     = Math.min(255, Math.max(0, (env[0] + aberr) * core));
-            fdata[idx + 1] = Math.min(255, Math.max(0, env[1] * core));
-            fdata[idx + 2] = Math.min(255, Math.max(0, (env[2] - aberr) * core));
-            fdata[idx + 3] = 255;
-          }
-        }
-      }
-
-      fctx.putImageData(imgData, 0, 0);
-
-      // ════════════════════════════════════════
-      //  RENDER TO MAIN CANVAS
-      // ════════════════════════════════════════
-      ctx.clearRect(0, 0, W, H);
-
-      // ── Background: STRONG purple → blue gradient (matches reference) ──
-      const bg = ctx.createLinearGradient(0, 0, W, H);
-      bg.addColorStop(0, "#2a0d4a");    // deep purple (top-left)
-      bg.addColorStop(0.4, "#1a0838");  // dark violet
-      bg.addColorStop(0.75, "#0a1438"); // navy
-      bg.addColorStop(1, "#050d28");    // deep blue (bottom-right)
+      // ── Background ──
+      const bg = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, W * 0.7);
+      bg.addColorStop(0, "#0a0820");
+      bg.addColorStop(0.6, "#050410");
+      bg.addColorStop(1, "#03030a");
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, W, H);
 
-      // Soft purple ambient glow behind the blob (radial, behind blob only)
-      const ambient = ctx.createRadialGradient(W * 0.5, H * 0.32, 0, W * 0.5, H * 0.32, W * 0.45);
-      ambient.addColorStop(0, "rgba(168,85,247,0.18)");
-      ambient.addColorStop(0.5, "rgba(124,58,237,0.08)");
-      ambient.addColorStop(1, "rgba(124,58,237,0)");
-      ctx.fillStyle = ambient;
-      ctx.fillRect(0, 0, W, H);
-
-      // ── Floating iridescent bubbles (small accents, NOT background orbs) ──
-      ctx.globalCompositeOperation = "screen";
-      for (const bb of bubbles) {
-        bb.x += bb.vx * (dt / 16);
-        bb.y += bb.vy * (dt / 16);
-        bb.phase += bb.twinkleSpeed * 0.02 * (dt / 16);
-        // wrap
-        if (bb.y < -10) { bb.y = H * 0.7; bb.x = rng() * W; }
-        if (bb.x < -10) bb.x = W + 10;
-        if (bb.x > W + 10) bb.x = -10;
-
-        const tw = 0.4 + Math.sin(bb.phase) * 0.4 + 0.2;
-        const r = bb.r;
-        // Iridescent rim
-        const hue = (bb.phase * 0.5) % 1;
-        const hr = Math.cos(hue * Math.PI * 2) * 0.5 + 0.5;
-        const hg = Math.cos((hue + 0.33) * Math.PI * 2) * 0.5 + 0.5;
-        const hb = Math.cos((hue + 0.66) * Math.PI * 2) * 0.5 + 0.5;
-        const glow = ctx.createRadialGradient(bb.x, bb.y, 0, bb.x, bb.y, r * 3);
-        glow.addColorStop(0, `rgba(${Math.floor(200 + hr * 55)},${Math.floor(150 + hg * 80)},${Math.floor(220 + hb * 35)},${0.7 * tw})`);
-        glow.addColorStop(0.4, `rgba(${Math.floor(168)},${Math.floor(85)},${Math.floor(247)},${0.3 * tw})`);
-        glow.addColorStop(1, "rgba(124,58,237,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(bb.x - r * 3, bb.y - r * 3, r * 6, r * 6);
-        // bright core
-        ctx.fillStyle = `rgba(255,255,255,${0.6 * tw})`;
+      // ── Stars (with parallax) ──
+      const px = (mouse.x - 0.5) * 16;
+      const py = (mouse.y - 0.5) * 10;
+      for (const s of stars) {
+        const tw = 0.5 + Math.sin(t * s.twinkleSpeed + s.phase) * 0.5;
+        const alpha = s.baseAlpha * (0.35 + tw * 0.65);
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
-        ctx.arc(bb.x, bb.y, r * 0.5, 0, Math.PI * 2);
+        ctx.arc(s.x + px * s.depth, s.y + py * s.depth, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ── Prism geometry ──
+      const cx = W * 0.5, cy = H * 0.5;
+      const prismSize = Math.min(W, H) * 0.13;
+      const rot = t * 0.25;
+      // Equilateral triangle vertices (pointing up)
+      const verts = [];
+      for (let i = 0; i < 3; i++) {
+        const a = rot + i * (Math.PI * 2 / 3) - Math.PI / 2;
+        verts.push({ x: cx + Math.cos(a) * prismSize, y: cy + Math.sin(a) * prismSize });
+      }
+
+      // ── Incoming beam (left side → prism center) ──
+      const inStart = { x: cx - W * 0.45, y: cy + Math.sin(t * 0.4) * 18 };
+      const inEnd = { x: cx - prismSize * 0.6, y: cy };
+
+      // Cursor lensing distortion on the incoming beam path
+      const lensX = mouse.active ? (mouse.x - 0.5) * 30 : 0;
+      const lensY = mouse.active ? (mouse.y - 0.5) * 20 : 0;
+
+      // Incoming beam glow (multi-pass for bloom)
+      ctx.globalCompositeOperation = "screen";
+      for (const width of [22, 12, 6, 2.5]) {
+        const alpha = width === 22 ? 0.06 : width === 12 ? 0.10 : width === 6 ? 0.18 : 0.85;
+        ctx.strokeStyle = width === 2.5 ? "rgba(255,255,255,0.85)" : `rgba(220,210,255,${alpha})`;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        ctx.moveTo(inStart.x, inStart.y);
+        ctx.quadraticCurveTo(
+          (inStart.x + inEnd.x) / 2 + lensX,
+          (inStart.y + inEnd.y) / 2 + lensY,
+          inEnd.x, inEnd.y
+        );
+        ctx.stroke();
+      }
+
+      // Incoming beam particles
+      for (const p of inParticles) {
+        p.t += p.speed * (dt / 16);
+        if (p.t > 1) p.t -= 1;
+        // quadratic bezier point
+        const mt = 1 - p.t;
+        const bx = mt * mt * inStart.x + 2 * mt * p.t * ((inStart.x + inEnd.x) / 2 + lensX) + p.t * p.t * inEnd.x;
+        const by = mt * mt * inStart.y + 2 * mt * p.t * ((inStart.y + inEnd.y) / 2 + lensY) + p.t * p.t * inEnd.y;
+        ctx.shadowColor = "rgba(255,255,255,1)";
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = `rgba(255,255,255,${0.7 + Math.sin(p.t * Math.PI) * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(bx, by, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ── Outgoing refracted beams ──
+      const beamLen = Math.min(W, H) * 0.42;
+      const cursorBend = mouse.active ? (mouse.x - 0.5) * 0.18 : 0;
+
+      for (let bi = 0; bi < BEAMS.length; bi++) {
+        const beam = BEAMS[bi];
+        // Slight breathing + cursor influence on beam angle
+        beam.angle = beam.baseAngle + Math.sin(t * 0.6 + bi) * 0.04 + cursorBend * (bi % 2 === 0 ? 1 : -1) * 0.3;
+
+        const endX = cx + Math.cos(beam.angle) * beamLen;
+        const endY = cy + Math.sin(beam.angle) * beamLen;
+        // Control point for slight curve (gives the beam an arc)
+        const midA = beam.angle + (bi % 2 === 0 ? 0.25 : -0.25);
+        const ctrlX = cx + Math.cos(midA) * beamLen * 0.55;
+        const ctrlY = cy + Math.sin(midA) * beamLen * 0.55;
+
+        const [r, g, b] = beam.color;
+
+        // Beam glow (multi-pass)
+        ctx.globalCompositeOperation = "screen";
+        for (const width of [26, 14, 7, 2.5]) {
+          const alpha = width === 26 ? 0.05 : width === 14 ? 0.10 : width === 7 ? 0.20 : 0.85;
+          ctx.strokeStyle = width === 2.5
+            ? `rgba(${Math.min(255, r + 80)},${Math.min(255, g + 80)},${Math.min(255, b + 80)},0.9)`
+            : `rgba(${r},${g},${b},${alpha})`;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.quadraticCurveTo(ctrlX, ctrlY, endX, endY);
+          ctx.stroke();
+        }
+
+        // Beam particles flowing outward
+        for (const p of beamParticles[bi]) {
+          p.t += p.speed * (dt / 16);
+          if (p.t > 1) p.t -= 1;
+          const mt = 1 - p.t;
+          const bx = mt * mt * cx + 2 * mt * p.t * ctrlX + p.t * p.t * endX;
+          const by = mt * mt * cy + 2 * mt * p.t * ctrlY + p.t * p.t * endY;
+          ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = `rgba(255,255,255,${0.5 + Math.sin(p.t * Math.PI + p.phase) * 0.4})`;
+          ctx.beginPath();
+          ctx.arc(bx, by, p.r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        }
+        ctx.globalCompositeOperation = "source-over";
+
+        // Label at beam end
+        const labelOffset = 26;
+        const lblX = endX + Math.cos(beam.angle) * labelOffset;
+        const lblY = endY + Math.sin(beam.angle) * labelOffset;
+        ctx.font = "11px 'JetBrains Mono', monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const tw = ctx.measureText(beam.label).width;
+        // pill background
+        ctx.fillStyle = "rgba(3,3,10,0.7)";
+        ctx.strokeStyle = `rgba(${r},${g},${b},0.5)`;
+        ctx.lineWidth = 1;
+        const pillW = tw + 18, pillH = 22;
+        const pillX = lblX - pillW / 2, pillY = lblY - pillH / 2;
+        ctx.beginPath();
+        ctx.arc(pillX + 8, pillY + 11, 11, Math.PI / 2, Math.PI * 1.5);
+        ctx.lineTo(pillX + pillW - 8, pillY);
+        ctx.arc(pillX + pillW - 8, pillY + 11, 11, Math.PI * 1.5, Math.PI / 2);
+        ctx.lineTo(pillX + 8, pillY + pillH);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = `rgba(${r},${g},${b},1)`;
+        ctx.fillText(beam.label, lblX, lblY);
+      }
+
+      // ── Sync pulses (click-triggered, traveling along all 4 beams) ──
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.t += p.speed * (dt / 16);
+        p.life -= 0.008 * (dt / 16);
+        if (p.t >= 1 || p.life <= 0) { pulses.splice(i, 1); continue; }
+        const beam = BEAMS[p.beamIdx];
+        const endX = cx + Math.cos(beam.angle) * beamLen;
+        const endY = cy + Math.sin(beam.angle) * beamLen;
+        const midA = beam.angle + (p.beamIdx % 2 === 0 ? 0.25 : -0.25);
+        const ctrlX = cx + Math.cos(midA) * beamLen * 0.55;
+        const ctrlY = cy + Math.sin(midA) * beamLen * 0.55;
+        const mt = 1 - p.t;
+        const bx = mt * mt * cx + 2 * mt * p.t * ctrlX + p.t * p.t * endX;
+        const by = mt * mt * cy + 2 * mt * p.t * ctrlY + p.t * p.t * endY;
+        const [r, g, b] = beam.color;
+        // Big glowing pulse head
+        const pulseGrad = ctx.createRadialGradient(bx, by, 0, bx, by, 18);
+        pulseGrad.addColorStop(0, `rgba(255,255,255,${p.life})`);
+        pulseGrad.addColorStop(0.3, `rgba(${r},${g},${b},${p.life * 0.8})`);
+        pulseGrad.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = pulseGrad;
+        ctx.fillRect(bx - 18, by - 18, 36, 36);
+      }
+      ctx.globalCompositeOperation = "source-over";
+
+      // ── Sparkles emission (from click burst) ──
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = sparkles.length - 1; i >= 0; i--) {
+        const sp = sparkles[i];
+        sp.x += sp.vx * (dt / 16);
+        sp.y += sp.vy * (dt / 16);
+        sp.vx *= 0.96; sp.vy *= 0.96;
+        sp.life -= sp.decay * (dt / 16);
+        if (sp.life <= 0) { sparkles.splice(i, 1); continue; }
+        const [r, g, b] = sp.color;
+        ctx.fillStyle = `rgba(${r},${g},${b},${sp.life})`;
+        ctx.beginPath();
+        ctx.arc(cx + sp.x, cy + sp.y, sp.r * sp.life, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Draw chrome blob (smooth upscale) ──
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(fieldCanvas, 0, 0, W, H);
-
-      // ── Bloom pass on the chrome blob ──
-      bctx.clearRect(0, 0, W, H);
-      bctx.filter = "blur(12px) brightness(1.35)";
-      bctx.drawImage(fieldCanvas, 0, 0, W, H);
-      bctx.filter = "none";
+      // ── The crystal prism (drawn last, on top) ──
+      // Outer glow
       ctx.globalCompositeOperation = "screen";
-      ctx.globalAlpha = 0.65;
-      ctx.drawImage(bloomCanvas, 0, 0);
-      ctx.globalAlpha = 1;
+      const outerGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, prismSize * 2.5);
+      outerGlow.addColorStop(0, "rgba(168,85,247,0.35)");
+      outerGlow.addColorStop(0.5, "rgba(124,58,237,0.12)");
+      outerGlow.addColorStop(1, "rgba(124,58,237,0)");
+      ctx.fillStyle = outerGlow;
+      ctx.fillRect(cx - prismSize * 2.5, cy - prismSize * 2.5, prismSize * 5, prismSize * 5);
       ctx.globalCompositeOperation = "source-over";
 
-      // ── Mirror floor (below the blob) ──
-      const floorY = H * 0.62;
-
-      // Build the reflection: flipped copy of the field canvas, ripple-distorted
-      rctx.clearRect(0, 0, W, H);
-      rctx.save();
-      rctx.translate(0, floorY * 2);
-      rctx.scale(1, -1);
-      rctx.imageSmoothingEnabled = true;
-      rctx.imageSmoothingQuality = "high";
-      rctx.drawImage(fieldCanvas, 0, 0, W, H);
-      rctx.restore();
-
-      // Draw the reflection with vertical fade (further down = dimmer)
-      // We use a gradient mask via globalAlpha and composite
-      ctx.save();
+      // Prism body — faceted glass with chromatic edges
       ctx.beginPath();
-      ctx.rect(0, floorY, W, H - floorY);
-      ctx.clip();
+      ctx.moveTo(verts[0].x, verts[0].y);
+      ctx.lineTo(verts[1].x, verts[1].y);
+      ctx.lineTo(verts[2].x, verts[2].y);
+      ctx.closePath();
 
-      // Ripple distortion via horizontal slices
-      const sliceCount = 28;
-      const sliceH = (H - floorY) / sliceCount;
-      ctx.globalAlpha = 0.55;
-      ctx.globalCompositeOperation = "screen";
-      for (let i = 0; i < sliceCount; i++) {
-        const sy = floorY + i * sliceH;
-        const t2 = i / sliceCount;
-        const ripple = Math.sin(t * 1.8 + i * 0.5) * (3 + t2 * 8);
-        const alpha = 0.55 * (1 - t2 * 0.85);
-        ctx.globalAlpha = alpha;
-        ctx.drawImage(
-          reflectCanvas,
-          0, sy * DPR, W * DPR, sliceH * DPR,
-          ripple, sy, W, sliceH
-        );
-      }
-      ctx.globalCompositeOperation = "source-over";
-      ctx.globalAlpha = 1;
-      ctx.restore();
+      // Glass fill — subtle radial gradient
+      const glassGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, prismSize);
+      glassGrad.addColorStop(0, "rgba(255,255,255,0.35)");
+      glassGrad.addColorStop(0.5, "rgba(168,85,247,0.18)");
+      glassGrad.addColorStop(1, "rgba(124,58,237,0.30)");
+      ctx.fillStyle = glassGrad;
+      ctx.fill();
 
-      // Floor surface line + ripple highlights
-      ctx.strokeStyle = "rgba(168,85,247,0.25)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, floorY);
-      ctx.lineTo(W, floorY);
-      ctx.stroke();
-
-      // Horizontal ripple lines on the floor (perspective)
-      ctx.strokeStyle = "rgba(255,255,255,0.05)";
-      ctx.lineWidth = 0.5;
-      for (let i = 1; i < 8; i++) {
-        const yRel = i / 8;
-        const y = floorY + yRel * yRel * (H - floorY);
-        const off = Math.sin(t * 1.4 + i * 0.6) * 4;
+      // Inner refraction lines (3 facet lines from center to each vertex)
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 0.8;
+      for (const v of verts) {
         ctx.beginPath();
-        ctx.moveTo(0, y + off);
-        for (let x = 0; x <= W; x += 20) {
-          ctx.lineTo(x, y + off + Math.sin(x * 0.02 + t * 1.8 + i) * 1.5);
-        }
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(v.x, v.y);
         ctx.stroke();
       }
+
+      // Rainbow edge (chromatic dispersion along edges)
+      ctx.lineWidth = 2;
+      const edgeHue = (t * 30) % 360;
+      for (let i = 0; i < 3; i++) {
+        const v1 = verts[i], v2 = verts[(i + 1) % 3];
+        const hue = (edgeHue + i * 80) % 360;
+        ctx.strokeStyle = `hsla(${hue}, 85%, 65%, 0.7)`;
+        ctx.beginPath();
+        ctx.moveTo(v1.x, v1.y);
+        ctx.lineTo(v2.x, v2.y);
+        ctx.stroke();
+      }
+      // Crisp white inner edge
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(verts[0].x, verts[0].y);
+      ctx.lineTo(verts[1].x, verts[1].y);
+      ctx.lineTo(verts[2].x, verts[2].y);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Bright vertex points
+      for (const v of verts) {
+        ctx.shadowColor = "rgba(255,255,255,1)";
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = "#fff";
+        ctx.beginPath();
+        ctx.arc(v.x, v.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // Central core glow (the "intelligence" point)
+      ctx.globalCompositeOperation = "screen";
+      const corePulse = 0.7 + Math.sin(t * 2) * 0.3;
+      const coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 16);
+      coreGrad.addColorStop(0, `rgba(255,255,255,${corePulse})`);
+      coreGrad.addColorStop(0.4, `rgba(168,85,247,${corePulse * 0.6})`);
+      coreGrad.addColorStop(1, "rgba(168,85,247,0)");
+      ctx.fillStyle = coreGrad;
+      ctx.fillRect(cx - 16, cy - 16, 32, 32);
+      ctx.globalCompositeOperation = "source-over";
 
       raf = requestAnimationFrame(tick);
     };
@@ -780,6 +698,7 @@ export function NeuralField() {
       window.removeEventListener("resize", resize);
       canvas.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("mouseleave", onLeave);
+      canvas.removeEventListener("click", onClick);
     };
   }, []);
 
@@ -788,38 +707,38 @@ export function NeuralField() {
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: 40, padding: "0 40px" }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
-          <span className="dot" /> MOLTEN INTELLIGENCE
+          <span className="dot" /> ONE MIND, FOUR MODES
         </div>
         <h2 className="h-section" style={{ fontSize: "clamp(28px,4.5vw,48px)" }}>
-          Shapes itself{" "}
-          <span className="shimmer-text">to your every move.</span>
+          One beam of thought.{" "}
+          <span className="shimmer-text">Four paths of brilliance.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          A living chrome surface — drag your cursor through it and watch it morph, drip, and reflect.
+          Chat, Vision, Code and Research — refracted from a single intelligence. Move your cursor to bend the light, click to fire a sync pulse.
         </p>
       </div>
 
       {/* Canvas */}
-      <div style={{ position: "relative", height: 500, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ position: "relative", height: 520, maxWidth: 1200, margin: "0 auto", borderRadius: 16, overflow: "hidden", border: "1px solid rgba(255,255,255,0.06)" }}>
         <canvas
           ref={canvasRef}
           style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "crosshair", display: "block" }}
         />
 
-        {/* Hint at bottom — diamond markers */}
+        {/* Hint at bottom */}
         <div style={{
           position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)",
           display: "flex", gap: 14, zIndex: 3, pointerEvents: "none",
-          fontSize: 10, color: "rgba(255,255,255,0.55)",
+          fontSize: 10, color: "rgba(255,255,255,0.45)",
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#a855f7", transform: "rotate(45deg)" }} />
-            drag to dent
+            move to bend
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 5, height: 5, background: "#06b6d4", transform: "rotate(45deg)" }} />
-            watch it morph
+            click to sync
           </span>
         </div>
       </div>
