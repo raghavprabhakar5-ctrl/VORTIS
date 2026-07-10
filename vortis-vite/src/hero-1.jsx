@@ -319,21 +319,18 @@ export function NeuralField() {
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     let raf, W = 0, H = 0;
-    const mouse = { x: -9999, y: -9999, active: false, vx: 0, vy: 0, lx: 0, ly: 0 };
+    const mouse = { x: -9999, y: -9999, active: false, vx: 0, vy: 0, lx: 0, ly: 0, trail: [] };
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
-    // ── Hubs: the bright nodes that form the backbone ──
     let hubs = [];
-    // ── Dust: small depth-layered particles ──
     let dust = [];
-    // ── Pulses: energy packets traveling along connections ──
     let pulses = [];
-    // ── Ripples: expanding rings from clicks / hub discharges ──
     let ripples = [];
-    // ── Scan angle for the periodic radar sweep ──
+    let bursts = [];
+    let waves = [];
     let scanAngle = 0;
     let seeded = false;
-    let lastDischarge = 0;
+    let lastWave = 0;
     let last = performance.now();
 
     const PALETTE = [
@@ -342,39 +339,51 @@ export function NeuralField() {
       [236, 72, 153],  // pink
       [245, 158, 11],  // gold
       [99, 102, 241],  // indigo
+      [52, 211, 153],  // emerald
     ];
 
+    const LABELS = ['neural','vision','code','memory','search','voice','graph','vector','stream','cache','edge','gpu','auth','sync','render','pipeline'];
+
+    // ── Seeded RNG for stable layout across renders ──
+    let seedState = 12345;
+    const rng = () => { seedState = (seedState * 1664525 + 1013904223) % 4294967296; return seedState / 4294967296; };
+
     const makeParticles = () => {
-      const HUB_COUNT = 14;
+      const HUB_COUNT = 16;
       hubs = Array.from({ length: HUB_COUNT }, (_, i) => {
         const c = PALETTE[i % PALETTE.length];
         return {
-          x: Math.random() * W,
-          y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.18,
-          vy: (Math.random() - 0.5) * 0.18,
-          r: 3 + Math.random() * 3,
-          phase: Math.random() * Math.PI * 2,
+          x: rng() * W,
+          y: rng() * H,
+          z: 0.3 + rng() * 0.7,           // depth 0.3 (far) to 1.0 (near)
+          vx: (rng() - 0.5) * 0.15,
+          vy: (rng() - 0.5) * 0.15,
+          r: 3 + rng() * 4,
+          phase: rng() * Math.PI * 2,
           color: c,
-          charge: 0,            // builds up; releases as a pulse when > 1
-          activity: 0,          // spikes when a pulse arrives / passes
-          label: ['neural','vision','code','memory','search','voice','graph','vector','stream','cache','edge','gpu','auth','sync'][i % 14],
+          charge: 0,
+          activity: 0,
+          label: LABELS[i % LABELS.length],
+          shape: i % 3,                    // 0: circle, 1: hex, 2: diamond
+          restX: 0, restY: 0,              // spring rest position
         };
       });
+      hubs.forEach(h => { h.restX = h.x; h.restY = h.y; });
 
-      const DUST_COUNT = 140;
+      const DUST_COUNT = 180;
       dust = Array.from({ length: DUST_COUNT }, () => {
-        const z = 0.2 + Math.random() * 0.8;
-        const c = PALETTE[Math.floor(Math.random() * PALETTE.length)];
+        const z = 0.15 + rng() * 0.85;
+        const c = PALETTE[Math.floor(rng() * PALETTE.length)];
         return {
-          x: Math.random() * W,
-          y: Math.random() * H,
-          vx: (Math.random() - 0.5) * 0.25 * z,
-          vy: (Math.random() - 0.5) * 0.25 * z,
+          x: rng() * W,
+          y: rng() * H,
           z,
-          r: 0.5 + z * 1.6,
+          vx: (rng() - 0.5) * 0.3 * z,
+          vy: (rng() - 0.5) * 0.3 * z,
+          r: 0.4 + z * 1.8,
           color: c,
-          twinkle: Math.random() * Math.PI * 2,
+          twinkle: rng() * Math.PI * 2,
+          twinkleSpeed: 0.02 + rng() * 0.04,
         };
       });
       seeded = true;
@@ -392,54 +401,65 @@ export function NeuralField() {
     resize();
     window.addEventListener("resize", resize);
 
-    // ── Mouse tracking with velocity ──
     const onMove = (e) => {
       const rect = canvas.getBoundingClientRect();
-      mouse.lx = mouse.x;
-      mouse.ly = mouse.y;
+      mouse.lx = mouse.x; mouse.ly = mouse.y;
       mouse.x = e.clientX - rect.left;
       mouse.y = e.clientY - rect.top;
       mouse.vx = mouse.x - mouse.lx;
       mouse.vy = mouse.y - mouse.ly;
       mouse.active = true;
+      // mouse trail
+      mouse.trail.push({ x: mouse.x, y: mouse.y, life: 1 });
+      if (mouse.trail.length > 20) mouse.trail.shift();
     };
     const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
 
-    // ── Click: spawn a connection burst from the nearest hub ──
     const onClick = (e) => {
       if (!mouse.active) return;
-      // find nearest hub and discharge it
       let nearest = null, nd = Infinity;
       for (const h of hubs) {
         const d = Math.hypot(h.x - mouse.x, h.y - mouse.y);
         if (d < nd) { nd = d; nearest = h; }
       }
-      if (nearest && nd < 300) {
-        nearest.charge = 1.4;
-        nearest.activity = 1.5;
-        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 180, color: nearest.color, life: 1 });
+      if (nearest && nd < 320) {
+        nearest.charge = 1.5;
+        nearest.activity = 2;
+        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 200, color: nearest.color, life: 1, width: 2 });
+        // spawn an energy wave from this hub
+        waves.push({ x: nearest.x, y: nearest.y, r: 0, max: Math.max(W, H) * 0.7, color: nearest.color, life: 1 });
       }
-      // ambient ripple at click point
-      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 120, color: [255,255,255], life: 1 });
+      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 140, color: [255, 255, 255], life: 1, width: 1.5 });
+      // burst of particles at click
+      for (let i = 0; i < 16; i++) {
+        const ang = (i / 16) * Math.PI * 2;
+        bursts.push({
+          x: mouse.x, y: mouse.y,
+          vx: Math.cos(ang) * (1 + rng() * 2),
+          vy: Math.sin(ang) * (1 + rng() * 2),
+          life: 1, color: nearest ? nearest.color : [255, 255, 255], r: 1.5 + rng(),
+        });
+      }
     };
 
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
     canvas.addEventListener("click", onClick);
 
-    // ── Spawn a pulse along a random connection ──
+    // ── Spawn a pulse along a connection ──
     const spawnPulse = (fromHub, toHub) => {
       pulses.push({
-        from: fromHub,
-        to: toHub,
+        from: fromHub, to: toHub,
         t: 0,
-        speed: 0.008 + Math.random() * 0.01,
+        speed: 0.006 + rng() * 0.008,
         color: fromHub.color,
         trail: [],
+        rotation: 0,
+        shape: fromHub.shape,
       });
     };
 
-    // ── Quadratic bezier point helper (slight curve for organic feel) ──
+    // ── Quadratic bezier helpers ──
     const bezierPoint = (p0, p1, p2, t) => {
       const mt = 1 - t;
       return {
@@ -447,258 +467,481 @@ export function NeuralField() {
         y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
       };
     };
-    // control point = midpoint + perpendicular offset
     const controlPoint = (a, b) => {
-      const mx = (a.x + b.x) / 2;
-      const my = (a.y + b.y) / 2;
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.hypot(dx, dy) || 1;
-      const off = (Math.sin((a.x + a.y) * 0.01) * 30); // deterministic curve direction
+      const off = Math.sin((a.x + a.y) * 0.008) * 35;
       return { x: mx - dy / len * off, y: my + dx / len * off };
     };
 
-    const HUB_LINK_DIST = 360;
+    const HUB_LINK_DIST = 380;
+
+    // ── Draw a glowing line (multi-pass bloom) ──
+    const glowLine = (x1, y1, x2, y2, cp, color, alpha, baseWidth) => {
+      const [r, g, b] = color;
+      // wide soft outer glow
+      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.08})`;
+      ctx.lineWidth = baseWidth * 6;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
+      ctx.stroke();
+      // medium glow
+      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.2})`;
+      ctx.lineWidth = baseWidth * 3;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
+      ctx.stroke();
+      // bright core
+      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.lineWidth = baseWidth;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
+      ctx.stroke();
+    };
+
+    // ── Draw a hub shape (circle / hex / diamond) ──
+    const drawShape = (h, scale, alpha) => {
+      const [r, g, b] = h.color;
+      const radius = (h.r + h.activity * 2) * scale;
+      ctx.beginPath();
+      if (h.shape === 1) {
+        // hexagon
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+          const px = h.x + Math.cos(a) * radius;
+          const py = h.y + Math.sin(a) * radius;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+      } else if (h.shape === 2) {
+        // diamond
+        ctx.moveTo(h.x, h.y - radius);
+        ctx.lineTo(h.x + radius, h.y);
+        ctx.lineTo(h.x, h.y + radius);
+        ctx.lineTo(h.x - radius, h.y);
+        ctx.closePath();
+      } else {
+        // circle
+        ctx.arc(h.x, h.y, radius, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.fill();
+    };
 
     const tick = (now) => {
       const dt = Math.min(now - last, 32);
       last = now;
-      ctx.clearRect(0, 0, W, H);
+      // trail-fade clear (creates motion blur / bloom accumulation)
+      ctx.fillStyle = "rgba(4,3,12,0.18)";
+      ctx.fillRect(0, 0, W, H);
 
-      // ── Mouse aura (soft glow that follows cursor) ──
+      // ── Mouse aura ──
       if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 260);
-        glow.addColorStop(0, "rgba(139,92,246,0.16)");
-        glow.addColorStop(0.5, "rgba(236,72,153,0.06)");
+        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 300);
+        glow.addColorStop(0, "rgba(139,92,246,0.18)");
+        glow.addColorStop(0.4, "rgba(236,72,153,0.08)");
         glow.addColorStop(1, "rgba(139,92,246,0)");
         ctx.fillStyle = glow;
         ctx.fillRect(0, 0, W, H);
       }
 
-      // ── Periodic radar sweep ──
-      scanAngle += 0.006;
-      const cx = W / 2, cy = H / 2;
-      const sweepGrad = ctx.createConicGradient
-        ? ctx.createConicGradient(scanAngle, cx, cy)
-        : null;
-      if (sweepGrad) {
-        sweepGrad.addColorStop(0, "rgba(167,139,250,0.10)");
-        sweepGrad.addColorStop(0.05, "rgba(167,139,250,0)");
-        sweepGrad.addColorStop(1, "rgba(167,139,250,0)");
-        ctx.fillStyle = sweepGrad;
-        ctx.fillRect(0, 0, W, H);
+      // ── Periodic energy wave from random hub every ~5s ──
+      if (now - lastWave > 5000 && hubs.length > 0) {
+        const h = hubs[Math.floor(rng() * hubs.length)];
+        waves.push({ x: h.x, y: h.y, r: 0, max: Math.max(W, H) * 0.8, color: h.color, life: 1 });
+        lastWave = now;
       }
 
-      // ── Update hubs ──
+      // ── Radar sweep (two beams) ──
+      scanAngle += 0.005;
+      const cx = W / 2, cy = H / 2;
+      if (ctx.createConicGradient) {
+        for (let bi = 0; bi < 2; bi++) {
+          const sweepGrad = ctx.createConicGradient(scanAngle + bi * Math.PI, cx, cy);
+          sweepGrad.addColorStop(0, "rgba(167,139,250,0.08)");
+          sweepGrad.addColorStop(0.04, "rgba(167,139,250,0)");
+          sweepGrad.addColorStop(1, "rgba(167,139,250,0)");
+          ctx.fillStyle = sweepGrad;
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
+
+      // ── Update hubs (spring physics + drift + mouse repulsion) ──
       for (const h of hubs) {
+        // spring back toward rest position (gentle)
+        h.vx += (h.restX - h.x) * 0.0008;
+        h.vy += (h.restY - h.y) * 0.0008;
+        // drift
         h.x += h.vx * (dt / 16);
         h.y += h.vy * (dt / 16);
-        if (h.x < 40 || h.x > W - 40) h.vx *= -1;
-        if (h.y < 40 || h.y > H - 40) h.vy *= -1;
+        // damping
+        h.vx *= 0.99; h.vy *= 0.99;
+        // bounds (bounce, also update rest)
+        if (h.x < 40) { h.x = 40; h.vx *= -0.5; h.restX = 60 + rng() * 40; }
+        if (h.x > W - 40) { h.x = W - 40; h.vx *= -0.5; h.restX = W - 60 - rng() * 40; }
+        if (h.y < 40) { h.y = 40; h.vy *= -0.5; h.restY = 60 + rng() * 40; }
+        if (h.y > H - 40) { h.y = H - 40; h.vy *= -0.5; h.restY = H - 60 - rng() * 40; }
 
-        // mouse repulsion (cursor pushes hubs gently)
+        // mouse repulsion (stronger for near hubs)
         if (mouse.active) {
           const dx = h.x - mouse.x, dy = h.y - mouse.y;
           const d = Math.hypot(dx, dy);
-          if (d < 180 && d > 0.1) {
-            const f = (1 - d / 180) * 0.6;
-            h.x += (dx / d) * f;
-            h.y += (dy / d) * f;
+          if (d < 200 && d > 0.1) {
+            const f = (1 - d / 200) * 1.2;
+            h.vx += (dx / d) * f * 0.05;
+            h.vy += (dy / d) * f * 0.05;
           }
         }
 
-        // charge builds over time, faster when active
-        h.charge += (0.0015 + h.activity * 0.004) * (dt / 16);
+        // charge builds; activity decays
+        h.charge += (0.0012 + h.activity * 0.005) * (dt / 16);
         if (h.charge >= 1) {
-          // discharge: fire pulses to 1-2 nearby hubs
           const candidates = hubs
-            .filter((o) => o !== h)
-            .map((o) => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
-            .filter((c) => c.d < HUB_LINK_DIST)
+            .filter(o => o !== h)
+            .map(o => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
+            .filter(c => c.d < HUB_LINK_DIST)
             .sort((a, b) => a.d - b.d)
-            .slice(0, 2);
+            .slice(0, 2 + Math.floor(rng() * 2));
           for (const c of candidates) spawnPulse(h, c.o);
-          ripples.push({ x: h.x, y: h.y, r: 0, max: 60, color: h.color, life: 0.6 });
+          ripples.push({ x: h.x, y: h.y, r: 0, max: 80, color: h.color, life: 0.7, width: 1.5 });
           h.charge = 0;
-          h.activity = Math.min(1.5, h.activity + 0.5);
+          h.activity = Math.min(2, h.activity + 0.6);
         }
-        // activity decays
-        h.activity *= 0.96;
-        h.phase += 0.02;
+        h.activity *= 0.95;
+        h.phase += 0.025;
       }
 
-      // ── Draw hub-to-hub bezier connections (backbone) ──
-      // Pre-compute connection list so we can also use it for pulse paths
+      // ── Compute connections ──
       const connections = [];
       for (let i = 0; i < hubs.length; i++) {
         for (let j = i + 1; j < hubs.length; j++) {
           const a = hubs[i], b = hubs[j];
           const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < HUB_LINK_DIST) {
-            connections.push({ a, b, d, cp: controlPoint(a, b) });
-          }
+          if (d < HUB_LINK_DIST) connections.push({ a, b, d, cp: controlPoint(a, b) });
         }
       }
 
+      // ── Update + draw waves (radial energy waves that light up connections) ──
+      for (let i = waves.length - 1; i >= 0; i--) {
+        const w = waves[i];
+        w.r += 3 * (dt / 16);
+        w.life -= 0.004 * (dt / 16);
+        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
+        const [r, g, b] = w.color;
+        // expanding ring with glow
+        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.15})`;
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.5})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // ── Draw connections (bloom glow + flowing dashes + wave-boost) ──
       for (const c of connections) {
         const { a, b, d, cp } = c;
-        const alpha = (1 - d / HUB_LINK_DIST) * 0.35;
-        // base line — gradient between the two hub colors
+        let alpha = (1 - d / HUB_LINK_DIST) * 0.4;
+        // depth attenuation (farther hubs = dimmer)
+        const depthFactor = Math.min(a.z, b.z);
+        alpha *= 0.4 + depthFactor * 0.6;
+
+        // wave boost: if a wave is passing through this connection's midpoint, brighten
+        let waveBoost = 0;
+        const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
+        for (const w of waves) {
+          const wd = Math.hypot(midX - w.x, midY - w.y);
+          if (Math.abs(wd - w.r) < 40) {
+            waveBoost += w.life * (1 - Math.abs(wd - w.r) / 40) * 0.8;
+          }
+        }
+
+        const [r, g, bC] = a.color;
+        const [r2, g2, b2] = b.color;
+        const baseWidth = 0.6 + depthFactor * 0.8;
+
+        // gradient glow line
         const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-        grad.addColorStop(0, `rgba(${a.color[0]},${a.color[1]},${a.color[2]},${alpha})`);
-        grad.addColorStop(1, `rgba(${b.color[0]},${b.color[1]},${b.color[2]},${alpha})`);
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 0.9;
+        grad.addColorStop(0, `rgba(${r},${g},${bC},${alpha})`);
+        grad.addColorStop(1, `rgba(${r2},${g2},${b2},${alpha})`);
+
+        // outer soft glow
+        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.06 + waveBoost * 0.1})`;
+        ctx.lineWidth = baseWidth * 7;
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+        // medium
+        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.18 + waveBoost * 0.2})`;
+        ctx.lineWidth = baseWidth * 3;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.stroke();
+        // bright core
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = baseWidth + waveBoost * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
         ctx.stroke();
 
-        // flowing dashed overlay (energy moving)
-        const flowAlpha = alpha * 0.6;
+        // flowing dashed energy overlay
+        const flowAlpha = (alpha + waveBoost) * 0.7;
         ctx.strokeStyle = `rgba(255,255,255,${flowAlpha})`;
         ctx.lineWidth = 0.5;
-        ctx.setLineDash([3, 14]);
-        ctx.lineDashOffset = -now * 0.04;
+        ctx.setLineDash([2, 16]);
+        ctx.lineDashOffset = -now * 0.05;
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // mouse proximity highlight — connections near cursor glow brighter
+        // mouse proximity highlight
         if (mouse.active) {
-          const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
           const md = Math.hypot(midX - mouse.x, midY - mouse.y);
-          if (md < 140) {
-            const boost = (1 - md / 140) * 0.5;
+          if (md < 160) {
+            const boost = (1 - md / 160) * 0.6;
             ctx.strokeStyle = `rgba(255,255,255,${boost})`;
-            ctx.lineWidth = 1.2;
+            ctx.lineWidth = 1.4;
             ctx.beginPath();
-            ctx.moveTo(a.x, a.y);
-            ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
+            ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
             ctx.stroke();
           }
         }
       }
 
-      // ── Update + draw pulses (traveling energy packets) ──
+      // ── Cursor beams: connect mouse to nearest 3 hubs with bright beams ──
+      if (mouse.active) {
+        const near = hubs
+          .map(h => ({ h, d: Math.hypot(h.x - mouse.x, h.y - mouse.y) }))
+          .filter(c => c.d < 220)
+          .sort((a, b) => a.d - b.d)
+          .slice(0, 3);
+        for (const c of near) {
+          const [r, g, b] = c.h.color;
+          const alpha = (1 - c.d / 220) * 0.7;
+          // beam glow
+          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.15})`;
+          ctx.lineWidth = 5;
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y); ctx.lineTo(c.h.x, c.h.y);
+          ctx.stroke();
+          // beam core
+          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(mouse.x, mouse.y); ctx.lineTo(c.h.x, c.h.y);
+          ctx.stroke();
+        }
+      }
+
+      // ── Update + draw pulses (traveling data packets with trails) ──
       for (let i = pulses.length - 1; i >= 0; i--) {
         const p = pulses[i];
         p.t += p.speed * (dt / 16);
+        p.rotation += 0.08;
         if (p.t >= 1) {
-          // arrived: boost destination hub activity
-          p.to.activity = Math.min(1.5, p.to.activity + 0.6);
+          // arrived: boost dest, spawn burst
+          p.to.activity = Math.min(2, p.to.activity + 0.7);
+          for (let k = 0; k < 8; k++) {
+            const ang = (k / 8) * Math.PI * 2 + rng();
+            bursts.push({
+              x: p.to.x, y: p.to.y,
+              vx: Math.cos(ang) * (0.5 + rng() * 1.5),
+              vy: Math.sin(ang) * (0.5 + rng() * 1.5),
+              life: 1, color: p.color, r: 1 + rng(),
+            });
+          }
           pulses.splice(i, 1);
           continue;
         }
         const cp = controlPoint(p.from, p.to);
         const pos = bezierPoint(p.from, cp, p.to, p.t);
-        // push to trail
         p.trail.push({ x: pos.x, y: pos.y });
-        if (p.trail.length > 14) p.trail.shift();
+        if (p.trail.length > 18) p.trail.shift();
 
-        // draw trail
+        // draw trail (fading)
+        const [r, g, b] = p.color;
         for (let k = 0; k < p.trail.length; k++) {
           const tp = p.trail[k];
-          const ta = (k / p.trail.length) * 0.8;
-          ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},${ta})`;
+          const ta = (k / p.trail.length) * 0.7;
+          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
           ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2, 0, Math.PI * 2);
+          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2.5, 0, Math.PI * 2);
           ctx.fill();
         }
-        // bright head
-        ctx.shadowColor = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},1)`;
-        ctx.shadowBlur = 14;
-        ctx.fillStyle = "#fff";
+        // glowing head (multi-pass bloom)
+        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+        ctx.shadowBlur = 20;
+        ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 2.5, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
+        // rotating geometric payload
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(p.rotation);
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+        ctx.lineWidth = 1;
+        if (p.shape === 1) {
+          // hex
+          ctx.beginPath();
+          for (let k = 0; k < 6; k++) {
+            const a = (k / 6) * Math.PI * 2;
+            const px = Math.cos(a) * 5, py = Math.sin(a) * 5;
+            if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+          }
+          ctx.closePath(); ctx.stroke();
+        } else if (p.shape === 2) {
+          // diamond
+          ctx.beginPath();
+          ctx.moveTo(0, -5); ctx.lineTo(5, 0); ctx.lineTo(0, 5); ctx.lineTo(-5, 0);
+          ctx.closePath(); ctx.stroke();
+        } else {
+          // square
+          ctx.strokeRect(-3.5, -3.5, 7, 7);
+        }
+        ctx.restore();
       }
 
       // ── Update + draw ripples ──
       for (let i = ripples.length - 1; i >= 0; i--) {
-        const r = ripples[i];
-        r.r += 1.8 * (dt / 16);
-        r.life -= 0.012 * (dt / 16);
-        if (r.life <= 0 || r.r > r.max) { ripples.splice(i, 1); continue; }
-        ctx.strokeStyle = `rgba(${r.color[0]},${r.color[1]},${r.color[2]},${r.life * 0.5})`;
-        ctx.lineWidth = 1.2;
+        const rp = ripples[i];
+        rp.r += 2 * (dt / 16);
+        rp.life -= 0.012 * (dt / 16);
+        if (rp.life <= 0 || rp.r > rp.max) { ripples.splice(i, 1); continue; }
+        const [r, g, b] = rp.color;
+        ctx.strokeStyle = `rgba(${r},${g},${b},${rp.life * 0.5})`;
+        ctx.lineWidth = rp.width || 1.2;
         ctx.beginPath();
-        ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
+        ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // ── Dust drift + parallax with mouse ──
+      // ── Update + draw bursts (particle explosions) ──
+      for (let i = bursts.length - 1; i >= 0; i--) {
+        const bt = bursts[i];
+        bt.x += bt.vx * (dt / 16);
+        bt.y += bt.vy * (dt / 16);
+        bt.vx *= 0.96; bt.vy *= 0.96;
+        bt.life -= 0.02 * (dt / 16);
+        if (bt.life <= 0) { bursts.splice(i, 1); continue; }
+        const [r, g, b] = bt.color;
+        ctx.fillStyle = `rgba(${r},${g},${b},${bt.life})`;
+        ctx.beginPath();
+        ctx.arc(bt.x, bt.y, bt.r * bt.life, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // ── Dust drift + parallax + twinkle ──
       for (const p of dust) {
         p.x += p.vx * (dt / 16);
         p.y += p.vy * (dt / 16);
         if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
         if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        p.twinkle += 0.03;
+        p.twinkle += p.twinkleSpeed;
 
-        // parallax: deeper particles drift opposite to mouse
         if (mouse.active) {
-          p.x += mouse.vx * 0.02 * (1 - p.z);
-          p.y += mouse.vy * 0.02 * (1 - p.z);
+          p.x += mouse.vx * 0.025 * (1 - p.z);
+          p.y += mouse.vy * 0.025 * (1 - p.z);
         }
 
-        const tw = 0.4 + Math.sin(p.twinkle) * 0.3;
-        ctx.globalAlpha = (0.3 + p.z * 0.5) * tw;
-        ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},0.9)`;
+        const tw = 0.35 + Math.sin(p.twinkle) * 0.35;
+        const [r, g, b] = p.color;
+        ctx.globalAlpha = (0.25 + p.z * 0.55) * tw;
+        ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
 
-      // ── Draw hubs (on top) with glow + activity halo ──
-      for (const h of hubs) {
+      // ── Mouse trail (fading glowing dots) ──
+      if (mouse.trail.length > 1) {
+        for (let i = 0; i < mouse.trail.length; i++) {
+          const t = mouse.trail[i];
+          t.life -= 0.05;
+          if (t.life <= 0) continue;
+          const alpha = t.life * (i / mouse.trail.length) * 0.6;
+          ctx.fillStyle = `rgba(167,139,250,${alpha})`;
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, 2 + (i / mouse.trail.length) * 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // remove dead trail points
+        mouse.trail = mouse.trail.filter(t => t.life > 0);
+      }
+
+      // ── Draw hubs (depth-sorted: far first) ──
+      const sortedHubs = [...hubs].sort((a, b) => a.z - b.z);
+      for (const h of sortedHubs) {
         const pulse = 0.7 + Math.sin(now * 0.0015 + h.phase) * 0.3;
         const actBoost = h.activity;
+        const depthScale = 0.5 + h.z * 0.7;
+        const [r, g, b] = h.color;
 
-        // outer halo when active
+        // activity halo (radial bloom)
         if (actBoost > 0.05) {
-          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 40);
-          halo.addColorStop(0, `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${0.3 * actBoost})`);
-          halo.addColorStop(1, `rgba(${h.color[0]},${h.color[1]},${h.color[2]},0)`);
+          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 50);
+          halo.addColorStop(0, `rgba(${r},${g},${b},${0.35 * actBoost})`);
+          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
           ctx.fillStyle = halo;
-          ctx.fillRect(h.x - 40, h.y - 40, 80, 80);
+          ctx.fillRect(h.x - 50, h.y - 50, 100, 100);
         }
 
-        // charge ring (fills up as charge approaches 1)
+        // charge ring (arc fills as charge → 1)
         if (h.charge > 0.1) {
-          ctx.strokeStyle = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${h.charge * 0.5})`;
-          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = `rgba(${r},${g},${b},${h.charge * 0.6})`;
+          ctx.lineWidth = 1.8;
           ctx.beginPath();
-          ctx.arc(h.x, h.y, h.r + 6, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
+          ctx.arc(h.x, h.y, (h.r + 8) * depthScale, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
           ctx.stroke();
         }
 
-        // core
-        ctx.shadowColor = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},0.9)`;
-        ctx.shadowBlur = 18 * pulse + 10 * actBoost;
-        ctx.fillStyle = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${0.85 * pulse + 0.15})`;
+        // rotating outer ring (dashed, depth-scaled)
+        const ringR = (h.r + 6) * depthScale;
+        ctx.strokeStyle = `rgba(${r},${g},${b},0.2)`;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 5]);
+        ctx.lineDashOffset = -now * 0.02 * (h.shape === 1 ? -1 : 1);
         ctx.beginPath();
-        ctx.arc(h.x, h.y, h.r + actBoost * 1.5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(h.x, h.y, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
-        // white hot center
+        // glow + core
+        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+        ctx.shadowBlur = 22 * pulse + 12 * actBoost;
+        drawShape(h, depthScale, 0.85 * pulse + 0.15);
         ctx.shadowBlur = 0;
+
+        // white-hot center
         ctx.fillStyle = `rgba(255,255,255,${0.5 + actBoost * 0.5})`;
         ctx.beginPath();
-        ctx.arc(h.x, h.y, (h.r + actBoost * 1.5) * 0.4, 0, Math.PI * 2);
+        ctx.arc(h.x, h.y, (h.r + actBoost * 2) * depthScale * 0.4, 0, Math.PI * 2);
         ctx.fill();
 
-        // label appears when near mouse
+        // label on hover
         if (mouse.active) {
           const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-          if (md < 110) {
-            const op = (1 - md / 110);
+          if (md < 120) {
+            const op = (1 - md / 120);
             ctx.font = "10px 'JetBrains Mono', monospace";
-            ctx.fillStyle = `rgba(${h.color[0]},${h.color[1]},${h.color[2]},${op})`;
+            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
             ctx.textAlign = "center";
-            ctx.fillText(h.label, h.x, h.y - h.r - 10);
+            // label background pill
+            const tw = ctx.measureText(h.label).width;
+            ctx.fillStyle = `rgba(8,6,20,${op * 0.7})`;
+            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r * depthScale - 22, tw + 12, 16);
+            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
+            ctx.fillText(h.label, h.x, h.y - h.r * depthScale - 11);
           }
         }
       }
@@ -726,7 +969,7 @@ export function NeuralField() {
         padding: "40px 0 0",
       }}
     >
-      <div style={{ position: "relative", height: 520, maxWidth: 1300, margin: "0 auto" }}>
+      <div style={{ position: "relative", height: 560, maxWidth: 1300, margin: "0 auto" }}>
         <canvas
           ref={canvasRef}
           style={{
@@ -737,8 +980,6 @@ export function NeuralField() {
             cursor: "crosshair",
           }}
         />
-
-        {/* Centered headline overlay */}
         <div
           style={{
             position: "absolute",
@@ -767,9 +1008,11 @@ export function NeuralField() {
             One mind.{" "}
             <span
               style={{
-                background: "linear-gradient(90deg,#a855f7,#06B6D4)",
+                background: "linear-gradient(90deg,#a855f7,#06B6D4,#ec4899)",
+                backgroundSize: "200% auto",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
+                animation: "nfShimmer 5s linear infinite",
               }}
             >
               A billion connections.
@@ -779,7 +1022,7 @@ export function NeuralField() {
             style={{
               fontSize: 16,
               color: "rgba(255,255,255,0.55)",
-              margin: "0 0 8px",
+              margin: "0 0 10px",
               textAlign: "center",
               maxWidth: 480,
               lineHeight: 1.7,
@@ -792,9 +1035,9 @@ export function NeuralField() {
             style={{
               display: "flex",
               gap: 16,
-              marginTop: 8,
+              marginTop: 6,
               fontSize: 11,
-              color: "rgba(255,255,255,0.35)",
+              color: "rgba(255,255,255,0.4)",
               fontFamily: "'JetBrains Mono', monospace",
               letterSpacing: ".08em",
               textTransform: "uppercase",
@@ -809,9 +1052,17 @@ export function NeuralField() {
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ec4899", boxShadow: "0 0 8px #ec4899" }} />
               click to ignite
             </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22d3ee", boxShadow: "0 0 8px #22d3ee" }} />
+              waves pulse every 5s
+            </span>
           </div>
         </div>
       </div>
+
+      <style>{`
+        @keyframes nfShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+      `}</style>
     </section>
   );
 }
@@ -1817,509 +2068,620 @@ function BentoGrid() {
 //  HOW IT WORKS
 // ══════════════════════════════════════════════════════════════════
 function HowItWorks() {
-  const [ref, inView] = useInView(0.15);
+  const [ref, inView] = useInView(0.1);
   const [active, setActive] = useState(0);
+  const sectionRef = useRef(null);
+
+  // Track scroll position to determine active step
+  useEffect(() => {
+    if (!inView) return;
+    const onScroll = () => {
+      const els = document.querySelectorAll('.how-step-row');
+      let best = 0, bestDist = Infinity;
+      const center = window.innerHeight / 2;
+      els.forEach((el, i) => {
+        const r = el.getBoundingClientRect();
+        const mid = r.top + r.height / 2;
+        const d = Math.abs(mid - center);
+        if (d < bestDist) { bestDist = d; best = i; }
+      });
+      setActive(best);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [inView]);
 
   const steps = [
     {
       n: '01', t: 'Connect your stack', c: '#a78bfa',
       icon: Layers,
       d: 'Plug Vortis into your repos, docs, databases, and APIs. We index everything in minutes — no migration, no lock-in, no professional services required.',
-      chips: ['GitHub', 'Notion', 'Postgres', 'Slack', 'Figma'],
-      visual: 'connect',
+      chips: ['GitHub', 'Notion', 'Postgres', 'Slack', 'Figma', 'Linear'],
+      stat: { v: '12 min', l: 'avg setup' },
+      demo: 'connect',
     },
     {
       n: '02', t: 'Describe the outcome', c: '#22d3ee',
       icon: Brain,
-      d: 'Type, paste, or speak what you want built. Vortis orchestrates the right agents in parallel — code, search, vision, and voice working as one.',
-      chips: ['chat', 'voice', 'image', 'code', 'docs'],
-      visual: 'describe',
+      d: 'Type, paste, or speak what you want built. Vortis orchestrates the right agents in parallel — code, search, vision, and voice working as one fluid mesh.',
+      chips: ['chat', 'voice', 'image', 'code', 'docs', 'url'],
+      stat: { v: '4 agents', l: 'in parallel' },
+      demo: 'describe',
     },
     {
       n: '03', t: 'Watch it ship', c: '#ec4899',
       icon: Rocket,
-      d: 'Get production-ready output with tests, types, and docs. Review in a live preview, then deploy to your edge network with a single click.',
-      chips: ['preview', 'tests', 'types', 'deploy', 'live'],
-      visual: 'ship',
+      d: 'Get production-ready output with tests, types, and docs. Review in a live preview, then deploy to your edge network with a single click. No CI babysitting.',
+      chips: ['preview', 'tests', 'types', 'deploy', 'live', 'edge'],
+      stat: { v: '60 fps', l: 'live preview' },
+      demo: 'ship',
     },
     {
       n: '04', t: 'Iterate at lightspeed', c: '#f59e0b',
       icon: Zap,
-      d: 'Every change is versioned, observable, and reversible. Your team stays in flow — Vortis handles the busywork so you can keep building.',
-      chips: ['versioned', 'observable', 'reversible', 'fast'],
-      visual: 'iterate',
+      d: 'Every change is versioned, observable, and reversible. Your team stays in flow — Vortis handles the busywork so you can keep building without breaking stride.',
+      chips: ['versioned', 'observable', 'reversible', 'fast', 'safe'],
+      stat: { v: '1 click', l: 'rollback' },
+      demo: 'iterate',
     },
   ];
 
-  // Auto-advance the active step
-  useEffect(() => {
-    if (!inView) return;
-    const id = setInterval(() => {
-      setActive((a) => (a + 1) % steps.length);
-    }, 3200);
-    return () => clearInterval(id);
-  }, [inView, steps.length]);
-
   return (
-    <section
-      ref={ref}
-      id="how"
-      className="section"
-      style={{ position: 'relative', overflow: 'hidden' }}
-    >
+    <section ref={ref} id="how" className="section" style={{ position: 'relative', overflow: 'hidden' }}>
       <style>{`
-        @keyframes hiwFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        @keyframes hiwSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes hiwSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-        @keyframes hiwPulse { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
-        @keyframes hiwBarWave { 0%,100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
-        @keyframes hiwDotFlow { 0% { offset-distance: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
-        @keyframes hiwFadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes hiwTypeBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
-        @keyframes hiwScan { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
-        @keyframes hiwRadar { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(2.4); opacity: 0; } }
-        @keyframes hiwShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        @keyframes howFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+        @keyframes howSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes howSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes howPulse { 0%,100% { opacity: .5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+        @keyframes howBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+        @keyframes howShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @keyframes howFadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes howScanY { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
+        @keyframes howTypeBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes howDotFlow { 0% { transform: translateY(-100%); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { transform: translateY(100%); opacity: 0; } }
+        @keyframes howRingExpand { 0% { transform: scale(1); opacity: .8; } 100% { transform: scale(2); opacity: 0; } }
+        @keyframes howCardGlow { 0%,100% { box-shadow: 0 0 0 0 var(--c, #a78bfa)00; } 50% { box-shadow: 0 0 50px -10px var(--c, #a78bfa)44; } }
+        @keyframes howProgressFill { from { width: 0%; } to { width: 100%; } }
+        @keyframes howBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes howFloat3d { 0%,100% { transform: translateY(0) translateX(0); } 33% { transform: translateY(-6px) translateX(3px); } 66% { transform: translateY(3px) translateX(-3px); } }
       `}</style>
 
+      {/* Ambient bg orbs */}
+      <div style={{ position: 'absolute', top: '10%', left: '-10%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(139,92,246,.15), transparent 60%)', filter: 'blur(80px)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '10%', right: '-10%', width: '40vw', height: '40vw', background: 'radial-gradient(circle, rgba(236,72,153,.12), transparent 60%)', filter: 'blur(80px)', pointerEvents: 'none' }} />
+
       {/* Header */}
-      <div
-       className={`reveal ${inView ? 'in' : ''}`}
-       style={{ textAlign: 'center', marginBottom: 110 }}
-          >
+      <div className={`reveal ${inView ? 'in' : ''}`} style={{ textAlign: 'center', marginBottom: 80 }}>
         <div className="eyebrow" style={{ marginBottom: 18 }}>
           <span className="dot" /> HOW IT WORKS
         </div>
         <h2 className="h-section">
           From idea to live
           <br />
-          <span
-  style={{
-    background:
-      'linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)',
-    backgroundSize: '200% auto',
-    WebkitBackgroundClip: 'text',
-    backgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    animation: 'hiwShimmer 5s linear infinite',
-  }}
->
-  in four moves.
+          <span style={{
+            background: 'linear-gradient(110deg,#a78bfa,#22d3ee,#ec4899,#f59e0b,#a78bfa)',
+            backgroundSize: '200% auto',
+            WebkitBackgroundClip: 'text', backgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            animation: 'howShimmer 6s linear infinite',
+          }}>
+            in four moves.
           </span>
         </h2>
-        <p
-          className="h-sub"
-          style={{ margin: '18px auto 0' }}
-        >
-          A flow that feels like magic. Every step is fluid, observable, and built for teams that ship.
+        <p className="h-sub" style={{ margin: '18px auto 0' }}>
+          A flow that feels like magic. Every step is fluid, observable, and built for teams that actually ship.
         </p>
       </div>
 
-      {/* ── Desktop: horizontal timeline (4 columns) ── */}
-      <div
-        className={`reveal ${inView ? 'in' : ''}`}
-        style={{ position: 'relative', maxWidth: 1280, margin: '0 auto' }}
-      >
-        {/* Animated connector line behind the orbs */}
-        <svg
-          viewBox="0 0 1200 120"
-          preserveAspectRatio="none"
-          style={{
-            position: 'absolute',
-            top: 60,
-            left: 0,
-            right: 0,
-            width: '100%',
-            height: 80,
-            zIndex: 0,
-            pointerEvents: 'none',
-          }}
-        >
-          <defs>
-            <linearGradient id="hiwLineG" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#a78bfa" />
-              <stop offset="33%" stopColor="#22d3ee" />
-              <stop offset="66%" stopColor="#ec4899" />
-              <stop offset="100%" stopColor="#f59e0b" />
-            </linearGradient>
-          </defs>
-          {/* Base dashed line */}
-          <line
-            x1="120" y1="40" x2="1080" y2="40"
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="2"
-            strokeDasharray="6 8"
-          />
-          {/* Animated gradient line that draws on scroll */}
-          <line
-            x1="120" y1="40" x2="1080" y2="40"
-            stroke="url(#hiwLineG)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeDasharray={inView ? '960' : '0'}
-            strokeDashoffset={inView ? '0' : '960'}
-            style={{ transition: 'stroke-dashoffset 2s ease, stroke-dasharray 2s ease' }}
-          />
-          {/* Flowing dots along the line */}
-          {[0, 1, 2, 3].map((i) => (
-            <circle key={i} r="3" fill={steps[i].c}>
-              <animateMotion
-                dur="4s"
-                repeatCount="indefinite"
-                begin={`${i * 1}s`}
-                path="M120,40 L1080,40"
-              />
-              <animate
-                attributeName="opacity"
-                values="0;1;1;0"
-                dur="4s"
-                repeatCount="indefinite"
-                begin={`${i * 1}s`}
-              />
-            </circle>
-          ))}
-        </svg>
-
-        {/* Steps grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: 20,
-            position: 'relative',
+      {/* Vertical timeline */}
+      <div ref={sectionRef} style={{ maxWidth: 1180, margin: '0 auto', position: 'relative' }}>
+        {/* Central vertical line with gradient + flowing dots */}
+        <div style={{
+          position: 'absolute', left: '50%', top: 0, bottom: 0,
+          width: 2, transform: 'translateX(-50%)',
+          background: 'linear-gradient(180deg, rgba(139,92,246,.4), rgba(34,211,238,.4), rgba(236,72,153,.4), rgba(245,158,11,.4), transparent)',
+          zIndex: 0,
+        }} />
+        {/* Flowing dots traveling down the line */}
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            position: 'absolute', left: '50%', top: 0,
+            width: 8, height: 8, borderRadius: '50%',
+            background: ['#a78bfa', '#22d3ee', '#ec4899'][i],
+            boxShadow: `0 0 12px ${['#a78bfa', '#22d3ee', '#ec4899'][i]}`,
+            transform: 'translateX(-50%)',
+            animation: `howDotFlow ${4 + i}s linear infinite`,
+            animationDelay: `${i * 1.3}s`,
             zIndex: 1,
-          }}
-          className="hiw-grid"
-        >
-          {steps.map((s, i) => {
-            const Icon = s.icon;
-            const isActive = active === i;
-            return (
-              <div
-                key={s.n}
-                onMouseEnter={() => setActive(i)}
-                style={{
-                  position: 'relative',
-                  paddingTop: 90,
-                  opacity: inView ? 1 : 0,
-                  transform: inView ? 'translateY(0)' : 'translateY(30px)',
-                  transition: `all 0.7s ease ${i * 0.12}s`,
-                  cursor: 'pointer',
-                }}
-              >
-                {/* Floating icon orb */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: '50%',
-                    transform: `translateX(-50%) ${isActive ? 'scale(1.1)' : 'scale(1)'}`,
-                    width: 76,
-                    height: 76,
-                    transition: 'transform 0.4s ease',
-                    animation: 'hiwFloat 5s ease-in-out infinite',
-                    animationDelay: `${i * 0.4}s`,
-                  }}
-                >
-                  {/* Outer rotating ring */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: -8,
-                      borderRadius: '50%',
-                      border: `1.5px solid ${s.c}40`,
-                      animation: `hiwSpin ${10 + i * 2}s linear infinite`,
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: -4,
-                        left: '50%',
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: s.c,
-                        boxShadow: `0 0 12px ${s.c}`,
-                        transform: 'translateX(-50%)',
-                      }}
-                    />
-                  </div>
-                  {/* Inner reverse ring */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: -3,
-                      borderRadius: '50%',
-                      border: `1px dashed ${s.c}30`,
-                      animation: `hiwSpinRev ${7 + i}s linear infinite`,
-                    }}
-                  />
-                  {/* Radar ping when active */}
-                  {isActive && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        borderRadius: '50%',
-                        border: `2px solid ${s.c}`,
-                        animation: 'hiwRadar 2s ease-out infinite',
-                      }}
-                    />
-                  )}
-                  {/* Core orb */}
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      borderRadius: '50%',
-                      background: `radial-gradient(circle at 30% 30%, ${s.c}, ${s.c}55 60%, transparent)`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: isActive
-                        ? `0 0 40px ${s.c}88, inset 0 0 20px rgba(255,255,255,0.2)`
-                        : `0 0 20px ${s.c}44, inset 0 0 12px rgba(255,255,255,0.1)`,
-                      transition: 'box-shadow 0.4s ease',
-                    }}
-                  >
-                    <Icon size={26} style={{ color: '#fff' }} />
-                  </div>
-                </div>
+          }} />
+        ))}
 
-                {/* Card */}
-                <div
-                  style={{
-                    background: isActive
-                      ? `linear-gradient(160deg, ${s.c}18, rgba(8,6,20,0.85))`
-                      : 'linear-gradient(160deg, rgba(15,12,30,0.6), rgba(8,6,20,0.8))',
-                    border: `1px solid ${isActive ? s.c + '55' : 'rgba(255,255,255,0.06)'}`,
-                    borderRadius: 20,
-                    padding: '26px 22px',
-                    minHeight: 260,
-                    transition: 'all 0.35s ease',
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)',
-                    boxShadow: isActive ? `0 20px 50px -15px ${s.c}55` : 'none',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* Top gradient line */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: 1,
-                      background: `linear-gradient(90deg, transparent, ${s.c}88, transparent)`,
-                    }}
-                  />
-                  {/* Step number */}
-                  <div
-                    style={{
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 11,
-                      color: s.c,
-                      fontWeight: 700,
-                      letterSpacing: '.15em',
-                      marginBottom: 10,
-                    }}
-                  >
-                    STEP {s.n}
-                  </div>
-                  {/* Title */}
-                  <h3
-                    style={{
-                      fontFamily: "'Space Grotesk', sans-serif",
-                      fontSize: 20,
-                      fontWeight: 700,
-                      letterSpacing: '-.02em',
-                      margin: '0 0 10px',
-                    }}
-                  >
-                    {s.t}
-                  </h3>
-                  {/* Description */}
-                  <p
-                    style={{
-                      color: 'rgba(255,255,255,0.58)',
-                      fontSize: 13.5,
-                      lineHeight: 1.6,
-                      margin: '0 0 16px',
-                    }}
-                  >
-                    {s.d}
-                  </p>
-                  {/* Chips */}
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 6,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    {s.chips.map((ch) => (
-                      <span
-                        key={ch}
-                        style={{
-                          fontSize: 10,
-                          padding: '4px 9px',
-                          borderRadius: 6,
-                          background: `${s.c}1a`,
-                          border: `1px solid ${s.c}33`,
-                          color: s.c,
-                          fontFamily: "'JetBrains Mono', monospace",
-                          letterSpacing: '.02em',
-                        }}
-                      >
-                        {ch}
-                      </span>
-                    ))}
-                  </div>
-
-                  {/* Active indicator bar at bottom */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      height: 2,
-                      width: isActive ? '100%' : '0%',
-                      background: `linear-gradient(90deg, ${s.c}, transparent)`,
-                      transition: 'width 0.5s ease',
-                    }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Progress dots (mobile-friendly indicator) */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 8,
-            marginTop: 40,
-          }}
-        >
-          {steps.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => setActive(i)}
-              style={{
-                width: active === i ? 28 : 8,
-                height: 8,
-                borderRadius: 4,
-                background: active === i ? s.c : 'rgba(255,255,255,0.15)',
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: active === i ? `0 0 12px ${s.c}` : 'none',
-              }}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* ── Bottom band: live animated stat strip ── */}
-      <div
-        className={`reveal ${inView ? 'in' : ''}`}
-        style={{
-          marginTop: 60,
-          maxWidth: 1100,
-          margin: '60px auto 0',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 14,
-        }}
-        className2="hiw-stats"
-      >
-        {[
-          { v: '12 min', l: 'Avg setup time', c: '#a78bfa' },
-          { v: '4 agents', l: 'Run in parallel', c: '#22d3ee' },
-          { v: '60 fps', l: 'Live preview', c: '#ec4899' },
-          { v: '1 click', l: 'Edge deploy', c: '#f59e0b' },
-        ].map((stat, i) => (
-          <div
-            key={i}
-            style={{
-              padding: '20px 18px',
-              borderRadius: 16,
-              background: 'rgba(255,255,255,0.025)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              textAlign: 'left',
-              position: 'relative',
-              overflow: 'hidden',
-              opacity: inView ? 1 : 0,
-              transform: inView ? 'translateY(0)' : 'translateY(20px)',
-              transition: `all 0.6s ease ${0.4 + i * 0.1}s`,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 800,
-                fontFamily: "'Space Grotesk', sans-serif",
-                letterSpacing: '-.03em',
-                background: `linear-gradient(180deg, #fff, ${stat.c})`,
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                marginBottom: 4,
-              }}
-            >
-              {stat.v}
-            </div>
-            <div
-              style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)' }}
-            >
-              {stat.l}
-            </div>
-            {/* Mini wave bars */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 10,
-                right: 12,
-                display: 'flex',
-                gap: 2,
-                alignItems: 'flex-end',
-                height: 14,
-              }}
-            >
-              {[...Array(5)].map((_, j) => (
-                <div
-                  key={j}
-                  style={{
-                    width: 2,
-                    height: '100%',
-                    background: stat.c,
-                    opacity: 0.5,
-                    borderRadius: 1,
-                    transformOrigin: 'bottom',
-                    animation: `hiwBarWave ${0.7 + j * 0.15}s ease-in-out infinite`,
-                    animationDelay: `${j * 0.08}s`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
+        {steps.map((s, i) => (
+          <HowStep key={s.n} step={s} index={i} active={active === i} inView={inView} side={i % 2 === 0 ? 'left' : 'right'} />
         ))}
       </div>
 
-      <style>{`
-        @media(max-width:980px){
-          .hiw-grid{grid-template-columns:repeat(2,1fr)!important}
-        }
-        @media(max-width:600px){
-          .hiw-grid{grid-template-columns:1fr!important}
-          .hiw-stats{grid-template-columns:repeat(2,1fr)!important}
-        }
-      `}</style>
+      {/* Bottom CTA strip */}
+      <div className={`reveal ${inView ? 'in' : ''}`} style={{ marginTop: 80, textAlign: 'center' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderRadius: 999, background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.2)' }}>
+          <Sparkles size={16} style={{ color: '#a78bfa' }} />
+          <span style={{ fontSize: 14, color: 'rgba(255,255,255,.8)' }}>Average team ships their first feature in</span>
+          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16, color: '#a78bfa' }}>under 30 minutes</span>
+        </div>
+      </div>
     </section>
+  );
+}
+
+// ── Single step row (alternating left/right with live demo) ──
+function HowStep({ step, index, active, inView, side }) {
+  const Icon = step.icon;
+  const [ref, stepInView] = useInView(0.3);
+  const isLeft = side === 'left';
+
+  return (
+    <div ref={ref} className="how-step-row" style={{
+      display: 'grid', gridTemplateColumns: '1fr 80px 1fr', gap: 0,
+      marginBottom: 80, alignItems: 'center', position: 'relative', zIndex: 2,
+      opacity: stepInView ? 1 : 0, transform: stepInView ? 'translateY(0)' : 'translateY(40px)',
+      transition: 'all 0.8s cubic-bezier(.2,.7,.3,1)',
+    }}>
+      {/* Left content (or spacer) */}
+      <div style={{ paddingRight: isLeft ? 40 : 0, paddingLeft: isLeft ? 0 : 40, order: isLeft ? 1 : 3, textAlign: isLeft ? 'right' : 'left' }}>
+        {isLeft ? (
+          <HowStepContent step={step} active={active} align="right" />
+        ) : (
+          <HowDemo demo={step.demo} c={step.c} active={active} />
+        )}
+      </div>
+
+      {/* Center node */}
+      <div style={{ display: 'flex', justifyContent: 'center', order: 2, position: 'relative' }}>
+        <div style={{
+          position: 'relative', width: 72, height: 72,
+          transform: active ? 'scale(1.15)' : 'scale(1)',
+          transition: 'transform 0.4s cubic-bezier(.2,.7,.3,1.4)',
+          animation: 'howFloat 5s ease-in-out infinite',
+          animationDelay: `${index * 0.5}s`,
+        }}>
+          {/* Expanding ring when active */}
+          {active && (
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              border: `2px solid ${step.c}`,
+              animation: 'howRingExpand 2s ease-out infinite',
+            }} />
+          )}
+          {/* Rotating outer ring with orbiting dot */}
+          <div style={{
+            position: 'absolute', inset: -8, borderRadius: '50%',
+            border: `1.5px solid ${step.c}30`,
+            animation: `howSpin ${12 + index * 2}s linear infinite`,
+          }}>
+            <div style={{
+              position: 'absolute', top: -5, left: '50%',
+              width: 9, height: 9, borderRadius: '50%',
+              background: step.c, boxShadow: `0 0 14px ${step.c}`,
+              transform: 'translateX(-50%)',
+            }} />
+          </div>
+          {/* Reverse dashed ring */}
+          <div style={{
+            position: 'absolute', inset: -3, borderRadius: '50%',
+            border: `1px dashed ${step.c}40`,
+            animation: `howSpinRev ${8 + index}s linear infinite`,
+          }} />
+          {/* Core orb */}
+          <div style={{
+            width: '100%', height: '100%', borderRadius: '50%',
+            background: `radial-gradient(circle at 30% 30%, ${step.c}, ${step.c}55 60%, transparent)`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: active
+              ? `0 0 50px ${step.c}99, inset 0 0 25px rgba(255,255,255,.25)`
+              : `0 0 25px ${step.c}55, inset 0 0 15px rgba(255,255,255,.15)`,
+            transition: 'box-shadow 0.4s ease',
+            position: 'relative',
+          }}>
+            <Icon size={26} style={{ color: '#fff' }} />
+            {/* Number badge */}
+            <div style={{
+              position: 'absolute', bottom: -8, right: -8,
+              width: 24, height: 24, borderRadius: '50%',
+              background: '#0a0820', border: `1.5px solid ${step.c}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 9, fontWeight: 700, color: step.c,
+            }}>{step.n}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right content (or spacer) */}
+      <div style={{ paddingLeft: isLeft ? 40 : 0, paddingRight: isLeft ? 0 : 40, order: isLeft ? 3 : 1, textAlign: isLeft ? 'left' : 'right' }}>
+        {isLeft ? (
+          <HowDemo demo={step.demo} c={step.c} active={active} />
+        ) : (
+          <HowStepContent step={step} active={active} align="left" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HowStepContent({ step, active, align }) {
+  return (
+    <div>
+      <div style={{
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+        color: step.c, fontWeight: 700, letterSpacing: '.15em',
+        marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8,
+        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+      }}>
+        <span style={{
+          width: 24, height: 1, background: step.c, opacity: .6,
+        }} />
+        STEP {step.n}
+      </div>
+      <h3 style={{
+        fontFamily: "'Space Grotesk', sans-serif", fontSize: 30, fontWeight: 700,
+        letterSpacing: '-.025em', margin: '0 0 12px', lineHeight: 1.15,
+      }}>{step.t}</h3>
+      <p style={{
+        color: 'rgba(255,255,255,.6)', fontSize: 15, lineHeight: 1.65,
+        margin: '0 0 18px', maxWidth: 440,
+        marginLeft: align === 'right' ? 'auto' : 0, marginRight: align === 'left' ? 'auto' : 0,
+      }}>{step.d}</p>
+      {/* Chips */}
+      <div style={{
+        display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 18,
+        justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+      }}>
+        {step.chips.map(ch => (
+          <span key={ch} style={{
+            fontSize: 10, padding: '4px 10px', borderRadius: 6,
+            background: `${step.c}1a`, border: `1px solid ${step.c}33`,
+            color: step.c, fontFamily: "'JetBrains Mono', monospace",
+          }}>{ch}</span>
+        ))}
+      </div>
+      {/* Stat */}
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 14px',
+        borderRadius: 12, background: 'rgba(255,255,255,.03)',
+        border: '1px solid rgba(255,255,255,.08)',
+      }}>
+        <span style={{
+          fontFamily: "'Space Grotesk', sans-serif", fontSize: 18, fontWeight: 800,
+          color: step.c, letterSpacing: '-.02em',
+        }}>{step.stat.v}</span>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>{step.stat.l}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Live mini-demo panels (different animation per step) ──
+function HowDemo({ demo, c, active }) {
+  return (
+    <div style={{
+      borderRadius: 20, overflow: 'hidden',
+      background: 'linear-gradient(160deg, rgba(15,12,30,.7), rgba(8,6,20,.85))',
+      border: `1px solid ${active ? c + '44' : 'rgba(255,255,255,.08)'}`,
+      boxShadow: active ? `0 20px 60px -20px ${c}55` : '0 10px 30px -10px rgba(0,0,0,.4)',
+      transition: 'all 0.4s ease',
+      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+      position: 'relative',
+    }}>
+      {/* Top bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 14px', borderBottom: '1px solid rgba(255,255,255,.06)',
+      }}>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#ff5f57' }} />
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#febc2e' }} />
+          <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#28c840' }} />
+        </div>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: 'rgba(255,255,255,.3)' }}>
+          vortis · {demo}
+        </span>
+        {active && <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, boxShadow: `0 0 8px ${c}`, animation: 'howPulse 2s ease-in-out infinite' }} />}
+      </div>
+      {/* Demo body */}
+      <div style={{ padding: 18, minHeight: 220, position: 'relative' }}>
+        {demo === 'connect' && <ConnectDemo c={c} active={active} />}
+        {demo === 'describe' && <DescribeDemo c={c} active={active} />}
+        {demo === 'ship' && <ShipDemo c={c} active={active} />}
+        {demo === 'iterate' && <IterateDemo c={c} active={active} />}
+      </div>
+    </div>
+  );
+}
+
+// ── Demo 1: Connect — services connecting to a central hub ──
+function ConnectDemo({ c, active }) {
+  const services = [
+    { icon: GitBranch, label: 'GitHub', angle: 0 },
+    { icon: FileText, label: 'Notion', angle: 60 },
+    { icon: Database, label: 'Postgres', angle: 120 },
+    { icon: MessageSquare, label: 'Slack', angle: 180 },
+    { icon: Globe, label: 'APIs', angle: 240 },
+    { icon: Code2, label: 'Repos', angle: 300 },
+  ];
+  return (
+    <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {/* Central hub */}
+      <div style={{
+        position: 'absolute', width: 56, height: 56, borderRadius: '50%',
+        background: `radial-gradient(circle at 30% 30%, ${c}, ${c}55)`,
+        boxShadow: `0 0 30px ${c}88`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        animation: 'howPulse 2s ease-in-out infinite', zIndex: 2,
+      }}>
+        <Sparkles size={22} />
+      </div>
+      {/* Services orbiting */}
+      {services.map((s, i) => {
+        const Icon = s.icon;
+        const rad = (s.angle * Math.PI) / 180;
+        const x = Math.cos(rad) * 75;
+        const y = Math.sin(rad) * 75;
+        return (
+          <div key={i} style={{
+            position: 'absolute', transform: `translate(${x}px, ${y}px)`,
+            animation: `howFloat3d ${4 + i * 0.3}s ease-in-out infinite`,
+            animationDelay: `${i * 0.2}s`,
+          }}>
+            {/* Connection line */}
+            <svg width="2" height="80" style={{
+              position: 'absolute', left: '50%', top: '50%',
+              transformOrigin: 'top center',
+              transform: `translate(-50%, 0) rotate(${s.angle + 180}deg)`,
+              overflow: 'visible',
+            }}>
+              <line x1="1" y1="0" x2="1" y2="75" stroke={c} strokeWidth="1" strokeDasharray="2 4" opacity=".4" />
+            </svg>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'rgba(255,255,255,.04)', border: `1px solid ${c}33`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: c, position: 'relative',
+            }}>
+              <Icon size={15} />
+              <span style={{
+                position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)',
+                fontSize: 8, color: 'rgba(255,255,255,.5)', fontFamily: "'JetBrains Mono', monospace",
+                whiteSpace: 'nowrap',
+              }}>{s.label}</span>
+            </div>
+          </div>
+        );
+      })}
+      {/* Status footer */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', animation: 'howPulse 1.5s ease-in-out infinite' }} />
+          6 connected
+        </span>
+        <span style={{ color }}>indexing complete</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Demo 2: Describe — chat typing + agent fan-out ──
+function DescribeDemo({ c, active }) {
+  const [text, setText] = useState('');
+  const fullText = 'build a dashboard with MRR chart';
+  useEffect(() => {
+    if (!active) { setText(''); return; }
+    let i = 0;
+    const id = setInterval(() => {
+      setText(fullText.slice(0, i));
+      i++;
+      if (i > fullText.length) { clearInterval(id); setTimeout(() => { setText(''); i = 0; }, 2000); }
+    }, 80);
+    return () => clearInterval(id);
+  }, [active]);
+  const agents = [
+    { icon: Code2, label: 'code', c: '#a78bfa' },
+    { icon: Search, label: 'search', c: '#22d3ee' },
+    { icon: Eye, label: 'vision', c: '#ec4899' },
+    { icon: Mic, label: 'voice', c: '#f59e0b' },
+  ];
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Chat input */}
+      <div style={{
+        background: 'rgba(0,0,0,.4)', borderRadius: 10, padding: '10px 12px',
+        border: `1px solid ${c}33`, display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <Sparkles size={13} style={{ color: c }} />
+        <span style={{ fontSize: 12, color: '#fff' }}>
+          {text}
+          <span style={{ display: 'inline-block', width: 1.5, height: 12, background: c, marginLeft: 1, verticalAlign: 'middle', animation: 'howBlink .8s steps(2) infinite' }} />
+        </span>
+      </div>
+      {/* Agent fan-out */}
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'space-around', alignItems: 'center', position: 'relative' }}>
+        {/* Central source */}
+        <div style={{
+          position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)',
+          width: 4, height: 4, borderRadius: '50%', background: c,
+          boxShadow: `0 0 12px ${c}`,
+        }} />
+        {agents.map((a, i) => {
+          const Icon = a.icon;
+          return (
+            <div key={i} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+              animation: `howFadeUp .5s ease`, animationDelay: `${0.3 + i * 0.1}s`, animationFillMode: 'both',
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: `${a.c}22`, border: `1px solid ${a.c}44`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: a.c,
+                animation: 'howPulse 2s ease-in-out infinite', animationDelay: `${i * 0.3}s`,
+              }}>
+                <Icon size={14} />
+              </div>
+              <span style={{ fontSize: 8, color: a.c, fontFamily: "'JetBrains Mono', monospace" }}>{a.label}</span>
+              {/* Wave bars */}
+              <div style={{ display: 'flex', gap: 1.5, height: 8 }}>
+                {[...Array(3)].map((_, j) => (
+                  <div key={j} style={{
+                    width: 2, height: '100%', background: a.c, borderRadius: 1,
+                    transformOrigin: 'bottom', opacity: .5,
+                    animation: `howBarWave ${.5 + j * .15}s ease-in-out infinite`, animationDelay: `${j * .1}s`,
+                  }} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Demo 3: Ship — build progress + deploy ──
+function ShipDemo({ c, active }) {
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (!active) { setProgress(0); return; }
+    const id = setInterval(() => {
+      setProgress(p => {
+        if (p >= 100) { setTimeout(() => setProgress(0), 1500); return 100; }
+        return p + 2;
+      });
+    }, 50);
+    return () => clearInterval(id);
+  }, [active]);
+  const stages = [
+    { label: 'compile', at: 25 },
+    { label: 'test', at: 50 },
+    { label: 'bundle', at: 75 },
+    { label: 'deploy', at: 100 },
+  ];
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 14, justifyContent: 'center' }}>
+      {/* Stages */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, fontFamily: "'JetBrains Mono', monospace" }}>
+        {stages.map((s, i) => {
+          const done = progress >= s.at;
+          return (
+            <span key={i} style={{
+              color: done ? c : 'rgba(255,255,255,.3)',
+              display: 'flex', alignItems: 'center', gap: 4,
+              transition: 'color .3s ease',
+            }}>
+              {done ? <Check size={10} /> : <span style={{ width: 8, height: 8, borderRadius: '50%', border: `1px solid ${done ? c : 'rgba(255,255,255,.2)'}` }} />}
+              {s.label}
+            </span>
+          );
+        })}
+      </div>
+      {/* Progress bar */}
+      <div style={{ height: 6, borderRadius: 3, background: 'rgba(255,255,255,.06)', overflow: 'hidden', position: 'relative' }}>
+        <div style={{
+          width: `${progress}%`, height: '100%',
+          background: `linear-gradient(90deg, ${c}, ${c}88)`,
+          borderRadius: 3, boxShadow: `0 0 12px ${c}`,
+          transition: 'width .05s linear',
+        }} />
+        {/* Moving shine */}
+        <div style={{
+          position: 'absolute', top: 0, left: 0, height: '100%', width: '40%',
+          background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent)',
+          animation: 'howProgressFill 2s linear infinite',
+        }} />
+      </div>
+      {/* Live preview mockup */}
+      <div style={{
+        background: 'rgba(0,0,0,.3)', borderRadius: 8, padding: 10,
+        border: '1px solid rgba(255,255,255,.06)',
+      }}>
+        <div style={{ fontSize: 8, color: 'rgba(255,255,255,.4)', marginBottom: 6, fontFamily: "'JetBrains Mono', monospace" }}>PREVIEW · {progress >= 100 ? 'live' : 'building...'}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
+          {[...Array(3)].map((_, i) => (
+            <div key={i} style={{
+              height: 24, borderRadius: 4,
+              background: `linear-gradient(135deg, ${c}${progress >= 100 ? '33' : '11'}, ${c}05)`,
+              border: `1px solid ${c}${progress >= 100 ? '44' : '11'}`,
+              animation: progress >= 100 ? `howPulse ${1.5 + i * 0.3}s ease-in-out infinite` : 'none',
+              animationDelay: `${i * 0.2}s`,
+            }} />
+          ))}
+        </div>
+      </div>
+      {progress >= 100 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center',
+          fontSize: 11, color: '#22c55e', fontFamily: "'JetBrains Mono', monospace",
+          animation: 'howFadeUp .4s ease',
+        }}>
+          <Check size={14} /> deployed to 14 regions · 240ms
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Demo 4: Iterate — version timeline with revert ──
+function IterateDemo({ c, active }) {
+  const versions = [
+    { v: 'v1.0', t: 'init', state: 'done' },
+    { v: 'v1.1', t: '+auth', state: 'done' },
+    { v: 'v1.2', t: '+stripe', state: 'done' },
+    { v: 'v1.3', t: '+analytics', state: 'current' },
+    { v: 'v1.4', t: 'queued', state: 'queued' },
+  ];
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 6, justifyContent: 'center' }}>
+      {versions.map((v, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '7px 10px', borderRadius: 8,
+          background: v.state === 'current' ? `${c}15` : 'rgba(255,255,255,.02)',
+          border: `1px solid ${v.state === 'current' ? c + '44' : 'rgba(255,255,255,.05)'}`,
+          opacity: v.state === 'queued' ? 0.5 : 1,
+          animation: v.state === 'current' ? 'howPulse 2s ease-in-out infinite' : 'none',
+        }}>
+          <div style={{
+            width: 22, height: 22, borderRadius: '50%',
+            background: v.state === 'done' ? '#22c55e22' : v.state === 'current' ? `${c}33` : 'rgba(255,255,255,.05)',
+            border: `1px solid ${v.state === 'done' ? '#22c55e66' : v.state === 'current' ? c + '66' : 'rgba(255,255,255,.1)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {v.state === 'done' && <Check size={11} style={{ color: '#22c55e' }} />}
+            {v.state === 'current' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, boxShadow: `0 0 6px ${c}` }} />}
+            {v.state === 'queued' && <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />}
+          </div>
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
+            color: v.state === 'current' ? c : 'rgba(255,255,255,.6)', fontWeight: 600,
+          }}>{v.v}</span>
+          <span style={{ fontSize: 10, color: 'rgba(255,255,255,.5)' }}>{v.t}</span>
+          {v.state === 'current' && (
+            <span style={{
+              marginLeft: 'auto', fontSize: 8, padding: '2px 6px', borderRadius: 4,
+              background: `${c}22`, color: c, fontFamily: "'JetBrains Mono', monospace",
+              fontWeight: 700, letterSpacing: '.05em',
+            }}>LIVE</span>
+          )}
+        </div>
+      ))}
+      <div style={{
+        marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
+        fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', animation: 'howPulse 1.5s ease-in-out infinite' }} />
+        any version · 1-click rollback
+      </div>
+    </div>
   );
 }
 
@@ -3299,305 +3661,388 @@ function FAQ() {
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
   const [showPicker, setShowPicker] = useState(false);
+  const [count, setCount] = useState(0);
+  const btnRef = useRef(null);
+  const orbRef = useRef(null);
 
-  // Floating rectangles — all positioned in the LOWER half + far sides
-  // so they never overlap the upper section or the main card.
-  const rects = [
-    { w: 190, h: 100, top: '58%', left: '2%',  delay: 0,   dur: 22, rot: -12, color: '139,92,246', label: 'neural' },
-    { w: 150, h: 84,  top: '78%', left: '8%',  delay: 3,   dur: 18, rot: 8,   color: '236,72,153', label: 'edge' },
-    { w: 210, h: 116, top: '60%', left: '78%', delay: 1,   dur: 26, rot: -6,  color: '34,211,238', label: 'gpu' },
-    { w: 165, h: 92,  top: '80%', left: '82%', delay: 4,   dur: 20, rot: 14,  color: '245,158,11', label: 'cache' },
-    { w: 130, h: 74,  top: '66%', left: '24%', delay: 2,   dur: 24, rot: 6,   color: '139,92,246', label: 'vector' },
-    { w: 120, h: 68,  top: '84%', left: '60%', delay: 5,   dur: 19, rot: -10, color: '236,72,153', label: 'stream' },
-    { w: 100, h: 60,  top: '70%', left: '44%', delay: 1.5, dur: 17, rot: 4,   color: '34,211,238', label: 'live' },
-  ];
+  // Live counter
+  useEffect(() => {
+    if (!inView) return;
+    const id = setInterval(() => setCount(c => c + Math.floor(Math.random() * 7) + 1), 800);
+    return () => clearInterval(id);
+  }, [inView]);
+
+  // Magnetic button
+  useEffect(() => {
+    const el = btnRef.current; if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dx = (e.clientX - cx) * 0.25, dy = (e.clientY - cy) * 0.25;
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const onLeave = () => { el.style.transform = 'translate(0,0)'; };
+    const range = 120;
+    const onWinMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      if (Math.hypot(e.clientX - cx, e.clientY - cy) < range) onMove(e);
+      else onLeave();
+    };
+    window.addEventListener('mousemove', onWinMove);
+    return () => window.removeEventListener('mousemove', onWinMove);
+  }, []);
+
+  // 3D orb tilt
+  useEffect(() => {
+    const el = orbRef.current; if (!el) return;
+    const onMove = (e) => {
+      const r = el.getBoundingClientRect();
+      const px = (e.clientX - r.left) / r.width;
+      const py = (e.clientY - r.top) / r.height;
+      const rx = (py - .5) * -20, ry = (px - .5) * 20;
+      el.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg)`;
+    };
+    const onLeave = () => { el.style.transform = 'perspective(800px) rotateX(0) rotateY(0)'; };
+    el.addEventListener('mousemove', onMove);
+    el.addEventListener('mouseleave', onLeave);
+    return () => {
+      el.removeEventListener('mousemove', onMove);
+      el.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
 
   return (
-    <section
-      ref={ref}
-      style={{
-        padding: '120px 40px 140px',
-        borderTop: '1px solid rgba(255,255,255,0.04)',
-        position: 'relative',
-        zIndex: 1,
-        textAlign: 'center',
-        overflow: 'hidden',
-      }}
-    >
-      {/* All keyframes inline — no global CSS dependency */}
+    <section ref={ref} style={{ padding: '120px 40px 160px', borderTop: '1px solid rgba(255,255,255,0.04)', position: 'relative', zIndex: 1, textAlign: 'center', overflow: 'hidden' }}>
       <style>{`
-        @keyframes ctaRect0 { 0%,100% { transform: rotate(-12deg) translate(0,0); } 50% { transform: rotate(-6deg) translate(50px,-20px); } }
-        @keyframes ctaRect1 { 0%,100% { transform: rotate(8deg) translate(0,0); }   50% { transform: rotate(14deg) translate(-40px,-25px); } }
-        @keyframes ctaRect2 { 0%,100% { transform: rotate(-6deg) translate(0,0); }  50% { transform: rotate(2deg) translate(-55px,-20px); } }
-        @keyframes ctaRect3 { 0%,100% { transform: rotate(14deg) translate(0,0); }  50% { transform: rotate(8deg) translate(35px,-30px); } }
-        @keyframes ctaRect4 { 0%,100% { transform: rotate(6deg) translate(0,0); }   50% { transform: rotate(0deg) translate(60px,-15px); } }
-        @keyframes ctaRect5 { 0%,100% { transform: rotate(-10deg) translate(0,0); } 50% { transform: rotate(-4deg) translate(-45px,-20px); } }
-        @keyframes ctaRect6 { 0%,100% { transform: rotate(4deg) translate(0,0); }   50% { transform: rotate(-2deg) translate(-25px,-15px); } }
-        @keyframes ctaConicSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes ctaPulseDot { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
-        @keyframes ctaBarWave { 0%,100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+        @keyframes ctaOrbFloat { 0%,100% { transform: translateZ(0) translateY(0); } 50% { transform: translateZ(0) translateY(-12px); } }
+        @keyframes ctaOrbPulse { 0%,100% { opacity: .8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
+        @keyframes ctaRingSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes ctaRingSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes ctaRadar { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.2); opacity: 0; } }
         @keyframes ctaGradientShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes ctaCardFloat { 0%,100% { transform: translateY(0) rotate(var(--rot,0deg)); } 50% { transform: translateY(-14px) rotate(var(--rot,0deg)); } }
+        @keyframes ctaCardFloatRev { 0%,100% { transform: translateY(0) rotate(var(--rot,0deg)); } 50% { transform: translateY(12px) rotate(var(--rot,0deg)); } }
+        @keyframes ctaShine { 0% { left: -100%; } 100% { left: 200%; } }
+        @keyframes ctaBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+        @keyframes ctaBurst { 0% { transform: scale(0); opacity: .8; } 100% { transform: scale(3); opacity: 0; } }
+        @keyframes ctaDotPulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+        @keyframes ctaConicSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes ctaGlowPulse { 0%,100% { filter: blur(60px) brightness(1); } 50% { filter: blur(80px) brightness(1.3); } }
+        @keyframes ctaShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+        @keyframes ctaTypeBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
       `}</style>
 
-      {/* Soft radial glow */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background:
-            'radial-gradient(ellipse 60% 50% at 50% 40%, rgba(124,58,237,0.10), transparent)',
-          pointerEvents: 'none',
-        }}
-      />
+      {/* ── Background layers ── */}
+      {/* Aurora glow */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 800, height: 600, background: 'radial-gradient(ellipse at center, rgba(139,92,246,.25), rgba(236,72,153,.12) 40%, transparent 70%)', animation: 'ctaGlowPulse 6s ease-in-out infinite', filter: 'blur(60px)' }} />
+      </div>
+      {/* Conic rotating border background */}
+      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 600, borderRadius: '50%', background: 'conic-gradient(from 0deg, rgba(139,92,246,.1), rgba(236,72,153,.08), rgba(34,211,238,.06), rgba(245,158,11,.08), rgba(139,92,246,.1))', animation: 'ctaConicSpin 20s linear infinite', filter: 'blur(40px)', opacity: .6, pointerEvents: 'none' }} />
 
-      {/* ── MAIN CTA CARD with rotating conic border ── */}
-      <div style={{ maxWidth: 720, margin: '0 auto', position: 'relative', zIndex: 2 }}>
-        <div
-          style={{
-            position: 'absolute',
-            inset: -2,
-            borderRadius: 32,
-            padding: 2,
-            background:
-              'conic-gradient(from 0deg, rgba(139,92,246,.7), rgba(236,72,153,.6), rgba(34,211,238,.5), rgba(245,158,11,.6), rgba(139,92,246,.7))',
-            animation: 'ctaConicSpin 8s linear infinite',
-            WebkitMask:
-              'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-            WebkitMaskComposite: 'xor',
-            maskComposite: 'exclude',
-            opacity: inView ? 1 : 0,
-            transition: 'opacity 1s ease',
-          }}
-        />
-        <div
-          style={{
-            position: 'relative',
-            padding: '64px 40px',
-            borderRadius: 30,
-            background:
-              'linear-gradient(160deg, rgba(15,12,30,0.92), rgba(8,6,20,0.96))',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            opacity: inView ? 1 : 0,
-            transform: inView ? 'translateY(0)' : 'translateY(30px)',
-            transition: 'all 0.8s ease',
-          }}
-        >
-          <div style={{ fontSize: 52, marginBottom: 20 }}>✦</div>
-          <h2
-            style={{
-              fontFamily: "'Space Grotesk',sans-serif",
-              fontWeight: 900,
-              fontSize: 'clamp(32px,6vw,62px)',
-              margin: '0 0 20px',
-              letterSpacing: '-0.04em',
-              lineHeight: 1.05,
-            }}
-          >
-            Start thinking{' '}
-            <span
-              style={{
-                background:
-                  'linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)',
-                backgroundSize: '200% auto',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                animation: 'ctaGradientShift 4s ease-in-out infinite',
-              }}
-            >
-              faster.
-            </span>
-          </h2>
-          <p
-            style={{
-              fontSize: 18,
-              color: 'rgba(255,255,255,0.5)',
-              lineHeight: 1.7,
-              marginBottom: 40,
-            }}
-          >
-            Join 50,000+ professionals who use Vortis every day. Free to start.
-          </p>
-          <div
-            style={{
-              display: 'flex',
-              gap: 14,
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <button
-              onClick={() => setShowPicker(true)}
-              style={{
-                padding: '16px 40px',
-                borderRadius: 99,
-                fontSize: 16,
-                fontWeight: 700,
-                background: 'linear-gradient(135deg,#7C3AED,#8b5cf6)',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                position: 'relative',
-                boxShadow:
-                  '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)',
-                transition: 'all 0.25s',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform =
-                  'translateY(-4px) scale(1.03)';
-                e.currentTarget.style.boxShadow =
-                  '0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.boxShadow =
-                  '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)';
-              }}
-            >
-              <span
-                style={{
-                  position: 'absolute',
-                  inset: -3,
-                  borderRadius: 99,
-                  border: '3px solid #c4b5fd',
-                  animation: 'radarPing 1.6s ease-out infinite',
-                  pointerEvents: 'none',
-                }}
-              />
-              <Zap size={18} style={{ position: 'relative', zIndex: 1 }} />
-              <span style={{ position: 'relative', zIndex: 1 }}>
-                Get Started Free
-              </span>
-            </button>
+      {/* ── Floating glass UI cards around the centerpiece ── */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        {/* Card 1 — top left, uptime */}
+        <div style={{
+          position: 'absolute', top: '18%', left: '8%',
+          ['--rot']: '-8deg',
+          animation: 'ctaCardFloat 6s ease-in-out infinite',
+        }}>
+          <div style={{
+            padding: '14px 18px', borderRadius: 14,
+            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(34,211,238,.25)',
+            boxShadow: '0 0 30px rgba(34,211,238,.15)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(34,211,238,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22d3ee' }}>
+              <Shield size={15} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#22d3ee' }}>99.99%</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>UPTIME SLA</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2 — top right, latency */}
+        <div style={{
+          position: 'absolute', top: '15%', right: '10%',
+          ['--rot']: '6deg',
+          animation: 'ctaCardFloatRev 7s ease-in-out infinite',
+        }}>
+          <div style={{
+            padding: '14px 18px', borderRadius: 14,
+            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(245,158,11,.25)',
+            boxShadow: '0 0 30px rgba(245,158,11,.15)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(245,158,11,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
+              <Zap size={15} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#f59e0b' }}>12ms</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>P99 LATENCY</div>
+            </div>
+            {/* Wave bars */}
+            <div style={{ display: 'flex', gap: 2, height: 16, alignItems: 'flex-end', marginLeft: 4 }}>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} style={{ width: 2, height: '100%', background: '#f59e0b', borderRadius: 1, transformOrigin: 'bottom', animation: `ctaBarWave ${.6 + i * .15}s ease-in-out infinite`, animationDelay: `${i * .1}s` }} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3 — mid left, live counter */}
+        <div style={{
+          position: 'absolute', top: '48%', left: '4%',
+          ['--rot']: '4deg',
+          animation: 'ctaCardFloat 5.5s ease-in-out infinite', animationDelay: '1s',
+        }}>
+          <div style={{
+            padding: '14px 18px', borderRadius: 14,
+            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(139,92,246,.25)',
+            boxShadow: '0 0 30px rgba(139,92,246,.15)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(139,92,246,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a78bfa' }}>
+              <Users size={15} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#a78bfa' }}>+{count.toLocaleString()}</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>JOINED TODAY</div>
+            </div>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e', animation: 'ctaDotPulse 1.5s ease-in-out infinite' }} />
+          </div>
+        </div>
+
+        {/* Card 4 — mid right, rating */}
+        <div style={{
+          position: 'absolute', top: '50%', right: '5%',
+          ['--rot']: '-5deg',
+          animation: 'ctaCardFloatRev 6.5s ease-in-out infinite', animationDelay: '.5s',
+        }}>
+          <div style={{
+            padding: '14px 18px', borderRadius: 14,
+            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(236,72,153,.25)',
+            boxShadow: '0 0 30px rgba(236,72,153,.15)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(236,72,153,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
+              <Star size={15} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#ec4899' }}>4.9/5</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>2,847 REVIEWS</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 5 — bottom left, regions */}
+        <div style={{
+          position: 'absolute', bottom: '22%', left: '12%',
+          ['--rot']: '-3deg',
+          animation: 'ctaCardFloat 7.5s ease-in-out infinite', animationDelay: '1.5s',
+        }}>
+          <div style={{
+            padding: '12px 16px', borderRadius: 14,
+            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(52,211,153,.25)',
+            boxShadow: '0 0 30px rgba(52,211,153,.12)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(52,211,153,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#34d399' }}>
+              <Globe size={14} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#34d399' }}>14 regions</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>GLOBAL EDGE</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 6 — bottom right, AI model */}
+        <div style={{
+          position: 'absolute', bottom: '24%', right: '14%',
+          ['--rot']: '7deg',
+          animation: 'ctaCardFloatRev 6s ease-in-out infinite', animationDelay: '2s',
+        }}>
+          <div style={{
+            padding: '12px 16px', borderRadius: 14,
+            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            border: '1px solid rgba(99,102,241,.25)',
+            boxShadow: '0 0 30px rgba(99,102,241,.12)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
+              <Cpu size={14} />
+            </div>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#6366f1' }}>GPT-5 class</div>
+              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>MULTIMODAL</div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── FLOATING RECTANGLES — contained BELOW the card only ── */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: '45%',
-          pointerEvents: 'none',
-          overflow: 'hidden',
-          zIndex: 1,
-        }}
-      >
-        {/* Top fade so rectangles never touch the card above */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 60,
-            background:
-              'linear-gradient(180deg, rgba(4,3,12,1), transparent)',
-            zIndex: 2,
-            pointerEvents: 'none',
-          }}
-        />
-        {rects.map((r, i) => (
-          <div
-            key={i}
-            style={{
-              position: 'absolute',
-              top: r.top,
-              left: r.left,
-              width: r.w,
-              height: r.h,
-              borderRadius: 18,
-              background: `linear-gradient(135deg, rgba(${r.color},0.10), rgba(${r.color},0.02))`,
-              border: `1px solid rgba(${r.color},0.28)`,
-              backdropFilter: 'blur(8px)',
-              WebkitBackdropFilter: 'blur(8px)',
-              boxShadow: `0 0 50px rgba(${r.color},0.18), inset 0 0 30px rgba(${r.color},0.05)`,
-              animation: `ctaRect${i} ${r.dur}s ease-in-out infinite`,
-              animationDelay: `${r.delay}s`,
-              opacity: inView ? 1 : 0,
-              transition: 'opacity 1.2s ease',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 12,
-                left: 12,
-                right: 12,
-                height: 1,
-                background: `linear-gradient(90deg, transparent, rgba(${r.color},0.7), transparent)`,
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                top: 14,
-                right: 14,
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: `rgba(${r.color},0.95)`,
-                boxShadow: `0 0 12px rgba(${r.color},0.9)`,
-                animation: 'ctaPulseDot 2s ease-in-out infinite',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                top: 24,
-                left: 14,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 9,
-                color: `rgba(${r.color},0.8)`,
-                letterSpacing: '.1em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {r.label}
-            </div>
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 14,
-                left: 14,
-                right: 14,
-                display: 'flex',
-                gap: 3,
-                alignItems: 'flex-end',
-                height: 16,
-              }}
-            >
-              {[...Array(8)].map((_, j) => (
-                <div
-                  key={j}
-                  style={{
-                    flex: 1,
-                    height: '100%',
-                    background: `rgba(${r.color},${0.25 + (j % 3) * 0.15})`,
-                    borderRadius: 1.5,
-                    transformOrigin: 'bottom',
-                    animation: `ctaBarWave ${0.8 + (j % 4) * 0.2}s ease-in-out infinite`,
-                    animationDelay: `${j * 0.08}s`,
-                  }}
-                />
-              ))}
-            </div>
+      {/* ── Main centerpiece ── */}
+      <div style={{ maxWidth: 720, margin: '0 auto', position: 'relative', zIndex: 5 }}>
+        {/* 3D Orb */}
+        <div ref={orbRef} style={{
+          width: 140, height: 140, margin: '0 auto 32px',
+          position: 'relative', transformStyle: 'preserve-3d',
+          transition: 'transform .15s ease-out',
+          animation: 'ctaOrbFloat 5s ease-in-out infinite',
+        }}>
+          {/* Radar pings */}
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{
+              position: 'absolute', inset: -10, borderRadius: '50%',
+              border: '1.5px solid rgba(167,139,250,.5)',
+              animation: 'ctaRadar 3s ease-out infinite', animationDelay: `${i * 1}s`,
+            }} />
+          ))}
+          {/* Outer rotating ring with orbiting dots */}
+          <div style={{
+            position: 'absolute', inset: -20, borderRadius: '50%',
+            border: '1px solid rgba(167,139,250,.25)',
+            animation: 'ctaRingSpin 14s linear infinite',
+          }}>
+            {[0, 120, 240].map(deg => (
+              <div key={deg} style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: `rotate(${deg}deg) translateY(-80px)`,
+                width: 8, height: 8, borderRadius: '50%',
+                background: ['#a78bfa', '#ec4899', '#22d3ee'][deg / 120],
+                boxShadow: `0 0 12px ${['#a78bfa', '#ec4899', '#22d3ee'][deg / 120]}`,
+                marginLeft: -4, marginTop: -4,
+              }} />
+            ))}
           </div>
-        ))}
+          {/* Reverse dashed ring */}
+          <div style={{
+            position: 'absolute', inset: -8, borderRadius: '50%',
+            border: '1px dashed rgba(236,72,153,.3)',
+            animation: 'ctaRingSpinRev 10s linear infinite',
+          }} />
+          {/* Core orb */}
+          <div style={{
+            width: '100%', height: '100%', borderRadius: '50%',
+            background: 'radial-gradient(circle at 30% 30%, #fff, #a78bfa 30%, #ec4899 70%, #4c1d95)',
+            boxShadow: '0 0 80px rgba(167,139,250,.7), inset 0 0 40px rgba(255,255,255,.3)',
+            animation: 'ctaOrbPulse 3s ease-in-out infinite',
+            position: 'relative',
+          }}>
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              background: 'radial-gradient(circle at 70% 70%, transparent 50%, rgba(0,0,0,.4))',
+            }} />
+            {/* Inner shine */}
+            <div style={{
+              position: 'absolute', top: '20%', left: '25%', width: 30, height: 20,
+              background: 'radial-gradient(ellipse, rgba(255,255,255,.6), transparent 70%)',
+              borderRadius: '50%', filter: 'blur(4px)',
+            }} />
+          </div>
+        </div>
+
+        {/* Headline */}
+        <h2 style={{
+          fontFamily: "'Space Grotesk', sans-serif", fontWeight: 900,
+          fontSize: 'clamp(36px, 6vw, 72px)', margin: '0 0 20px',
+          letterSpacing: '-0.04em', lineHeight: 1.05,
+          opacity: inView ? 1 : 0, transform: inView ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.8s ease',
+        }}>
+          Start thinking{' '}
+          <span style={{
+            background: 'linear-gradient(90deg, #a78bfa, #ec4899, #f59e0b, #a78bfa)',
+            backgroundSize: '200% auto',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            animation: 'ctaGradientShift 4s ease-in-out infinite',
+          }}>
+            faster.
+          </span>
+        </h2>
+
+        <p style={{
+          fontSize: 19, color: 'rgba(255,255,255,0.55)', lineHeight: 1.65,
+          maxWidth: 540, margin: '0 auto 40px',
+          opacity: inView ? 1 : 0, transform: inView ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'all 0.8s ease 0.1s',
+        }}>
+          Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction.
+        </p>
+
+        {/* Magnetic burst button */}
+        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', opacity: inView ? 1 : 0, transition: 'opacity 0.8s ease 0.2s' }}>
+          <button
+            ref={btnRef}
+            onClick={() => setShowPicker(true)}
+            style={{
+              padding: '18px 44px', borderRadius: 999, fontSize: 17, fontWeight: 700,
+              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+              color: '#fff', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 10,
+              position: 'relative',
+              boxShadow: '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,.25)',
+              transition: 'box-shadow .3s ease',
+              overflow: 'hidden',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 100px rgba(236,72,153,.7), 0 24px 60px rgba(236,72,153,.4), inset 0 1px 0 rgba(255,255,255,.35)'; }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,.25)'; }}
+          >
+            {/* Radar ping ring */}
+            <span style={{ position: 'absolute', inset: -3, borderRadius: 999, border: '3px solid #c4b5fd', animation: 'ctaRadar 1.8s ease-out infinite', pointerEvents: 'none' }} />
+            {/* Burst on hover */}
+            <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'radial-gradient(circle, rgba(255,255,255,.3), transparent 70%)', animation: 'ctaBurst 2s ease-out infinite', pointerEvents: 'none' }} />
+            {/* Shine sweep */}
+            <span style={{ position: 'absolute', top: 0, bottom: 0, width: '40%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent)', animation: 'ctaShine 3s ease-in-out infinite', pointerEvents: 'none' }} />
+            <Zap size={19} style={{ position: 'relative', zIndex: 1 }} />
+            <span style={{ position: 'relative', zIndex: 1 }}>Get Started Free</span>
+            <ArrowRight size={17} style={{ position: 'relative', zIndex: 1 }} />
+          </button>
+
+          <button style={{
+            padding: '17px 32px', borderRadius: 999, fontSize: 16, fontWeight: 600,
+            background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.12)',
+            color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+            transition: 'all .25s ease',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.2)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+          >
+            <Sparkles size={16} /> Book a demo
+          </button>
+        </div>
+
+        {/* Trust chips */}
+        <div style={{
+          display: 'flex', gap: 24, justifyContent: 'center', marginTop: 36,
+          flexWrap: 'wrap', color: 'rgba(255,255,255,.5)', fontSize: 13,
+          opacity: inView ? 1 : 0, transition: 'opacity 0.8s ease 0.4s',
+        }}>
+          {[
+            { icon: Check, t: 'No credit card', c: '#22c55e' },
+            { icon: Check, t: 'Cancel anytime', c: '#22c55e' },
+            { icon: Shield, t: 'SOC 2 Type II', c: '#22d3ee' },
+            { icon: Zap, t: '12 min setup', c: '#f59e0b' },
+          ].map(({ icon: Icon, t, c }) => (
+            <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon size={14} style={{ color: c }} /> {t}
+            </span>
+          ))}
+        </div>
       </div>
 
       {showPicker && (
         <AuthPicker
-          onLogin={(provider) => {
-            setShowPicker(false);
-            onLogin(provider);
-          }}
+          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
           authLoading={false}
           onClose={() => setShowPicker(false)}
         />
@@ -3605,7 +4050,6 @@ function CTA({ onLogin }) {
     </section>
   );
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 //  FOOTER
