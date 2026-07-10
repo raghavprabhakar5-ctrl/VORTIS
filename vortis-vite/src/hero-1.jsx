@@ -309,762 +309,129 @@ function Nav({ onLogin }) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  NEURAL FIELD — interactive constellation (replaces ScrollManifesto)
+//  Metrics — interactive constellation
 // ══════════════════════════════════════════════════════════════════
-export function NeuralField() {
-  const canvasRef = useRef(null);
-  const [ref, inView] = useInView(0.15);
+export function Metrics() {
+  const [ref, inView] = useInView(0.2);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let raf, W = 0, H = 0;
-    const mouse = { x: -9999, y: -9999, active: false, vx: 0, vy: 0, lx: 0, ly: 0, trail: [] };
-    const DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-    let hubs = [];
-    let dust = [];
-    let pulses = [];
-    let ripples = [];
-    let bursts = [];
-    let waves = [];
-    let scanAngle = 0;
-    let seeded = false;
-    let lastWave = 0;
-    let last = performance.now();
-
-    const PALETTE = [
-      [167, 139, 250], // purple
-      [34, 211, 238],  // cyan
-      [236, 72, 153],  // pink
-      [245, 158, 11],  // gold
-      [99, 102, 241],  // indigo
-      [52, 211, 153],  // emerald
-    ];
-
-    const LABELS = ['neural','vision','code','memory','search','voice','graph','vector','stream','cache','edge','gpu','auth','sync','render','pipeline'];
-
-    // ── Seeded RNG for stable layout across renders ──
-    let seedState = 12345;
-    const rng = () => { seedState = (seedState * 1664525 + 1013904223) % 4294967296; return seedState / 4294967296; };
-
-    const makeParticles = () => {
-      const HUB_COUNT = 16;
-      hubs = Array.from({ length: HUB_COUNT }, (_, i) => {
-        const c = PALETTE[i % PALETTE.length];
-        return {
-          x: rng() * W,
-          y: rng() * H,
-          z: 0.3 + rng() * 0.7,           // depth 0.3 (far) to 1.0 (near)
-          vx: (rng() - 0.5) * 0.15,
-          vy: (rng() - 0.5) * 0.15,
-          r: 3 + rng() * 4,
-          phase: rng() * Math.PI * 2,
-          color: c,
-          charge: 0,
-          activity: 0,
-          label: LABELS[i % LABELS.length],
-          shape: i % 3,                    // 0: circle, 1: hex, 2: diamond
-          restX: 0, restY: 0,              // spring rest position
-        };
-      });
-      hubs.forEach(h => { h.restX = h.x; h.restY = h.y; });
-
-      const DUST_COUNT = 180;
-      dust = Array.from({ length: DUST_COUNT }, () => {
-        const z = 0.15 + rng() * 0.85;
-        const c = PALETTE[Math.floor(rng() * PALETTE.length)];
-        return {
-          x: rng() * W,
-          y: rng() * H,
-          z,
-          vx: (rng() - 0.5) * 0.3 * z,
-          vy: (rng() - 0.5) * 0.3 * z,
-          r: 0.4 + z * 1.8,
-          color: c,
-          twinkle: rng() * Math.PI * 2,
-          twinkleSpeed: 0.02 + rng() * 0.04,
-        };
-      });
-      seeded = true;
-    };
-
-    const resize = () => {
-      W = canvas.offsetWidth;
-      H = canvas.offsetHeight;
-      canvas.width = W * DPR;
-      canvas.height = H * DPR;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.scale(DPR, DPR);
-      if (!seeded && W > 0 && H > 0) makeParticles();
-    };
-    resize();
-    window.addEventListener("resize", resize);
-
-    const onMove = (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouse.lx = mouse.x; mouse.ly = mouse.y;
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-      mouse.vx = mouse.x - mouse.lx;
-      mouse.vy = mouse.y - mouse.ly;
-      mouse.active = true;
-      // mouse trail
-      mouse.trail.push({ x: mouse.x, y: mouse.y, life: 1 });
-      if (mouse.trail.length > 20) mouse.trail.shift();
-    };
-    const onLeave = () => { mouse.active = false; mouse.x = -9999; mouse.y = -9999; };
-
-    const onClick = (e) => {
-      if (!mouse.active) return;
-      let nearest = null, nd = Infinity;
-      for (const h of hubs) {
-        const d = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-        if (d < nd) { nd = d; nearest = h; }
-      }
-      if (nearest && nd < 320) {
-        nearest.charge = 1.5;
-        nearest.activity = 2;
-        ripples.push({ x: nearest.x, y: nearest.y, r: 0, max: 200, color: nearest.color, life: 1, width: 2 });
-        // spawn an energy wave from this hub
-        waves.push({ x: nearest.x, y: nearest.y, r: 0, max: Math.max(W, H) * 0.7, color: nearest.color, life: 1 });
-      }
-      ripples.push({ x: mouse.x, y: mouse.y, r: 0, max: 140, color: [255, 255, 255], life: 1, width: 1.5 });
-      // burst of particles at click
-      for (let i = 0; i < 16; i++) {
-        const ang = (i / 16) * Math.PI * 2;
-        bursts.push({
-          x: mouse.x, y: mouse.y,
-          vx: Math.cos(ang) * (1 + rng() * 2),
-          vy: Math.sin(ang) * (1 + rng() * 2),
-          life: 1, color: nearest ? nearest.color : [255, 255, 255], r: 1.5 + rng(),
-        });
-      }
-    };
-
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
-    canvas.addEventListener("click", onClick);
-
-    // ── Spawn a pulse along a connection ──
-    const spawnPulse = (fromHub, toHub) => {
-      pulses.push({
-        from: fromHub, to: toHub,
-        t: 0,
-        speed: 0.006 + rng() * 0.008,
-        color: fromHub.color,
-        trail: [],
-        rotation: 0,
-        shape: fromHub.shape,
-      });
-    };
-
-    // ── Quadratic bezier helpers ──
-    const bezierPoint = (p0, p1, p2, t) => {
-      const mt = 1 - t;
-      return {
-        x: mt * mt * p0.x + 2 * mt * t * p1.x + t * t * p2.x,
-        y: mt * mt * p0.y + 2 * mt * t * p1.y + t * t * p2.y,
-      };
-    };
-    const controlPoint = (a, b) => {
-      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const off = Math.sin((a.x + a.y) * 0.008) * 35;
-      return { x: mx - dy / len * off, y: my + dx / len * off };
-    };
-
-    const HUB_LINK_DIST = 380;
-
-    // ── Draw a glowing line (multi-pass bloom) ──
-    const glowLine = (x1, y1, x2, y2, cp, color, alpha, baseWidth) => {
-      const [r, g, b] = color;
-      // wide soft outer glow
-      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.08})`;
-      ctx.lineWidth = baseWidth * 6;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
-      ctx.stroke();
-      // medium glow
-      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.2})`;
-      ctx.lineWidth = baseWidth * 3;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
-      ctx.stroke();
-      // bright core
-      ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-      ctx.lineWidth = baseWidth;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.quadraticCurveTo(cp.x, cp.y, x2, y2);
-      ctx.stroke();
-    };
-
-    // ── Draw a hub shape (circle / hex / diamond) ──
-    const drawShape = (h, scale, alpha) => {
-      const [r, g, b] = h.color;
-      const radius = (h.r + h.activity * 2) * scale;
-      ctx.beginPath();
-      if (h.shape === 1) {
-        // hexagon
-        for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
-          const px = h.x + Math.cos(a) * radius;
-          const py = h.y + Math.sin(a) * radius;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-      } else if (h.shape === 2) {
-        // diamond
-        ctx.moveTo(h.x, h.y - radius);
-        ctx.lineTo(h.x + radius, h.y);
-        ctx.lineTo(h.x, h.y + radius);
-        ctx.lineTo(h.x - radius, h.y);
-        ctx.closePath();
-      } else {
-        // circle
-        ctx.arc(h.x, h.y, radius, 0, Math.PI * 2);
-      }
-      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
-      ctx.fill();
-    };
-
-    const tick = (now) => {
-      const dt = Math.min(now - last, 32);
-      last = now;
-      // trail-fade clear (creates motion blur / bloom accumulation)
-      ctx.fillStyle = "rgba(4,3,12,0.18)";
-      ctx.fillRect(0, 0, W, H);
-
-      // ── Mouse aura ──
-      if (mouse.active) {
-        const glow = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 300);
-        glow.addColorStop(0, "rgba(139,92,246,0.18)");
-        glow.addColorStop(0.4, "rgba(236,72,153,0.08)");
-        glow.addColorStop(1, "rgba(139,92,246,0)");
-        ctx.fillStyle = glow;
-        ctx.fillRect(0, 0, W, H);
-      }
-
-      // ── Periodic energy wave from random hub every ~5s ──
-      if (now - lastWave > 5000 && hubs.length > 0) {
-        const h = hubs[Math.floor(rng() * hubs.length)];
-        waves.push({ x: h.x, y: h.y, r: 0, max: Math.max(W, H) * 0.8, color: h.color, life: 1 });
-        lastWave = now;
-      }
-
-      // ── Radar sweep (two beams) ──
-      scanAngle += 0.005;
-      const cx = W / 2, cy = H / 2;
-      if (ctx.createConicGradient) {
-        for (let bi = 0; bi < 2; bi++) {
-          const sweepGrad = ctx.createConicGradient(scanAngle + bi * Math.PI, cx, cy);
-          sweepGrad.addColorStop(0, "rgba(167,139,250,0.08)");
-          sweepGrad.addColorStop(0.04, "rgba(167,139,250,0)");
-          sweepGrad.addColorStop(1, "rgba(167,139,250,0)");
-          ctx.fillStyle = sweepGrad;
-          ctx.fillRect(0, 0, W, H);
-        }
-      }
-
-      // ── Update hubs (spring physics + drift + mouse repulsion) ──
-      for (const h of hubs) {
-        // spring back toward rest position (gentle)
-        h.vx += (h.restX - h.x) * 0.0008;
-        h.vy += (h.restY - h.y) * 0.0008;
-        // drift
-        h.x += h.vx * (dt / 16);
-        h.y += h.vy * (dt / 16);
-        // damping
-        h.vx *= 0.99; h.vy *= 0.99;
-        // bounds (bounce, also update rest)
-        if (h.x < 40) { h.x = 40; h.vx *= -0.5; h.restX = 60 + rng() * 40; }
-        if (h.x > W - 40) { h.x = W - 40; h.vx *= -0.5; h.restX = W - 60 - rng() * 40; }
-        if (h.y < 40) { h.y = 40; h.vy *= -0.5; h.restY = 60 + rng() * 40; }
-        if (h.y > H - 40) { h.y = H - 40; h.vy *= -0.5; h.restY = H - 60 - rng() * 40; }
-
-        // mouse repulsion (stronger for near hubs)
-        if (mouse.active) {
-          const dx = h.x - mouse.x, dy = h.y - mouse.y;
-          const d = Math.hypot(dx, dy);
-          if (d < 200 && d > 0.1) {
-            const f = (1 - d / 200) * 1.2;
-            h.vx += (dx / d) * f * 0.05;
-            h.vy += (dy / d) * f * 0.05;
-          }
-        }
-
-        // charge builds; activity decays
-        h.charge += (0.0012 + h.activity * 0.005) * (dt / 16);
-        if (h.charge >= 1) {
-          const candidates = hubs
-            .filter(o => o !== h)
-            .map(o => ({ o, d: Math.hypot(o.x - h.x, o.y - h.y) }))
-            .filter(c => c.d < HUB_LINK_DIST)
-            .sort((a, b) => a.d - b.d)
-            .slice(0, 2 + Math.floor(rng() * 2));
-          for (const c of candidates) spawnPulse(h, c.o);
-          ripples.push({ x: h.x, y: h.y, r: 0, max: 80, color: h.color, life: 0.7, width: 1.5 });
-          h.charge = 0;
-          h.activity = Math.min(2, h.activity + 0.6);
-        }
-        h.activity *= 0.95;
-        h.phase += 0.025;
-      }
-
-      // ── Compute connections ──
-      const connections = [];
-      for (let i = 0; i < hubs.length; i++) {
-        for (let j = i + 1; j < hubs.length; j++) {
-          const a = hubs[i], b = hubs[j];
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d < HUB_LINK_DIST) connections.push({ a, b, d, cp: controlPoint(a, b) });
-        }
-      }
-
-      // ── Update + draw waves (radial energy waves that light up connections) ──
-      for (let i = waves.length - 1; i >= 0; i--) {
-        const w = waves[i];
-        w.r += 3 * (dt / 16);
-        w.life -= 0.004 * (dt / 16);
-        if (w.life <= 0 || w.r > w.max) { waves.splice(i, 1); continue; }
-        const [r, g, b] = w.color;
-        // expanding ring with glow
-        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.15})`;
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.strokeStyle = `rgba(${r},${g},${b},${w.life * 0.5})`;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // ── Draw connections (bloom glow + flowing dashes + wave-boost) ──
-      for (const c of connections) {
-        const { a, b, d, cp } = c;
-        let alpha = (1 - d / HUB_LINK_DIST) * 0.4;
-        // depth attenuation (farther hubs = dimmer)
-        const depthFactor = Math.min(a.z, b.z);
-        alpha *= 0.4 + depthFactor * 0.6;
-
-        // wave boost: if a wave is passing through this connection's midpoint, brighten
-        let waveBoost = 0;
-        const midX = (a.x + b.x) / 2, midY = (a.y + b.y) / 2;
-        for (const w of waves) {
-          const wd = Math.hypot(midX - w.x, midY - w.y);
-          if (Math.abs(wd - w.r) < 40) {
-            waveBoost += w.life * (1 - Math.abs(wd - w.r) / 40) * 0.8;
-          }
-        }
-
-        const [r, g, bC] = a.color;
-        const [r2, g2, b2] = b.color;
-        const baseWidth = 0.6 + depthFactor * 0.8;
-
-        // gradient glow line
-        const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
-        grad.addColorStop(0, `rgba(${r},${g},${bC},${alpha})`);
-        grad.addColorStop(1, `rgba(${r2},${g2},${b2},${alpha})`);
-
-        // outer soft glow
-        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.06 + waveBoost * 0.1})`;
-        ctx.lineWidth = baseWidth * 7;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        // medium
-        ctx.strokeStyle = `rgba(${r},${g},${bC},${alpha * 0.18 + waveBoost * 0.2})`;
-        ctx.lineWidth = baseWidth * 3;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        // bright core
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = baseWidth + waveBoost * 1.5;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-
-        // flowing dashed energy overlay
-        const flowAlpha = (alpha + waveBoost) * 0.7;
-        ctx.strokeStyle = `rgba(255,255,255,${flowAlpha})`;
-        ctx.lineWidth = 0.5;
-        ctx.setLineDash([2, 16]);
-        ctx.lineDashOffset = -now * 0.05;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // mouse proximity highlight
-        if (mouse.active) {
-          const md = Math.hypot(midX - mouse.x, midY - mouse.y);
-          if (md < 160) {
-            const boost = (1 - md / 160) * 0.6;
-            ctx.strokeStyle = `rgba(255,255,255,${boost})`;
-            ctx.lineWidth = 1.4;
-            ctx.beginPath();
-            ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(cp.x, cp.y, b.x, b.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // ── Cursor beams: connect mouse to nearest 3 hubs with bright beams ──
-      if (mouse.active) {
-        const near = hubs
-          .map(h => ({ h, d: Math.hypot(h.x - mouse.x, h.y - mouse.y) }))
-          .filter(c => c.d < 220)
-          .sort((a, b) => a.d - b.d)
-          .slice(0, 3);
-        for (const c of near) {
-          const [r, g, b] = c.h.color;
-          const alpha = (1 - c.d / 220) * 0.7;
-          // beam glow
-          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha * 0.15})`;
-          ctx.lineWidth = 5;
-          ctx.beginPath();
-          ctx.moveTo(mouse.x, mouse.y); ctx.lineTo(c.h.x, c.h.y);
-          ctx.stroke();
-          // beam core
-          ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(mouse.x, mouse.y); ctx.lineTo(c.h.x, c.h.y);
-          ctx.stroke();
-        }
-      }
-
-      // ── Update + draw pulses (traveling data packets with trails) ──
-      for (let i = pulses.length - 1; i >= 0; i--) {
-        const p = pulses[i];
-        p.t += p.speed * (dt / 16);
-        p.rotation += 0.08;
-        if (p.t >= 1) {
-          // arrived: boost dest, spawn burst
-          p.to.activity = Math.min(2, p.to.activity + 0.7);
-          for (let k = 0; k < 8; k++) {
-            const ang = (k / 8) * Math.PI * 2 + rng();
-            bursts.push({
-              x: p.to.x, y: p.to.y,
-              vx: Math.cos(ang) * (0.5 + rng() * 1.5),
-              vy: Math.sin(ang) * (0.5 + rng() * 1.5),
-              life: 1, color: p.color, r: 1 + rng(),
-            });
-          }
-          pulses.splice(i, 1);
-          continue;
-        }
-        const cp = controlPoint(p.from, p.to);
-        const pos = bezierPoint(p.from, cp, p.to, p.t);
-        p.trail.push({ x: pos.x, y: pos.y });
-        if (p.trail.length > 18) p.trail.shift();
-
-        // draw trail (fading)
-        const [r, g, b] = p.color;
-        for (let k = 0; k < p.trail.length; k++) {
-          const tp = p.trail[k];
-          const ta = (k / p.trail.length) * 0.7;
-          ctx.fillStyle = `rgba(${r},${g},${b},${ta})`;
-          ctx.beginPath();
-          ctx.arc(tp.x, tp.y, 1 + (k / p.trail.length) * 2.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        // glowing head (multi-pass bloom)
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 20;
-        ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        // rotating geometric payload
-        ctx.save();
-        ctx.translate(pos.x, pos.y);
-        ctx.rotate(p.rotation);
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
-        ctx.lineWidth = 1;
-        if (p.shape === 1) {
-          // hex
-          ctx.beginPath();
-          for (let k = 0; k < 6; k++) {
-            const a = (k / 6) * Math.PI * 2;
-            const px = Math.cos(a) * 5, py = Math.sin(a) * 5;
-            if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-          }
-          ctx.closePath(); ctx.stroke();
-        } else if (p.shape === 2) {
-          // diamond
-          ctx.beginPath();
-          ctx.moveTo(0, -5); ctx.lineTo(5, 0); ctx.lineTo(0, 5); ctx.lineTo(-5, 0);
-          ctx.closePath(); ctx.stroke();
-        } else {
-          // square
-          ctx.strokeRect(-3.5, -3.5, 7, 7);
-        }
-        ctx.restore();
-      }
-
-      // ── Update + draw ripples ──
-      for (let i = ripples.length - 1; i >= 0; i--) {
-        const rp = ripples[i];
-        rp.r += 2 * (dt / 16);
-        rp.life -= 0.012 * (dt / 16);
-        if (rp.life <= 0 || rp.r > rp.max) { ripples.splice(i, 1); continue; }
-        const [r, g, b] = rp.color;
-        ctx.strokeStyle = `rgba(${r},${g},${b},${rp.life * 0.5})`;
-        ctx.lineWidth = rp.width || 1.2;
-        ctx.beginPath();
-        ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // ── Update + draw bursts (particle explosions) ──
-      for (let i = bursts.length - 1; i >= 0; i--) {
-        const bt = bursts[i];
-        bt.x += bt.vx * (dt / 16);
-        bt.y += bt.vy * (dt / 16);
-        bt.vx *= 0.96; bt.vy *= 0.96;
-        bt.life -= 0.02 * (dt / 16);
-        if (bt.life <= 0) { bursts.splice(i, 1); continue; }
-        const [r, g, b] = bt.color;
-        ctx.fillStyle = `rgba(${r},${g},${b},${bt.life})`;
-        ctx.beginPath();
-        ctx.arc(bt.x, bt.y, bt.r * bt.life, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // ── Dust drift + parallax + twinkle ──
-      for (const p of dust) {
-        p.x += p.vx * (dt / 16);
-        p.y += p.vy * (dt / 16);
-        if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
-        if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
-        p.twinkle += p.twinkleSpeed;
-
-        if (mouse.active) {
-          p.x += mouse.vx * 0.025 * (1 - p.z);
-          p.y += mouse.vy * 0.025 * (1 - p.z);
-        }
-
-        const tw = 0.35 + Math.sin(p.twinkle) * 0.35;
-        const [r, g, b] = p.color;
-        ctx.globalAlpha = (0.25 + p.z * 0.55) * tw;
-        ctx.fillStyle = `rgba(${r},${g},${b},0.9)`;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-
-      // ── Mouse trail (fading glowing dots) ──
-      if (mouse.trail.length > 1) {
-        for (let i = 0; i < mouse.trail.length; i++) {
-          const t = mouse.trail[i];
-          t.life -= 0.05;
-          if (t.life <= 0) continue;
-          const alpha = t.life * (i / mouse.trail.length) * 0.6;
-          ctx.fillStyle = `rgba(167,139,250,${alpha})`;
-          ctx.beginPath();
-          ctx.arc(t.x, t.y, 2 + (i / mouse.trail.length) * 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        // remove dead trail points
-        mouse.trail = mouse.trail.filter(t => t.life > 0);
-      }
-
-      // ── Draw hubs (depth-sorted: far first) ──
-      const sortedHubs = [...hubs].sort((a, b) => a.z - b.z);
-      for (const h of sortedHubs) {
-        const pulse = 0.7 + Math.sin(now * 0.0015 + h.phase) * 0.3;
-        const actBoost = h.activity;
-        const depthScale = 0.5 + h.z * 0.7;
-        const [r, g, b] = h.color;
-
-        // activity halo (radial bloom)
-        if (actBoost > 0.05) {
-          const halo = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, 50);
-          halo.addColorStop(0, `rgba(${r},${g},${b},${0.35 * actBoost})`);
-          halo.addColorStop(1, `rgba(${r},${g},${b},0)`);
-          ctx.fillStyle = halo;
-          ctx.fillRect(h.x - 50, h.y - 50, 100, 100);
-        }
-
-        // charge ring (arc fills as charge → 1)
-        if (h.charge > 0.1) {
-          ctx.strokeStyle = `rgba(${r},${g},${b},${h.charge * 0.6})`;
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.arc(h.x, h.y, (h.r + 8) * depthScale, -Math.PI / 2, -Math.PI / 2 + h.charge * Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // rotating outer ring (dashed, depth-scaled)
-        const ringR = (h.r + 6) * depthScale;
-        ctx.strokeStyle = `rgba(${r},${g},${b},0.2)`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 5]);
-        ctx.lineDashOffset = -now * 0.02 * (h.shape === 1 ? -1 : 1);
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, ringR, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // glow + core
-        ctx.shadowColor = `rgba(${r},${g},${b},1)`;
-        ctx.shadowBlur = 22 * pulse + 12 * actBoost;
-        drawShape(h, depthScale, 0.85 * pulse + 0.15);
-        ctx.shadowBlur = 0;
-
-        // white-hot center
-        ctx.fillStyle = `rgba(255,255,255,${0.5 + actBoost * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(h.x, h.y, (h.r + actBoost * 2) * depthScale * 0.4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // label on hover
-        if (mouse.active) {
-          const md = Math.hypot(h.x - mouse.x, h.y - mouse.y);
-          if (md < 120) {
-            const op = (1 - md / 120);
-            ctx.font = "10px 'JetBrains Mono', monospace";
-            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-            ctx.textAlign = "center";
-            // label background pill
-            const tw = ctx.measureText(h.label).width;
-            ctx.fillStyle = `rgba(8,6,20,${op * 0.7})`;
-            ctx.fillRect(h.x - tw / 2 - 6, h.y - h.r * depthScale - 22, tw + 12, 16);
-            ctx.fillStyle = `rgba(${r},${g},${b},${op})`;
-            ctx.fillText(h.label, h.x, h.y - h.r * depthScale - 11);
-          }
-        }
-      }
-
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", resize);
-      canvas.removeEventListener("mousemove", onMove);
-      canvas.removeEventListener("mouseleave", onLeave);
-      canvas.removeEventListener("click", onClick);
-    };
-  }, []);
+  const stats = [
+    { value: 120, suffix: "K+", label: "Active builders", sub: "shipping every day", color: "124,58,237", icon: "users" },
+    { value: 99.99, suffix: "%", label: "Uptime SLA", sub: "last 12 months", color: "6,182,212", decimals: 2, icon: "shield" },
+    { value: 12, suffix: "ms", label: "P99 latency", sub: "global edge network", color: "168,85,247", icon: "zap" },
+    { value: 2.4, suffix: "M", label: "Tokens / sec", sub: "peak throughput", color: "6,182,212", decimals: 1, icon: "cpu" },
+  ];
 
   return (
-    <section
-      ref={ref}
-      style={{
-        position: "relative",
-        zIndex: 1,
-        borderTop: "1px solid rgba(255,255,255,0.04)",
-        padding: "40px 0 0",
-      }}
-    >
-      <div style={{ position: "relative", height: 560, maxWidth: 1300, margin: "0 auto" }}>
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            cursor: "crosshair",
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            pointerEvents: "none",
-            opacity: inView ? 1 : 0,
-            transform: inView ? "translateY(0)" : "translateY(30px)",
-            transition: "all 1s cubic-bezier(.2,.9,.3,1.15)",
-          }}
-        >
-          <h2
-            style={{
-              fontFamily: "'Space Grotesk',sans-serif",
-              fontWeight: 900,
-              fontSize: "clamp(30px,5vw,58px)",
-              margin: "0 0 14px",
-              letterSpacing: "-0.03em",
-              textAlign: "center",
-              textShadow: "0 0 60px rgba(3,3,10,0.95), 0 0 30px rgba(3,3,10,0.9)",
-            }}
-          >
-            One mind.{" "}
-            <span
-              style={{
-                background: "linear-gradient(90deg,#a855f7,#06B6D4,#ec4899)",
-                backgroundSize: "200% auto",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                animation: "nfShimmer 5s linear infinite",
-              }}
-            >
-              A billion connections.
-            </span>
-          </h2>
-          <p
-            style={{
-              fontSize: 16,
-              color: "rgba(255,255,255,0.55)",
-              margin: "0 0 10px",
-              textAlign: "center",
-              maxWidth: 480,
-              lineHeight: 1.7,
-              textShadow: "0 0 30px rgba(3,3,10,0.95)",
-            }}
-          >
-            Move your cursor through the network — this is how Vortis connects your world.
-          </p>
-          <div
-            style={{
-              display: "flex",
-              gap: 16,
-              marginTop: 6,
-              fontSize: 11,
-              color: "rgba(255,255,255,0.4)",
-              fontFamily: "'JetBrains Mono', monospace",
-              letterSpacing: ".08em",
-              textTransform: "uppercase",
-              textShadow: "0 0 20px rgba(3,3,10,0.95)",
-            }}
-          >
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#a78bfa", boxShadow: "0 0 8px #a78bfa" }} />
-              move to influence
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#ec4899", boxShadow: "0 0 8px #ec4899" }} />
-              click to ignite
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22d3ee", boxShadow: "0 0 8px #22d3ee" }} />
-              waves pulse every 5s
-            </span>
-          </div>
+    <section ref={ref} className="section reveal" style={{ padding: "60px 40px" }}>
+      <style>{`
+        @keyframes metricsBarGrow { from { width: 0%; } }
+        @keyframes metricsBarWave { 0%,100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+        @keyframes metricsDotPulse { 0%,100% { opacity: .4; } 50% { opacity: 1; } }
+        @keyframes metricsOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px,-15px); } }
+      `}</style>
+
+      {/* Ambient orb — subtle, blurred, on-theme */}
+      <div style={{ position: "absolute", top: "20%", left: "50%", transform: "translateX(-50%)", width: 500, height: 300, background: "radial-gradient(ellipse, rgba(124,58,237,0.06), transparent 70%)", filter: "blur(60px)", pointerEvents: "none", animation: "metricsOrbDrift 16s ease-in-out infinite" }} />
+
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 50, position: "relative" }}>
+        <div className="eyebrow" style={{ marginBottom: 14 }}>
+          <span className="dot" /> BY THE NUMBERS
         </div>
+        <h2 className="h-section" style={{ fontSize: "clamp(28px,4vw,42px)" }}>
+          Built for scale.<span className="shimmer-text"> Trusted in production.</span>
+        </h2>
+      </div>
+
+      {/* Stats grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, maxWidth: 1200, margin: "0 auto", position: "relative" }} className="metrics-grid">
+        {stats.map((s, i) => (
+          <MetricCard key={i} stat={s} index={i} inView={inView} />
+        ))}
       </div>
 
       <style>{`
-        @keyframes nfShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @media (max-width: 880px) { .metrics-grid { grid-template-columns: repeat(2, 1fr) !important; } }
+        @media (max-width: 520px) { .metrics-grid { grid-template-columns: 1fr !important; } }
       `}</style>
     </section>
+  );
+}
+
+function MetricCard({ stat, index, inView }) {
+  const [ref, cardInView] = useInView(0.3);
+  const count = useCountUp(stat.value, 2200, cardInView, stat.decimals || 0);
+  const [r, g, b] = stat.color.split(",");
+
+  return (
+    <div
+      ref={ref}
+      className="gradient-border"
+      style={{
+        padding: "28px 24px", borderRadius: 18,
+        background: "rgba(255,255,255,0.015)",
+        position: "relative", overflow: "hidden",
+        opacity: cardInView ? 1 : 0,
+        transform: cardInView ? "translateY(0)" : "translateY(20px)",
+        transition: `all 0.7s ease ${index * 0.1}s`,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = `rgba(${r},${g},${b},0.04)`; e.currentTarget.style.transform = "translateY(-4px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.015)"; e.currentTarget.style.transform = "translateY(0)"; }}
+    >
+      {/* Top gradient line */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, rgba(${r},${g},${b},0.5), transparent)` }} />
+
+      {/* Icon + label */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {stat.label}
+        </div>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8,
+          background: `rgba(${r},${g},${b},0.1)`, border: `1px solid rgba(${r},${g},${b},0.2)`,
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: `rgb(${r},${g},${b})`, boxShadow: `0 0 8px rgb(${r},${g},${b})`, animation: "metricsDotPulse 2s ease-in-out infinite" }} />
+        </div>
+      </div>
+
+      {/* Big number */}
+      <div style={{
+        fontFamily: "'Space Grotesk', sans-serif", fontWeight: 800,
+        fontSize: "clamp(32px,4vw,44px)", letterSpacing: "-0.03em", lineHeight: 1,
+        color: `rgb(${r},${g},${b})`, marginBottom: 8,
+        textShadow: `0 0 30px rgba(${r},${g},${b},0.3)`,
+      }}>
+        {count}{stat.suffix}
+      </div>
+
+      {/* Sub label */}
+      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginBottom: 16 }}>
+        {stat.sub}
+      </div>
+
+      {/* Progress bar — animates from 0 on view */}
+      <div style={{ height: 3, borderRadius: 2, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+        <div style={{
+          height: "100%", width: cardInView ? "85%" : "0%",
+          background: `linear-gradient(90deg, rgba(${r},${g},${b},0.6), rgba(${r},${g},${b},1))`,
+          borderRadius: 2, boxShadow: `0 0 8px rgba(${r},${g},${b},0.6)`,
+          transition: "width 1.6s cubic-bezier(.2,.7,.3,1)",
+          transitionDelay: `${index * 0.15}s`,
+        }} />
+      </div>
+
+      {/* Tiny wave bars in corner */}
+      <div style={{ position: "absolute", bottom: 14, right: 16, display: "flex", gap: 2, alignItems: "flex-end", height: 12 }}>
+        {[...Array(4)].map((_, j) => (
+          <div key={j} style={{
+            width: 2, height: "100%", background: `rgba(${r},${g},${b},0.4)`, borderRadius: 1,
+            transformOrigin: "bottom", animation: `metricsBarWave ${0.8 + j * 0.2}s ease-in-out infinite`,
+            animationDelay: `${j * 0.1}s`,
+          }} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2161,7 +1528,7 @@ function HowItWorks() {
           From idea to live
           <br />
           <span style={{
-            background: 'linear-gradient(110deg,#a78bfa,#22d3ee,#ec4899,#f59e0b,#a78bfa)',
+            background: 'linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)',
             backgroundSize: '200% auto',
             WebkitBackgroundClip: 'text', backgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -2401,73 +1768,124 @@ function HowDemo({ demo, c, active }) {
 
 // ── Demo 1: Connect — services connecting to a central hub ──
 function ConnectDemo({ c, active }) {
-  const services = [
-    { icon: GitBranch, label: 'GitHub', angle: 0 },
-    { icon: FileText, label: 'Notion', angle: 60 },
-    { icon: Database, label: 'Postgres', angle: 120 },
-    { icon: MessageSquare, label: 'Slack', angle: 180 },
-    { icon: Globe, label: 'APIs', angle: 240 },
-    { icon: Code2, label: 'Repos', angle: 300 },
+  const SERVICES = [
+    { icon: GitBranch, label: 'github.com/acme/core', ms: 82 },
+    { icon: FileText, label: 'notion.so/workspace', ms: 61 },
+    { icon: Database, label: 'postgres://prod-db', ms: 134 },
+    { icon: MessageSquare, label: 'slack.com/acme-hq', ms: 47 },
+    { icon: Globe, label: 'api.stripe.com', ms: 96 },
+    { icon: Code2, label: '12 repos indexed', ms: 210 },
   ];
+ 
+  const [lineCount, setLineCount] = useState(0);
+  const [sweepAngle, setSweepAngle] = useState(0);
+  const [done, setDone] = useState(false);
+ 
+  useEffect(() => {
+    if (!active) { setLineCount(0); setDone(false); return; }
+    setLineCount(0);
+    setDone(false);
+    let i = 0;
+    const id = setInterval(() => {
+      i++;
+      setLineCount(i);
+      if (i >= SERVICES.length) {
+        clearInterval(id);
+        setTimeout(() => setDone(true), 400);
+      }
+    }, 480);
+    return () => clearInterval(id);
+  }, [active]);
+ 
+  useEffect(() => {
+    let raf;
+    const tick = () => {
+      setSweepAngle(a => (a + 2.4) % 360);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+ 
   return (
-    <div style={{ position: 'relative', height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {/* Central hub */}
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 10, position: 'relative' }}>
+      {/* Radar sweep backdrop */}
       <div style={{
-        position: 'absolute', width: 56, height: 56, borderRadius: '50%',
-        background: `radial-gradient(circle at 30% 30%, ${c}, ${c}55)`,
-        boxShadow: `0 0 30px ${c}88`, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        animation: 'howPulse 2s ease-in-out infinite', zIndex: 2,
+        position: 'absolute', top: -10, right: -10, width: 130, height: 130,
+        borderRadius: '50%', overflow: 'hidden', opacity: 0.35, pointerEvents: 'none',
       }}>
-        <Sparkles size={22} />
+        <div style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          border: `1px solid ${c}30`,
+        }} />
+        <div style={{
+          position: 'absolute', inset: 18, borderRadius: '50%',
+          border: `1px solid ${c}25`,
+        }} />
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: `conic-gradient(from ${sweepAngle}deg, ${c}55, transparent 55deg)`,
+          borderRadius: '50%',
+        }} />
       </div>
-      {/* Services orbiting */}
-      {services.map((s, i) => {
-        const Icon = s.icon;
-        const rad = (s.angle * Math.PI) / 180;
-        const x = Math.cos(rad) * 75;
-        const y = Math.sin(rad) * 75;
-        return (
-          <div key={i} style={{
-            position: 'absolute', transform: `translate(${x}px, ${y}px)`,
-            animation: `howFloat3d ${4 + i * 0.3}s ease-in-out infinite`,
-            animationDelay: `${i * 0.2}s`,
-          }}>
-            {/* Connection line */}
-            <svg width="2" height="80" style={{
-              position: 'absolute', left: '50%', top: '50%',
-              transformOrigin: 'top center',
-              transform: `translate(-50%, 0) rotate(${s.angle + 180}deg)`,
-              overflow: 'visible',
-            }}>
-              <line x1="1" y1="0" x2="1" y2="75" stroke={c} strokeWidth="1" strokeDasharray="2 4" opacity=".4" />
-            </svg>
-            <div style={{
-              width: 36, height: 36, borderRadius: 10,
-              background: 'rgba(255,255,255,.04)', border: `1px solid ${c}33`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: c, position: 'relative',
-            }}>
-              <Icon size={15} />
-              <span style={{
-                position: 'absolute', top: -16, left: '50%', transform: 'translateX(-50%)',
-                fontSize: 8, color: 'rgba(255,255,255,.5)', fontFamily: "'JetBrains Mono', monospace",
-                whiteSpace: 'nowrap',
-              }}>{s.label}</span>
-            </div>
-          </div>
-        );
-      })}
-      {/* Status footer */}
+ 
+      {/* Terminal header line */}
       <div style={{
-        position: 'absolute', bottom: 0, left: 0, right: 0,
+        display: 'flex', alignItems: 'center', gap: 8, fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10.5, color: 'rgba(255,255,255,.4)',
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: done ? '#22c55e' : c, boxShadow: `0 0 8px ${done ? '#22c55e' : c}`, animation: done ? 'none' : 'howPulse 1s ease-in-out infinite' }} />
+        {done ? 'sync complete' : 'scanning workspace…'}
+      </div>
+ 
+      {/* Streaming log lines */}
+      <div style={{
+        flex: 1, borderRadius: 10, background: 'rgba(0,0,0,.35)',
+        border: `1px solid ${c}22`, padding: '10px 12px',
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5,
+        display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden',
+        position: 'relative',
+      }}>
+        {SERVICES.map((s, i) => {
+          const Icon = s.icon;
+          const shown = i < lineCount;
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              opacity: shown ? 1 : 0,
+              transform: shown ? 'translateX(0)' : 'translateX(-8px)',
+              transition: 'all .35s ease',
+              color: 'rgba(255,255,255,.75)',
+            }}>
+              <Icon size={11} style={{ color: c, flexShrink: 0 }} />
+              <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+              {shown && (
+                <span style={{ color: '#22c55e', fontSize: 9.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Check size={9} /> {s.ms}ms
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {/* Blinking cursor while still scanning */}
+        {!done && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <span style={{ color: c }}>$</span>
+            <span style={{
+              display: 'inline-block', width: 6, height: 12, background: c,
+              animation: 'howBlink .8s step-end infinite',
+            }} />
+          </div>
+        )}
+      </div>
+ 
+      {/* Footer status */}
+      <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace",
       }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e', animation: 'howPulse 1.5s ease-in-out infinite' }} />
-          6 connected
-        </span>
-        <span style={{ color: c }}>indexing complete</span>
+        <span>{lineCount}/{SERVICES.length} sources</span>
+        <span style={{ color: done ? '#22c55e' : c }}>{done ? 'indexing complete' : `${Math.round((lineCount / SERVICES.length) * 100)}%`}</span>
       </div>
     </div>
   );
@@ -3662,388 +3080,121 @@ function FAQ() {
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
   const [showPicker, setShowPicker] = useState(false);
-  const [count, setCount] = useState(0);
   const btnRef = useRef(null);
-  const orbRef = useRef(null);
 
-  // Live counter
-  useEffect(() => {
-    if (!inView) return;
-    const id = setInterval(() => setCount(c => c + Math.floor(Math.random() * 7) + 1), 800);
-    return () => clearInterval(id);
-  }, [inView]);
-
-  // Magnetic button
+  // Subtle magnetic button (small range, not aggressive)
   useEffect(() => {
     const el = btnRef.current; if (!el) return;
     const onMove = (e) => {
       const r = el.getBoundingClientRect();
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const dx = (e.clientX - cx) * 0.25, dy = (e.clientY - cy) * 0.25;
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      const dx = (e.clientX - cx) * 0.15, dy = (e.clientY - cy) * 0.15;
+      const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
+      if (dist < 100) el.style.transform = `translate(${dx}px, ${dy}px)`;
+      else el.style.transform = "translate(0,0)";
     };
-    const onLeave = () => { el.style.transform = 'translate(0,0)'; };
-    const range = 120;
-    const onWinMove = (e) => {
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      if (Math.hypot(e.clientX - cx, e.clientY - cy) < range) onMove(e);
-      else onLeave();
-    };
-    window.addEventListener('mousemove', onWinMove);
-    return () => window.removeEventListener('mousemove', onWinMove);
-  }, []);
-
-  // 3D orb tilt
-  useEffect(() => {
-    const el = orbRef.current; if (!el) return;
-    const onMove = (e) => {
-      const r = el.getBoundingClientRect();
-      const px = (e.clientX - r.left) / r.width;
-      const py = (e.clientY - r.top) / r.height;
-      const rx = (py - .5) * -20, ry = (px - .5) * 20;
-      el.style.transform = `perspective(800px) rotateX(${rx}deg) rotateY(${ry}deg)`;
-    };
-    const onLeave = () => { el.style.transform = 'perspective(800px) rotateX(0) rotateY(0)'; };
-    el.addEventListener('mousemove', onMove);
-    el.addEventListener('mouseleave', onLeave);
-    return () => {
-      el.removeEventListener('mousemove', onMove);
-      el.removeEventListener('mouseleave', onLeave);
-    };
+    window.addEventListener("mousemove", onMove);
+    return () => window.removeEventListener("mousemove", onMove);
   }, []);
 
   return (
-    <section ref={ref} style={{ padding: '120px 40px 160px', borderTop: '1px solid rgba(255,255,255,0.04)', position: 'relative', zIndex: 1, textAlign: 'center', overflow: 'hidden' }}>
+    <section ref={ref} className="section reveal" style={{ padding: "80px 40px 100px" }}>
       <style>{`
-        @keyframes ctaOrbFloat { 0%,100% { transform: translateZ(0) translateY(0); } 50% { transform: translateZ(0) translateY(-12px); } }
-        @keyframes ctaOrbPulse { 0%,100% { opacity: .8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
-        @keyframes ctaRingSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes ctaRingSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-        @keyframes ctaRadar { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.2); opacity: 0; } }
-        @keyframes ctaGradientShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-        @keyframes ctaCardFloat { 0%,100% { transform: translateY(0) rotate(var(--rot,0deg)); } 50% { transform: translateY(-14px) rotate(var(--rot,0deg)); } }
-        @keyframes ctaCardFloatRev { 0%,100% { transform: translateY(0) rotate(var(--rot,0deg)); } 50% { transform: translateY(12px) rotate(var(--rot,0deg)); } }
-        @keyframes ctaShine { 0% { left: -100%; } 100% { left: 200%; } }
-        @keyframes ctaBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
-        @keyframes ctaBurst { 0% { transform: scale(0); opacity: .8; } 100% { transform: scale(3); opacity: 0; } }
-        @keyframes ctaDotPulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
-        @keyframes ctaConicSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes ctaGlowPulse { 0%,100% { filter: blur(60px) brightness(1); } 50% { filter: blur(80px) brightness(1.3); } }
-        @keyframes ctaShimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
-        @keyframes ctaTypeBlink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes ctaBandShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+        @keyframes ctaBandPulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+        @keyframes ctaBandOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-30px,20px); } }
       `}</style>
 
-      {/* ── Background layers ── */}
-      {/* Aurora glow */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        <div style={{ position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)', width: 800, height: 600, background: 'radial-gradient(ellipse at center, rgba(139,92,246,.25), rgba(236,72,153,.12) 40%, transparent 70%)', animation: 'ctaGlowPulse 6s ease-in-out infinite', filter: 'blur(60px)' }} />
-      </div>
-      {/* Conic rotating border background */}
-      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 600, height: 600, borderRadius: '50%', background: 'conic-gradient(from 0deg, rgba(139,92,246,.1), rgba(236,72,153,.08), rgba(34,211,238,.06), rgba(245,158,11,.08), rgba(139,92,246,.1))', animation: 'ctaConicSpin 20s linear infinite', filter: 'blur(40px)', opacity: .6, pointerEvents: 'none' }} />
-
-      {/* ── Floating glass UI cards around the centerpiece ── */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-        {/* Card 1 — top left, uptime */}
+      {/* Single centered panel with gradient border */}
+      <div style={{ maxWidth: 760, margin: "0 auto", position: "relative" }}>
+        {/* Ambient orb behind panel — subtle */}
         <div style={{
-          position: 'absolute', top: '18%', left: '8%',
-          ['--rot']: '-8deg',
-          animation: 'ctaCardFloat 6s ease-in-out infinite',
-        }}>
-          <div style={{
-            padding: '14px 18px', borderRadius: 14,
-            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            border: '1px solid rgba(34,211,238,.25)',
-            boxShadow: '0 0 30px rgba(34,211,238,.15)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(34,211,238,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#22d3ee' }}>
-              <Shield size={15} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#22d3ee' }}>99.99%</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>UPTIME SLA</div>
-            </div>
-          </div>
-        </div>
+          position: "absolute", inset: -40,
+          background: "radial-gradient(ellipse at center, rgba(124,58,237,0.08), rgba(6,182,212,0.04) 50%, transparent 75%)",
+          filter: "blur(50px)", pointerEvents: "none",
+          animation: "ctaBandOrbDrift 14s ease-in-out infinite",
+        }} />
 
-        {/* Card 2 — top right, latency */}
-        <div style={{
-          position: 'absolute', top: '15%', right: '10%',
-          ['--rot']: '6deg',
-          animation: 'ctaCardFloatRev 7s ease-in-out infinite',
+        {/* The panel */}
+        <div className="gradient-border" style={{
+          padding: "56px 48px", borderRadius: 24, textAlign: "center",
+          background: "linear-gradient(160deg, rgba(15,12,30,0.6), rgba(3,3,10,0.85))",
+          backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+          position: "relative", overflow: "hidden",
+          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
+          transition: "all 0.8s cubic-bezier(.2,.7,.3,1)",
         }}>
-          <div style={{
-            padding: '14px 18px', borderRadius: 14,
-            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            border: '1px solid rgba(245,158,11,.25)',
-            boxShadow: '0 0 30px rgba(245,158,11,.15)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(245,158,11,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#f59e0b' }}>
-              <Zap size={15} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#f59e0b' }}>12ms</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>P99 LATENCY</div>
-            </div>
-            {/* Wave bars */}
-            <div style={{ display: 'flex', gap: 2, height: 16, alignItems: 'flex-end', marginLeft: 4 }}>
-              {[...Array(4)].map((_, i) => (
-                <div key={i} style={{ width: 2, height: '100%', background: '#f59e0b', borderRadius: 1, transformOrigin: 'bottom', animation: `ctaBarWave ${.6 + i * .15}s ease-in-out infinite`, animationDelay: `${i * .1}s` }} />
-              ))}
-            </div>
-          </div>
-        </div>
+          {/* Top gradient line */}
+          <div style={{ position: "absolute", top: 0, left: "20%", right: "20%", height: 1, background: "linear-gradient(90deg, transparent, rgba(168,85,247,0.6), transparent)" }} />
 
-        {/* Card 3 — mid left, live counter */}
-        <div style={{
-          position: 'absolute', top: '48%', left: '4%',
-          ['--rot']: '4deg',
-          animation: 'ctaCardFloat 5.5s ease-in-out infinite', animationDelay: '1s',
-        }}>
-          <div style={{
-            padding: '14px 18px', borderRadius: 14,
-            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            border: '1px solid rgba(139,92,246,.25)',
-            boxShadow: '0 0 30px rgba(139,92,246,.15)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(139,92,246,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a78bfa' }}>
-              <Users size={15} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#a78bfa' }}>+{count.toLocaleString()}</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>JOINED TODAY</div>
-            </div>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e', animation: 'ctaDotPulse 1.5s ease-in-out infinite' }} />
+          {/* Eyebrow */}
+          <div className="eyebrow" style={{ marginBottom: 20 }}>
+            <span className="dot" /> READY WHEN YOU ARE
           </div>
-        </div>
 
-        {/* Card 4 — mid right, rating */}
-        <div style={{
-          position: 'absolute', top: '50%', right: '5%',
-          ['--rot']: '-5deg',
-          animation: 'ctaCardFloatRev 6.5s ease-in-out infinite', animationDelay: '.5s',
-        }}>
-          <div style={{
-            padding: '14px 18px', borderRadius: 14,
-            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            border: '1px solid rgba(236,72,153,.25)',
-            boxShadow: '0 0 30px rgba(236,72,153,.15)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(236,72,153,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ec4899' }}>
-              <Star size={15} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#ec4899' }}>4.9/5</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>2,847 REVIEWS</div>
-            </div>
+          {/* Headline */}
+          <h2 className="h-section" style={{ fontSize: "clamp(32px,5vw,52px)", marginBottom: 16 }}>
+            Start thinking{" "}
+            <span className="shimmer-text">faster.</span>
+          </h2>
+
+          {/* Subtext */}
+          <p style={{ fontSize: 17, color: "rgba(255,255,255,0.45)", lineHeight: 1.65, maxWidth: 480, margin: "0 auto 36px" }}>
+            Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction.
+          </p>
+
+          {/* Button + secondary */}
+          <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 28 }}>
+            <button
+              ref={btnRef}
+              onClick={() => setShowPicker(true)}
+              style={{
+                padding: "15px 36px", borderRadius: 99, fontSize: 15, fontWeight: 700,
+                background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+                border: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8,
+                boxShadow: "0 0 30px rgba(124,58,237,0.35), 0 8px 24px rgba(124,58,237,0.2)",
+                transition: "box-shadow 0.3s ease",
+                position: "relative",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 50px rgba(124,58,237,0.55), 0 12px 32px rgba(124,58,237,0.3)"; }}
+              onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 30px rgba(124,58,237,0.35), 0 8px 24px rgba(124,58,237,0.2)"; }}
+            >
+              <Zap size={17} />
+              Get Started Free
+              <ArrowRight size={16} />
+            </button>
           </div>
-        </div>
 
-        {/* Card 5 — bottom left, regions */}
-        <div style={{
-          position: 'absolute', bottom: '22%', left: '12%',
-          ['--rot']: '-3deg',
-          animation: 'ctaCardFloat 7.5s ease-in-out infinite', animationDelay: '1.5s',
-        }}>
+          {/* Trust row — clean, single line */}
           <div style={{
-            padding: '12px 16px', borderRadius: 14,
-            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            border: '1px solid rgba(52,211,153,.25)',
-            boxShadow: '0 0 30px rgba(52,211,153,.12)',
-            display: 'flex', alignItems: 'center', gap: 10,
+            display: "flex", gap: 20, justifyContent: "center", flexWrap: "wrap",
+            fontSize: 12, color: "rgba(255,255,255,0.35)",
+            fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em",
           }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(52,211,153,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#34d399' }}>
-              <Globe size={14} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#34d399' }}>14 regions</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>GLOBAL EDGE</div>
-            </div>
+            {["No credit card", "Cancel anytime", "SOC 2 Type II", "12 min setup"].map(t => (
+              <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Check size={12} style={{ color: "rgba(6,182,212,0.8)" }} />
+                {t}
+              </span>
+            ))}
           </div>
-        </div>
 
-        {/* Card 6 — bottom right, AI model */}
-        <div style={{
-          position: 'absolute', bottom: '24%', right: '14%',
-          ['--rot']: '7deg',
-          animation: 'ctaCardFloatRev 6s ease-in-out infinite', animationDelay: '2s',
-        }}>
-          <div style={{
-            padding: '12px 16px', borderRadius: 14,
-            background: 'rgba(15,12,30,.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-            border: '1px solid rgba(99,102,241,.25)',
-            boxShadow: '0 0 30px rgba(99,102,241,.12)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
-              <Cpu size={14} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: '#6366f1' }}>GPT-5 class</div>
-              <div style={{ fontSize: 9, color: 'rgba(255,255,255,.4)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '.05em' }}>MULTIMODAL</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Main centerpiece ── */}
-      <div style={{ maxWidth: 720, margin: '0 auto', position: 'relative', zIndex: 5 }}>
-        {/* 3D Orb */}
-        <div ref={orbRef} style={{
-          width: 140, height: 140, margin: '0 auto 32px',
-          position: 'relative', transformStyle: 'preserve-3d',
-          transition: 'transform .15s ease-out',
-          animation: 'ctaOrbFloat 5s ease-in-out infinite',
-        }}>
-          {/* Radar pings */}
-          {[0, 1, 2].map(i => (
-            <div key={i} style={{
-              position: 'absolute', inset: -10, borderRadius: '50%',
-              border: '1.5px solid rgba(167,139,250,.5)',
-              animation: 'ctaRadar 3s ease-out infinite', animationDelay: `${i * 1}s`,
-            }} />
-          ))}
-          {/* Outer rotating ring with orbiting dots */}
-          <div style={{
-            position: 'absolute', inset: -20, borderRadius: '50%',
-            border: '1px solid rgba(167,139,250,.25)',
-            animation: 'ctaRingSpin 14s linear infinite',
-          }}>
-            {[0, 120, 240].map(deg => (
-              <div key={deg} style={{
-                position: 'absolute', top: '50%', left: '50%',
-                transform: `rotate(${deg}deg) translateY(-80px)`,
-                width: 8, height: 8, borderRadius: '50%',
-                background: ['#a78bfa', '#ec4899', '#22d3ee'][deg / 120],
-                boxShadow: `0 0 12px ${['#a78bfa', '#ec4899', '#22d3ee'][deg / 120]}`,
-                marginLeft: -4, marginTop: -4,
+          {/* Subtle bottom flourish — pulsing dots */}
+          <div style={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8 }}>
+            {[0, 1, 2].map(i => (
+              <span key={i} style={{
+                width: 4, height: 4, borderRadius: "50%",
+                background: i === 1 ? "#a855f7" : "rgba(255,255,255,0.15)",
+                animation: "ctaBandPulse 2s ease-in-out infinite", animationDelay: `${i * 0.3}s`,
               }} />
             ))}
           </div>
-          {/* Reverse dashed ring */}
-          <div style={{
-            position: 'absolute', inset: -8, borderRadius: '50%',
-            border: '1px dashed rgba(236,72,153,.3)',
-            animation: 'ctaRingSpinRev 10s linear infinite',
-          }} />
-          {/* Core orb */}
-          <div style={{
-            width: '100%', height: '100%', borderRadius: '50%',
-            background: 'radial-gradient(circle at 30% 30%, #fff, #a78bfa 30%, #ec4899 70%, #4c1d95)',
-            boxShadow: '0 0 80px rgba(167,139,250,.7), inset 0 0 40px rgba(255,255,255,.3)',
-            animation: 'ctaOrbPulse 3s ease-in-out infinite',
-            position: 'relative',
-          }}>
-            <div style={{
-              position: 'absolute', inset: 0, borderRadius: '50%',
-              background: 'radial-gradient(circle at 70% 70%, transparent 50%, rgba(0,0,0,.4))',
-            }} />
-            {/* Inner shine */}
-            <div style={{
-              position: 'absolute', top: '20%', left: '25%', width: 30, height: 20,
-              background: 'radial-gradient(ellipse, rgba(255,255,255,.6), transparent 70%)',
-              borderRadius: '50%', filter: 'blur(4px)',
-            }} />
-          </div>
-        </div>
-
-        {/* Headline */}
-        <h2 style={{
-          fontFamily: "'Space Grotesk', sans-serif", fontWeight: 900,
-          fontSize: 'clamp(36px, 6vw, 72px)', margin: '0 0 20px',
-          letterSpacing: '-0.04em', lineHeight: 1.05,
-          opacity: inView ? 1 : 0, transform: inView ? 'translateY(0)' : 'translateY(30px)',
-          transition: 'all 0.8s ease',
-        }}>
-          Start thinking{' '}
-          <span style={{
-            background: 'linear-gradient(90deg, #a78bfa, #ec4899, #f59e0b, #a78bfa)',
-            backgroundSize: '200% auto',
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-            animation: 'ctaGradientShift 4s ease-in-out infinite',
-          }}>
-            faster.
-          </span>
-        </h2>
-
-        <p style={{
-          fontSize: 19, color: 'rgba(255,255,255,0.55)', lineHeight: 1.65,
-          maxWidth: 540, margin: '0 auto 40px',
-          opacity: inView ? 1 : 0, transform: inView ? 'translateY(0)' : 'translateY(20px)',
-          transition: 'all 0.8s ease 0.1s',
-        }}>
-          Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction.
-        </p>
-
-        {/* Magnetic burst button */}
-        <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap', opacity: inView ? 1 : 0, transition: 'opacity 0.8s ease 0.2s' }}>
-          <button
-            ref={btnRef}
-            onClick={() => setShowPicker(true)}
-            style={{
-              padding: '18px 44px', borderRadius: 999, fontSize: 17, fontWeight: 700,
-              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-              color: '#fff', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: 10,
-              position: 'relative',
-              boxShadow: '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,.25)',
-              transition: 'box-shadow .3s ease',
-              overflow: 'hidden',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 100px rgba(236,72,153,.7), 0 24px 60px rgba(236,72,153,.4), inset 0 1px 0 rgba(255,255,255,.35)'; }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3), inset 0 1px 0 rgba(255,255,255,.25)'; }}
-          >
-            {/* Radar ping ring */}
-            <span style={{ position: 'absolute', inset: -3, borderRadius: 999, border: '3px solid #c4b5fd', animation: 'ctaRadar 1.8s ease-out infinite', pointerEvents: 'none' }} />
-            {/* Burst on hover */}
-            <span style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'radial-gradient(circle, rgba(255,255,255,.3), transparent 70%)', animation: 'ctaBurst 2s ease-out infinite', pointerEvents: 'none' }} />
-            {/* Shine sweep */}
-            <span style={{ position: 'absolute', top: 0, bottom: 0, width: '40%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent)', animation: 'ctaShine 3s ease-in-out infinite', pointerEvents: 'none' }} />
-            <Zap size={19} style={{ position: 'relative', zIndex: 1 }} />
-            <span style={{ position: 'relative', zIndex: 1 }}>Get Started Free</span>
-            <ArrowRight size={17} style={{ position: 'relative', zIndex: 1 }} />
-          </button>
-
-          <button style={{
-            padding: '17px 32px', borderRadius: 999, fontSize: 16, fontWeight: 600,
-            background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.12)',
-            color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-            backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-            transition: 'all .25s ease',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,.08)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.2)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,.12)'; e.currentTarget.style.transform = 'translateY(0)'; }}
-          >
-            <Sparkles size={16} /> Book a demo
-          </button>
-        </div>
-
-        {/* Trust chips */}
-        <div style={{
-          display: 'flex', gap: 24, justifyContent: 'center', marginTop: 36,
-          flexWrap: 'wrap', color: 'rgba(255,255,255,.5)', fontSize: 13,
-          opacity: inView ? 1 : 0, transition: 'opacity 0.8s ease 0.4s',
-        }}>
-          {[
-            { icon: Check, t: 'No credit card', c: '#22c55e' },
-            { icon: Check, t: 'Cancel anytime', c: '#22c55e' },
-            { icon: Shield, t: 'SOC 2 Type II', c: '#22d3ee' },
-            { icon: Zap, t: '12 min setup', c: '#f59e0b' },
-          ].map(({ icon: Icon, t, c }) => (
-            <span key={t} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Icon size={14} style={{ color: c }} /> {t}
-            </span>
-          ))}
         </div>
       </div>
 
       {showPicker && (
         <AuthPicker
-          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
+          onLogin={provider => { setShowPicker(false); onLogin(provider); }}
           authLoading={false}
           onClose={() => setShowPicker(false)}
         />
@@ -4051,6 +3202,7 @@ function CTA({ onLogin }) {
     </section>
   );
 }
+
 
 // ══════════════════════════════════════════════════════════════════
 //  FOOTER
@@ -4121,7 +3273,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         </div>
         <Logos />
         <BentoGrid />
-        <NeuralField />
+        <Metrics />
         <Showcase />
         <HowItWorks />
         <DashboardPreview />
