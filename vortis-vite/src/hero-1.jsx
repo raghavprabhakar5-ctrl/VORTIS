@@ -313,17 +313,17 @@ function Nav({ onLogin }) {
 // ══════════════════════════════════════════════════════════════════
 export function NeuralField() {
   const [ref, inView] = useInView(0.15);
-  const svgRef = useRef(null);
+  const containerRef = useRef(null);
   const [parallax, setParallax] = useState({ x: 0, y: 0 });
 
-  // Mouse parallax — simple, safe, transform-only
+  // Mouse parallax (subtle, transform-only — safe)
   useEffect(() => {
-    const el = svgRef.current; if (!el) return;
+    const el = containerRef.current; if (!el) return;
     const onMove = (e) => {
       const r = el.getBoundingClientRect();
       const px = (e.clientX - r.left) / r.width - 0.5;
       const py = (e.clientY - r.top) / r.height - 0.5;
-      setParallax({ x: px * 20, y: py * 20 });
+      setParallax({ x: px * 15, y: py * 15 });
     };
     const onLeave = () => setParallax({ x: 0, y: 0 });
     el.addEventListener("mousemove", onMove);
@@ -334,60 +334,84 @@ export function NeuralField() {
     };
   }, []);
 
-  // Node positions (percentages of viewBox 1000x500)
-  const nodes = [
-    { id: 0, x: 500, y: 250, label: "core",     big: true,  color: "#a855f7" }, // center
-    { id: 1, x: 180, y: 120, label: "vision",   color: "#06b6d4" },
-    { id: 2, x: 820, y: 120, label: "code",     color: "#a855f7" },
-    { id: 3, x: 120, y: 320, label: "memory",   color: "#06b6d4" },
-    { id: 4, x: 880, y: 320, label: "search",   color: "#a855f7" },
-    { id: 5, x: 300, y: 80,  label: "voice",    color: "#06b6d4" },
-    { id: 6, x: 700, y: 80,  label: "graph",    color: "#a855f7" },
-    { id: 7, x: 350, y: 420, label: "stream",   color: "#06b6d4" },
-    { id: 8, x: 650, y: 420, label: "vector",   color: "#a855f7" },
-    { id: 9, x: 500, y: 80,  label: "neural",   color: "#06b6d4" },
-    { id: 10, x: 500, y: 420, label: "cache",   color: "#a855f7" },
+  // ── Logo config: 11 arms vortex ──
+  const ARMS = 11;
+  const LOGO_CX = 500;
+  const LOGO_CY = 300;
+  const LOGO_CORE_R = 16;       // white core radius
+  const LOGO_HALO_R = 26;       // violet halo ring radius
+  const ARM_LENGTH = 70;        // arm length from center
+  const ARM_CURVE = 22;         // curve offset for vortex swirl
+
+  // Generate the 11 arm-tip positions (where wires connect)
+  const armTips = Array.from({ length: ARMS }, (_, i) => {
+    const angle = (i / ARMS) * Math.PI * 2 - Math.PI / 2; // start at top
+    const tipX = LOGO_CX + Math.cos(angle) * ARM_LENGTH;
+    const tipY = LOGO_CY + Math.sin(angle) * ARM_LENGTH;
+    return { id: i, angle, tipX, tipY, color: i % 2 === 0 ? "#9d4edd" : "#14b8a6" };
+  });
+
+  // ── Outer source nodes (services feeding energy into the logo) ──
+  const sources = [
+    { id: "github",   label: "GitHub",   x: 120, y: 140, color: "#9d4edd", armIndex: 1 },
+    { id: "notion",   label: "Notion",   x: 880, y: 140, color: "#14b8a6", armIndex: 3 },
+    { id: "postgres", label: "Postgres", x: 90,  y: 300, color: "#9d4edd", armIndex: 5 },
+    { id: "apis",     label: "APIs",     x: 910, y: 300, color: "#14b8a6", armIndex: 7 },
+    { id: "slack",    label: "Slack",    x: 150, y: 470, color: "#9d4edd", armIndex: 9 },
+    { id: "repos",    label: "Repos",    x: 850, y: 470, color: "#14b8a6", armIndex: 0 },
+    { id: "voice",    label: "Voice",    x: 300, y: 90,  color: "#14b8a6", armIndex: 2 },
+    { id: "vision",   label: "Vision",   x: 700, y: 90,  color: "#9d4edd", armIndex: 4 },
+    { id: "memory",   label: "Memory",   x: 300, y: 520, color: "#9d4edd", armIndex: 6 },
+    { id: "search",   label: "Search",   x: 700, y: 520, color: "#14b8a6", armIndex: 8 },
   ];
 
-  // Connections from core to each outer node
-  const connections = nodes.filter(n => !n.big).map(n => ({ from: nodes[0], to: n }));
+  // Build curved path from each source to its target arm-tip
+  const wires = sources.map(s => {
+    const tip = armTips[s.armIndex];
+    const mx = (s.x + tip.tipX) / 2;
+    const my = (s.y + tip.tipY) / 2;
+    const dx = tip.tipX - s.x;
+    const dy = tip.tipY - s.y;
+    // perpendicular offset for curve
+    const off = Math.sin(s.armIndex * 1.3) * 40;
+    const cpX = mx - dy * 0.12 + off * 0.2;
+    const cpY = my + dx * 0.12 + off * 0.2;
+    const d = `M${s.x},${s.y} Q${cpX},${cpY} ${tip.tipX},${tip.tipY}`;
+    return { source: s, tip, d, delay: s.armIndex * 0.35, dur: 2.8 + (s.armIndex % 3) * 0.4 };
+  });
 
-  // Floating particles
-  const particles = Array.from({ length: 24 }, (_, i) => ({
-    x: Math.random() * 1000,
-    y: Math.random() * 500,
-    r: 0.8 + Math.random() * 1.6,
+  // Floating ambient particles
+  const particles = Array.from({ length: 18 }, (_, i) => ({
+    x: 100 + Math.random() * 800,
+    y: 80 + Math.random() * 440,
+    r: 0.7 + Math.random() * 1.4,
     delay: Math.random() * 6,
-    dur: 6 + Math.random() * 8,
-    color: Math.random() > 0.5 ? "#a855f7" : "#06b6d4",
-  }));
-
-  // Energy pulses traveling along connections (staggered)
-  const pulses = connections.map((c, i) => ({
-    from: c.from, to: c.to, delay: i * 0.4, dur: 3 + (i % 3),
+    dur: 7 + Math.random() * 6,
+    color: Math.random() > 0.5 ? "#9d4edd" : "#14b8a6",
   }));
 
   return (
-    <section ref={ref} className="section" style={{ padding: "80px 40px", position: "relative", overflow: "hidden" }}>
+    <section ref={ref} className="section" style={{ padding: "80px 40px 60px", position: "relative", overflow: "hidden" }}>
       <style>{`
-        @keyframes ncDraw { from { stroke-dashoffset: 1000; } to { stroke-dashoffset: 0; } }
-        @keyframes ncPulse { 0%,100% { opacity: .6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
-        @keyframes ncCoreBreathe { 0%,100% { transform: scale(1); opacity: .9; } 50% { transform: scale(1.06); opacity: 1; } }
-        @keyframes ncDotTravel { 0% { offset-distance: 0%; opacity: 0; } 8% { opacity: 1; } 92% { opacity: 1; } 100% { offset-distance: 100%; opacity: 0; } }
-        @keyframes ncFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-        @keyframes ncParticleDrift { 0% { transform: translate(0,0); opacity: 0; } 15% { opacity: .6; } 85% { opacity: .6; } 100% { transform: translate(var(--dx,30px), var(--dy,-40px)); opacity: 0; } }
-        @keyframes ncRingExpand { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.5); opacity: 0; } }
-        @keyframes ncSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes ncSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-        @keyframes ncShimmer { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
-        @keyframes ncOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(25px,-20px); } }
+        @keyframes nfDraw { from { stroke-dashoffset: 800; } to { stroke-dashoffset: 0; } }
+        @keyframes nfFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -28; } }
+        @keyframes nfCoreBreathe { 0%,100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.08); opacity: 1; } }
+        @keyframes nfHaloSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes nfHaloSpinRev { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes nfArmGlow { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+        @keyframes nfNodePulse { 0%,100% { opacity: .6; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+        @keyframes nfRingExpand { 0% { transform: scale(1); opacity: .6; } 100% { transform: scale(2.8); opacity: 0; } }
+        @keyframes nfFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        @keyframes nfParticleDrift { 0%,100% { transform: translate(0,0); opacity: .3; } 50% { transform: translate(10px,-12px); opacity: .7; } }
+        @keyframes nfOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(25px,-20px); } }
+        @keyframes nfSurge { 0%,90%,100% { opacity: 0; } 92%,96% { opacity: 1; } }
       `}</style>
 
-      {/* Ambient orb */}
-      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 700, height: 500, background: "radial-gradient(ellipse, rgba(124,58,237,0.07), rgba(6,182,212,0.03) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "ncOrbDrift 18s ease-in-out infinite" }} />
+      {/* Ambient orb behind everything */}
+      <div style={{ position: "absolute", top: "30%", left: "50%", transform: "translateX(-50%)", width: 700, height: 500, background: "radial-gradient(ellipse, rgba(124,58,237,0.08), rgba(6,182,212,0.04) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "nfOrbDrift 18s ease-in-out infinite" }} />
 
       {/* Header */}
-      <div style={{ textAlign: "center", marginBottom: 40 }}>
+      <div style={{ textAlign: "center", marginBottom: 30 }}>
         <div className="eyebrow" style={{ marginBottom: 14 }}>
           <span className="dot" /> THE NETWORK
         </div>
@@ -396,110 +420,108 @@ export function NeuralField() {
           <span className="shimmer-text">A billion connections.</span>
         </h2>
         <p className="h-sub" style={{ margin: "14px auto 0" }}>
-          Every agent, every modality, every data source — orchestrated as one living mesh.
+          Every source feeds into one intelligence. This is how Vortis charges.
         </p>
       </div>
 
-      {/* SVG Constellation */}
-      <div ref={svgRef} style={{
-        maxWidth: 1100, margin: "0 auto", position: "relative",
-        transform: `translate(${parallax.x * 0.3}px, ${parallax.y * 0.3}px)`,
+      {/* ── Main SVG stage ── */}
+      <div ref={containerRef} style={{
+        maxWidth: 1000, margin: "0 auto", position: "relative",
+        transform: `translate(${parallax.x * 0.4}px, ${parallax.y * 0.4}px)`,
         transition: "transform 0.3s cubic-bezier(.2,.7,.3,1)",
       }}>
-        <svg viewBox="0 0 1000 500" style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}>
+        <svg viewBox="0 0 1000 600" style={{ width: "100%", height: "auto", display: "block", overflow: "visible" }}>
 
-          {/* ── Glow filter ── */}
           <defs>
-            <filter id="ncGlow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
+            {/* Glow filters */}
+            <filter id="nfGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
-            <filter id="ncGlowBig" x="-100%" y="-100%" width="300%" height="300%">
-              <feGaussianBlur stdDeviation="8" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
+            <filter id="nfGlowBig" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="7" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
-            <linearGradient id="ncLinePurple" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#a855f7" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.4" />
+            <filter id="nfGlowHuge" x="-150%" y="-150%" width="400%" height="400%">
+              <feGaussianBlur stdDeviation="14" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+
+            {/* Wire gradient: source color → logo color */}
+            <linearGradient id="wireGradV" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#9d4edd" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0.8" />
             </linearGradient>
-            <radialGradient id="ncCoreGrad">
+            <linearGradient id="wireGradT" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0.8" />
+            </linearGradient>
+
+            {/* Logo arm gradient: violet at center → dark blue at tip */}
+            <linearGradient id="armGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#9d4edd" />
+              <stop offset="100%" stopColor="#1e3a8a" />
+            </linearGradient>
+
+            {/* Logo core radial gradient */}
+            <radialGradient id="coreGrad">
               <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="30%" stopColor="#a855f7" />
-              <stop offset="70%" stopColor="#7C3AED" />
-              <stop offset="100%" stopColor="#7C3AED" stopOpacity="0" />
+              <stop offset="60%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#9d4edd" />
+            </radialGradient>
+
+            {/* Surge overlay gradient (flares the whole logo periodically) */}
+            <radialGradient id="surgeGrad">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.9" />
+              <stop offset="50%" stopColor="#9d4edd" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#9d4edd" stopOpacity="0" />
             </radialGradient>
           </defs>
 
-          {/* ── Connections (self-drawing on scroll) ── */}
-          {connections.map((c, i) => {
-            // curved path from core to node
-            const mx = (c.from.x + c.to.x) / 2;
-            const my = (c.from.y + c.to.y) / 2;
-            const dx = c.to.x - c.from.x;
-            const dy = c.to.y - c.from.y;
-            const off = Math.sin(i * 1.7) * 30;
-            const cx = mx - dy * 0.08;
-            const cy = my + dx * 0.08 + off * 0.3;
-            const d = `M${c.from.x},${c.from.y} Q${cx},${cy} ${c.to.x},${c.to.y}`;
-            return (
-              <g key={`conn-${i}`}>
-                {/* soft glow underlay */}
-                <path d={d} stroke="rgba(124,58,237,0.08)" strokeWidth="6" fill="none" strokeLinecap="round" />
-                {/* main line — draws on scroll */}
-                <path
-                  d={d}
-                  stroke="url(#ncLinePurple)"
-                  strokeWidth="1.2"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray="1000"
-                  strokeDashoffset={inView ? "0" : "1000"}
-                  style={{ transition: `stroke-dashoffset 1.8s ease ${i * 0.1}s` }}
-                />
-                {/* flowing dashed energy */}
-                <path
-                  d={d}
-                  stroke="rgba(255,255,255,0.4)"
-                  strokeWidth="0.6"
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray="2 12"
-                  style={{ animation: inView ? `ncDraw ${4 + i * 0.3}s linear infinite` : "none", animationDelay: `${i * 0.2}s` }}
-                />
-              </g>
-            );
-          })}
+          {/* ── WIRES: source → logo arm-tips ── */}
+          {wires.map((w, i) => (
+            <g key={`wire-${i}`}>
+              {/* soft glow underlay */}
+              <path d={w.d} stroke={w.source.color} strokeWidth="5" fill="none" strokeLinecap="round" opacity="0.08" />
+              {/* main line — self-draws on scroll */}
+              <path
+                d={w.d}
+                stroke={w.source.color === "#9d4edd" ? "url(#wireGradV)" : "url(#wireGradT)"}
+                strokeWidth="1.1"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray="800"
+                strokeDashoffset={inView ? "0" : "800"}
+                style={{ transition: `stroke-dashoffset 1.8s ease ${i * 0.08}s` }}
+              />
+              {/* flowing dashed energy traveling INTO logo */}
+              <path
+                d={w.d}
+                stroke="rgba(255,255,255,0.55)"
+                strokeWidth="0.6"
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray="3 14"
+                style={{ animation: inView ? `nfFlow ${1.6 + (i % 3) * 0.3}s linear infinite` : "none", animationDelay: `${i * 0.15}s` }}
+              />
+            </g>
+          ))}
 
-          {/* ── Traveling energy pulses ── */}
-          {pulses.map((p, i) => {
-            const mx = (p.from.x + p.to.x) / 2;
-            const my = (p.from.y + p.to.y) / 2;
-            const dx = p.to.x - p.from.x;
-            const dy = p.to.y - p.from.y;
-            const off = Math.sin(i * 1.7) * 30;
-            const cx = mx - dy * 0.08;
-            const cy = my + dx * 0.08 + off * 0.3;
-            const pathD = `M${p.from.x},${p.from.y} Q${cx},${cy} ${p.to.x},${p.to.y}`;
-            return (
-              <circle key={`pulse-${i}`} r="3" fill="#ffffff" filter="url(#ncGlow)">
-                <animateMotion
-                  dur={`${p.dur}s`}
-                  repeatCount="indefinite"
-                  begin={`${p.delay}s`}
-                  path={pathD}
-                />
-                <animate attributeName="opacity" values="0;1;1;0" dur={`${p.dur}s`} repeatCount="indefinite" begin={`${p.delay}s`} />
-              </circle>
-            );
-          })}
+          {/* ── TRAVELING ENERGY PULSES (white dots moving source → logo) ── */}
+          {wires.map((w, i) => (
+            <circle key={`pulse-${i}`} r="3" fill="#ffffff" filter="url(#nfGlow)">
+              <animateMotion
+                dur={`${w.dur}s`}
+                repeatCount="indefinite"
+                begin={`${w.delay}s`}
+                path={w.d}
+              />
+              <animate attributeName="opacity" values="0;1;1;0" dur={`${w.dur}s`} repeatCount="indefinite" begin={`${w.delay}s`} />
+              <animate attributeName="r" values="2;3.5;2" dur={`${w.dur}s`} repeatCount="indefinite" begin={`${w.delay}s`} />
+            </circle>
+          ))}
 
-          {/* ── Floating particles ── */}
+          {/* ── AMBIENT FLOATING PARTICLES ── */}
           {particles.map((p, i) => (
             <circle
               key={`particle-${i}`}
@@ -507,71 +529,132 @@ export function NeuralField() {
               fill={p.color}
               opacity="0.4"
               style={{
-                animation: `ncFloat ${p.dur}s ease-in-out infinite`,
+                animation: `nfParticleDrift ${p.dur}s ease-in-out infinite`,
                 animationDelay: `${p.delay}s`,
-                filter: "url(#ncGlow)",
+                filter: "url(#nfGlow)",
               }}
             />
           ))}
 
-          {/* ── Outer nodes ── */}
-          {nodes.filter(n => !n.big).map((n, i) => (
-            <g key={`node-${n.id}`} style={{ animation: `ncPulse ${3 + i * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.4}s`, transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" }}>
+          {/* ── OUTER SOURCE NODES ── */}
+          {sources.map((s, i) => (
+            <g key={`source-${s.id}`} style={{ animation: `nfNodePulse ${3 + i * 0.25}s ease-in-out infinite`, animationDelay: `${i * 0.3}s`, transformOrigin: `${s.x}px ${s.y}px`, transformBox: "fill-box" }}>
               {/* expanding ring */}
-              <circle cx={n.x} cy={n.y} r="8" fill="none" stroke={n.color} strokeWidth="0.8" opacity="0.3" style={{ animation: `ncRingExpand 3s ease-out infinite`, animationDelay: `${i * 0.5}s`, transformOrigin: `${n.x}px ${n.y}px` }} />
-              {/* glow */}
-              <circle cx={n.x} cy={n.y} r="7" fill={n.color} opacity="0.25" filter="url(#ncGlowBig)" />
+              <circle cx={s.x} cy={s.y} r="9" fill="none" stroke={s.color} strokeWidth="0.8" opacity="0.25" style={{ animation: `nfRingExpand 3.5s ease-out infinite`, animationDelay: `${i * 0.4}s`, transformOrigin: `${s.x}px ${s.y}px` }} />
+              {/* soft glow */}
+              <circle cx={s.x} cy={s.y} r="8" fill={s.color} opacity="0.2" filter="url(#nfGlowBig)" />
               {/* core */}
-              <circle cx={n.x} cy={n.y} r="4" fill={n.color} filter="url(#ncGlow)" />
+              <circle cx={s.x} cy={s.y} r="4.5" fill={s.color} filter="url(#nfGlow)" />
               {/* white center */}
-              <circle cx={n.x} cy={n.y} r="1.8" fill="#ffffff" opacity="0.9" />
+              <circle cx={s.x} cy={s.y} r="2" fill="#ffffff" opacity="0.95" />
               {/* label */}
-              <text x={n.x} y={n.y - 14} textAnchor="middle" fill={n.color} fontSize="9" fontFamily="'JetBrains Mono', monospace" opacity="0.7" style={{ letterSpacing: "0.1em" }}>{n.label}</text>
+              <text
+                x={s.x} y={s.y - 16}
+                textAnchor="middle"
+                fill={s.color}
+                fontSize="9"
+                fontFamily="'JetBrains Mono', monospace"
+                opacity="0.7"
+                style={{ letterSpacing: "0.08em" }}
+              >{s.label}</text>
             </g>
           ))}
 
-          {/* ── Central core ── */}
-          <g style={{ transformOrigin: "500px 250px", transformBox: "fill-box" }}>
-            {/* outer rotating ring with dots */}
-            <g style={{ animation: "ncSpin 20s linear infinite", transformOrigin: "500px 250px" }}>
-              <circle cx="500" cy="250" r="40" fill="none" stroke="rgba(168,85,247,0.2)" strokeWidth="0.8" strokeDasharray="4 8" />
-              <circle cx="500" cy="210" r="2.5" fill="#a855f7" filter="url(#ncGlow)" />
+          {/* ════════════════════════════════════════════════════════════
+              THE VORTIS LOGO — at the center, charged by the wires
+              ════════════════════════════════════════════════════════════ */}
+          <g style={{ transformOrigin: `${LOGO_CX}px ${LOGO_CY}px`, transformBox: "fill-box" }}>
+
+            {/* Surge flare — periodically lights up the whole logo */}
+            <circle cx={LOGO_CX} cy={LOGO_CY} r="90" fill="url(#surgeGrad)" filter="url(#nfGlowHuge)" style={{ animation: "nfSurge 7s ease-in-out infinite" }} />
+
+            {/* Expanding radar pings from logo */}
+            <circle cx={LOGO_CX} cy={LOGO_CY} r="40" fill="none" stroke="#9d4edd" strokeWidth="1" opacity="0.4" style={{ animation: "nfRingExpand 3.5s ease-out infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }} />
+            <circle cx={LOGO_CX} cy={LOGO_CY} r="40" fill="none" stroke="#14b8a6" strokeWidth="1" opacity="0.3" style={{ animation: "nfRingExpand 3.5s ease-out infinite", animationDelay: "1.7s", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }} />
+
+            {/* Outer rotating dashed ring with orbiting dots */}
+            <g style={{ animation: "nfHaloSpin 22s linear infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }}>
+              <circle cx={LOGO_CX} cy={LOGO_CY} r="48" fill="none" stroke="rgba(157,78,221,0.2)" strokeWidth="0.8" strokeDasharray="4 8" />
+              <circle cx={LOGO_CX} cy={LOGO_CY - 48} r="2.5" fill="#9d4edd" filter="url(#nfGlow)" />
             </g>
-            {/* reverse ring */}
-            <g style={{ animation: "ncSpinRev 16s linear infinite", transformOrigin: "500px 250px" }}>
-              <circle cx="500" cy="250" r="30" fill="none" stroke="rgba(6,182,212,0.2)" strokeWidth="0.8" strokeDasharray="3 6" />
-              <circle cx="530" cy="250" r="2" fill="#06b6d4" filter="url(#ncGlow)" />
+            {/* Reverse ring */}
+            <g style={{ animation: "nfHaloSpinRev 18s linear infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }}>
+              <circle cx={LOGO_CX} cy={LOGO_CY} r="38" fill="none" stroke="rgba(20,184,166,0.2)" strokeWidth="0.8" strokeDasharray="3 6" />
+              <circle cx={LOGO_CX + 38} cy={LOGO_CY} r="2" fill="#14b8a6" filter="url(#nfGlow)" />
             </g>
-            {/* breathing core */}
-            <g style={{ animation: "ncCoreBreathe 3s ease-in-out infinite", transformOrigin: "500px 250px" }}>
-              <circle cx="500" cy="250" r="22" fill="url(#ncCoreGrad)" filter="url(#ncGlowBig)" />
-              <circle cx="500" cy="250" r="14" fill="#a855f7" opacity="0.8" filter="url(#ncGlow)" />
-              <circle cx="500" cy="250" r="6" fill="#ffffff" opacity="0.95" />
+
+            {/* ── 11 vortex arms (the logo's spiraling arms) ── */}
+            {armTips.map((arm, i) => {
+              // Each arm: curved path from center to tip, with vortex swirl
+              const startX = LOGO_CX + Math.cos(arm.angle) * LOGO_HALO_R;
+              const startY = LOGO_CY + Math.sin(arm.angle) * LOGO_HALO_R;
+              // control point offset perpendicular for swirl
+              const midX = (startX + arm.tipX) / 2;
+              const midY = (startY + arm.tipY) / 2;
+              const perpX = -Math.sin(arm.angle) * ARM_CURVE;
+              const perpY = Math.cos(arm.angle) * ARM_CURVE;
+              const cpX = midX + perpX;
+              const cpY = midY + perpY;
+              const armD = `M${startX},${startY} Q${cpX},${cpY} ${arm.tipX},${arm.tipY}`;
+              return (
+                <g key={`arm-${i}`}>
+                  {/* arm glow underlay */}
+                  <path d={armD} stroke={arm.color} strokeWidth="4" fill="none" strokeLinecap="round" opacity="0.15" filter="url(#nfGlow)" />
+                  {/* main arm — pulses as energy arrives */}
+                  <path
+                    d={armD}
+                    stroke="url(#armGrad)"
+                    strokeWidth="2"
+                    fill="none"
+                    strokeLinecap="round"
+                    style={{
+                      animation: `nfArmGlow ${2.4 + (i % 3) * 0.4}s ease-in-out infinite`,
+                      animationDelay: `${i * 0.3}s`,
+                      filter: "url(#nfGlow)",
+                    }}
+                  />
+                  {/* arm-tip node */}
+                  <circle cx={arm.tipX} cy={arm.tipY} r="3.5" fill={arm.color} filter="url(#nfGlow)" style={{ animation: `nfNodePulse ${2.6 + (i % 3) * 0.3}s ease-in-out infinite`, animationDelay: `${i * 0.25}s`, transformOrigin: `${arm.tipX}px ${arm.tipY}px` }} />
+                  <circle cx={arm.tipX} cy={arm.tipY} r="1.5" fill="#ffffff" opacity="0.95" />
+                </g>
+              );
+            })}
+
+            {/* ── Violet halo ring ── */}
+            <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_HALO_R} fill="none" stroke="#9d4edd" strokeWidth="1.5" opacity="0.7" filter="url(#nfGlow)" />
+
+            {/* ── White core (breathing) ── */}
+            <g style={{ animation: "nfCoreBreathe 2.5s ease-in-out infinite", transformOrigin: `${LOGO_CX}px ${LOGO_CY}px` }}>
+              {/* outer glow */}
+              <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_CORE_R + 6} fill="#9d4edd" opacity="0.3" filter="url(#nfGlowHuge)" />
+              {/* core */}
+              <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_CORE_R} fill="url(#coreGrad)" filter="url(#nfGlowBig)" />
+              {/* hot white center */}
+              <circle cx={LOGO_CX} cy={LOGO_CY} r={LOGO_CORE_R * 0.55} fill="#ffffff" opacity="0.98" />
+              {/* shine */}
+              <ellipse cx={LOGO_CX - 4} cy={LOGO_CY - 4} rx="5" ry="3" fill="#ffffff" opacity="0.6" />
             </g>
-            {/* expanding radar pings */}
-            <circle cx="500" cy="250" r="22" fill="none" stroke="#a855f7" strokeWidth="1" opacity="0.5" style={{ animation: "ncRingExpand 3s ease-out infinite", transformOrigin: "500px 250px" }} />
-            <circle cx="500" cy="250" r="22" fill="none" stroke="#06b6d4" strokeWidth="1" opacity="0.4" style={{ animation: "ncRingExpand 3s ease-out infinite", animationDelay: "1.5s", transformOrigin: "500px 250px" }} />
           </g>
         </svg>
 
         {/* Bottom hint chips */}
         <div style={{
-          position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)",
+          position: "absolute", bottom: -10, left: "50%", transform: "translateX(-50%)",
           display: "flex", gap: 16, pointerEvents: "none",
           fontSize: 10, color: "rgba(255,255,255,0.3)",
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em", textTransform: "uppercase",
         }}>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#a855f7", boxShadow: "0 0 6px #a855f7" }} />
-            11 nodes
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#9d4edd", boxShadow: "0 0 6px #9d4edd" }} />
+            10 sources
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#06b6d4", boxShadow: "0 0 6px #06b6d4" }} />
-            live mesh
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#14b8a6", boxShadow: "0 0 6px #14b8a6" }} />
+            11-arm vortex
           </span>
           <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "ncPulse 1.5s ease-in-out infinite" }} />
-            synced
+            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "nfNodePulse 1.5s ease-in-out infinite" }} />
+            charging
           </span>
         </div>
       </div>
@@ -3218,352 +3301,54 @@ function FAQ() {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  CTA SECTION
-// ══════════════════════════════════════════════════════════════════
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
   const [showPicker, setShowPicker] = useState(false);
-  const btnRef = useRef(null);
-
-  // Magnetic button
-  useEffect(() => {
-    const el = btnRef.current; if (!el) return;
-    const onWinMove = (e) => {
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const dist = Math.hypot(e.clientX - cx, e.clientY - cy);
-      if (dist < 110) {
-        const dx = (e.clientX - cx) * 0.18, dy = (e.clientY - cy) * 0.18;
-        el.style.transform = `translate(${dx}px, ${dy}px)`;
-      } else {
-        el.style.transform = "translate(0,0)";
-      }
-    };
-    window.addEventListener("mousemove", onWinMove);
-    return () => window.removeEventListener("mousemove", onWinMove);
-  }, []);
-
   return (
-    <section ref={ref} className="section reveal" style={{ padding: "100px 40px 120px", position: "relative", overflow: "hidden" }}>
-      <style>{`
-        @keyframes ctaShine { 0% { left: -100%; } 100% { left: 200%; } }
-        @keyframes ctaOrbDrift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-25px,18px); } }
-        @keyframes ctaDotPulse { 0%,100% { opacity: .4; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
-        @keyframes ctaBarWave { 0%,100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
-        @keyframes ctaFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
-        @keyframes ctaFloatRev { 0%,100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
-        @keyframes ctaProgress { 0% { width: 0%; } 100% { width: 100%; } }
-        @keyframes ctaScan { 0% { transform: translateY(-100%); } 100% { transform: translateY(400%); } }
-        @keyframes ctaFadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
-
-      {/* Ambient orb */}
-      <div style={{ position: "absolute", top: "25%", left: "35%", width: 650, height: 480, background: "radial-gradient(ellipse, rgba(124,58,237,0.09), rgba(6,182,212,0.04) 50%, transparent 75%)", filter: "blur(70px)", pointerEvents: "none", animation: "ctaOrbDrift 16s ease-in-out infinite" }} />
-
-      {/* Split layout */}
-      <div style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }} className="cta-split">
-
-        {/* ── LEFT: copy + button ── */}
-        <div style={{
-          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
-          transition: "all 0.8s cubic-bezier(.2,.7,.3,1)",
-        }}>
-          <div className="eyebrow" style={{ marginBottom: 20 }}>
-            <span className="dot" /> READY WHEN YOU ARE
-          </div>
-
-          <h2 className="h-section" style={{ fontSize: "clamp(34px,5vw,56px)", marginBottom: 18 }}>
+    <section ref={ref} style={{ padding: "100px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1, textAlign: "center" }}>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse 60% 70% at 50% 50%, rgba(124,58,237,0.07), transparent)", pointerEvents: "none" }} />
+      <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
+        <div style={{ opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)", transition: "all 0.8s ease" }}>
+          <div style={{ fontSize: 52, marginBottom: 20 }}>✦</div>
+          <h2 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(32px,6vw,62px)", margin: "0 0 20px", letterSpacing: "-0.04em", lineHeight: 1.05 }}>
             Start thinking{" "}
-            <span className="shimmer-text">faster.</span>
+            <span style={{ background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "gradientShift 4s ease-in-out infinite" }}>faster.</span>
           </h2>
-
-          <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", lineHeight: 1.65, maxWidth: 480, marginBottom: 32 }}>
-            Join 50,000+ professionals who use Vortis every day. Free to start — no credit card, no lock-in, no friction. Ship your first feature in under 30 minutes.
+          <p style={{ fontSize: 18, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 40 }}>
+            Join 50,000+ professionals who use Vortis every day. Free to start.
           </p>
-
-          {/* Button */}
-          <div style={{ display: "flex", gap: 14, marginBottom: 28, flexWrap: "wrap" }}>
-            <button
-              ref={btnRef}
-              onClick={() => setShowPicker(true)}
-              style={{
-                padding: "16px 36px", borderRadius: 99, fontSize: 16, fontWeight: 700,
-                background: "linear-gradient(135deg, #7C3AED, #8b5cf6)", color: "#fff",
-                border: "none", cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 9,
-                position: "relative", overflow: "hidden",
-                boxShadow: "0 0 40px rgba(124,58,237,0.4), 0 12px 32px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)",
-                transition: "box-shadow .3s ease",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 0 64px rgba(124,58,237,0.6), 0 16px 44px rgba(124,58,237,0.32), inset 0 1px 0 rgba(255,255,255,0.3)"; }}
-              onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.4), 0 12px 32px rgba(124,58,237,0.22), inset 0 1px 0 rgba(255,255,255,0.2)"; }}
+          <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+            <button onClick={() => setShowPicker(true)} style={{
+              padding: "16px 40px", borderRadius: 99, fontSize: 16, fontWeight: 700,
+              background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
+              border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+              position: "relative",
+              boxShadow: "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)",
+              transition: "all 0.25s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 80px rgba(124,58,237,0.7), 0 24px 60px rgba(124,58,237,0.4)"; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.55), 0 16px 40px rgba(124,58,237,0.3)"; }}
             >
-              <span style={{ position: "absolute", top: 0, bottom: 0, width: "40%", background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)", animation: "ctaShine 3.5s ease-in-out infinite", pointerEvents: "none" }} />
+              <span style={{
+                position: "absolute", inset: -3, borderRadius: 99,
+                border: "3px solid #c4b5fd",
+                animation: "radarPing 1.6s ease-out infinite",
+                pointerEvents: "none",
+              }} />
               <Zap size={18} style={{ position: "relative", zIndex: 1 }} />
               <span style={{ position: "relative", zIndex: 1 }}>Get Started Free</span>
-              <ArrowRight size={16} style={{ position: "relative", zIndex: 1 }} />
             </button>
           </div>
-
-          {/* Trust chips */}
-          <div style={{
-            display: "flex", gap: 18, flexWrap: "wrap",
-            fontSize: 12, color: "rgba(255,255,255,0.4)",
-            fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.05em",
-          }}>
-            {["No credit card", "Cancel anytime", "SOC 2 Type II", "12 min setup"].map(t => (
-              <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                <Check size={12} style={{ color: "rgba(6,182,212,0.8)" }} />
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* ── RIGHT: animated product preview ── */}
-        <div style={{
-          opacity: inView ? 1 : 0, transform: inView ? "translateY(0)" : "translateY(30px)",
-          transition: "all 0.8s cubic-bezier(.2,.7,.3,1) 0.15s",
-        }}>
-          <PreviewPanel inView={inView} />
         </div>
       </div>
-
       {showPicker && (
         <AuthPicker
-          onLogin={provider => { setShowPicker(false); onLogin(provider); }}
+          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
           authLoading={false}
           onClose={() => setShowPicker(false)}
         />
       )}
-
-      <style>{`
-        @media (max-width: 880px) { .cta-split { grid-template-columns: 1fr !important; gap: 40px !important; } }
-      `}</style>
     </section>
-  );
-}
-
-// ── Animated product preview panel ──
-function PreviewPanel({ inView }) {
-  const users = useCountUp(84213, 2200, inView);
-  const queries = useCountUp(2400000, 2200, inView);
-  const latency = useCountUp(12, 2200, inView);
-
-  return (
-    <div style={{ position: "relative" }}>
-      {/* Floating badges around panel */}
-      <div style={{
-        position: "absolute", top: -16, right: -12, zIndex: 3,
-        animation: "ctaFloat 5s ease-in-out infinite",
-      }}>
-        <div style={{
-          padding: "8px 14px", borderRadius: 10,
-          background: "rgba(15,12,30,0.85)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          border: "1px solid rgba(6,182,212,0.3)",
-          boxShadow: "0 0 24px rgba(6,182,212,0.15)",
-          display: "flex", alignItems: "center", gap: 8,
-          fontSize: 11, fontWeight: 600, color: "#06b6d4",
-          fontFamily: "'JetBrains Mono', monospace",
-        }}>
-          <Shield size={13} />
-          SOC 2
-        </div>
-      </div>
-
-      <div style={{
-        position: "absolute", bottom: -14, left: -12, zIndex: 3,
-        animation: "ctaFloatRev 6s ease-in-out infinite", animationDelay: "0.5s",
-      }}>
-        <div style={{
-          padding: "8px 14px", borderRadius: 10,
-          background: "rgba(15,12,30,0.85)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          border: "1px solid rgba(168,85,247,0.3)",
-          boxShadow: "0 0 24px rgba(168,85,247,0.15)",
-          display: "flex", alignItems: "center", gap: 8,
-          fontSize: 11, fontWeight: 600, color: "#a855f7",
-          fontFamily: "'JetBrains Mono', monospace",
-        }}>
-          <Cpu size={13} />
-          GPT-5 class
-        </div>
-      </div>
-
-      {/* Main panel */}
-      <div className="gradient-border" style={{
-        borderRadius: 18, overflow: "hidden",
-        background: "linear-gradient(160deg, rgba(15,12,30,0.7), rgba(3,3,10,0.9))",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        boxShadow: "0 30px 80px -20px rgba(0,0,0,0.6)",
-        position: "relative",
-      }}>
-        {/* Panel header */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)",
-        }}>
-          <div style={{ display: "flex", gap: 5 }}>
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff5f57" }} />
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#febc2e" }} />
-            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#28c840" }} />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>
-            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", animation: "ctaDotPulse 1.5s ease-in-out infinite" }} />
-            vortis · dashboard
-          </div>
-        </div>
-
-        {/* Panel body */}
-        <div style={{ padding: 20 }}>
-          {/* Top metric row */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
-            {[
-              { label: "USERS", value: users, color: "#a855f7", icon: Users },
-              { label: "QUERIES", value: queries, color: "#06b6d4", icon: BarChart3 },
-              { label: "LATENCY", value: `${latency}ms`, color: "#a855f7", icon: Zap },
-            ].map((m, i) => {
-              const Icon = m.icon;
-              return (
-                <div key={i} style={{
-                  padding: "12px 12px", borderRadius: 10,
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.05)",
-                  animation: `ctaFadeUp 0.5s ease`, animationDelay: `${0.3 + i * 0.1}s`, animationFillMode: "both",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.1em" }}>{m.label}</span>
-                    <Icon size={11} style={{ color: m.color }} />
-                  </div>
-                  <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif", color: m.color, letterSpacing: "-0.02em" }}>
-                    {typeof m.value === "number" ? m.value.toLocaleString() : m.value}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Live chart card */}
-          <div style={{
-            padding: 16, borderRadius: 12,
-            background: "rgba(255,255,255,0.015)",
-            border: "1px solid rgba(255,255,255,0.05)",
-            position: "relative", overflow: "hidden",
-            marginBottom: 14,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>Throughput</div>
-                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>last 30 days</div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#22c55e", fontFamily: "'JetBrains Mono', monospace" }}>
-                <TrendingUp size={11} />
-                +24%
-              </div>
-            </div>
-
-            {/* Self-drawing SVG chart */}
-            <svg viewBox="0 0 280 80" style={{ width: "100%", height: 70 }}>
-              <defs>
-                <linearGradient id="ctaChartG" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#a855f7" stopOpacity="0.4" />
-                  <stop offset="100%" stopColor="#a855f7" stopOpacity="0" />
-                </linearGradient>
-                <linearGradient id="ctaChartLine" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stopColor="#a855f7" />
-                  <stop offset="100%" stopColor="#06b6d4" />
-                </linearGradient>
-              </defs>
-              {/* Grid lines */}
-              {[20, 40, 60].map(y => (
-                <line key={y} x1="0" y1={y} x2="280" y2={y} stroke="rgba(255,255,255,0.04)" strokeWidth="0.5" strokeDasharray="2 3" />
-              ))}
-              {/* Area fill */}
-              <path
-                d="M0,60 L20,55 L40,48 L60,52 L80,40 L100,38 L120,30 L140,32 L160,22 L180,25 L200,18 L220,20 L240,12 L260,14 L280,8 L280,80 L0,80 Z"
-                fill="url(#ctaChartG)"
-              />
-              {/* Line — draws on scroll */}
-              <path
-                d="M0,60 L20,55 L40,48 L60,52 L80,40 L100,38 L120,30 L140,32 L160,22 L180,25 L200,18 L220,20 L240,12 L260,14 L280,8"
-                stroke="url(#ctaChartLine)"
-                strokeWidth="1.5"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeDasharray="600"
-                strokeDashoffset={inView ? "0" : "600"}
-                style={{ transition: "stroke-dashoffset 2.2s ease 0.3s" }}
-              />
-              {/* End point with pulse */}
-              <circle cx="280" cy="8" r="2.5" fill="#06b6d4">
-                <animate attributeName="r" from="2.5" to="5" dur="1.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" from="1" to="0" dur="1.5s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="280" cy="8" r="2.5" fill="#06b6d4" />
-            </svg>
-
-            {/* Scan line overlay */}
-            <div style={{
-              position: "absolute", left: 0, right: 0, top: 0, height: 2,
-              background: "linear-gradient(90deg, transparent, rgba(168,85,247,0.6), transparent)",
-              animation: "ctaScan 4s ease-in-out infinite", pointerEvents: "none",
-            }} />
-          </div>
-
-          {/* Deploy progress */}
-          <div style={{
-            padding: "12px 14px", borderRadius: 10,
-            background: "rgba(255,255,255,0.015)",
-            border: "1px solid rgba(255,255,255,0.05)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                <Rocket size={12} style={{ color: "#a855f7" }} />
-                <span style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,0.7)" }}>Deploying to edge</span>
-              </div>
-              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", fontFamily: "'JetBrains Mono', monospace" }}>14 / 14 regions</span>
-            </div>
-            <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)", overflow: "hidden", position: "relative" }}>
-              <div style={{
-                height: "100%", borderRadius: 2,
-                background: "linear-gradient(90deg, #a855f7, #06b6d4)",
-                boxShadow: "0 0 8px rgba(168,85,247,0.5)",
-                width: inView ? "100%" : "0%",
-                transition: "width 2s ease 0.5s",
-              }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 8, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>
-              <span>✓ compiled</span>
-              <span>✓ tested</span>
-              <span>✓ bundled</span>
-              <span style={{ color: "#22c55e" }}>● live</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Panel footer with wave bars */}
-        <div style={{
-          padding: "8px 18px", borderTop: "1px solid rgba(255,255,255,0.05)",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-          background: "rgba(255,255,255,0.02)",
-        }}>
-          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono', monospace" }}>2,847 events/min</span>
-          <div style={{ display: "flex", gap: 2, alignItems: "flex-end", height: 12 }}>
-            {[...Array(6)].map((_, j) => (
-              <div key={j} style={{
-                width: 2, height: "100%",
-                background: j % 2 === 0 ? "#a855f7" : "#06b6d4",
-                borderRadius: 1, opacity: 0.6,
-                transformOrigin: "bottom",
-                animation: `ctaBarWave ${0.7 + j * 0.12}s ease-in-out infinite`,
-                animationDelay: `${j * 0.08}s`,
-              }} />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
