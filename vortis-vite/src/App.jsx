@@ -2228,12 +2228,12 @@ export default function VortisAI() {
   handleResize(); window.addEventListener('resize', handleResize); return () => window.removeEventListener('resize', handleResize);
 }, []);
 
-  const LIMITS = {
-    free:     { messages: 10, documents: 1, images: 2, vision: 0 },
-    silver:   { messages: 300, documents: 40, images: 20, vision: 3 },
-    gold:     { messages: 500, documents: 50, images: 40, vision: 10 },
-    platinum: { messages: 999999, documents: 999999, images: 999999, vision: 999999 }
-  };
+ const LIMITS = {
+  free:     { messages: 10,  documents: 1,  images: 2,  vision: 0 },
+  silver:   { messages: 80,  documents: 5,  images: 6,  vision: 2 },
+  gold:     { messages: 100, documents: 8,  images: 10, vision: 3 },
+  platinum: { messages: 120, documents: 10, images: 12, vision: 4 },
+};
 
   const PLANS = [
     { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice mode'] },
