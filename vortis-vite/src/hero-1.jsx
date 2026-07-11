@@ -1453,7 +1453,7 @@ function HowItWorks() {
 
       {/* Bottom CTA strip */}
       <div className={`reveal ${inView ? 'in' : ''}`} style={{ marginTop: 80, textAlign: 'center' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '14px 22px', borderRadius: 999, background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.2)' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-start', gap: 14, padding: '14px 22px', borderRadius: 999, background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.2)' }}>
           <Sparkles size={16} style={{ color: '#a78bfa' }} />
           <span style={{ fontSize: 14, color: 'rgba(255,255,255,.8)' }}>One AI. Every Possibility.</span>
           <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 16, color: '#a78bfa' }}>Everything in one place</span>
