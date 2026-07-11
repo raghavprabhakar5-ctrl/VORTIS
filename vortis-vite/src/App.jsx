@@ -2236,7 +2236,7 @@ export default function VortisAI() {
 };
 
   const PLANS = [
-    { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice mode'] },
+    { tier: 'silver', name: 'Silver', popular: false, durations: [{ label: '1 Month', price: '$9', saving: null }, { label: '3 Months', price: '$24', saving: 'Save 10%' }, { label: '6 Months', price: '$43', saving: 'Save 20%' }, { label: '1 Year', price: '$81', saving: 'Save 25%' }], feats: ['300 messages/day', '40 documents/day', '20 images/day', '3 vision/day', 'Priority access', 'Voice Call'] },
     { tier: 'gold', name: 'Gold', popular: true, durations: [{ label: '1 Month', price: '$19', saving: null }, { label: '3 Months', price: '$51', saving: 'Save 10%' }, { label: '6 Months', price: '$91', saving: 'Save 20%' }, { label: '1 Year', price: '$171', saving: 'Save 25%' }], feats: ['500 messages/day', '50 documents/day', '40 images/day', '10 vision/day', 'Priority responses', 'Deep research'] },
     { tier: 'platinum', name: 'Platinum', popular: false, durations: [{ label: '1 Month', price: '$29', saving: null }, { label: '3 Months', price: '$78', saving: 'Save 10%' }, { label: '6 Months', price: '$139', saving: 'Save 20%' }, { label: '1 Year', price: '$261', saving: 'Save 25%' }], feats: ['Unlimited messages', 'Unlimited documents', 'Unlimited images', 'Unlimited vision', 'VIP support', 'Early features'] },
   ];
@@ -3960,8 +3960,7 @@ You have the following capabilities:
 - **Code**: Write, debug, and explain code in any language
 - **Deep Research**: Write thorough multi-paragraph research on any topic
 - **Web Search**: Real-time web results for news, people, events, scores, weather, stocks
-- **Voice Mode**: Speak responses aloud when enabled
-
+- **Voice Call**: Speak responses aloud when enabled
 
 Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. Current time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})} — it is ${now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening'} right now. Current year: ${now.getFullYear()}. Never say a wrong year. When suggesting messages for the user to send, always use the correct greeting based on this time — never write "Good morning/afternoon" with a slash. If unsure about anything current, use WEB_SEARCH.
 ${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally — not every message.` : ''}${memoriesContext}
