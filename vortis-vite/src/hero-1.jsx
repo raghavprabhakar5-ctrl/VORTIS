@@ -3140,7 +3140,7 @@ function CTA({ onLogin }) {
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.background = "rgba(139,92,246,0.08)"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
-            >Product Walkthrough</a>
+            >Watch Demo</a>
           </div>
 
           {/* Trust badges row */}
