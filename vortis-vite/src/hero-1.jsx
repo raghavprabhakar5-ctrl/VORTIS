@@ -842,7 +842,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
   {!authLoading && <ArrowRight size={16} style={{ animation: "ctaArrow 1.6s ease-in-out infinite" }} />}
 </GlowPillButton>
 
-  <a href="#capabilities" style={{
+  <a href="#walkthrough" style={{
     padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
     border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
     background: "rgba(255,255,255,0.04)", textDecoration: "none",
@@ -1257,7 +1257,7 @@ function BentoGrid() {
   ];
 
   return (
-    <section ref={ref} style={{ padding: "90px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
+    <section ref={ref} id="capabilities" style={{ padding: "90px 40px", position: "relative", zIndex: 1, borderTop: "1px solid rgba(255,255,255,0.04)", maxWidth: 1200, margin: "0 auto" }}>
       <style>{`
         @keyframes tileIn{0%{opacity:0;transform:translateY(36px) scale(.95)}60%{opacity:1;transform:translateY(-5px) scale(1.01)}100%{opacity:1;transform:translateY(0) scale(1)}}
         @keyframes caretB{0%,100%{opacity:1}50%{opacity:0}}
@@ -2335,7 +2335,7 @@ function Showcase() {
   const tab = DEMO_TABS[active];
 
   return (
-    <section id="capabilities" ref={ref} style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
+    <section ref={ref} id="walkthrough" style={{ padding: "80px 40px", borderTop: "1px solid rgba(255,255,255,0.04)", position: "relative", zIndex: 1 }}>
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 52 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", marginBottom: 16, opacity: inView ? 1 : 0, transition: "opacity 0.7s ease" }}>
@@ -3131,7 +3131,7 @@ function CTA({ onLogin }) {
             </div>
 
             {/* Secondary link button */}
-            <a href="#capabilities" style={{
+            <a href="#walkthrough" style={{
               padding: "16px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
               border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
               background: "rgba(255,255,255,0.04)", textDecoration: "none",
