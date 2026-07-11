@@ -5334,68 +5334,125 @@ onChange={e => {
   />
 )}
 
-      {showUpgrade && (
-        <div className="modal-overlay" style={{ alignItems: 'flex-start', paddingTop: 24 }}>
-          {upgradeOk ? (
-            <div className="modal-box" style={{ maxWidth: 300, textAlign: 'center', margin: 'auto' }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}><Check size={24} color="var(--green)"/></div>
-              <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 5 }}>Plan activated!</h3>
-              <p style={{ fontSize: 13, color: 'var(--text2)' }}>Welcome to {selectedPlan?.name}.</p>
-            </div>
-          ) : (
-            <div className="modal-box" style={{ maxWidth: 820, width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
-                <div>
-                  <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10 }}><Crown size={20} color="var(--amber)"/> Upgrade to Premium</h2>
-                  {availablePlans.length === 0 ? (
-                    <p style={{ fontSize: 12, color: 'var(--green)', fontFamily: 'JetBrains Mono' }}>✓ You're on the highest plan — Platinum</p>
-                  ) : (
-                    <p style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>All plans renew automatically · Cancel anytime · Upgrade only</p>
-                  )}
-                </div>
-                <button className="modal-close" onClick={() => setShowUpgrade(false)} style={{ position: 'static' }}><X size={14}/></button>
-              </div>
-              {availablePlans.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div style={{ fontSize: 40, marginBottom: 12 }}>✦</div>
-                  <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text1)', marginBottom: 6 }}>You have the best plan!</p>
-                  <p style={{ fontSize: 13, color: 'var(--text3)' }}>Unlimited messages, images, and documents — enjoy.</p>
-                </div>
-              ) : (
-                <div className="plans-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 }}>
-                  {availablePlans.map(plan => (
-                    <div key={plan.tier} className={`plan-card ${plan.popular ? 'featured' : ''}`} style={{ position: 'relative' }}>
-                      {plan.popular && <div style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(135deg,var(--indigo),var(--violet))', padding: '3px 14px', borderRadius: 20, fontSize: 10.5, color: 'white', fontFamily: 'JetBrains Mono', fontWeight: 700, whiteSpace: 'nowrap' }}>Most popular</div>}
-                      <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                        {plan.tier === 'silver' && <Star size={18} color="#94a3b8" fill="#94a3b8" style={{ margin: '0 auto 10px', display: 'block' }}/>}
-{plan.tier === 'gold' && <Crown size={18} color="#fbbf24" fill="#fbbf24" style={{ margin: '0 auto 10px', display: 'block' }}/>}
-{plan.tier === 'platinum' && <Gem size={18} color="#06b6d4" fill="#06b6d4" style={{ margin: '0 auto 10px', display: 'block' }}/>}
-                        <h3 style={{ fontWeight: 700, fontSize: 14, marginBottom: 10 }}>{plan.name}</h3>
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-                          {plan.durations.map((d, i) => (
-                            <button key={i} onClick={() => setSelectedDuration(i)} style={{ padding: '3px 8px', borderRadius: 8, fontSize: 10.5, fontFamily: 'JetBrains Mono', cursor: 'pointer', border: `1px solid ${selectedDuration===i?'var(--indigo)':'var(--border2)'}`, background: selectedDuration===i?'rgba(99,102,241,.12)':'var(--bg3)', color: selectedDuration===i?'var(--indigo)':'var(--text3)', transition: 'all .15s' }}>{d.label}</button>
-                          ))}
-                        </div>
-                        <p style={{ fontSize: 28, fontWeight: 800, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', marginBottom: 2 }}>{plan.durations[selectedDuration].price}</p>
-                        <p style={{ fontSize: 12, color: 'var(--text3)' }}>{plan.durations[selectedDuration].label}</p>
-                        {plan.durations[selectedDuration].saving && (
-                          <span style={{ fontSize: 10.5, background: 'rgba(16,185,129,.1)', color: 'var(--green)', border: '1px solid rgba(16,185,129,.2)', borderRadius: 20, padding: '2px 8px', fontFamily: 'JetBrains Mono', display: 'inline-block', marginTop: 4 }}>{plan.durations[selectedDuration].saving}</span>
-                        )}
-                      </div>
-                      <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px' }}>
-                        {plan.feats.map((f, i) => <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 0', fontSize: 12.5, color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}><Check size={11} color="var(--green)"/>{f}</li>)}
-                      </ul>
-                      <button onClick={() => { setSelectedPlan({ ...plan, ...plan.durations[selectedDuration] }); setShowUpgrade(false); setShowPayment(true); }} className="btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '10px', fontSize: 13, fontWeight: 700, borderRadius: 10 }}>
-                        Upgrade to {plan.name}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+     {showUpgrade && (
+  <div className="modal-overlay" style={{ alignItems: 'flex-start', paddingTop: 24 }}>
+    {upgradeOk ? (
+      <div className="modal-box" style={{ maxWidth: 300, textAlign: 'center', margin: 'auto' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(16,185,129,.12)', border: '1px solid rgba(16,185,129,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}><Check size={24} color="var(--green)"/></div>
+        <h3 style={{ fontWeight: 700, fontSize: 16, marginBottom: 5 }}>Plan activated!</h3>
+        <p style={{ fontSize: 13, color: 'var(--text2)' }}>Welcome to {selectedPlan?.name}.</p>
+      </div>
+    ) : (
+      <div className="modal-box" style={{ maxWidth: 900, width: '100%', background: '#0a0714', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <style>{`
+          @keyframes upgGlowGold{0%,100%{box-shadow:0 0 20px rgba(251,191,36,.12),0 0 50px rgba(124,58,237,.08)}50%{box-shadow:0 0 50px rgba(251,191,36,.3),0 0 100px rgba(124,58,237,.18)}}
+        `}</style>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28, flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <h2 style={{ fontSize: 22, fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 10, color: '#fff', letterSpacing: '-0.02em' }}>
+              <Crown size={20} color="#fbbf24"/> Upgrade to Premium
+            </h2>
+            {availablePlans.length === 0 ? (
+              <p style={{ fontSize: 12, color: '#10b981', fontFamily: 'JetBrains Mono,monospace' }}>✓ You're on the highest plan — Platinum</p>
+            ) : (
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', fontFamily: 'JetBrains Mono,monospace' }}>All plans renew automatically · Cancel anytime</p>
+            )}
+          </div>
+          <button className="modal-close" onClick={() => setShowUpgrade(false)} style={{ position: 'static', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}><X size={14}/></button>
         </div>
-      )}
+
+        {availablePlans.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>✦</div>
+            <p style={{ fontSize: 15, fontWeight: 600, color: '#fff', marginBottom: 6 }}>You have the best plan!</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>Unlimited messages, images, and documents — enjoy.</p>
+          </div>
+        ) : (
+          <>
+            {/* Duration toggle */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+              <div style={{ display: 'inline-flex', padding: 4, borderRadius: 99, border: '1px solid rgba(255,255,255,0.09)', background: 'rgba(255,255,255,0.03)', gap: 3 }}>
+                {availablePlans[0]?.durations.map((d, i) => (
+                  <button key={i} onClick={() => setSelectedDuration(i)} style={{
+                    padding: '8px 16px', borderRadius: 99, fontSize: 12.5, fontWeight: 600, border: 'none', cursor: 'pointer',
+                    background: selectedDuration === i ? 'linear-gradient(135deg,#7C3AED,#a855f7)' : 'transparent',
+                    color: selectedDuration === i ? '#fff' : 'rgba(255,255,255,0.5)',
+                    boxShadow: selectedDuration === i ? '0 0 16px rgba(124,58,237,0.4)' : 'none',
+                    transition: 'all 0.2s', fontFamily: 'Geist,sans-serif',
+                  }}>{d.label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div className="plans-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 18 }}>
+              {availablePlans.map(plan => {
+                const meta = {
+                  silver:   { colorStr: '148,163,184', color: '#94a3b8', Icon: Star,  iconBg: 'rgba(148,163,184,0.15)', iconBorder: 'rgba(148,163,184,0.35)' },
+                  gold:     { colorStr: '251,191,36',  color: '#fbbf24', Icon: Crown, iconBg: 'rgba(251,191,36,0.15)',  iconBorder: 'rgba(251,191,36,0.4)', popular: true, badge: '✦ Most Popular' },
+                  platinum: { colorStr: '6,182,212',   color: '#06b6d4', Icon: Gem,   iconBg: 'rgba(6,182,212,0.15)',   iconBorder: 'rgba(6,182,212,0.35)' },
+                }[plan.tier];
+                const d = plan.durations[selectedDuration];
+                return (
+                  <div key={plan.tier} style={{
+                    borderRadius: 24, padding: '30px 24px', position: 'relative',
+                    border: meta.popular ? `1px solid rgba(${meta.colorStr},0.6)` : '1px solid rgba(255,255,255,0.07)',
+                    background: meta.popular ? `rgba(${meta.colorStr},0.07)` : 'rgba(255,255,255,0.02)',
+                    animation: meta.popular ? 'upgGlowGold 3s ease-in-out infinite' : 'none',
+                    display: 'flex', flexDirection: 'column',
+                  }}>
+                    {meta.popular && (
+                      <>
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, borderRadius: '24px 24px 0 0', background: `linear-gradient(90deg, transparent, ${meta.color}, transparent)` }} />
+                        <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', background: `linear-gradient(135deg,${meta.color},#a855f7)`, padding: '4px 16px', borderRadius: 99, fontSize: 11, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', boxShadow: `0 4px 16px rgba(${meta.colorStr},0.5)` }}>{meta.badge}</div>
+                      </>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                      <h3 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 18, margin: 0, color: '#fff' }}>{plan.name}</h3>
+                      <div style={{ width: 38, height: 38, borderRadius: 11, background: meta.iconBg, border: `1px solid ${meta.iconBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <meta.Icon size={17} style={{ color: meta.color }}/>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginBottom: 4 }}>
+                      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 38, color: '#fff', lineHeight: 1 }}>{d.price}</span>
+                      <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', paddingBottom: 4 }}>{d.label}</span>
+                    </div>
+                    {d.saving && (
+                      <span style={{ fontSize: 10.5, background: 'rgba(16,185,129,.12)', color: '#10b981', border: '1px solid rgba(16,185,129,.25)', borderRadius: 20, padding: '2px 8px', fontFamily: 'JetBrains Mono,monospace', display: 'inline-block', marginBottom: 18, alignSelf: 'flex-start' }}>{d.saving}</span>
+                    )}
+                    <ul style={{ listStyle: 'none', padding: 0, margin: '18px 0 26px', flex: 1, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {plan.feats.map(f => (
+                        <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>
+                          <div style={{ width: 18, height: 18, borderRadius: '50%', background: `rgba(${meta.colorStr},0.18)`, border: `1px solid rgba(${meta.colorStr},0.4)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Check size={10} style={{ color: meta.color }}/>
+                          </div>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => { setSelectedPlan({ ...plan, ...d }); setShowUpgrade(false); setShowPayment(true); }}
+                      style={{
+                        width: '100%', padding: '13px', borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+                        background: meta.popular ? `linear-gradient(135deg,${meta.color},#7C3AED)` : 'rgba(255,255,255,0.06)',
+                        color: '#fff', border: meta.popular ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: meta.popular ? `0 0 24px rgba(${meta.colorStr},0.4)` : 'none',
+                        transition: 'all 0.2s', fontFamily: 'Geist,sans-serif',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    >
+                      Upgrade to {plan.name} →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    )}
+  </div>
+)}
 
       {showPayment && (
         <div className="modal-overlay">
