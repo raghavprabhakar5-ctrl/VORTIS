@@ -712,8 +712,14 @@ export default async function handler(req, res) {
     const token  = req.headers.authorization?.split('Bearer ')[1];
     const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
-    try { await admin.auth().verifyIdToken(token); }
-    catch { return res.status(401).json({ error: 'Invalid or expired token' }); }
+
+    let uid;
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      uid = decoded.uid;
+    } catch {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
 
     const body   = req.body;
     const action = sanitizeString(body.action || '', 20);
@@ -722,6 +728,39 @@ export default async function handler(req, res) {
     if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
+    // ── SERVER-SIDE TIER + USAGE ENFORCEMENT ──
+    const LIMITS = {
+      free:     { messages: 10,  documents: 1,  images: 2,  vision: 0 },
+      silver:   { messages: 80,  documents: 5,  images: 6,  vision: 2 },
+      gold:     { messages: 100, documents: 8,  images: 10, vision: 3 },
+      platinum: { messages: 120, documents: 10, images: 12, vision: 4 },
+    };
+    const USAGE_KEY = {
+      chat: 'messages', search: 'messages', tts: 'messages',
+      execute: 'messages', transcribe: 'messages',
+      image: 'images', vision: 'vision',
+    };
+
+    const db = admin.firestore();
+    const userRef = db.collection('users').doc(uid);
+    const userSnap = await userRef.get();
+    const userData = userSnap.exists ? userSnap.data() : {};
+
+    const tier = LIMITS[userData.tier] ? userData.tier : 'free';
+    const today = new Date().toDateString();
+    let usage = userData.usage || { messages: 0, documents: 0, images: 0, vision: 0 };
+    if (userData.usageDate !== today) usage = { messages: 0, documents: 0, images: 0, vision: 0 };
+
+    const bucket = USAGE_KEY[action] || 'messages';
+    const limit  = LIMITS[tier][bucket];
+
+    if (usage[bucket] >= limit) {
+      return res.status(429).json({ error: `Daily ${bucket} limit reached for your plan.` });
+    }
+
+    usage[bucket] += 1;
+    await userRef.set({ usage, usageDate: today, tier }, { merge: true });
+    
     const prompt  = sanitizeString(body.prompt  || '', 15000);
     const query   = sanitizeString(body.query   || '', 500);
     const image   = body.image || null;
