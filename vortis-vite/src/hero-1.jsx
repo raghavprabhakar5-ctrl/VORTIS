@@ -27,6 +27,11 @@ body{margin:0;padding:0;overflow-x:hidden;background:#03030a;color:#fff}
 @keyframes marquee-l{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @keyframes marquee-r{from{transform:translateX(-50%)}to{transform:translateX(0)}}
 
+@keyframes ctaBorderSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes ctaShimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes ctaRipple { from { transform: translate(-50%,-50%) scale(0); opacity: .55; } to { transform: translate(-50%,-50%) scale(4); opacity: 0; } }
+@keyframes ctaArrow { 0%,100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideInLeft{from{opacity:0;transform:translateX(-50px)}to{opacity:1;transform:translateX(0)}}
@@ -118,6 +123,48 @@ export function VortisLogo({ size = 36, color = "#8b5cf6", className }) {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  GlowPillButton
+// ══════════════════════════════════════════════════════════════════
+function GlowPillButton({ onClick, children, size = "md", style = {} }) {
+  const pad = size === "sm" ? "9px 26px" : "16px 40px";
+  const fontSize = size === "sm" ? 13.5 : 16;
+  return (
+    <div style={{ position: "relative", padding: 3, borderRadius: 99, overflow: "hidden", display: "inline-block", ...style }}>
+      <div style={{
+        position: "absolute", top: "-100%", left: "-100%",
+        width: "300%", height: "300%",
+        background: "conic-gradient(from 0deg, #7C3AED, #a855f7, #06b6d4, #a855f7, #7C3AED)",
+        animation: "ctaBorderSpin 4s linear infinite",
+      }} />
+      <button
+        onClick={onClick}
+        style={{
+          position: "relative",
+          padding: pad, borderRadius: 99, fontSize, fontWeight: 700,
+          background: "#0a0820", color: "#fff",
+          border: "none", cursor: "pointer",
+          display: "flex", alignItems: "center", gap: 8,
+          overflow: "hidden",
+          transition: "transform 0.25s ease, box-shadow 0.25s ease",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px) scale(1.03)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.5), 0 12px 40px rgba(124,58,237,0.3)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "none"; }}
+      >
+        <span style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%)",
+          backgroundSize: "200% 100%",
+          animation: "ctaShimmer 3s linear infinite",
+          pointerEvents: "none",
+        }} />
+        <span style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 8 }}>
+          {children}
+        </span>
+      </button>
+    </div>
+  );
+}
 // ══════════════════════════════════════════════════════════════════
 //  AMBIENT SPOTLIGHT — no visible cursor element, just a faint
 //  background glow that lags behind the mouse (Linear/Vercel style)
@@ -234,7 +281,7 @@ function CosmicBg() {
 const NAV_LINKS = [
   { label: "About", href: "#about" },
   { label: "Capabilities", href: "#capabilities" },
-  { label: "How it works", href: "#howitworks" },
+  { label: "How it works", href: "#how" },
   { label: "Pricing", href: "#pricing" },
   { label: "FAQ", href: "#faq" },
 ];
@@ -276,26 +323,9 @@ function Nav({ onLogin }) {
         ))}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, animation: "slideInRight 0.7s ease both" }}>
-        <button onClick={() => setShowPicker(true)} style={{
-          padding: "8px 22px", borderRadius: 99, fontSize: 13, fontWeight: 700,
-          background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-          border: "none", cursor: "pointer", position: "relative",
-          boxShadow: "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)",
-          transition: "all 0.2s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05) translateY(-1px)"; e.currentTarget.style.boxShadow = "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.25)"; }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(124,58,237,0.4), 0 0 40px rgba(124,58,237,0.15)"; }}
-        >
-          <span style={{
-            position: "absolute", inset: -3, borderRadius: 99,
-            border: "3px solid #c4b5fd",
-            animation: "radarPing 1.6s ease-out infinite",
-            pointerEvents: "none",
-          }} />
-          <span style={{ position: "relative", zIndex: 1 }}>Sign In →</span>
-        </button>
-      </div>
+      <GlowPillButton onClick={() => setShowPicker(true)} size="sm">
+  Sign In <ArrowRight size={14} />
+</GlowPillButton>
 
       {showPicker && (
         <AuthPicker
@@ -800,39 +830,17 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
 
        {/* CTA */}
 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-  <button
-    onClick={() => setShowPicker(true)}
-    disabled={authLoading}
-    style={{
-      padding: "14px 32px", borderRadius: 99, fontSize: 15, fontWeight: 700,
-      background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", color: "#fff",
-      border: "none", cursor: authLoading ? "not-allowed" : "pointer",
-      display: "flex", alignItems: "center", gap: 8, position: "relative",
-      boxShadow: "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)",
-      transition: "all 0.25s", opacity: authLoading ? 0.85 : 1,
-    }}
-    onMouseEnter={e => { if (!authLoading) { e.currentTarget.style.transform = "translateY(-3px) scale(1.02)"; e.currentTarget.style.boxShadow = "0 0 60px rgba(124,58,237,0.7), 0 16px 48px rgba(124,58,237,0.4)"; } }}
-    onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0) scale(1)"; e.currentTarget.style.boxShadow = "0 0 40px rgba(124,58,237,0.5), 0 8px 32px rgba(124,58,237,0.3)"; }}
-  >
-    {!authLoading && (
-      <span style={{
-        position: "absolute", inset: -3, borderRadius: 99,
-        border: "3px solid #c4b5fd",
-        animation: "radarPing 1.6s ease-out infinite",
-        pointerEvents: "none",
-      }} />
-    )}
-    {authLoading ? (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite", position: "relative", zIndex: 1 }}>
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
-    ) : (
-      <Zap size={16} style={{ position: "relative", zIndex: 1 }} />
-    )}
-    <span style={{ position: "relative", zIndex: 1 }}>
-      {authLoading ? "Signing in…" : "Start Free"}
-    </span>
-  </button>
+  <GlowPillButton onClick={() => setShowPicker(true)} style={{ opacity: authLoading ? 0.85 : 1 }}>
+  {authLoading ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  ) : (
+    <Zap size={16} />
+  )}
+  {authLoading ? "Signing in…" : "Start Free"}
+  {!authLoading && <ArrowRight size={16} style={{ animation: "ctaArrow 1.6s ease-in-out infinite" }} />}
+</GlowPillButton>
 
   <a href="#capabilities" style={{
     padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
@@ -2994,22 +3002,6 @@ function CTA({ onLogin }) {
         @keyframes ctaGridScroll {
           from { background-position: 0 0; }
           to   { background-position: 0 40px; }
-        }
-        @keyframes ctaBorderSpin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-        @keyframes ctaShimmer {
-          0%   { background-position: -200% 0; }
-          100% { background-position: 200% 0; }
-        }
-        @keyframes ctaRipple {
-          from { transform: translate(-50%,-50%) scale(0); opacity: 0.55; }
-          to   { transform: translate(-50%,-50%) scale(4); opacity: 0; }
-        }
-        @keyframes ctaArrow {
-          0%,100% { transform: translateX(0); }
-          50%     { transform: translateX(4px); }
         }
         @keyframes ctaBar {
           0%,100% { transform: scaleY(0.25); }
