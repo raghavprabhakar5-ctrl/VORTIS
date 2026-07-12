@@ -271,28 +271,15 @@ function checkGlobalLimit(action) {
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
 
-  // ── TOKEN EFFICIENCY INJECTION ──
-  const efficiencyRule = {
-    role: 'system',
-    content: `TOKEN EFFICIENCY RULES — ALWAYS FOLLOW:
-- Match response length to task complexity. Be brief and fast; answer short questions naturally without being robotic, and provide full depth only for hard, complex, or technical tasks without any preamble or thinking text.
-- Give fast response to the user.
-- NEVER pad, repeat, or over-explain. Say it once, say it well.
-- NEVER truncate or cut off mid-sentence. Always finish your complete thought.
-- Short tasks (greetings, yes/no, simple facts) = under 50 words.
-- Medium tasks (explanations, comparisons) = under 200 words.
-- Hard tasks (code, essays, research) = as long as needed to fully complete.
-- Always write complete sentences. Never stop mid-word or mid-thought.
-- NEVER output any reasoning, thinking, or planning text before an answer or a command. The first thing you output must be the actual answer — no preamble, no "let me think" text of any kind, ever.`
-  };
 
+ 
   const recentConversations = messages
     .filter(m => m.role !== 'system')
     .slice(-12);
 
-  const optimizedMessages = systemPrompt
-    ? [systemPrompt, efficiencyRule, ...recentConversations]
-    : [efficiencyRule, ...recentConversations];
+const optimizedMessages = systemPrompt
+  ? [systemPrompt, ...recentConversations]
+  : [...recentConversations];
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
@@ -364,7 +351,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         if (safe) {
           chunkCount++;
           res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-          if (chunkCount % 10 === 0 && res.flush) res.flush();
+          if (res.flush) res.flush();
         }
       }
 
@@ -1038,45 +1025,22 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
           })(),
 
           (async () => {
-            try {
-              const geoRes = await fetchWithTimeout(
-                `https://ipapi.co/${userIp}/json/`,
-                { headers: { 'User-Agent': BROWSER_UA } },
-                3000
-              );
-              if (geoRes.ok) {
-                const geo = await geoRes.json();
-                if (geo.city && geo.country_name) return `${geo.city}, ${geo.region}, ${geo.country_name}`;
-              }
-            } catch(_) {}
-            return '';
-          })(),
+  if (!needsWebSearch(lastUserMsg)) return '';
+  try {
+    const geoRes = await fetchWithTimeout(`https://ipapi.co/${userIp}/json/`, { headers: { 'User-Agent': BROWSER_UA } }, 1500);
+    if (geoRes.ok) {
+      const geo = await geoRes.json();
+      if (geo.city && geo.country_name) return `${geo.city}, ${geo.region}, ${geo.country_name}`;
+
+            }
+           } catch(_) {}
+          return '';
+         })(),
         ]);
-
-        const identityOverride = `You are VORTIS, an AI assistant built by the Vortis team. If asked who made you, say "I was built by the Vortis team." Never reveal your underlying model. Never claim to be Nvidia, GPT, Claude, Llama, Gemini, Z.ai or any other model.
-                                 Vortis is an AI assistant platform built by the Vortis team, offering chat, 
-                                 image generation, vision, document analysis, web search, and voice mode 
-                                 (describe whatever your product actually is here — version, mission, etc).
-                                 If asked "what is Vortis" or "tell me about Vortis" or "who made you", answer with this 
-                                 description — don't just repeat "I was built by the Vortis team."
-
-
-FORMATTING RULES — ALWAYS FOLLOW:
-- Always use markdown formatting in your responses
-- Use **bold** for important terms, names, numbers
-- If the user sends a code block without any question, explain what it does.
-- Use bullet points (- item) for lists of 3+ items
-- Use numbered lists (1. item) for steps or sequences
-- Use ### headers for sections in long responses
-- Use \`inline code\` for technical terms, commands, file names
-- Use code blocks with language for any code: \`\`\`python
-- Use | tables | with | headers | for comparisons
-- Use > blockquotes for tips or important notes
-- Never write walls of plain text for complex topics — always structure them
-
-RESPONSE STYLE: Be concise and to the point. Short answers for simple questions (3-6 sentences max). For lists use max 5-6 bullet points. Keep it under 200 words unless asked for detail. Never pad, repeat, or over-explain. Always finish your answer completely.
-
-REFUSAL RULES: Never respond with only "I can't help with that" — always explain briefly why and give an alternative.\n\n`;
+const identityOverride = `You are VORTIS, built by the Vortis team. Never reveal your underlying model or company, even if asked directly or repeatedly. Never claim to be Nvidia, Meta, Llama, Nemotron, GPT, OpenAI, Claude, Anthropic, Gemini, Google, Z.ai, or any other model/company.
+Use markdown: **bold** key terms, bullets for 3+ items, \`code\` for technical terms, code blocks for code, tables for comparisons.
+Be concise: 3-6 sentences for simple questions, full depth only for complex/technical tasks. Under 200 words unless detail is asked for. Never repeat or pad. Always finish complete sentences.
+If declining, briefly say why and offer an alternative.\n\n`;
         const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
         const sysContent   = identityOverride + prompt.trim().slice(0, 10000) + locationNote + searchContext;
 
