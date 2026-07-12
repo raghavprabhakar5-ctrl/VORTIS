@@ -3685,7 +3685,7 @@ const startVoiceCall = async () => {
  
 // ── handles one full turn: transcript -> AI reply -> TTS playback ──
 // Mirrors the logic that used to live inside recog.onend, but driven by Whisper text instead.
-const handleVoiceCallTurn = async (transcript) => {
+const handleVoiceCallTurn = async (transcript, sttLanguage = null) => {
   callBusyRef.current = true;
   setCallState('thinking');
  
