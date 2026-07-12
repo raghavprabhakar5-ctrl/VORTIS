@@ -4546,14 +4546,14 @@ setProcessingStatus('');
   };
 
   const handleDocUpload = (e) => {
-    if (!canDo('documents')) { hitLimit(); return; } const file = e.target.files?.[0]; if (!file) return;
+   if (!canDo('documents')) { hitLimit('documents'); return; } const file = e.target.files?.[0]; if (!file) return;
     setProcessingStatus('reading'); const reader = new FileReader();
     reader.onload = ev => { setUploadedDoc({ name: file.name, content: ev.target.result }); incrUsage('documents'); setProcessingStatus(''); addMsg('system', `Document loaded: ${file.name}`); addMsg('vortis', `I've read **"${file.name}"** — ask me anything about it.`, autoSpeak); convHistory.current = []; };
     reader.readAsText(file); e.target.value = '';
   };
 
-  const handleImgUpload = async (e) => {
-    if (!canDo('images')) { hitLimit(); return; } const file = e.target.files?.[0]; if (!file) return;
+ const handleImgUpload = async (e) => {
+  if (!canDo('vision')) { hitLimit('vision'); return; } const file = e.target.files?.[0]; if (!file) return;
     if (!file.type.startsWith('image/')) { addMsg('vortis', "That doesn't look like an image — try a JPG or PNG.", false); return; }
     const reader = new FileReader(); reader.onload = (ev) => { setPendingImage({ base64: ev.target.result, name: file.name }); setTimeout(() => textareaRef.current?.focus(), 50); };
     reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
@@ -4568,15 +4568,15 @@ setProcessingStatus('');
     if (!val || isProcessing) return; setLastMethod('text'); handleCmd(val); setInput(''); setWordCount(0); if (textareaRef.current) textareaRef.current.style.height = 'auto';
   };
 
-  const sendImageForAnalysis = async (imgObj, question) => {
-    if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
-    if (!canDo('messages')) { hitLimit(); return; }
+ const sendImageForAnalysis = async (imgObj, question) => {
+  if (!imgObj || !imgObj.base64) { addMsg('vortis', "Couldn't load the image — try uploading again.", false); return; }
+  if (!canDo('vision')) { hitLimit('vision'); return; }
     const previewUrl = URL.createObjectURL(new Blob([
       Uint8Array.from(atob(imgObj.base64.split(',')[1] || imgObj.base64), c => c.charCodeAt(0))
     ], { type: 'image/jpeg' }));
     setMessages(prev => [...prev, { id: Date.now()+Math.random(), type: 'user', text: question, image: previewUrl }]);
     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 600);
-    incrUsage('messages'); setIsProcessing(true); setProcessingStatus('vision');
+    incrUsage('vision'); setIsProcessing(true); setProcessingStatus('vision');
     try {
       const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(), body: JSON.stringify({ action: 'vision', image: imgObj.base64, prompt: question?.trim().length > 0 ? question : 'Describe this image in detail.' }) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
