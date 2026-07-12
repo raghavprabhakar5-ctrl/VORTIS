@@ -3656,23 +3656,23 @@ const startVoiceCall = async () => {
 
   // 2. Start VAD + local Whisper pipeline
   try {
-    vadRef.current = await startVoicePipeline({
-     onTranscript: async (transcript) => {
-       if (detectedLang) callDetectedLangRef.current = detectedLang;
-       const t = transcript?.trim();
-       if (!t || !callActiveRef.current) return;
-       if (t.length < 4) return; // too short to be real speech
-       if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
-       await handleVoiceCallTurn(t);
-     },
-      onStateChange: (state) => {
-        if (!callActiveRef.current) return;
-        if (state === 'listening') setCallState('listening');
-        else if (state === 'transcribing') setCallState('thinking');
-      },
-      isBusy: () => callBusyRef.current || isSpeakingRef.current, // ← prevents overlapping turns from stomping call state
-      getLanguageHint: () => callDetectedLangRef.current,
-    });
+    vad = await startVoicePipeline({
+  onTranscript: async (transcript, detectedLang) => {   // ← add second param
+    const t = transcript?.trim();
+    if (!t || !callActiveRef.current) return;
+    if (t.length < 4) return;
+    if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
+    if (detectedLang) callDetectedLangRef.current = detectedLang;
+    await handleVoiceCallTurn(t);
+  },
+  onStateChange: (state) => {
+    if (!callActiveRef.current) return;
+    if (state === 'listening') setCallState('listening');
+    else if (state === 'transcribing') setCallState('thinking');
+  },
+  isBusy: () => callBusyRef.current || isSpeakingRef.current,
+  getLanguageHint: () => callDetectedLangRef.current,  // ← also make sure this is present
+});
   } catch (pipelineError) {
     console.error('Failed to start voice pipeline:', pipelineError);
     setShowVoiceCall(false);
