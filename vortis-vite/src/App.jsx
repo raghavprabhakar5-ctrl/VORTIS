@@ -3663,7 +3663,7 @@ const startVoiceCall = async () => {
       if (t.length < 4) return;
       if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
       if (detectedLang) callDetectedLangRef.current = detectedLang;
-      await handleVoiceCallTurn(t);
+      await handleVoiceCallTurn(t, detectedLang);
     },
     onStateChange: (state) => {
       if (!callActiveRef.current) return;
@@ -3699,6 +3699,8 @@ const handleVoiceCallTurn = async (transcript) => {
     const voiceSwitchRe = /\b(change|switch|use|badal|badlo|switch karo)\b.{0,20}\b(voice|awaaz|आवाज़)\b/i;
     const wantsMale = /\b(male|man'?s|mard|aadmi)\b/i.test(transcript);
     const wantsFemale = /\b(female|woman'?s|mahila|aurat)\b/i.test(transcript);
+    const detectedLang = sttLanguage || detectSpokenLang(transcript);
+    callDetectedLangRef.current = detectedLang;
     if (voiceSwitchRe.test(transcript) && (wantsMale || wantsFemale)) {
       const newGender = wantsMale ? 'male' : 'female';
       setTtsGender(newGender);
