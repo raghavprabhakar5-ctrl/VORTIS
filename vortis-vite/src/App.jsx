@@ -3919,7 +3919,7 @@ const enrichImagePrompt = (rawPrompt, style) => {
 
 const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = false) => {
   if (imgGenLock.current) return; imgGenLock.current = true;
-  if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
+  if (!canDo('images')) { hitLimit('images'); setIsProcessing(false); imgGenLock.current = false; return; }
   setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); setLastImagePrompt(imagePrompt);
   pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
   const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
