@@ -3658,18 +3658,20 @@ const startVoiceCall = async () => {
   try {
     vadRef.current = await startVoicePipeline({
      onTranscript: async (transcript) => {
-  const t = transcript?.trim();
-  if (!t || !callActiveRef.current) return;
-  if (t.length < 4) return; // too short to be real speech
-  if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
-  await handleVoiceCallTurn(t);
-},
+       if (detectedLang) callDetectedLangRef.current = detectedLang;
+       const t = transcript?.trim();
+       if (!t || !callActiveRef.current) return;
+       if (t.length < 4) return; // too short to be real speech
+       if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
+       await handleVoiceCallTurn(t);
+     },
       onStateChange: (state) => {
         if (!callActiveRef.current) return;
         if (state === 'listening') setCallState('listening');
         else if (state === 'transcribing') setCallState('thinking');
       },
       isBusy: () => callBusyRef.current || isSpeakingRef.current, // ← prevents overlapping turns from stomping call state
+      getLanguageHint: () => callDetectedLangRef.current,
     });
   } catch (pipelineError) {
     console.error('Failed to start voice pipeline:', pipelineError);

@@ -1310,12 +1310,13 @@ if (action === 'transcribe') {
     const transcription = await groq.audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-large-v3-turbo',
-      ...(language ? { language } : {}),
-      response_format: 'json',
+     ...(language ? { language: language.split('-')[0] } : {}),
+      response_format: 'verbose_json',
     });
 
     const text = (transcription?.text || '').trim();
-    return res.status(200).json({ text });
+    const detectedLang = transcription?.language || null;
+    return res.status(200).json({ text, language: detectedLang });
 
   } catch (error) {
     console.error('TRANSCRIBE ERROR:', error.message);

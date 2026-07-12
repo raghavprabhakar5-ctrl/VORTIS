@@ -61,5 +61,5 @@ export const transcribeAudio = async (audioFloat32Array, language = null) => {
 
   if (!res.ok) throw new Error(`Transcription failed: ${res.status}`);
   const data = await res.json();
-  return (data.text || '').trim();
+  return { text: (data.text || '').trim(), language: data.language || null }; // ← return language too
 };

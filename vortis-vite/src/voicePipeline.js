@@ -1,7 +1,7 @@
 import { MicVAD } from '@ricky0123/vad-web';
 import { transcribeAudio } from './whisper';
 
-export const startVoicePipeline = async ({ onTranscript, onStateChange, isBusy }) => {
+export const startVoicePipeline = async ({ onTranscript, onStateChange, isBusy, getLanguageHint }) => {
   onStateChange?.('listening');
 
   const vad = await MicVAD.new({
@@ -11,8 +11,9 @@ export const startVoicePipeline = async ({ onTranscript, onStateChange, isBusy }
     onSpeechEnd: async (audio) => {
       if (isBusy?.()) return;
       onStateChange?.('transcribing');
-      const text = await transcribeAudio(audio);
-      if (text) await onTranscript(text);
+      const hint = getLanguageHint?.() || null; // ← pull current best-guess language
+      const { text, language } = await transcribeAudio(audio, hint);
+      if (text) await onTranscript(text, language); // ← pass detected language up too
       if (!isBusy?.()) onStateChange?.('listening');
     },
     positiveSpeechThreshold: 0.6,
