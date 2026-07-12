@@ -3427,8 +3427,15 @@ callRecogRef.current = recog;
         return;
       }
 
-      incrUsage('messages');
-      pushHistory(convHistory, 'user', transcript);
+      const looksGarbled = transcript.split(/\s+/).length <= 2 && !/[a-zA-Zäöüß]{4,}/.test(transcript);
+if (!looksGarbled) {
+  incrUsage('messages');
+  pushHistory(convHistory, 'user', transcript);
+} else {
+  callBusyRef.current = false;
+  if (callActiveRef.current) setCallState('listening');
+  return; 
+}
 
       const gender = ttsGenderRef.current;
       const genderNote = gender === 'female'
@@ -3757,13 +3764,12 @@ const handleVoiceCallTurn = async (transcript, sttLanguage = null) => {
     const genderNote = gender === 'female' ? 'Speak as a female assistant.' : 'Speak as a male assistant.';
  
     const sys = `You are Vortis, a voice AI assistant.
+
+Default to replying in the same language the user is speaking (detected: ${detectedLang}), UNLESS the user explicitly asks you to switch to a different language — in that case, honor their request and reply in the language they asked for, in every following turn until they ask to switch again.
 Output ONLY the final spoken reply — 1-3 short sentences. Nothing else.
 NEVER output your reasoning, analysis, or thoughts about what language the user spoke, what they meant, or how you should respond.
 No markdown, no lists, no symbols, no emojis, no labels, no quotes.
-CRITICAL: Reply in EXACTLY the same language the user spoke.
-Detected language: ${detectedLang}.
-${genderNote}
- 
+
 VOICE SWITCH COMMAND — HIGHEST PRIORITY, CHECK THIS FIRST:
 If the user's message is asking you to change/switch your speaking voice or gender, your ENTIRE response must be ONLY one exact token: SWITCH_VOICE_MALE or SWITCH_VOICE_FEMALE
 No punctuation, no quotes, no extra words. This overrides every other instruction above.

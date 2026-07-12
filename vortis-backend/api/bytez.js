@@ -908,10 +908,12 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
             { role: 'system', content: voiceSystemContent },   // ← now actually used
             ...sanitizeHistory(history, 8),
           ],
-          max_tokens:  800,
-          temperature: body.temperature ?? 0.4,
-          stream:      false,
-        }),
+           max_tokens: 800,
+           temperature: body.temperature ?? 0.4,
+           frequency_penalty: 0.4,
+           presence_penalty: 0.3,
+           stream: false,
+         }),
       },
       10000
     );
