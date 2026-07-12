@@ -3224,6 +3224,34 @@ const CALL_VOICE_MAP = {
   'en-US': ['en-US-GuyNeural',      'en-US-AriaNeural'],
 };
 
+const normalizeLangCode = (lang) => {
+  if (!lang) return 'en-US';
+  const l = lang.toLowerCase().trim();
+
+  const exactMatch = Object.keys(CALL_VOICE_MAP).find(k => k.toLowerCase() === l);
+  if (exactMatch) return exactMatch;
+
+  const NAME_TO_CODE = {
+    german: 'de-DE', hindi: 'hi-IN', french: 'fr-FR', spanish: 'es-ES',
+    arabic: 'ar-SA', chinese: 'zh-CN', japanese: 'ja-JP', korean: 'ko-KR',
+    portuguese: 'pt-BR', italian: 'it-IT', russian: 'ru-RU', turkish: 'tr-TR',
+    vietnamese: 'vi-VN', indonesian: 'id-ID', dutch: 'nl-NL', polish: 'pl-PL',
+    swedish: 'sv-SE', greek: 'el-GR', hebrew: 'he-IL', english: 'en-US',
+  };
+  if (NAME_TO_CODE[l]) return NAME_TO_CODE[l];
+
+  const BARE_TO_FULL = {
+    de: 'de-DE', hi: 'hi-IN', fr: 'fr-FR', es: 'es-ES', ar: 'ar-SA',
+    zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR', pt: 'pt-BR', it: 'it-IT',
+    ru: 'ru-RU', tr: 'tr-TR', vi: 'vi-VN', id: 'id-ID', nl: 'nl-NL',
+    pl: 'pl-PL', sv: 'sv-SE', el: 'el-GR', he: 'he-IL', en: 'en-US',
+  };
+  const bare = l.split(/[-_]/)[0];
+  if (BARE_TO_FULL[bare]) return BARE_TO_FULL[bare];
+
+  return 'en-US';
+};
+
 const getCallVoice = (lang, gender) => {
   const voices = CALL_VOICE_MAP[lang] || CALL_VOICE_MAP['en-US'];
   return voices[gender === 'female' ? 1 : 0];
@@ -3361,12 +3389,12 @@ callRecogRef.current = recog;
     callFinalTranscriptRef.current = '';
     if (!transcript) { safeRestart(); return; }
 
-    const detectedLang = detectSpokenLang(transcript);
-    callDetectedLangRef.current = detectedLang;
+   const detectedLang = normalizeLangCode(detectSpokenLang(transcript));
+   callDetectedLangRef.current = detectedLang;
 
-    callBusyRef.current = true;
-    setCallState('thinking');
-    safeRestart();
+   callBusyRef.current = true;
+   setCallState('thinking');
+   safeRestart();
 
 
     try {
@@ -3694,11 +3722,11 @@ const handleVoiceCallTurn = async (transcript, sttLanguage = null) => {
 
  
     // voice-switch hard fallback (same as before)
-    const voiceSwitchRe = /\b(change|switch|use|badal|badlo|switch karo)\b.{0,20}\b(voice|awaaz|आवाज़)\b/i;
-    const wantsMale = /\b(male|man'?s|mard|aadmi)\b/i.test(transcript);
-    const wantsFemale = /\b(female|woman'?s|mahila|aurat)\b/i.test(transcript);
-    const detectedLang = sttLanguage || detectSpokenLang(transcript);
-    callDetectedLangRef.current = detectedLang;
+   const voiceSwitchRe = /\b(change|switch|use|badal|badlo|switch karo)\b.{0,20}\b(voice|awaaz|आवाज़)\b/i;
+   const wantsMale = /\b(male|man'?s|mard|aadmi)\b/i.test(transcript);
+   const wantsFemale = /\b(female|woman'?s|mahila|aurat)\b/i.test(transcript);
+   const detectedLang = normalizeLangCode(sttLanguage || detectSpokenLang(transcript));
+   callDetectedLangRef.current = detectedLang;
     if (voiceSwitchRe.test(transcript) && (wantsMale || wantsFemale)) {
       const newGender = wantsMale ? 'male' : 'female';
       setTtsGender(newGender);
