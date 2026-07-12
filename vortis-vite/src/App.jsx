@@ -3691,9 +3691,7 @@ const handleVoiceCallTurn = async (transcript) => {
  
   try {
     if (!canDo('messages')) { hitLimit(); endVoiceCall(); return; }
- 
-    const detectedLang = detectSpokenLang(transcript);
-    callDetectedLangRef.current = detectedLang;
+
  
     // voice-switch hard fallback (same as before)
     const voiceSwitchRe = /\b(change|switch|use|badal|badlo|switch karo)\b.{0,20}\b(voice|awaaz|आवाज़)\b/i;
