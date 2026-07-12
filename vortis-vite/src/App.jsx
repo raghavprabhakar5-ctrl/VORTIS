@@ -3920,11 +3920,12 @@ const enrichImagePrompt = (rawPrompt, style) => {
 const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = false) => {
   if (imgGenLock.current) return; imgGenLock.current = true;
   if (!canDo('images')) { hitLimit(); setIsProcessing(false); imgGenLock.current = false; return; }
-  setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); incrUsage('images'); setLastImagePrompt(imagePrompt);
+  setProcessingStatus('generating'); addMsg('vortis', '__IMG_LOADING__', false); setLastImagePrompt(imagePrompt);
   pushHistory(convHistory, 'assistant', `[Generated image for: "${imagePrompt}"]`);
   const enriched = enrichImagePrompt(imagePrompt, detectedStyle || imgGenStyle);
   try {
     const imgData = await callImageAPI(enriched, forceGemini);
+    if (imgData.usage) setUsage(imgData.usage); 
     const imgUrl = extractImageUrl(imgData);
     if (imgUrl) {
       setMessages(prev => prev.map(m => m.text === '__IMG_LOADING__' ? { ...m, text: `__IMG_B64__${imgUrl}` } : m));

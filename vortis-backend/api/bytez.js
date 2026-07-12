@@ -746,7 +746,8 @@ export default async function handler(req, res) {
     const userSnap = await userRef.get();
     const userData = userSnap.exists ? userSnap.data() : {};
 
-    const tier = LIMITS[userData.tier] ? userData.tier : 'free';
+    const rawTier = (userData.tier || '').toString().trim().toLowerCase();
+    const tier = LIMITS[rawTier] ? rawTier : 'free';
     const today = new Date().toDateString();
     let usage = userData.usage || { messages: 0, documents: 0, images: 0, vision: 0 };
     if (userData.usageDate !== today) usage = { messages: 0, documents: 0, images: 0, vision: 0 };
@@ -1460,22 +1461,22 @@ if (action === 'image') {
     // 1. Try Primary (Cloudflare)
     const fluxResult = await tryFlux(prompt);
     if (fluxResult?.imageUrl) {
-      return res.status(200).json({ ...fluxResult, provider: 'flux' });
-    }
+  return res.status(200).json({ ...fluxResult, provider: 'flux', usage, limits: LIMITS[tier] });
+}
 
     // 2. Try Fallback 1 (NVIDIA NIM - SD 3.5 Large)
     console.log('Cloudflare failed, shifting to NVIDIA SD 3.5...');
     const sd35Fallback = await tryNvidiaSD35(prompt);
     if (sd35Fallback?.imageUrl) {
-      return res.status(200).json({ ...sd35Fallback, provider: 'nvidia-sd-3.5-large' });
-    }
+  return res.status(200).json({ ...sd35Fallback, provider: 'nvidia-sd-3.5-large', usage, limits: LIMITS[tier] });
+}
 
     // 3. Try Fallback 2 (NVIDIA NIM - Llama-3-Diffusion-XL)
     console.log('NVIDIA SD 3.5 failed, shifting to NVIDIA Llama-3...');
     const llamaFallback = await tryNvidiaLlama(prompt);
     if (llamaFallback?.imageUrl) {
-        return res.status(200).json({ ...llamaFallback, provider: 'nvidia-llama-3' });
-    }
+    return res.status(200).json({ ...llamaFallback, provider: 'nvidia-llama-3', usage, limits: LIMITS[tier] });
+}
 
     // 4. All Providers Failed
     console.log('All image generation providers failed.');
