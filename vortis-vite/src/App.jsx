@@ -3655,31 +3655,30 @@ const startVoiceCall = async () => {
   if (!callActiveRef.current) return; // user hung up while permission dialog was open
 
   // 2. Start VAD + local Whisper pipeline
-  try {
-    vad = await startVoicePipeline({
-  onTranscript: async (transcript, detectedLang) => {   // ← add second param
-    const t = transcript?.trim();
-    if (!t || !callActiveRef.current) return;
-    if (t.length < 4) return;
-    if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
-    if (detectedLang) callDetectedLangRef.current = detectedLang;
-    await handleVoiceCallTurn(t);
-  },
-  onStateChange: (state) => {
-    if (!callActiveRef.current) return;
-    if (state === 'listening') setCallState('listening');
-    else if (state === 'transcribing') setCallState('thinking');
-  },
-  isBusy: () => callBusyRef.current || isSpeakingRef.current,
-  getLanguageHint: () => callDetectedLangRef.current,  // ← also make sure this is present
-});
-  } catch (pipelineError) {
-    console.error('Failed to start voice pipeline:', pipelineError);
-    setShowVoiceCall(false);
-    callActiveRef.current = false;
-    return;
-  }
-
+ try {
+  vadRef.current = await startVoicePipeline({
+    onTranscript: async (transcript, detectedLang) => {
+      const t = transcript?.trim();
+      if (!t || !callActiveRef.current) return;
+      if (t.length < 4) return;
+      if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
+      if (detectedLang) callDetectedLangRef.current = detectedLang;
+      await handleVoiceCallTurn(t);
+    },
+    onStateChange: (state) => {
+      if (!callActiveRef.current) return;
+      if (state === 'listening') setCallState('listening');
+      else if (state === 'transcribing') setCallState('thinking');
+    },
+    isBusy: () => callBusyRef.current || isSpeakingRef.current,
+    getLanguageHint: () => callDetectedLangRef.current,
+  });
+} catch (pipelineError) {
+  console.error('Failed to start voice pipeline:', pipelineError);
+  setShowVoiceCall(false);
+  callActiveRef.current = false;
+  return;
+}
   setCallDuration(0);
   callTimerRef.current = setInterval(() => setCallDuration(d => d + 1), 1000);
 };
