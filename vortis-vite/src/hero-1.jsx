@@ -1085,25 +1085,24 @@ function Logos() {
 //  INK REVEAL SLIDE -- full-width paint-to-reveal image section
 // ═════════════════════════════════════════════════════════════════
 function InkRevealSection() {
-  const [ref, inView] = useInView(0.15);
+  const [ref, inView] = useInView(0.1);
   return (
     <section ref={ref} style={{
       position: "relative",
       width: "100%",
-      height: "70vh",
-      minHeight: 480,
-      maxHeight: 720,
+      height: "100vh",
+      minHeight: 600,
       overflow: "hidden",
       borderTop: "1px solid rgba(255,255,255,0.04)",
       borderBottom: "1px solid rgba(255,255,255,0.04)",
       zIndex: 1,
       opacity: inView ? 1 : 0,
-      transition: "opacity 0.9s ease",
+      transition: "opacity 1.1s ease",
     }}>
-      {/* Themed AI neural image -- dark purple to match the Vortis palette */}
+      {/* Themed image -- dark purple AI neural to match the Vortis palette */}
       <img
-        src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=2000&q=85"
-        alt="Vortis AI neural visualization"
+        src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=2400&q=85"
+        alt="Vortis neural visualization"
         style={{
           position: "absolute",
           inset: 0,
@@ -1113,22 +1112,22 @@ function InkRevealSection() {
           filter: "saturate(1.1) contrast(1.05)",
         }}
       />
-      {/* Violet color grade so any image blends into the Vortis palette */}
+      {/* Violet color grade so the image blends into the Vortis palette */}
       <div style={{
         position: "absolute",
         inset: 0,
         background:
-          "linear-gradient(180deg, rgba(124,58,237,0.15) 0%, rgba(3,3,10,0.6) 100%), radial-gradient(circle at 30% 30%, rgba(168,85,247,0.22), transparent 60%)",
+          "linear-gradient(180deg, rgba(124,58,237,0.18) 0%, rgba(3,3,10,0.55) 100%), radial-gradient(circle at 50% 50%, rgba(168,85,247,0.2), transparent 65%)",
         pointerEvents: "none",
         zIndex: 0,
       }} />
-      {/* Side fades so the slide blends into the page top/bottom */}
+      {/* Top + bottom fades so the slide blends into the page */}
       <div style={{
         position: "absolute",
         top: 0,
         left: 0,
         right: 0,
-        height: 120,
+        height: 160,
         background: "linear-gradient(to bottom, #03030a, transparent)",
         pointerEvents: "none",
         zIndex: 2,
@@ -1138,60 +1137,32 @@ function InkRevealSection() {
         bottom: 0,
         left: 0,
         right: 0,
-        height: 120,
+        height: 160,
         background: "linear-gradient(to top, #03030a, transparent)",
         pointerEvents: "none",
         zIndex: 2,
       }} />
-      {/* Paint-to-reveal mask canvas (sits above image + grade, below caption) */}
+      {/* Paint-to-reveal mask canvas (above image, below the VORTIS wordmark) */}
       <InkReveal />
-      {/* Caption + hint */}
-      <div style={{
+      {/* Giant VORTIS wordmark -- the only thing on top of the canvas */}
+      <h2 style={{
         position: "absolute",
         top: "50%",
         left: "50%",
         transform: "translate(-50%, -50%)",
         zIndex: 3,
-        textAlign: "center",
+        fontFamily: "'Space Grotesk',sans-serif",
+        fontWeight: 900,
+        fontSize: "clamp(5rem, 22vw, 22rem)",
+        letterSpacing: "-0.05em",
+        lineHeight: 0.9,
+        margin: 0,
+        color: "#fff",
+        textShadow: "0 0 80px rgba(124,58,237,0.55), 0 0 30px rgba(168,85,247,0.35)",
         pointerEvents: "none",
-      }}>
-        <div style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "10px 20px",
-          borderRadius: 99,
-          background: "rgba(3,3,10,0.7)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid rgba(139,92,246,0.4)",
-          fontFamily: "'JetBrains Mono',monospace",
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
-          color: "rgba(168,85,247,0.95)",
-          whiteSpace: "nowrap",
-        }}>
-          <Sparkles size={14} />
-          Hover to reveal
-        </div>
-        <h2 style={{
-          fontFamily: "'Space Grotesk',sans-serif",
-          fontWeight: 900,
-          fontSize: "clamp(2rem, 4vw, 3.5rem)",
-          color: "#fff",
-          margin: "20px 0 10px",
-          letterSpacing: "-0.03em",
-          lineHeight: 1.05,
-        }}>See what Vortis sees</h2>
-        <p style={{
-          fontSize: 15,
-          color: "rgba(255,255,255,0.55)",
-          maxWidth: 480,
-          margin: "0 auto",
-          lineHeight: 1.7,
-        }}>Paint across the canvas to reveal the neural surface that powers every Vortis capability — chat, vision, code, research.</p>
-      </div>
+        whiteSpace: "nowrap",
+        userSelect: "none",
+      }}>VORTIS</h2>
     </section>
   );
 }
