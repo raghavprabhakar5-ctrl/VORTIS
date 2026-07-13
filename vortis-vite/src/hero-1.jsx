@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AICore from "./AICore";
+import InkReveal from "./ink-reveal";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
@@ -885,7 +886,80 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
       {/* Right: visual */}
 <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
   <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
-  
+
+  {/* Ink-reveal image card -- dark/purple AI neural theme to match Vortis branding.
+      Users hover (cursor hidden) to paint away the mask and reveal the image underneath.
+      The mask color is the exact #03030a hero background so the canvas is invisible until interaction. */}
+  <div
+    style={{
+      position: "absolute",
+      bottom: -28,
+      left: -40,
+      width: 280,
+      height: 180,
+      borderRadius: 16,
+      overflow: "hidden",
+      border: "1px solid rgba(139,92,246,0.28)",
+      boxShadow:
+        "0 30px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,58,237,0.08), 0 0 40px rgba(124,58,237,0.18)",
+      zIndex: 2,
+      animation: "waveFloat 7s ease-in-out infinite",
+      transform: "rotate(-4deg)",
+    }}
+  >
+    <img
+      src="https://images.unsplash.com/photo-1620121692029-d088224ddc74?w=900&q=80"
+      alt="AI neural network visualization"
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        filter: "saturate(1.15) hue-rotate(-8deg)",
+      }}
+    />
+    {/* Subtle violet tint so the image blends with the Vortis palette */}
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background:
+          "linear-gradient(135deg, rgba(124,58,237,0.25), rgba(6,6,20,0.35))",
+        mixBlendMode: "overlay",
+        pointerEvents: "none",
+        zIndex: 0,
+      }}
+    />
+    <InkReveal />
+    {/* Hint label */}
+    <div
+      style={{
+        position: "absolute",
+      bottom: 10,
+      left: 12,
+      zIndex: 3,
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      padding: "5px 10px",
+      borderRadius: 99,
+      background: "rgba(3,3,10,0.7)",
+      backdropFilter: "blur(8px)",
+      border: "1px solid rgba(255,255,255,0.08)",
+        fontFamily: "'JetBrains Mono',monospace",
+        fontSize: 10,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        color: "rgba(168,85,247,0.95)",
+        pointerEvents: "none",
+      }}
+    >
+      <Sparkles size={11} />
+      Hover to reveal
+    </div>
+  </div>
+
   <HeroVisual />
   
   {/* Floating badges */}
