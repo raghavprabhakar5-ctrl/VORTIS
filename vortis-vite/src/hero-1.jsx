@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AICore from "./AICore";
-import InkReveal from "./ink-reveal";
+import InkReveal from "./ink-reveal.jsx";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
