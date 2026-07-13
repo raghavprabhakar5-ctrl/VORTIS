@@ -809,9 +809,7 @@ const getPreviewContent = (langKey, codeText) => {
   return null;
 };
  
-const CodeBlock = ({ lang, codeText }) => {
-
-  const CODE_TERMINAL_LANGS = ['javascript','typescript','python','lua','ruby','php','sql','cpp','json'];
+const CODE_TERMINAL_LANGS = ['javascript','typescript','python','lua','ruby','php','sql','cpp','json'];
 
 const CodeTerminal = ({ onClose }) => {
   const [lang, setLang] = useState('javascript');
@@ -930,6 +928,8 @@ const CodeTerminal = ({ onClose }) => {
     </div>
   );
 };
+
+const CodeBlock = ({ lang, codeText }) => {
   const [output, setOutput] = React.useState(null);
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
