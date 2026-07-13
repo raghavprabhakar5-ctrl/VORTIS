@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AICore from "./AICore";
 import InkReveal from "./ink-reveal.jsx";
+import vortisNeural from "./vortis-neural.png";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
@@ -1099,48 +1100,31 @@ function InkRevealSection() {
       opacity: inView ? 1 : 0,
       transition: "opacity 1.1s ease",
     }}>
-      {/* Themed image -- dark purple AI neural to match the Vortis palette */}
+      {/* Custom Vortis-branded image -- dark purple AI neural with VORTIS
+          written into the image itself, so painting reveals the wordmark
+          as part of the artwork. */}
       <img
-        src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=2400&q=85"
-        alt="Vortis neural visualization"
+        src={vortisNeural}
+        alt="Vortis AI neural visualization"
         style={{
           position: "absolute",
           inset: 0,
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          filter: "saturate(1.1) contrast(1.05)",
+          filter: "saturate(1.05) contrast(1.05)",
         }}
       />
-      {/* Violet color grade so the image blends into the Vortis palette */}
+      {/* Subtle violet color grade so the image blends seamlessly into
+          the Vortis page background. */}
       <div style={{
         position: "absolute",
         inset: 0,
         background:
-          "linear-gradient(180deg, rgba(124,58,237,0.18) 0%, rgba(3,3,10,0.55) 100%), radial-gradient(circle at 50% 50%, rgba(168,85,247,0.2), transparent 65%)",
+          "linear-gradient(180deg, rgba(124,58,237,0.12) 0%, rgba(3,3,10,0.45) 100%)",
         pointerEvents: "none",
         zIndex: 0,
       }} />
-      {/* Giant VORTIS wordmark -- sits BELOW the ink-reveal canvas so it gets
-          revealed by painting, like it's part of the image itself. */}
-      <h2 style={{
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        zIndex: 0,
-        fontFamily: "'Space Grotesk',sans-serif",
-        fontWeight: 900,
-        fontSize: "clamp(5rem, 22vw, 22rem)",
-        letterSpacing: "-0.05em",
-        lineHeight: 0.9,
-        margin: 0,
-        color: "#fff",
-        textShadow: "0 0 80px rgba(124,58,237,0.55), 0 0 30px rgba(168,85,247,0.35)",
-        pointerEvents: "none",
-        whiteSpace: "nowrap",
-        userSelect: "none",
-      }}>VORTIS</h2>
       {/* Paint-to-reveal mask canvas -- covers the image + VORTIS wordmark.
           When the user paints, the mask is erased, revealing the image AND
           the VORTIS text underneath, as if they were always part of the image. */}
