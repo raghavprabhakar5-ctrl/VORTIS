@@ -25,7 +25,7 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem, PhoneOff, Play, Pause   
+  Gem, PhoneOff, Play, Pause, Code2 
 } from 'lucide-react';
 
 
@@ -810,6 +810,126 @@ const getPreviewContent = (langKey, codeText) => {
 };
  
 const CodeBlock = ({ lang, codeText }) => {
+
+  const CODE_TERMINAL_LANGS = ['javascript','typescript','python','lua','ruby','php','sql','cpp','json'];
+
+const CodeTerminal = ({ onClose }) => {
+  const [lang, setLang] = useState('javascript');
+  const [code, setCode] = useState('');
+  const [output, setOutput] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [hasError, setHasError] = useState(false);
+  const [bootMsg, setBootMsg] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const meta = ENGINE_META[LANG_ENGINE[lang]];
+
+  const run = async () => {
+    if (!code.trim() || running) return;
+    setRunning(true); setOutput(null); setHasError(false); setBootMsg('');
+    try {
+      const result = await safeExecuteCodeLocally(lang, code, (m) => setBootMsg(m));
+      setHasError(!!result.isError);
+      setOutput(tidyOutput(result.output));
+    } catch (e) {
+      setHasError(true);
+      setOutput('Error: ' + (e?.message || String(e)));
+    } finally {
+      setRunning(false); setBootMsg('');
+    }
+  };
+
+  const clearAll = () => { setCode(''); setOutput(null); setHasError(false); };
+  const copyCode = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
+  useEffect(() => {
+    const handler = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); run(); } };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [code, lang, running]);
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 300 }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 18,
+        width: '100%', maxWidth: 820, maxHeight: '86vh', display: 'flex', flexDirection: 'column',
+        overflow: 'hidden', animation: 'scaleIn .18s ease',
+      }} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg3)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Code2 size={16} color="var(--indigo)"/>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)' }}>Code Terminal</span>
+            {meta && <span style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>via {meta.name}</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <select value={lang} onChange={e => setLang(e.target.value)} style={{ background: 'var(--bg2)', border: '1px solid var(--border2)', color: 'var(--text1)', fontSize: 12, borderRadius: 8, padding: '5px 9px', fontFamily: 'JetBrains Mono', cursor: 'pointer' }}>
+              {CODE_TERMINAL_LANGS.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+            <button onClick={onClose} className="hdr-btn"><X size={15}/></button>
+          </div>
+        </div>
+
+        {/* Editor */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }} className="scr">
+          <textarea
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            placeholder={`Write ${lang} code here… (Ctrl/Cmd + Enter to run)`}
+            spellCheck={false}
+            style={{
+              flex: '0 0 auto', minHeight: 220, maxHeight: 340, resize: 'vertical',
+              background: 'var(--bg3)', color: 'var(--cyan)', border: 'none', outline: 'none',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 13, lineHeight: 1.7,
+              padding: '14px 16px', width: '100%',
+            }}
+          />
+
+          {/* Toolbar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', background: 'var(--bg2)', flexShrink: 0 }}>
+            <button
+              onClick={run}
+              disabled={running || !code.trim()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8,
+                border: '1px solid rgba(16,185,129,.3)', background: running ? 'rgba(99,102,241,.08)' : 'rgba(16,185,129,.08)',
+                color: running ? 'var(--indigo)' : '#10b981', fontSize: 12, fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer',
+                fontFamily: 'JetBrains Mono', letterSpacing: '.03em',
+              }}
+            >
+              {running ? <Loader size={12} style={{ animation: 'spin 1s linear infinite' }}/> : <Play size={12} fill="currentColor"/>}
+              {running ? 'Running…' : `Run (${meta?.verb || 'Run'})`}
+            </button>
+            <button onClick={copyCode} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'transparent', color: copied ? '#10b981' : 'var(--text3)', fontSize: 12, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
+              {copied ? <Check size={12}/> : <Copy size={12}/>} {copied ? 'Copied' : 'Copy'}
+            </button>
+            <button onClick={clearAll} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border2)', background: 'transparent', color: 'var(--text3)', fontSize: 12, cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>
+              <Trash2 size={12}/> Clear
+            </button>
+            <span style={{ marginLeft: 'auto', fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>⌘/Ctrl + Enter to run</span>
+          </div>
+
+          {running && bootMsg && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px', background: 'rgba(99,102,241,.05)', fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', flexShrink: 0 }}>
+              <Loader size={10} style={{ animation: 'spin 1s linear infinite' }}/> {bootMsg}
+            </div>
+          )}
+
+          {/* Output */}
+          <div style={{ flex: 1, minHeight: 140, background: '#080810', padding: '14px 16px' }}>
+            <div style={{ fontSize: 10.5, color: hasError ? '#ef4444' : 'var(--text4)', fontFamily: 'JetBrains Mono', letterSpacing: '.06em', marginBottom: 8, fontWeight: 700 }}>
+              {output === null ? 'OUTPUT' : hasError ? 'ERROR' : 'OUTPUT'}
+            </div>
+            <pre style={{ margin: 0, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7, color: hasError ? '#f87171' : '#a5f3fc', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {output === null ? 'Run your code to see output here…' : output}
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
   const [output, setOutput] = React.useState(null);
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
@@ -2128,6 +2248,7 @@ export default function VortisAI() {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [copiedUserIdx, setCopiedUserIdx] = useState(null);
   const [toast, setToast] = useState(null);
+  const [showCodeTerminal, setShowCodeTerminal] = useState(false);
   const [uploadedDoc, setUploadedDoc] = useState(null);
   const [imgGenMode, setImgGenMode] = useState(false);
   const [imgGenStyle, setImgGenStyle] = useState('realistic');
@@ -5319,11 +5440,16 @@ onChange={e => {
          <button className={`ia-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)}>
              <Plus size={13}/><span>Add</span>
                 </button>
-               <div className="ia-right">
+              <div className="ia-right">
   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
 
-  {/* NEW — Voice call (soundwave) button */}
+  {/* NEW — Code Terminal button */}
+  <button className="mic-btn" onClick={() => setShowCodeTerminal(true)} title="Code Terminal">
+    <Code2 size={14}/>
+  </button>
+
+  {/* Voice call (soundwave) button */}
   <button className="mic-btn" onClick={startVoiceCall} title="Voice call" disabled={isProcessing}>
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <line x1="3"  y1="12" x2="3"  y2="12"/>
@@ -5345,7 +5471,7 @@ onChange={e => {
   <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
     {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
   </button>
-</div>
+               </div>
               </div>
             </div>
           </div>
@@ -5580,6 +5706,8 @@ onChange={e => {
           </div>
         </div>
       )}
+
+      {showCodeTerminal && <CodeTerminal onClose={() => setShowCodeTerminal(false)} />}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: 0, right: 0, zIndex: 9999, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
