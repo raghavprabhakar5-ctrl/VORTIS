@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AICore from "./AICore";
 import InkReveal from "./ink-reveal.jsx";
-import vortisNeural from "./vortis-neural.png";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
@@ -1085,6 +1084,151 @@ function Logos() {
 // ═════════════════════════════════════════════════════════════════
 //  INK REVEAL SLIDE -- full-width paint-to-reveal image section
 // ═════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+//  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
+// ═════════════════════════════════════════════════════════════════
+function VortisAnimation() {
+  // 12 orbiting particles distributed evenly around a circle
+  const orbits = Array.from({ length: 12 }, (_, i) => i);
+  // 3 concentric rings rotating at different speeds
+  const rings = [
+    { size: 360, dur: 24, dir: 1, opacity: 0.5, dots: 12, dotColor: "rgba(168,85,247,0.85)" },
+    { size: 520, dur: 38, dir: -1, opacity: 0.35, dots: 16, dotColor: "rgba(124,58,237,0.75)" },
+    { size: 680, dur: 60, dir: 1, opacity: 0.22, dots: 20, dotColor: "rgba(139,92,246,0.55)" },
+  ];
+  return (
+    <div style={{
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "radial-gradient(circle at 50% 50%, rgba(20,12,40,0.6) 0%, #03030a 70%)",
+      zIndex: 0,
+    }}>
+      <style>{`
+        @keyframes vortisSpin        { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
+        @keyframes vortisSpinReverse { from { transform: rotate(0deg);   } to { transform: rotate(-360deg); } }
+        @keyframes vortisPulse       { 0%,100% { transform: scale(1);    filter: drop-shadow(0 0 30px rgba(124,58,237,0.45)); }
+                                         50%   { transform: scale(1.08); filter: drop-shadow(0 0 70px rgba(168,85,247,0.75)); } }
+        @keyframes vortisRingPulse   { 0%,100% { opacity: 0.3;  transform: scale(1);    }
+                                         50%   { opacity: 0.7;  transform: scale(1.04); } }
+        @keyframes vortisSparkFloat  { 0%   { transform: translateY(0)    scale(1); opacity: 0.6; }
+                                         50%  { transform: translateY(-20px) scale(1.4); opacity: 1;   }
+                                         100% { transform: translateY(0)    scale(1); opacity: 0.6; } }
+      `}</style>
+
+      {/* Background ambient glow blob */}
+      <div style={{
+        position: "absolute",
+        width: 600,
+        height: 600,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(124,58,237,0.25), transparent 65%)",
+        filter: "blur(40px)",
+        animation: "vortisRingPulse 4s ease-in-out infinite",
+        pointerEvents: "none",
+      }} />
+
+      {/* Concentric rotating rings of particles */}
+      {rings.map((ring, ri) => (
+        <div key={ri} style={{
+          position: "absolute",
+          width: ring.size,
+          height: ring.size,
+          borderRadius: "50%",
+          border: `1px solid rgba(139,92,246,${ring.opacity * 0.4})`,
+          animation: `${ring.dir === 1 ? "vortisSpin" : "vortisSpinReverse"} ${ring.dur}s linear infinite`,
+          pointerEvents: "none",
+        }}>
+          {Array.from({ length: ring.dots }, (_, i) => {
+            const angle = (i / ring.dots) * Math.PI * 2;
+            const r = ring.size / 2;
+            const x = r + Math.cos(angle) * r - 3;
+            const y = r + Math.sin(angle) * r - 3;
+            return (
+              <div key={i} style={{
+                position: "absolute",
+                left: x,
+                top: y,
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: ring.dotColor,
+                boxShadow: `0 0 12px ${ring.dotColor}`,
+              }} />
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Inner pulsing halo behind the logo */}
+      <div style={{
+        position: "absolute",
+        width: 260,
+        height: 260,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(168,85,247,0.3), rgba(124,58,237,0.08) 60%, transparent 80%)",
+        animation: "vortisRingPulse 3s ease-in-out infinite",
+        pointerEvents: "none",
+      }} />
+
+      {/* Floating sparks scattered around the logo */}
+      {[
+        { x: "20%",  y: "30%", s: 4, d: "0s",   c: "rgba(168,85,247,0.9)" },
+        { x: "78%",  y: "28%", s: 3, d: "0.5s", c: "rgba(124,58,237,0.8)" },
+        { x: "15%",  y: "70%", s: 5, d: "1s",   c: "rgba(139,92,246,0.7)" },
+        { x: "82%",  y: "72%", s: 3, d: "1.4s", c: "rgba(168,85,247,0.85)" },
+        { x: "50%",  y: "12%", s: 4, d: "0.8s", c: "rgba(124,58,237,0.75)" },
+        { x: "50%",  y: "88%", s: 4, d: "1.6s", c: "rgba(139,92,246,0.7)" },
+        { x: "32%",  y: "18%", s: 2, d: "2s",   c: "rgba(168,85,247,0.6)" },
+        { x: "68%",  y: "82%", s: 2, d: "1.2s", c: "rgba(124,58,237,0.65)" },
+      ].map((sp, i) => (
+        <div key={i} style={{
+          position: "absolute",
+          left: sp.x,
+          top: sp.y,
+          width: sp.s,
+          height: sp.s,
+          borderRadius: "50%",
+          background: sp.c,
+          boxShadow: `0 0 10px ${sp.c}`,
+          animation: `vortisSparkFloat ${2.5 + i * 0.3}s ease-in-out ${sp.d} infinite`,
+          pointerEvents: "none",
+        }} />
+      ))}
+
+      {/* The VortisLogo brand mark -- the centerpiece */}
+      <div style={{
+        position: "relative",
+        zIndex: 2,
+        animation: "vortisPulse 3.5s ease-in-out infinite",
+      }}>
+        <VortisLogo size={220} color="#a855f7" />
+      </div>
+
+      {/* VORTIS wordmark below the logo */}
+      <div style={{
+        position: "absolute",
+        bottom: "18%",
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 2,
+        fontFamily: "'Space Grotesk',sans-serif",
+        fontWeight: 900,
+        fontSize: "clamp(2.5rem, 7vw, 5rem)",
+        letterSpacing: "0.4em",
+        color: "#fff",
+        textShadow: "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(168,85,247,0.4)",
+        margin: 0,
+        userSelect: "none",
+        pointerEvents: "none",
+        paddingLeft: "0.4em",
+      }}>VORTIS</div>
+    </div>
+  );
+}
+
 function InkRevealSection() {
   const [ref, inView] = useInView(0.1);
   return (
@@ -1100,31 +1244,9 @@ function InkRevealSection() {
       opacity: inView ? 1 : 0,
       transition: "opacity 1.1s ease",
     }}>
-      {/* Custom Vortis-branded image -- dark purple AI neural with VORTIS
-          written into the image itself, so painting reveals the wordmark
-          as part of the artwork. */}
-      <img
-        src={vortisNeural}
-        alt="Vortis AI neural visualization"
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          filter: "saturate(1.05) contrast(1.05)",
-        }}
-      />
-      {/* Subtle violet color grade so the image blends seamlessly into
-          the Vortis page background. */}
-      <div style={{
-        position: "absolute",
-        inset: 0,
-        background:
-          "linear-gradient(180deg, rgba(124,58,237,0.12) 0%, rgba(3,3,10,0.45) 100%)",
-        pointerEvents: "none",
-        zIndex: 0,
-      }} />
+      {/* Animated Vortis brand mark -- logo at center with orbiting particles,
+          pulsing glow rings, and floating sparks. Painting reveals the animation. */}
+      <VortisAnimation />
       {/* Paint-to-reveal mask canvas -- covers the image + VORTIS wordmark.
           When the user paints, the mask is erased, revealing the image AND
           the VORTIS text underneath, as if they were always part of the image. */}
