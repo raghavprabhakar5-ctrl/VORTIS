@@ -1088,13 +1088,27 @@ function Logos() {
 //  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
 // ═════════════════════════════════════════════════════════════════
 function VortisAnimation() {
-  // 12 orbiting particles distributed evenly around a circle
-  const orbits = Array.from({ length: 12 }, (_, i) => i);
-  // 3 concentric rings rotating at different speeds
+  // 4 concentric rings -- longer durations + linear for smooth continuous spin
   const rings = [
-    { size: 360, dur: 24, dir: 1, opacity: 0.5, dots: 12, dotColor: "rgba(168,85,247,0.85)" },
-    { size: 520, dur: 38, dir: -1, opacity: 0.35, dots: 16, dotColor: "rgba(124,58,237,0.75)" },
-    { size: 680, dur: 60, dir: 1, opacity: 0.22, dots: 20, dotColor: "rgba(139,92,246,0.55)" },
+    { size: 340, dur: 28,  dir: 1,  opacity: 0.55, dots: 14, dotColor: "rgba(168,85,247,0.9)",  dotSize: 5 },
+    { size: 480, dur: 44,  dir: -1, opacity: 0.4,  dots: 18, dotColor: "rgba(124,58,237,0.8)",  dotSize: 4 },
+    { size: 640, dur: 70,  dir: 1,  opacity: 0.28, dots: 22, dotColor: "rgba(139,92,246,0.6)",  dotSize: 3 },
+    { size: 820, dur: 100, dir: -1, opacity: 0.18, dots: 28, dotColor: "rgba(168,85,247,0.45)", dotSize: 3 },
+  ];
+  // Floating sparks -- each with its own drift phase
+  const sparks = [
+    { x: "18%", y: "28%", s: 4, d: 0,   c: "rgba(168,85,247,0.95)" },
+    { x: "80%", y: "24%", s: 3, d: 0.7, c: "rgba(124,58,237,0.85)" },
+    { x: "12%", y: "68%", s: 5, d: 1.3, c: "rgba(139,92,246,0.75)" },
+    { x: "84%", y: "74%", s: 3, d: 1.9, c: "rgba(168,85,247,0.9)"  },
+    { x: "50%", y: "10%", s: 4, d: 0.4, c: "rgba(124,58,237,0.8)"  },
+    { x: "50%", y: "90%", s: 4, d: 2.2, c: "rgba(139,92,246,0.75)" },
+    { x: "30%", y: "16%", s: 2, d: 2.6, c: "rgba(168,85,247,0.65)" },
+    { x: "70%", y: "84%", s: 2, d: 1.6, c: "rgba(124,58,237,0.7)"  },
+    { x: "24%", y: "50%", s: 3, d: 0.9, c: "rgba(168,85,247,0.7)"  },
+    { x: "76%", y: "50%", s: 3, d: 1.8, c: "rgba(124,58,237,0.75)" },
+    { x: "40%", y: "76%", s: 2, d: 2.4, c: "rgba(139,92,246,0.6)"  },
+    { x: "60%", y: "22%", s: 2, d: 0.3, c: "rgba(168,85,247,0.65)" },
   ];
   return (
     <div style={{
@@ -1103,32 +1117,79 @@ function VortisAnimation() {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "radial-gradient(circle at 50% 50%, rgba(20,12,40,0.6) 0%, #03030a 70%)",
+      background:
+        "radial-gradient(circle at 50% 50%, rgba(28,16,52,0.7) 0%, rgba(8,6,18,0.95) 55%, #03030a 85%)",
       zIndex: 0,
+      overflow: "hidden",
     }}>
       <style>{`
-        @keyframes vortisSpin        { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
-        @keyframes vortisSpinReverse { from { transform: rotate(0deg);   } to { transform: rotate(-360deg); } }
-        @keyframes vortisPulse       { 0%,100% { transform: scale(1);    filter: drop-shadow(0 0 30px rgba(124,58,237,0.45)); }
-                                         50%   { transform: scale(1.08); filter: drop-shadow(0 0 70px rgba(168,85,247,0.75)); } }
-        @keyframes vortisRingPulse   { 0%,100% { opacity: 0.3;  transform: scale(1);    }
-                                         50%   { opacity: 0.7;  transform: scale(1.04); } }
-        @keyframes vortisSparkFloat  { 0%   { transform: translateY(0)    scale(1); opacity: 0.6; }
-                                         50%  { transform: translateY(-20px) scale(1.4); opacity: 1;   }
-                                         100% { transform: translateY(0)    scale(1); opacity: 0.6; } }
+        @keyframes vSpin         { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
+        @keyframes vSpinReverse  { from { transform: rotate(0deg);   } to { transform: rotate(-360deg); } }
+        /* Logo: long, slow, deeply eased breathe -- much more fluid */
+        @keyframes vBreathe      { 0%,100% { transform: scale(1);     filter: drop-shadow(0 0 30px rgba(124,58,237,0.5)) drop-shadow(0 0 60px rgba(168,85,247,0.25)); }
+                                    50%    { transform: scale(1.06);  filter: drop-shadow(0 0 55px rgba(168,85,247,0.85)) drop-shadow(0 0 110px rgba(124,58,237,0.45)); } }
+        /* Halo: smooth soft pulse */
+        @keyframes vHaloPulse    { 0%,100% { opacity: 0.35; transform: scale(1);    }
+                                    50%    { opacity: 0.85; transform: scale(1.08); } }
+        /* Slow ambient blob drift */
+        @keyframes vBlobDrift    { 0%   { transform: translate(0,0)     scale(1);    opacity: 0.5; }
+                                    33%  { transform: translate(40px,-30px) scale(1.15); opacity: 0.7; }
+                                    66%  { transform: translate(-30px,40px) scale(0.95); opacity: 0.55; }
+                                    100% { transform: translate(0,0)     scale(1);    opacity: 0.5; } }
+        /* Spark: 3-axis drift with smooth easing */
+        @keyframes vSparkDrift   { 0%   { transform: translate(0,0)       scale(1);   opacity: 0.5; }
+                                    25%  { transform: translate(12px,-18px) scale(1.4); opacity: 1;   }
+                                    50%  { transform: translate(20px,-8px)  scale(1);   opacity: 0.7; }
+                                    75%  { transform: translate(8px,16px)   scale(1.2); opacity: 0.95; }
+                                    100% { transform: translate(0,0)       scale(1);   opacity: 0.5; } }
+        /* Conic gradient ring rotating slowly behind logo */
+        @keyframes vConicSpin    { from { transform: rotate(0deg);   } to { transform: rotate(360deg);  } }
+        /* VORTIS text -- gradient shimmer sweep + soft float */
+        @keyframes vTextFloat    { 0%,100% { transform: translateX(-50%) translateY(0);    }
+                                    50%    { transform: translateX(-50%) translateY(-6px); } }
+        @keyframes vTextShimmer  { 0%   { background-position: -200% center; }
+                                    100% { background-position:  200% center; } }
+        /* Glow ring expanding outward like a sonar pulse */
+        @keyframes vSonar        { 0%   { transform: scale(0.6); opacity: 0.7; }
+                                    100% { transform: scale(2.2); opacity: 0;   } }
       `}</style>
 
-      {/* Background ambient glow blob */}
+      {/* Ambient drifting blob -- backmost layer */}
       <div style={{
         position: "absolute",
-        width: 600,
-        height: 600,
+        width: 700,
+        height: 700,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(124,58,237,0.25), transparent 65%)",
-        filter: "blur(40px)",
-        animation: "vortisRingPulse 4s ease-in-out infinite",
+        background: "radial-gradient(circle, rgba(124,58,237,0.32), rgba(168,85,247,0.08) 50%, transparent 70%)",
+        filter: "blur(50px)",
+        animation: "vBlobDrift 12s ease-in-out infinite",
         pointerEvents: "none",
       }} />
+
+      {/* Secondary offset blob -- different color + phase for richness */}
+      <div style={{
+        position: "absolute",
+        width: 480,
+        height: 480,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(168,85,247,0.22), transparent 65%)",
+        filter: "blur(40px)",
+        animation: "vBlobDrift 16s ease-in-out -4s infinite reverse",
+        pointerEvents: "none",
+      }} />
+
+      {/* Sonar pulse rings expanding outward */}
+      {[0, 1.5, 3, 4.5].map((delay, i) => (
+        <div key={i} style={{
+          position: "absolute",
+          width: 260,
+          height: 260,
+          borderRadius: "50%",
+          border: "1px solid rgba(168,85,247,0.5)",
+          animation: `vSonar 6s ease-out ${delay}s infinite`,
+          pointerEvents: "none",
+        }} />
+      ))}
 
       {/* Concentric rotating rings of particles */}
       {rings.map((ring, ri) => (
@@ -1137,53 +1198,57 @@ function VortisAnimation() {
           width: ring.size,
           height: ring.size,
           borderRadius: "50%",
-          border: `1px solid rgba(139,92,246,${ring.opacity * 0.4})`,
-          animation: `${ring.dir === 1 ? "vortisSpin" : "vortisSpinReverse"} ${ring.dur}s linear infinite`,
+          border: `1px solid rgba(139,92,246,${ring.opacity * 0.35})`,
+          animation: `${ring.dir === 1 ? "vSpin" : "vSpinReverse"} ${ring.dur}s linear infinite`,
           pointerEvents: "none",
         }}>
           {Array.from({ length: ring.dots }, (_, i) => {
             const angle = (i / ring.dots) * Math.PI * 2;
             const r = ring.size / 2;
-            const x = r + Math.cos(angle) * r - 3;
-            const y = r + Math.sin(angle) * r - 3;
+            const x = r + Math.cos(angle) * r - ring.dotSize / 2;
+            const y = r + Math.sin(angle) * r - ring.dotSize / 2;
             return (
               <div key={i} style={{
                 position: "absolute",
                 left: x,
                 top: y,
-                width: 6,
-                height: 6,
+                width: ring.dotSize,
+                height: ring.dotSize,
                 borderRadius: "50%",
                 background: ring.dotColor,
-                boxShadow: `0 0 12px ${ring.dotColor}`,
+                boxShadow: `0 0 14px ${ring.dotColor}, 0 0 28px ${ring.dotColor}`,
               }} />
             );
           })}
         </div>
       ))}
 
+      {/* Conic-gradient rotating ring -- adds a sleek aurora feel */}
+      <div style={{
+        position: "absolute",
+        width: 300,
+        height: 300,
+        borderRadius: "50%",
+        background:
+          "conic-gradient(from 0deg, transparent 0%, rgba(168,85,247,0.5) 25%, transparent 50%, rgba(124,58,237,0.4) 75%, transparent 100%)",
+        filter: "blur(8px)",
+        animation: "vConicSpin 18s linear infinite",
+        pointerEvents: "none",
+      }} />
+
       {/* Inner pulsing halo behind the logo */}
       <div style={{
         position: "absolute",
-        width: 260,
-        height: 260,
+        width: 280,
+        height: 280,
         borderRadius: "50%",
-        background: "radial-gradient(circle, rgba(168,85,247,0.3), rgba(124,58,237,0.08) 60%, transparent 80%)",
-        animation: "vortisRingPulse 3s ease-in-out infinite",
+        background: "radial-gradient(circle, rgba(168,85,247,0.4), rgba(124,58,237,0.12) 55%, transparent 80%)",
+        animation: "vHaloPulse 4.5s ease-in-out infinite",
         pointerEvents: "none",
       }} />
 
       {/* Floating sparks scattered around the logo */}
-      {[
-        { x: "20%",  y: "30%", s: 4, d: "0s",   c: "rgba(168,85,247,0.9)" },
-        { x: "78%",  y: "28%", s: 3, d: "0.5s", c: "rgba(124,58,237,0.8)" },
-        { x: "15%",  y: "70%", s: 5, d: "1s",   c: "rgba(139,92,246,0.7)" },
-        { x: "82%",  y: "72%", s: 3, d: "1.4s", c: "rgba(168,85,247,0.85)" },
-        { x: "50%",  y: "12%", s: 4, d: "0.8s", c: "rgba(124,58,237,0.75)" },
-        { x: "50%",  y: "88%", s: 4, d: "1.6s", c: "rgba(139,92,246,0.7)" },
-        { x: "32%",  y: "18%", s: 2, d: "2s",   c: "rgba(168,85,247,0.6)" },
-        { x: "68%",  y: "82%", s: 2, d: "1.2s", c: "rgba(124,58,237,0.65)" },
-      ].map((sp, i) => (
+      {sparks.map((sp, i) => (
         <div key={i} style={{
           position: "absolute",
           left: sp.x,
@@ -1192,38 +1257,45 @@ function VortisAnimation() {
           height: sp.s,
           borderRadius: "50%",
           background: sp.c,
-          boxShadow: `0 0 10px ${sp.c}`,
-          animation: `vortisSparkFloat ${2.5 + i * 0.3}s ease-in-out ${sp.d} infinite`,
+          boxShadow: `0 0 10px ${sp.c}, 0 0 20px ${sp.c}`,
+          animation: `vSparkDrift ${4 + i * 0.4}s ease-in-out ${sp.d}s infinite`,
           pointerEvents: "none",
         }} />
       ))}
 
-      {/* The VortisLogo brand mark -- the centerpiece */}
+      {/* The VortisLogo brand mark -- the centerpiece, slow breathing glow */}
       <div style={{
         position: "relative",
         zIndex: 2,
-        animation: "vortisPulse 3.5s ease-in-out infinite",
+        animation: "vBreathe 5s ease-in-out infinite",
       }}>
         <VortisLogo size={220} color="#a855f7" />
       </div>
 
-      {/* VORTIS wordmark below the logo */}
+      {/* VORTIS wordmark -- gradient fill + shimmer sweep + soft float */}
       <div style={{
         position: "absolute",
-        bottom: "18%",
+        bottom: "16%",
         left: "50%",
-        transform: "translateX(-50%)",
         zIndex: 2,
         fontFamily: "'Space Grotesk',sans-serif",
         fontWeight: 900,
-        fontSize: "clamp(2.5rem, 7vw, 5rem)",
-        letterSpacing: "0.4em",
-        color: "#fff",
-        textShadow: "0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(168,85,247,0.4)",
+        fontSize: "clamp(2.8rem, 8vw, 6rem)",
+        letterSpacing: "0.45em",
         margin: 0,
         userSelect: "none",
         pointerEvents: "none",
-        paddingLeft: "0.4em",
+        paddingLeft: "0.45em",
+        /* Animated gradient fill -- violet to white to violet, sweeping forever */
+        backgroundImage:
+          "linear-gradient(100deg, rgba(168,85,247,0.85) 0%, #ffffff 25%, rgba(124,58,237,0.95) 50%, #ffffff 75%, rgba(168,85,247,0.85) 100%)",
+        backgroundSize: "200% auto",
+        backgroundClip: "text",
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        /* Soft outer glow via text-shadow won't show on transparent fill, so we add a drop-shadow filter */
+        filter: "drop-shadow(0 0 25px rgba(124,58,237,0.7)) drop-shadow(0 0 60px rgba(168,85,247,0.4))",
+        animation: "vTextFloat 5s ease-in-out infinite, vTextShimmer 4.5s linear infinite",
       }}>VORTIS</div>
     </div>
   );
