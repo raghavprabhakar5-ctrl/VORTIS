@@ -1121,7 +1121,31 @@ function InkRevealSection() {
         pointerEvents: "none",
         zIndex: 0,
       }} />
-      {/* Top + bottom fades so the slide blends into the page */}
+      {/* Giant VORTIS wordmark -- sits BELOW the ink-reveal canvas so it gets
+          revealed by painting, like it's part of the image itself. */}
+      <h2 style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        zIndex: 0,
+        fontFamily: "'Space Grotesk',sans-serif",
+        fontWeight: 900,
+        fontSize: "clamp(5rem, 22vw, 22rem)",
+        letterSpacing: "-0.05em",
+        lineHeight: 0.9,
+        margin: 0,
+        color: "#fff",
+        textShadow: "0 0 80px rgba(124,58,237,0.55), 0 0 30px rgba(168,85,247,0.35)",
+        pointerEvents: "none",
+        whiteSpace: "nowrap",
+        userSelect: "none",
+      }}>VORTIS</h2>
+      {/* Paint-to-reveal mask canvas -- covers the image + VORTIS wordmark.
+          When the user paints, the mask is erased, revealing the image AND
+          the VORTIS text underneath, as if they were always part of the image. */}
+      <InkReveal />
+      {/* Top + bottom fades so the slide blends into the page (above canvas) */}
       <div style={{
         position: "absolute",
         top: 0,
@@ -1142,27 +1166,6 @@ function InkRevealSection() {
         pointerEvents: "none",
         zIndex: 2,
       }} />
-      {/* Paint-to-reveal mask canvas (above image, below the VORTIS wordmark) */}
-      <InkReveal />
-      {/* Giant VORTIS wordmark -- the only thing on top of the canvas */}
-      <h2 style={{
-        position: "absolute",
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)",
-        zIndex: 3,
-        fontFamily: "'Space Grotesk',sans-serif",
-        fontWeight: 900,
-        fontSize: "clamp(5rem, 22vw, 22rem)",
-        letterSpacing: "-0.05em",
-        lineHeight: 0.9,
-        margin: 0,
-        color: "#fff",
-        textShadow: "0 0 80px rgba(124,58,237,0.55), 0 0 30px rgba(168,85,247,0.35)",
-        pointerEvents: "none",
-        whiteSpace: "nowrap",
-        userSelect: "none",
-      }}>VORTIS</h2>
     </section>
   );
 }
