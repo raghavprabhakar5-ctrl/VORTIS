@@ -25,121 +25,11 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem, PhoneOff, Play, Pause
+  Gem, PhoneOff, Play, Pause, Code2 
 } from 'lucide-react';
 
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
-
-// ─────────────────────────────────────────────────────────────────────────
-//  VORTIS CODER  —  custom branded coding icon (replaces lucide Code2)
-//  Hexagonal "V" mark with </> brackets inside, signals coder mode.
-//  `active` prop switches the accent to indigo + glow.
-// ─────────────────────────────────────────────────────────────────────────
-const VortisCodeIcon = ({ size = 14, active = false, ...rest }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    style={{ display: 'inline-block', flexShrink: 0 }}
-    {...rest}
-  >
-    {/* hexagon frame — Vortis mark */}
-    <path
-      d="M12 1.6 L21.2 6.9 L21.2 17.1 L12 22.4 L2.8 17.1 L2.8 6.9 Z"
-      fill={active ? 'rgba(99,102,241,0.15)' : 'none'}
-      stroke={active ? 'var(--indigo)' : 'currentColor'}
-      strokeWidth="1.6"
-      strokeLinejoin="round"
-    />
-    {/* inner </>  — split into two chevrons */}
-    <path
-      d="M9.2 8.6 L6 12 L9.2 15.4"
-      stroke={active ? 'var(--indigo)' : 'currentColor'}
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    <path
-      d="M14.8 8.6 L18 12 L14.8 15.4"
-      stroke={active ? 'var(--indigo)' : 'currentColor'}
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      fill="none"
-    />
-    {/* tiny dot in the middle — the cursor */}
-    <circle cx="12" cy="12" r="0.9" fill={active ? 'var(--indigo)' : 'currentColor'} />
-  </svg>
-);
-
-// ─────────────────────────────────────────────────────────────────────────
-//  VORTIS CODER SYSTEM PROMPT
-//  When coderMode is ON, this prompt is appended — it pivots Vortis from
-//  a general chat assistant into a focused, Codex-style coding co-pilot.
-// ─────────────────────────────────────────────────────────────────────────
-const VORTIS_CODER_PROMPT = `
-
-═══════════════════════════════════════
-VORTIS CODER MODE  (ACTIVE)
-═══════════════════════════════════════
-You are now operating as VORTIS CODER — the dedicated coding specialist
-inside the Vortis platform. The user has explicitly switched you into
-coder mode (the hexagonal </> icon is highlighted in the input bar).
-
-In this mode your behaviour changes:
-
-1. DEFAULT TO CODE. Every answer should lead with working code, not prose.
-   If the user asks a question that has a code answer, write the code first,
-   then a 1–3 sentence explanation. Never reply with only explanation when
-   code would be more useful.
-
-2. ALWAYS USE FENCED CODE BLOCKS with the correct language tag:
-   \`\`\`python, \`\`\`javascript, \`\`\`tsx, \`\`\`bash, \`\`\`sql,
-   \`\`\`rust, \`\`\`go, \`\`\`java, \`\`\`c++, \`\`\`css, \`\`\`json,
-   \`\`\`yaml, \`\`\`dockerfile, etc. Never output raw unformatted code.
-
-3. PRODUCTION GRADE. Code must be complete, runnable, and idiomatic for the
-   target language. No pseudo-code, no "// TODO: implement", no "you get the
-   idea" placeholders. Include imports. Include error handling where it
-   matters. Use modern syntax (ES2022+, Python 3.10+, TS strict).
-
-4. BE OPINIONATED. Recommend the best library / pattern, not five options.
-   If the user picks a bad approach, say so briefly and propose the better
-   one — then show it. Don't hedge with "it depends" unless it genuinely
-   depends on a constraint they haven't given.
-
-5. STRUCTURE LONG ANSWERS as: (a) one-line summary, (b) code block,
-   (c) short "why this works" note, (d) "Run it" / "Install" snippet when
-   relevant. Keep prose minimal — coders want code, not essays.
-
-6. DEBUG LIKE A SENIOR ENGINEER. When given an error or broken code:
-   - Identify the root cause in one line.
-   - Show the minimal fix as a diff-style snippet ("remove this, add this").
-   - Then show the corrected full block so it's copy-pasteable.
-
-7. RESPECT THE USER'S STACK. If they're using React + Tailwind, answer in
-   React + Tailwind. If they're on plain JS, don't drag in a framework.
-   Match their style (tabs vs spaces, semicolons, naming) unless they ask
-   otherwise.
-
-8. NO CHAT FLUFF. Drop "Sure!", "Of course", "Great question", "Happy to
-   help". Start directly with the answer. End without sign-offs.
-
-9. WHEN CODE ISN'T NEEDED (architecture, career, theory), be terse and
-   precise — bulleted when useful, never more than 6 short bullets.
-
-10. SECURITY & BEST PRACTICES. Never suggest eval, innerHTML with user
-    input, hardcoded secrets, or disabled TLS verification without an
-    explicit warning. Flag SQL injection / XSS risks in user code on sight.
-
-You are still Vortis, still built by the Vortis team — but in CODER MODE
-you are the engineering specialist. Stay sharp, stay direct, ship code.
-═══════════════════════════════════════
-`;
 
 // ── TINYLD — cached language detector (loaded once, reused forever) ──
 let _tinyld = null;
@@ -377,11 +267,6 @@ input,textarea,select{font-size:16px}
 .attach-chip.doc{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:var(--green)}
 .attach-chip.img{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.2);color:var(--indigo)}
 .attach-chip.mode{background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);color:var(--cyan)}
-.attach-chip.coder{background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.35);color:var(--indigo);font-weight:600;letter-spacing:.02em}
-.mic-btn.coder-active{color:#fff;background:linear-gradient(135deg,rgba(99,102,241,.85),rgba(139,92,246,.85));border-color:rgba(99,102,241,.6);box-shadow:0 0 0 3px rgba(99,102,241,.12),0 2px 8px rgba(99,102,241,.25)}
-.mic-btn.coder-active:hover{background:linear-gradient(135deg,rgba(99,102,241,.95),rgba(139,92,246,.95))}
-.vortis-coder-banner{display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:10px;background:linear-gradient(90deg,rgba(99,102,241,.10),rgba(139,92,246,.06));border:1px solid rgba(99,102,241,.25);color:var(--indigo);font-size:11.5px;font-family:'JetBrains Mono',monospace;font-weight:600;letter-spacing:.03em}
-.vortis-coder-banner .dot{width:6px;height:6px;border-radius:50%;background:var(--indigo);box-shadow:0 0 8px var(--indigo);animation:pulse 1.6s ease-in-out infinite}
 .attach-chip button{background:none;border:none;color:inherit;cursor:pointer;padding:0;display:flex;opacity:.7}
 .quick-pills{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:22px}
 .q-pill{display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:24px;color:var(--text3);font-size:12.5px;cursor:pointer;font-family:'Geist',sans-serif;transition:all .2s;-webkit-tap-highlight-color:transparent}
@@ -783,20 +668,21 @@ const executeCodeLocally = async (language, code, onStatus) => {
         return await executeCodeLocally('javascript', js, onStatus);
       }
  
-      case 'python': {
-        const py = await bootPython(onStatus);
-        onStatus?.('Running…');
-        let stdout = '';
-        py.setStdout({ write: (t) => { stdout += t; return t.length; } });
-        py.setStderr({ write: (t) => { stdout += t; return t.length; } });
-        try {
-          try { await py.loadPackagesFromImports(code); } catch (_) {}
-          await py.runPythonAsync(code);
-          return { output: tidyOutput(stdout) || 'Success (no output)', isError: false };
-        } catch (err) {
-          return { output: stdout + (stdout ? '\n' : '') + err.message, isError: true };
-        }
-      }
+     case 'python': {
+  const py = await bootPython(onStatus);
+  onStatus?.('Running…');
+  let stdout = '';
+  const decoder = new TextDecoder();
+  py.setStdout({ write: (buf) => { stdout += decoder.decode(buf, { stream: true }); return buf.length; } });
+  py.setStderr({ write: (buf) => { stdout += decoder.decode(buf, { stream: true }); return buf.length; } });
+  try {
+    try { await py.loadPackagesFromImports(code); } catch (_) {}
+    await py.runPythonAsync(code);
+    return { output: tidyOutput(stdout) || 'Success (no output)', isError: false };
+  } catch (err) {
+    return { output: stdout + (stdout ? '\n' : '') + err.message, isError: true };
+  }
+}
  
       case 'lua': {
         const factory = await bootLua(onStatus);
@@ -972,7 +858,7 @@ const CodeTerminal = ({ onClose }) => {
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--border)', background: 'var(--bg3)', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <VortisCodeIcon size={16} active/>
+            <Code2 size={16} color="var(--indigo)"/>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text1)' }}>Code Terminal</span>
             {meta && <span style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>via {meta.name}</span>}
           </div>
@@ -2367,7 +2253,6 @@ export default function VortisAI() {
   const [uploadedDoc, setUploadedDoc] = useState(null);
   const [imgGenMode, setImgGenMode] = useState(false);
   const [imgGenStyle, setImgGenStyle] = useState('realistic');
-  const [coderMode, setCoderMode] = useState(false); // VORTIS CODER — Codex-style coding specialist toggle
   const [ttsGender, setTtsGender] = useState(() => {
   try { return localStorage.getItem('vortis_tts_gender') || 'male'; } catch(_) { return 'male'; }
 });
@@ -2661,7 +2546,7 @@ export default function VortisAI() {
         setConfirmDialog(null); setShowSettings(false);
         setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
         setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
-        setShowMenu(false); setImgGenMode(false); setCoderMode(false); setLastImagePrompt(null);
+        setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
         convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
         try { localStorage.removeItem('vortis_usage'); localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
         if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); for (const d of snap.docs) await deleteDoc(d.ref); } catch(_) {} }
@@ -2878,7 +2763,7 @@ const saveChat = useCallback(async (msgsToSave) => {
   const startNewChat = async () => {
     if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); if (snap.docs.length >= 10) { const oldest = snap.docs.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0]; if (oldest) await deleteDoc(oldest.ref); } } catch(_) {} }
     const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
-    setMessages([]); setUploadedDoc(null); setShowMenu(false); setImgGenMode(false); setCoderMode(false);
+    setMessages([]); setUploadedDoc(null); setShowMenu(false); setImgGenMode(false);
     setLastImagePrompt(null); convHistory.current = []; setProcessingStatus('');
     imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
@@ -4403,7 +4288,6 @@ The ONLY output for an image request is the single line starting with GENERATE_I
 - Respond in the same language the user writes in.
 
 PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
-      if (coderMode) sys += VORTIS_CODER_PROMPT;
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
@@ -5447,14 +5331,7 @@ return (
 
         <div className="input-section">
           <div className="input-inner">
-            {coderMode && (
-              <div className="vortis-coder-banner">
-                <span className="dot"/>
-                <VortisCodeIcon size={13} active/>
-                <span>VORTIS CODER ACTIVE — responses will be code-first, production-grade, no fluff.</span>
-              </div>
-            )}
-            {(uploadedDoc || imgGenMode || researchMode || coderMode) && (
+            {(uploadedDoc || imgGenMode || researchMode) && (
               <div className="attach-chips">
                 {uploadedDoc && (
                   <div className="attach-chip doc">
@@ -5476,13 +5353,6 @@ return (
                   <div className="attach-chip mode">
                     <Search size={10}/><span>Deep Research</span>
                     <button onClick={() => setResearchMode(null)}><X size={10}/></button>
-                  </div>
-                )}
-                {coderMode && (
-                  <div className="attach-chip coder">
-                    <VortisCodeIcon size={11} active/>
-                    <span>VORTIS CODER</span>
-                    <button onClick={() => setCoderMode(false)}><X size={10}/></button>
                   </div>
                 )}
               </div>
@@ -5559,7 +5429,6 @@ onChange={e => {
   disabled={isProcessing}
   placeholder={
     input.startsWith('> ') ? 'Type your reply…' :
-    coderMode ? 'Ask Vortis Coder — describe the bug, paste the snippet, or request a feature…' :
     imgGenMode ? `Describe the image… (${imgGenStyle})` :
     researchMode === 'deep' ? 'What should I research in depth?' :
     pendingImage ? 'Ask something about this image…' :
@@ -5576,14 +5445,9 @@ onChange={e => {
   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
 
-  {/* VORTIS CODER — toggle coder mode (Codex-style) */}
-  <button
-    className={`mic-btn ${coderMode ? 'coder-active' : ''}`}
-    onClick={() => setCoderMode(v => !v)}
-    title={coderMode ? 'Vortis Coder mode is ON — click to exit' : 'Switch to Vortis Coder mode'}
-    aria-pressed={coderMode}
-  >
-    <VortisCodeIcon size={15} active={coderMode}/>
+  {/* NEW — Code Terminal button */}
+  <button className="mic-btn" onClick={() => setShowCodeTerminal(true)} title="Code Terminal">
+    <Code2 size={14}/>
   </button>
 
   {/* Voice call (soundwave) button */}
