@@ -1152,6 +1152,8 @@ function VortisAnimation() {
         /* Glow ring expanding outward like a sonar pulse */
         @keyframes vSonar        { 0%   { transform: scale(0.6); opacity: 0.7; }
                                     100% { transform: scale(2.2); opacity: 0;   } }
+        @keyframes vHintPulse    { 0%,100% { transform: translateX(-50%) translateY(0);     opacity: 0.75; }
+                                    50%    { transform: translateX(-50%) translateY(-4px);  opacity: 1;    } }
       `}</style>
 
       {/* Ambient drifting blob -- backmost layer */}
@@ -1319,10 +1321,49 @@ function InkRevealSection() {
       {/* Animated Vortis brand mark -- logo at center with orbiting particles,
           pulsing glow rings, and floating sparks. Painting reveals the animation. */}
       <VortisAnimation />
-      {/* Paint-to-reveal mask canvas -- covers the image + VORTIS wordmark.
-          When the user paints, the mask is erased, revealing the image AND
-          the VORTIS text underneath, as if they were always part of the image. */}
-      <InkReveal />
+      {/* Paint-to-reveal mask canvas. Tuned for high fluid clearance:
+          big brush (220px), strong center opacity (1.0), short lifetime (450ms)
+          so stamps fully erase the mask and reveal the animation underneath. */}
+      <InkReveal
+        brushSize={220}
+        lifetime={450}
+        rStart={18}
+        rVary={0.35}
+        stampStep={8}
+        maxStamps={300}
+        gradientInnerRadius={0.25}
+        gradientStops={[1.0, 0.92, 0]}
+        wobble={[0.1, 0.06, 0.04]}
+      />
+      {/* Hint pill at the top of the slide -- tells the user to hover/paint. */}
+      <div style={{
+        position: "absolute",
+        top: 48,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 4,
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "10px 22px",
+        borderRadius: 99,
+        background: "rgba(3,3,10,0.75)",
+        backdropFilter: "blur(14px)",
+        border: "1px solid rgba(139,92,246,0.45)",
+        boxShadow: "0 0 40px rgba(124,58,237,0.25)",
+        fontFamily: "'JetBrains Mono',monospace",
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "0.16em",
+        textTransform: "uppercase",
+        color: "rgba(168,85,247,0.95)",
+        pointerEvents: "none",
+        whiteSpace: "nowrap",
+        animation: "vHintPulse 2.4s ease-in-out infinite",
+      }}>
+        <Sparkles size={14} />
+        Hover me to reveal
+      </div>
       {/* Top + bottom fades so the slide blends into the page (above canvas) */}
       <div style={{
         position: "absolute",
