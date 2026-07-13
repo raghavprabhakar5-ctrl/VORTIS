@@ -887,80 +887,88 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
 <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
   <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
 
-  {/* Ink-reveal image card -- dark/purple AI neural theme to match Vortis branding.
-      Users hover (cursor hidden) to paint away the mask and reveal the image underneath.
-      The mask color is the exact #03030a hero background so the canvas is invisible until interaction. */}
+  {/* Ink-reveal SLIDE -- large hero-sized image panel with paint-to-reveal mask.
+      Uses a dark purple AI/neural themed image to match the Vortis palette (#7C3AED / #03030a).
+      The mask color is the exact #03030a hero background so the canvas is invisible until interaction.
+      The HeroVisual chat mock floats on top (zIndex 3 vs slide zIndex 1). */}
   <div
     style={{
       position: "absolute",
-      bottom: -28,
-      left: -40,
-      width: 280,
-      height: 180,
-      borderRadius: 16,
+      top: "50%",
+      left: "50%",
+      transform: "translate(-50%, -50%)",
+      width: "min(440px, 90%)",
+      height: 540,
+      maxWidth: "90%",
+      borderRadius: 24,
       overflow: "hidden",
-      border: "1px solid rgba(139,92,246,0.28)",
+      border: "1px solid rgba(139,92,246,0.25)",
       boxShadow:
-        "0 30px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(124,58,237,0.08), 0 0 40px rgba(124,58,237,0.18)",
-      zIndex: 2,
-      animation: "waveFloat 7s ease-in-out infinite",
-      transform: "rotate(-4deg)",
+        "0 50px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.08), 0 0 80px rgba(124,58,237,0.22)",
+      zIndex: 1,
+      animation: "waveFloat 8s ease-in-out infinite",
     }}
   >
+    {/* The themed image -- dark AI neural / cosmic purple to match Vortis branding */}
     <img
-      src="https://images.unsplash.com/photo-1620121692029-d088224ddc74?w=900&q=80"
-      alt="AI neural network visualization"
+      src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80"
+      alt="Vortis AI neural visualization"
       style={{
         position: "absolute",
         inset: 0,
         width: "100%",
         height: "100%",
         objectFit: "cover",
-        filter: "saturate(1.15) hue-rotate(-8deg)",
+        filter: "saturate(1.1) contrast(1.05)",
       }}
     />
-    {/* Subtle violet tint so the image blends with the Vortis palette */}
+    {/* Violet color grade so any image blends into the Vortis palette */}
     <div
       style={{
         position: "absolute",
         inset: 0,
         background:
-          "linear-gradient(135deg, rgba(124,58,237,0.25), rgba(6,6,20,0.35))",
-        mixBlendMode: "overlay",
+          "linear-gradient(180deg, rgba(124,58,237,0.18) 0%, rgba(3,3,10,0.55) 100%), radial-gradient(circle at 30% 20%, rgba(168,85,247,0.25), transparent 60%)",
         pointerEvents: "none",
         zIndex: 0,
       }}
     />
+    {/* Paint-to-reveal mask canvas (sits above image, below chat mock) */}
     <InkReveal />
-    {/* Hint label */}
+    {/* Hint pill -- tells the user to interact */}
     <div
       style={{
         position: "absolute",
-      bottom: 10,
-      left: 12,
+      bottom: 18,
+      left: "50%",
+      transform: "translateX(-50%)",
       zIndex: 3,
       display: "flex",
       alignItems: "center",
-      gap: 6,
-      padding: "5px 10px",
+      gap: 8,
+      padding: "8px 16px",
       borderRadius: 99,
-      background: "rgba(3,3,10,0.7)",
-      backdropFilter: "blur(8px)",
-      border: "1px solid rgba(255,255,255,0.08)",
+      background: "rgba(3,3,10,0.75)",
+      backdropFilter: "blur(10px)",
+      border: "1px solid rgba(139,92,246,0.35)",
         fontFamily: "'JetBrains Mono',monospace",
-        fontSize: 10,
-        letterSpacing: "0.08em",
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: "0.12em",
         textTransform: "uppercase",
         color: "rgba(168,85,247,0.95)",
         pointerEvents: "none",
+        whiteSpace: "nowrap",
       }}
     >
-      <Sparkles size={11} />
+      <Sparkles size={13} />
       Hover to reveal
     </div>
   </div>
 
-  <HeroVisual />
+  <div style={{ position: "relative", zIndex: 3 }}>
+    <HeroVisual />
+  </div>
   
   {/* Floating badges */}
   {[
