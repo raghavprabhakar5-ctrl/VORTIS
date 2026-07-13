@@ -887,88 +887,8 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
 <div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
   <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
 
-  {/* Ink-reveal SLIDE -- large hero-sized image panel with paint-to-reveal mask.
-      Uses a dark purple AI/neural themed image to match the Vortis palette (#7C3AED / #03030a).
-      The mask color is the exact #03030a hero background so the canvas is invisible until interaction.
-      The HeroVisual chat mock floats on top (zIndex 3 vs slide zIndex 1). */}
-  <div
-    style={{
-      position: "absolute",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)",
-      width: "min(440px, 90%)",
-      height: 540,
-      maxWidth: "90%",
-      borderRadius: 24,
-      overflow: "hidden",
-      border: "1px solid rgba(139,92,246,0.25)",
-      boxShadow:
-        "0 50px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,58,237,0.08), 0 0 80px rgba(124,58,237,0.22)",
-      zIndex: 1,
-      animation: "waveFloat 8s ease-in-out infinite",
-    }}
-  >
-    {/* The themed image -- dark AI neural / cosmic purple to match Vortis branding */}
-    <img
-      src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&q=80"
-      alt="Vortis AI neural visualization"
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        objectFit: "cover",
-        filter: "saturate(1.1) contrast(1.05)",
-      }}
-    />
-    {/* Violet color grade so any image blends into the Vortis palette */}
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        background:
-          "linear-gradient(180deg, rgba(124,58,237,0.18) 0%, rgba(3,3,10,0.55) 100%), radial-gradient(circle at 30% 20%, rgba(168,85,247,0.25), transparent 60%)",
-        pointerEvents: "none",
-        zIndex: 0,
-      }}
-    />
-    {/* Paint-to-reveal mask canvas (sits above image, below chat mock) */}
-    <InkReveal />
-    {/* Hint pill -- tells the user to interact */}
-    <div
-      style={{
-        position: "absolute",
-      bottom: 18,
-      left: "50%",
-      transform: "translateX(-50%)",
-      zIndex: 3,
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "8px 16px",
-      borderRadius: 99,
-      background: "rgba(3,3,10,0.75)",
-      backdropFilter: "blur(10px)",
-      border: "1px solid rgba(139,92,246,0.35)",
-        fontFamily: "'JetBrains Mono',monospace",
-        fontSize: 11,
-        fontWeight: 600,
-        letterSpacing: "0.12em",
-        textTransform: "uppercase",
-        color: "rgba(168,85,247,0.95)",
-        pointerEvents: "none",
-        whiteSpace: "nowrap",
-      }}
-    >
-      <Sparkles size={13} />
-      Hover to reveal
-    </div>
-  </div>
 
-  <div style={{ position: "relative", zIndex: 3 }}>
-    <HeroVisual />
-  </div>
+  <HeroVisual />
   
   {/* Floating badges */}
   {[
@@ -1161,6 +1081,121 @@ function Logos() {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
+//  INK REVEAL SLIDE -- full-width paint-to-reveal image section
+// ═════════════════════════════════════════════════════════════════
+function InkRevealSection() {
+  const [ref, inView] = useInView(0.15);
+  return (
+    <section ref={ref} style={{
+      position: "relative",
+      width: "100%",
+      height: "70vh",
+      minHeight: 480,
+      maxHeight: 720,
+      overflow: "hidden",
+      borderTop: "1px solid rgba(255,255,255,0.04)",
+      borderBottom: "1px solid rgba(255,255,255,0.04)",
+      zIndex: 1,
+      opacity: inView ? 1 : 0,
+      transition: "opacity 0.9s ease",
+    }}>
+      {/* Themed AI neural image -- dark purple to match the Vortis palette */}
+      <img
+        src="https://images.unsplash.com/photo-1677442136019-21780ecad995?w=2000&q=85"
+        alt="Vortis AI neural visualization"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          filter: "saturate(1.1) contrast(1.05)",
+        }}
+      />
+      {/* Violet color grade so any image blends into the Vortis palette */}
+      <div style={{
+        position: "absolute",
+        inset: 0,
+        background:
+          "linear-gradient(180deg, rgba(124,58,237,0.15) 0%, rgba(3,3,10,0.6) 100%), radial-gradient(circle at 30% 30%, rgba(168,85,247,0.22), transparent 60%)",
+        pointerEvents: "none",
+        zIndex: 0,
+      }} />
+      {/* Side fades so the slide blends into the page top/bottom */}
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 120,
+        background: "linear-gradient(to bottom, #03030a, transparent)",
+        pointerEvents: "none",
+        zIndex: 2,
+      }} />
+      <div style={{
+        position: "absolute",
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 120,
+        background: "linear-gradient(to top, #03030a, transparent)",
+        pointerEvents: "none",
+        zIndex: 2,
+      }} />
+      {/* Paint-to-reveal mask canvas (sits above image + grade, below caption) */}
+      <InkReveal />
+      {/* Caption + hint */}
+      <div style={{
+        position: "absolute",
+        top: "50%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        zIndex: 3,
+        textAlign: "center",
+        pointerEvents: "none",
+      }}>
+        <div style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "10px 20px",
+          borderRadius: 99,
+          background: "rgba(3,3,10,0.7)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(139,92,246,0.4)",
+          fontFamily: "'JetBrains Mono',monospace",
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: "0.14em",
+          textTransform: "uppercase",
+          color: "rgba(168,85,247,0.95)",
+          whiteSpace: "nowrap",
+        }}>
+          <Sparkles size={14} />
+          Hover to reveal
+        </div>
+        <h2 style={{
+          fontFamily: "'Space Grotesk',sans-serif",
+          fontWeight: 900,
+          fontSize: "clamp(2rem, 4vw, 3.5rem)",
+          color: "#fff",
+          margin: "20px 0 10px",
+          letterSpacing: "-0.03em",
+          lineHeight: 1.05,
+        }}>See what Vortis sees</h2>
+        <p style={{
+          fontSize: 15,
+          color: "rgba(255,255,255,0.55)",
+          maxWidth: 480,
+          margin: "0 auto",
+          lineHeight: 1.7,
+        }}>Paint across the canvas to reveal the neural surface that powers every Vortis capability — chat, vision, code, research.</p>
+      </div>
+    </section>
+  );
+}
+
 //  FEATURES — LIVE TILES
 // ══════════════════════════════════════════════════════════════════
 
@@ -3323,6 +3358,7 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
           <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
         </div>
         <Logos />
+        <InkRevealSection />
         <BentoGrid />
         <Showcase />
         <HowItWorks />
