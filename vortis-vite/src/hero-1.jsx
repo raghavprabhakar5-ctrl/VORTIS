@@ -1216,57 +1216,57 @@ function InkRevealSection() {
       zIndex: 1, opacity: inView ? 1 : 0, transition: "opacity 1.1s ease",
       padding: "90px 40px 60px",
     }}>
-      <div style={{ textAlign: "center", marginBottom: 24, position: "relative", zIndex: 5 }}>
-        <div className="eyebrow" style={{ marginBottom: 16 }}>
-          <span className="dot" /> THE VORTIS FIELD
-        </div>
-        <h2 className="h-section">
-          Everywhere you look.{" "}
-          <span style={{
-            background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>Nowhere it isn't.</span>
-        </h2>
-      </div>
+      {/* single shared container — title, pill, and canvas all align to this same center */}
+      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
 
-      {/* hover hint pill — now in normal flow, above the canvas, not overlapping it */}
-      <div style={{
-        display: "flex",
-        justifyContent: "center",
-        marginBottom: 20,
-      }}>
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div className="eyebrow" style={{ marginBottom: 16 }}>
+            <span className="dot" /> THE VORTIS FIELD
+          </div>
+          <h2 className="h-section">
+            Everywhere you look.{" "}
+            <span style={{
+              background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)",
+              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+            }}>Nowhere it isn't.</span>
+          </h2>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 22px",
+            borderRadius: 99,
+            background: "rgba(3,3,10,0.75)",
+            backdropFilter: "blur(14px)",
+            border: "1px solid rgba(139,92,246,0.45)",
+            boxShadow: "0 0 40px rgba(124,58,237,0.25)",
+            fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            color: "rgba(168,85,247,0.95)",
+            whiteSpace: "nowrap",
+            animation: "vHintPulse 2.4s ease-in-out infinite",
+          }}>
+            <Sparkles size={14} />
+            Hover to reveal
+          </div>
+        </div>
+
         <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 22px",
-          borderRadius: 99,
-          background: "rgba(3,3,10,0.75)",
-          backdropFilter: "blur(14px)",
-          border: "1px solid rgba(139,92,246,0.45)",
-          boxShadow: "0 0 40px rgba(124,58,237,0.25)",
-          fontFamily: "'JetBrains Mono',monospace",
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: "rgba(168,85,247,0.95)",
-          whiteSpace: "nowrap",
-          animation: "vHintPulse 2.4s ease-in-out infinite",
+          position: "relative", width: "100%",
+          height: 720,
+          overflow: "hidden", borderRadius: 20,
+          border: "1px solid rgba(255,255,255,0.06)",
         }}>
-          <Sparkles size={14} />
-          Hover to reveal
+          <VortisAnimation />
+          <InkReveal />
         </div>
-      </div>
 
-      <div style={{
-        position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
-        height: 720,
-        overflow: "hidden", borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.06)",
-      }}>
-        <VortisAnimation />
-        <InkReveal />
       </div>
     </section>
   );
