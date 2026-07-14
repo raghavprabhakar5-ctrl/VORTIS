@@ -1232,9 +1232,9 @@ function InkRevealSection() {
           </h2>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20, width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
   <div style={{
-    display: "flex",
+    display: "inline-flex",
     alignItems: "center",
     gap: 10,
     padding: "10px 22px",
