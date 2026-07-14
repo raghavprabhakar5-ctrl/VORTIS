@@ -1216,7 +1216,7 @@ function InkRevealSection() {
       zIndex: 1, opacity: inView ? 1 : 0, transition: "opacity 1.1s ease",
       padding: "90px 40px 60px",
     }}>
-      <div style={{ textAlign: "center", marginBottom: 40, position: "relative", zIndex: 5 }}>
+      <div style={{ textAlign: "center", marginBottom: 24, position: "relative", zIndex: 5 }}>
         <div className="eyebrow" style={{ marginBottom: 16 }}>
           <span className="dot" /> THE VORTIS FIELD
         </div>
@@ -1229,22 +1229,13 @@ function InkRevealSection() {
         </h2>
       </div>
 
+      {/* hover hint pill — now in normal flow, above the canvas, not overlapping it */}
       <div style={{
-        position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
-        height: 720,
-        overflow: "hidden", borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.06)",
+        display: "flex",
+        justifyContent: "center",
+        marginBottom: 20,
       }}>
-        <VortisAnimation />
-        <InkReveal />
-
-        {/* hover hint pill — sits at the top of the reveal canvas */}
         <div style={{
-          position: "absolute",
-          top: 24,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 4,
           display: "flex",
           alignItems: "center",
           gap: 10,
@@ -1260,7 +1251,6 @@ function InkRevealSection() {
           letterSpacing: "0.16em",
           textTransform: "uppercase",
           color: "rgba(168,85,247,0.95)",
-          pointerEvents: "none",
           whiteSpace: "nowrap",
           animation: "vHintPulse 2.4s ease-in-out infinite",
         }}>
@@ -1268,9 +1258,20 @@ function InkRevealSection() {
           Hover to reveal
         </div>
       </div>
+
+      <div style={{
+        position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
+        height: 720,
+        overflow: "hidden", borderRadius: 20,
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}>
+        <VortisAnimation />
+        <InkReveal />
+      </div>
     </section>
   );
 }
+
 // ═════════════════════════════════════════════════════════════════
 //  FEATURES — LIVE TILES
 // ══════════════════════════════════════════════════════════════════
