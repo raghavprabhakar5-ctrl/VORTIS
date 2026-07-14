@@ -1083,32 +1083,34 @@ function Logos() {
 // ═════════════════════════════════════════════════════════════════
 //  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
 // ═════════════════════════════════════════════════════════════════
+const BRAND = "#8b5cf6"; // fixed logo color everywhere — only glow varies
+
 const PETALS = [
-  // background scattered logos — mix of violet + cyan, more of them
-  { x: 20, y: 22, size: 170, blur: 0,  opacity: 0.9,  rotate: -12, color: "#a855f7" },
-  { x: 13, y: 42, size: 70,  blur: 3,  opacity: 0.6,  rotate: 20,  color: "#7C3AED" },
-  { x: 83, y: 14, size: 130, blur: 1,  opacity: 0.85, rotate: -6,  color: "#06b6d4" },
-  { x: 95, y: 20, size: 55,  blur: 4,  opacity: 0.5,  rotate: 30,  color: "#a855f7" },
-  { x: 90, y: 40, size: 60,  blur: 3,  opacity: 0.55, rotate: -18, color: "#0891b2" },
-  { x: 96, y: 48, size: 45,  blur: 4,  opacity: 0.45, rotate: 12,  color: "#7C3AED" },
-  { x: 89, y: 63, size: 70,  blur: 2,  opacity: 0.65, rotate: -8,  color: "#06b6d4" },
-  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.7,  rotate: 15,  color: "#a855f7" },
-  { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.55, rotate: -20, color: "#7C3AED" },
-  { x: 24, y: 93, size: 50,  blur: 4,  opacity: 0.45, rotate: 25,  color: "#06b6d4" },
-  { x: 84, y: 82, size: 100, blur: 1,  opacity: 0.75, rotate: -10, color: "#a855f7" },
-  { x: 93, y: 92, size: 55,  blur: 3,  opacity: 0.5,  rotate: 18,  color: "#0891b2" },
-  { x: 6,  y: 60, size: 40,  blur: 4,  opacity: 0.4,  rotate: 40,  color: "#a855f7" },
-  { x: 40, y: 8,  size: 55,  blur: 3,  opacity: 0.45, rotate: -25, color: "#06b6d4" },
-  { x: 62, y: 92, size: 65,  blur: 2,  opacity: 0.6,  rotate: 10,  color: "#7C3AED" },
+  // background scattered logos — same brand color, glow varies violet/cyan
+  { x: 20, y: 22, size: 170, blur: 0,  opacity: 0.9,  rotate: -12, glow: "#a855f7" },
+  { x: 13, y: 42, size: 70,  blur: 3,  opacity: 0.6,  rotate: 20,  glow: "#7C3AED" },
+  { x: 83, y: 14, size: 130, blur: 1,  opacity: 0.85, rotate: -6,  glow: "#06b6d4" },
+  { x: 95, y: 20, size: 55,  blur: 4,  opacity: 0.5,  rotate: 30,  glow: "#a855f7" },
+  { x: 90, y: 40, size: 60,  blur: 3,  opacity: 0.55, rotate: -18, glow: "#0891b2" },
+  { x: 96, y: 48, size: 45,  blur: 4,  opacity: 0.45, rotate: 12,  glow: "#7C3AED" },
+  { x: 89, y: 63, size: 70,  blur: 2,  opacity: 0.65, rotate: -8,  glow: "#06b6d4" },
+  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.7,  rotate: 15,  glow: "#a855f7" },
+  { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.55, rotate: -20, glow: "#7C3AED" },
+  { x: 24, y: 93, size: 50,  blur: 4,  opacity: 0.45, rotate: 25,  glow: "#06b6d4" },
+  { x: 84, y: 82, size: 100, blur: 1,  opacity: 0.75, rotate: -10, glow: "#a855f7" },
+  { x: 93, y: 92, size: 55,  blur: 3,  opacity: 0.5,  rotate: 18,  glow: "#0891b2" },
+  { x: 6,  y: 60, size: 40,  blur: 4,  opacity: 0.4,  rotate: 40,  glow: "#a855f7" },
+  { x: 40, y: 8,  size: 55,  blur: 3,  opacity: 0.45, rotate: -25, glow: "#06b6d4" },
+  { x: 62, y: 92, size: 65,  blur: 2,  opacity: 0.6,  rotate: 10,  glow: "#7C3AED" },
 ];
 
 // front-layer logos — sharper, larger, more visible motion, drift over the background ones
 const FRONT_PETALS = [
-  { x: 48, y: 50, size: 300, blur: 0, opacity: 1,    rotate: 6,   color: "#c084fc", speed: 6.5 },
-  { x: 32, y: 34, size: 110, blur: 0, opacity: 0.9,  rotate: -16, color: "#a855f7", speed: 5.2 },
-  { x: 67, y: 62, size: 130, blur: 0, opacity: 0.85, rotate: 14,  color: "#22d3ee", speed: 7.1 },
-  { x: 58, y: 30, size: 80,  blur: 0, opacity: 0.8,  rotate: -22, color: "#a855f7", speed: 4.6 },
-  { x: 36, y: 66, size: 90,  blur: 0, opacity: 0.8,  rotate: 20,  color: "#06b6d4", speed: 6.0 },
+  { x: 48, y: 50, size: 300, opacity: 1,    rotate: 6,   glow: "#a855f7", speed: 6.5 },
+  { x: 32, y: 34, size: 110, opacity: 0.9,  rotate: -16, glow: "#7C3AED", speed: 5.2 },
+  { x: 67, y: 62, size: 130, opacity: 0.85, rotate: 14,  glow: "#06b6d4", speed: 7.1 },
+  { x: 58, y: 30, size: 80,  opacity: 0.8,  rotate: -22, glow: "#a855f7", speed: 4.6 },
+  { x: 36, y: 66, size: 90,  opacity: 0.8,  rotate: 20,  glow: "#06b6d4", speed: 6.0 },
 ];
 
 function VortisPetalsBackground() {
@@ -1139,7 +1141,6 @@ function VortisPetalsBackground() {
         position: "absolute", inset: 0,
         background: "linear-gradient(90deg, rgba(124,58,237,0.4), transparent 45%, transparent 55%, rgba(6,182,212,0.35))",
       }} />
-      {/* extra glow pools to sell the brand colors more */}
       <div style={{
         position: "absolute", width: 500, height: 500, left: "10%", top: "20%",
         background: "radial-gradient(circle, rgba(168,85,247,0.25), transparent 70%)",
@@ -1151,32 +1152,32 @@ function VortisPetalsBackground() {
         filter: "blur(60px)",
       }} />
 
-      {/* background scattered logos */}
+      {/* background scattered logos — fixed brand color, glow color varies */}
       {PETALS.map((p, i) => (
         <div key={i} style={{
           position: "absolute",
           left: `${p.x}%`, top: `${p.y}%`,
-          filter: `blur(${p.blur}px) drop-shadow(0 0 ${18 + p.blur * 4}px ${p.color}66)`,
+          filter: `blur(${p.blur}px) drop-shadow(0 0 ${18 + p.blur * 4}px ${p.glow}66)`,
           opacity: p.opacity,
           animation: `petalDrift ${6 + i * 0.35}s ease-in-out ${i * 0.25}s infinite`,
           "--r": `${p.rotate}deg`,
         }}>
-          <VortisLogo size={p.size} color={p.color} />
+          <VortisLogo size={p.size} color={BRAND} />
         </div>
       ))}
 
-      {/* front-layer logos — bigger, sharp, more motion, sit above everything */}
+      {/* front-layer logos — fixed brand color, brighter glow, more motion */}
       {FRONT_PETALS.map((p, i) => (
         <div key={`f-${i}`} style={{
           position: "absolute",
           left: `${p.x}%`, top: `${p.y}%`,
           zIndex: 2,
-          filter: `drop-shadow(0 0 32px ${p.color}88) drop-shadow(0 0 60px ${p.color}44)`,
+          filter: `drop-shadow(0 0 32px ${p.glow}88) drop-shadow(0 0 60px ${p.glow}44)`,
           opacity: p.opacity,
           animation: `petalDriftFront ${p.speed}s ease-in-out ${i * 0.4}s infinite`,
           "--r": `${p.rotate}deg`,
         }}>
-          <VortisLogo size={p.size} color={p.color} />
+          <VortisLogo size={p.size} color={BRAND} />
         </div>
       ))}
 
@@ -1197,7 +1198,7 @@ function VortisAnimation() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════
 //  INK REVEAL SLIDE -- full-width paint-to-reveal image section
 // ═════════════════════════════════════════════════════════════════
 
@@ -1213,26 +1214,26 @@ function InkRevealSection() {
     }}>
       <div style={{ textAlign: "center", marginBottom: 40, position: "relative", zIndex: 5 }}>
         <div className="eyebrow" style={{ marginBottom: 16 }}>
-          <span className="dot" /> THE VORTIS EXPERIENCE
+          <span className="dot" /> THE VORTIS FIELD
         </div>
         <h2 className="h-section">
-          Wipe away the noise.{" "}
+          Everywhere you look.{" "}
           <span style={{
             background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)",
             WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>Find the signal.</span>
+          }}>Nowhere it isn't.</span>
         </h2>
       </div>
 
       <div style={{
-  position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
-  height: 720, // was 520 — noticeably taller now
-  overflow: "hidden", borderRadius: 20,
-  border: "1px solid rgba(255,255,255,0.06)",
-}}>
-  <VortisAnimation />
-  <InkReveal />
-    </div>
+        position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
+        height: 720,
+        overflow: "hidden", borderRadius: 20,
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}>
+        <VortisAnimation />
+        <InkReveal />
+      </div>
     </section>
   );
 }
