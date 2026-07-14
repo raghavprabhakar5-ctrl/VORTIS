@@ -1125,10 +1125,10 @@ function VortisPetalsBackground() {
           0%,100% { transform: translate(-50%,-50%) translateY(0) scale(1) rotate(var(--r)); }
           50%     { transform: translate(-50%,-50%) translateY(-22px) scale(1.05) rotate(calc(var(--r) + 6deg)); }
         }
-        @keyframes vHintPulse {
-          0%,100% { transform: translateX(-50%) translateY(0);    opacity: 0.75; }
-          50%     { transform: translateX(-50%) translateY(-4px); opacity: 1;    }
-        }
+       @keyframes vHintPulse {
+         0%,100% { transform: translate(-50%, -50%) translateY(0);    opacity: 0.75; }
+         50%     { transform: translate(-50%, -50%) translateY(-4px); opacity: 1;    }
+         }
       `}</style>
 
       {/* base gradient, deep violet -> deep cyan, matches Vortis palette */}
