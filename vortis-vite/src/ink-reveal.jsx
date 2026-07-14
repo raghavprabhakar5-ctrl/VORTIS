@@ -1,38 +1,14 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
 
-/**
- * InkReveal — paint-to-reveal mask overlay.
- *
- * Pure JavaScript version (no TypeScript types) for projects that don't
- * have TS configured (e.g. plain Vite + React). Drop-in equivalent of
- * ink-reveal.tsx — same props, same runtime behavior.
- *
- * Props (all optional):
- *   maskColor            [r,g,b] of the mask overlay. Default [3,3,10] (#03030a)
- *   brushSize            px radius of each ink stamp. Default 128
- *   lifetime             ms each stamp lives before fading. Default 600
- *   rStart               initial radius before stamp expands. Default 10
- *   rVary                random radius variation (0-1). Default 0.45
- *   stampStep            min px distance between stamps along a stroke. Default 10
- *   maxStamps            max stamps alive at once. Default 200
- *   segments             circle segment count (higher = smoother). Default 36
- *   wobble               [primary, secondary, tertiary] wobble weights. Default [0.14, 0.08, 0.05]
- *   gradientInnerRadius  0-1 inner radius factor. Default 0.2
- *   gradientStops        [center, mid, edge] opacity stops. Default [0.95, 0.88, 0]
- *   className            extra CSS class for the canvas
- *   style                extra inline styles for the canvas
- */
 export default function InkReveal({
-  // Tuned to match the Vortis dark hero background (#03030a)
-  // so the mask is invisible until the user paints.
   maskColor = [3, 3, 10],
   brushSize = 200,
-  lifetime = 550,
+  lifetime = 700,
   rStart = 16,
   rVary = 0.3,
-  stampStep = 6,
-  maxStamps = 260,
+  stampStep = 5,
+  maxStamps = 300,
   segments = 36,
   wobble = [0.08, 0.05, 0.03],
   gradientInnerRadius = 0.22,
@@ -44,6 +20,7 @@ export default function InkReveal({
   const stampsRef = useRef([]);
   const runningRef = useRef(false);
   const lastPosRef = useRef(null);
+  const lastTimeRef = useRef(0);
   const dimsRef = useRef({ w: 0, h: 0 });
 
   const mc = maskColor;
@@ -53,7 +30,6 @@ export default function InkReveal({
     if (!canvas) return;
     const parent = canvas.parentElement;
     if (!parent) return;
-
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rect = parent.getBoundingClientRect();
     const w = rect.width;
@@ -71,12 +47,14 @@ export default function InkReveal({
     ctx.fillRect(0, 0, w, h);
   }, [mc]);
 
+  // stretches the blob along `angle` by `stretch` (1 = round, >1 = elongated streak)
   const carveInk = useCallback(
-    (ctx, x, y, r, seed, alpha) => {
-      const g = ctx.createRadialGradient(
-        x, y, r * gradientInnerRadius,
-        x, y, r
-      );
+    (ctx, x, y, r, seed, alpha, angle = 0, stretch = 1) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+
+      const g = ctx.createRadialGradient(0, 0, r * gradientInnerRadius, 0, 0, r);
       g.addColorStop(0, `rgba(0,0,0,${gradientStops[0] * alpha})`);
       g.addColorStop(0.5, `rgba(0,0,0,${gradientStops[1] * alpha})`);
       g.addColorStop(1, `rgba(0,0,0,${gradientStops[2] * alpha})`);
@@ -90,43 +68,76 @@ export default function InkReveal({
           wobble[0] * Math.sin(a * 3 + seed) +
           wobble[1] * Math.sin(a * 5 + seed * 2.1) +
           wobble[2] * Math.sin(a * 7 + seed * 0.7);
-        const px = x + Math.cos(a) * r * wob;
-        const py = y + Math.sin(a) * r * wob;
+        // elongate along local x-axis (the direction of travel), keep y round
+        const px = Math.cos(a) * r * wob * stretch;
+        const py = Math.sin(a) * r * wob;
         i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
       }
       ctx.closePath();
       ctx.fill();
+      ctx.restore();
     },
     [segments, wobble, gradientInnerRadius, gradientStops]
   );
 
   const addStamp = useCallback(
-    (x, y) => {
+    (x, y, angle, stretch) => {
       const stamps = stampsRef.current;
       if (stamps.length >= maxStamps) stamps.shift();
       stamps.push({
-        x,
-        y,
+        x, y,
         born: performance.now(),
         seed: Math.random() * Math.PI * 2,
         rmax: brushSize * (1 - rVary + Math.random() * rVary),
+        angle, stretch,
+        life: lifetime * (0.85 + Math.random() * 0.3), // slight variance = organic bleed timing
       });
+
+      // occasional small droplet spatter off to the side of the stroke — mimics ink flicking
+      if (Math.random() < 0.22) {
+        const spread = (Math.random() - 0.5) * Math.PI * 0.9;
+        const dist = brushSize * (0.3 + Math.random() * 0.5);
+        const dx = Math.cos(angle + Math.PI / 2 + spread) * dist * 0.4;
+        const dy = Math.sin(angle + Math.PI / 2 + spread) * dist * 0.4;
+        stamps.push({
+          x: x + dx, y: y + dy,
+          born: performance.now(),
+          seed: Math.random() * Math.PI * 2,
+          rmax: brushSize * (0.12 + Math.random() * 0.18),
+          angle: Math.random() * Math.PI * 2, stretch: 1,
+          life: lifetime * (0.5 + Math.random() * 0.4),
+        });
+      }
     },
-    [brushSize, rVary, maxStamps]
+    [brushSize, rVary, maxStamps, lifetime]
   );
 
   const stampAlong = useCallback(
     (x, y) => {
       const last = lastPosRef.current;
+      const now = performance.now();
+      const dt = Math.max(16, now - lastTimeRef.current);
+      lastTimeRef.current = now;
+
       if (!last) {
-        addStamp(x, y);
+        addStamp(x, y, 0, 1);
       } else {
         const dx = x - last.x;
         const dy = y - last.y;
         const dist = Math.hypot(dx, dy);
+        const speed = dist / dt; // px per ms
+        const angle = Math.atan2(dy, dx);
+        // faster movement -> more elongated streak, capped so it doesn't look like a line
+        const stretch = Math.min(2.2, 1 + speed * 3.5);
+
         const steps = Math.max(1, Math.ceil(dist / stampStep));
         for (let i = 1; i <= steps; i++) {
-          addStamp(last.x + (dx * i) / steps, last.y + (dy * i) / steps);
+          addStamp(
+            last.x + (dx * i) / steps,
+            last.y + (dy * i) / steps,
+            angle,
+            stretch
+          );
         }
       }
       lastPosRef.current = { x, y };
@@ -149,15 +160,16 @@ export default function InkReveal({
     ctx.globalCompositeOperation = "destination-out";
 
     for (let i = stamps.length - 1; i >= 0; i--) {
-      const t = (now - stamps[i].born) / lifetime;
+      const s = stamps[i];
+      const t = (now - s.born) / s.life;
       if (t >= 1) {
         stamps.splice(i, 1);
         continue;
       }
       const ease = 1 - Math.pow(1 - t, 3);
-      const r = rStart + (stamps[i].rmax - rStart) * ease;
+      const r = rStart + (s.rmax - rStart) * ease;
       const alpha = 1 - t * t;
-      carveInk(ctx, stamps[i].x, stamps[i].y, r, stamps[i].seed, alpha);
+      carveInk(ctx, s.x, s.y, r, s.seed, alpha, s.angle, s.stretch);
     }
 
     if (stamps.length) {
@@ -165,7 +177,7 @@ export default function InkReveal({
     } else {
       runningRef.current = false;
     }
-  }, [carveInk, mc, lifetime, rStart]);
+  }, [carveInk, mc, rStart]);
 
   const startLoop = useCallback(() => {
     if (!runningRef.current) {
@@ -189,16 +201,11 @@ export default function InkReveal({
     <canvas
       ref={canvasRef}
       className={className}
-      style={{
-        position: "absolute",
-        inset: 0,
-        zIndex: 1,
-        cursor: "none",
-        ...style,
-      }}
+      style={{ position: "absolute", inset: 0, zIndex: 1, cursor: "none", ...style }}
       onMouseEnter={(e) => {
         const pos = getRelativePos(e);
         lastPosRef.current = pos;
+        lastTimeRef.current = performance.now();
         stampAlong(pos.x, pos.y);
         startLoop();
       }}

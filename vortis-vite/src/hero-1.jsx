@@ -1080,79 +1080,89 @@ function Logos() {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// ═════════════════════════════════════════════════════════════════
-//  INK REVEAL SLIDE -- full-width paint-to-reveal image section
-// ═════════════════════════════════════════════════════════════════
 // ═════════════════════════════════════════════════════════════════
 //  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
 // ═════════════════════════════════════════════════════════════════
-function VortisAnimation() {
+const PETALS = [
+  // x%, y%, size(px), blur(px), opacity, rotate(deg) — mirrors the reference photo's layout
+  { x: 48, y: 52, size: 260, blur: 0,  opacity: 1,    rotate: 8   }, // center, sharp focal logo
+  { x: 20, y: 24, size: 170, blur: 0,  opacity: 0.95, rotate: -12 }, // top-left large
+  { x: 13, y: 40, size: 70,  blur: 3,  opacity: 0.7,  rotate: 20  },
+  { x: 83, y: 12, size: 130, blur: 1,  opacity: 0.85, rotate: -6  }, // top-right large
+  { x: 95, y: 18, size: 55,  blur: 4,  opacity: 0.55, rotate: 30  },
+  { x: 90, y: 38, size: 60,  blur: 3,  opacity: 0.6,  rotate: -18 },
+  { x: 96, y: 45, size: 45,  blur: 4,  opacity: 0.5,  rotate: 12  },
+  { x: 89, y: 60, size: 70,  blur: 2,  opacity: 0.7,  rotate: -8  },
+  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.75, rotate: 15  }, // bottom-left cluster
+  { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.6,  rotate: -20 },
+  { x: 22, y: 92, size: 50,  blur: 4,  opacity: 0.5,  rotate: 25  },
+  { x: 84, y: 80, size: 100, blur: 1,  opacity: 0.8,  rotate: -10 }, // bottom-right cluster
+  { x: 93, y: 90, size: 55,  blur: 3,  opacity: 0.55, rotate: 18  },
+];
+
+function VortisPetalsBackground() {
   return (
-    <div style={{
-      position: "absolute", inset: 0, display: "flex",
-      flexDirection: "column", alignItems: "center", justifyContent: "center",
-      background: "radial-gradient(circle at 50% 50%, rgba(28,16,52,0.7) 0%, rgba(8,6,18,0.95) 55%, #03030a 85%)",
-      zIndex: 0, overflow: "hidden", textAlign: "center", padding: "0 24px",
-    }}>
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
       <style>{`
-        @keyframes vBreathe { 0%,100% { transform: scale(1); filter: drop-shadow(0 0 30px rgba(124,58,237,0.5)); }
-                               50% { transform: scale(1.05); filter: drop-shadow(0 0 55px rgba(168,85,247,0.8)); } }
-        @keyframes vRingSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes vFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes petalDrift {
+          0%,100% { transform: translateY(0) rotate(var(--r)); }
+          50%     { transform: translateY(-14px) rotate(calc(var(--r) + 3deg)); }
+        }
       `}</style>
 
-      {/* two soft rotating rings behind the logo -- restrained, not layered rings + sparks + conic gradients */}
+      {/* striped gradient backdrop, violet -> cyan instead of purple -> green */}
       <div style={{
-        position: "absolute", width: 360, height: 360, borderRadius: "50%",
-        border: "1px solid rgba(139,92,246,0.25)", animation: "vRingSpin 30s linear infinite",
+        position: "absolute", inset: 0,
+        background: "linear-gradient(115deg, #2a1550 0%, #120a28 35%, #071b22 65%, #05201f 100%)",
       }} />
       <div style={{
-        position: "absolute", width: 460, height: 460, borderRadius: "50%",
-        border: "1px dashed rgba(6,182,212,0.15)", animation: "vRingSpin 50s linear infinite reverse",
+        position: "absolute", inset: 0,
+        backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.35) 0px, rgba(0,0,0,0.35) 4px, transparent 4px, transparent 26px)",
+        mixBlendMode: "multiply",
+      }} />
+      <div style={{
+        position: "absolute", inset: 0,
+        background: "linear-gradient(90deg, rgba(124,58,237,0.35), transparent 45%, transparent 55%, rgba(6,182,212,0.3))",
       }} />
 
-      <div style={{ animation: "vBreathe 5s ease-in-out infinite", marginBottom: 28 }}>
-        <VortisLogo size={110} color="#a855f7" />
-      </div>
+      {/* scattered Vortis logos, sharp centerpiece + blurred receding ones */}
+      {PETALS.map((p, i) => (
+        <div key={i} style={{
+          position: "absolute",
+          left: `${p.x}%`, top: `${p.y}%`,
+          transform: `translate(-50%,-50%) rotate(${p.rotate}deg)`,
+          filter: `blur(${p.blur}px) drop-shadow(0 0 ${18 + p.blur * 4}px rgba(168,85,247,${0.35 * p.opacity}))`,
+          opacity: p.opacity,
+          animation: `petalDrift ${6 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
+          "--r": `${p.rotate}deg`,
+        }}>
+          <VortisLogo size={p.size} color={i === 0 ? "#c084fc" : "#a855f7"} />
+        </div>
+      ))}
 
-      <h2 style={{
-        fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
-        fontSize: "clamp(2rem,5vw,3.2rem)", margin: "0 0 14px",
-        letterSpacing: "-0.02em", color: "#fff",
-        animation: "vFadeUp 0.8s 0.1s ease both",
-      }}>
-        One AI.{" "}
-        <span style={{
-          background: "linear-gradient(90deg,#a855f7,#06b6d4)",
-          WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-        }}>Every capability.</span>
-      </h2>
-      <p style={{
-        fontSize: 16, color: "rgba(255,255,255,0.5)", maxWidth: 440, lineHeight: 1.7,
-        margin: 0, animation: "vFadeUp 0.8s 0.25s ease both",
-      }}>
-        Chat, search, code, vision and research — unified under one roof.
-      </p>
+      {/* subtle vignette so any overlaid text stays readable */}
+      <div style={{
+        position: "absolute", inset: 0,
+        background: "radial-gradient(circle at 50% 50%, transparent 35%, rgba(3,3,10,0.55) 100%)",
+      }} />
     </div>
   );
 }
+
+// ═════════════════════════════════════════════════════════════════
+//  INK REVEAL SLIDE -- full-width paint-to-reveal image section
+// ═════════════════════════════════════════════════════════════════
 
 function InkRevealSection() {
   const [ref, inView] = useInView(0.1);
   return (
     <section ref={ref} style={{
-      position: "relative",
-      width: "100%",
+      position: "relative", width: "100%",
       borderTop: "1px solid rgba(255,255,255,0.04)",
       borderBottom: "1px solid rgba(255,255,255,0.04)",
-      zIndex: 1,
-      opacity: inView ? 1 : 0,
-      transition: "opacity 1.1s ease",
+      zIndex: 1, opacity: inView ? 1 : 0, transition: "opacity 1.1s ease",
       padding: "90px 40px 60px",
     }}>
-      {/* Always-visible title, sitting above the reveal canvas -- matches the header
-          pattern used by every other section (eyebrow + h-section) */}
       <div style={{ textAlign: "center", marginBottom: 40, position: "relative", zIndex: 5 }}>
         <div className="eyebrow" style={{ marginBottom: 16 }}>
           <span className="dot" /> THE VORTIS EXPERIENCE
@@ -1166,67 +1176,19 @@ function InkRevealSection() {
         </h2>
       </div>
 
-      {/* Reveal canvas -- fixed 520px instead of 100vh, so it's a contained moment
-          rather than swallowing the whole viewport and colliding with the nav */}
       <div style={{
         position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
         height: 520, overflow: "hidden", borderRadius: 20,
         border: "1px solid rgba(255,255,255,0.06)",
       }}>
         <VortisAnimation />
-        <InkReveal
-          brushSize={220}
-          lifetime={450}
-          rStart={18}
-          rVary={0.35}
-          stampStep={8}
-          maxStamps={300}
-          gradientInnerRadius={0.25}
-          gradientStops={[1.0, 0.92, 0]}
-          wobble={[0.1, 0.06, 0.04]}
-        />
-        <div style={{
-          position: "absolute",
-          top: 24,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 4,
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "10px 22px",
-          borderRadius: 99,
-          background: "rgba(3,3,10,0.75)",
-          backdropFilter: "blur(14px)",
-          border: "1px solid rgba(139,92,246,0.45)",
-          boxShadow: "0 0 40px rgba(124,58,237,0.25)",
-          fontFamily: "'JetBrains Mono',monospace",
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: "rgba(168,85,247,0.95)",
-          pointerEvents: "none",
-          whiteSpace: "nowrap",
-        }}>
-          <Sparkles size={14} />
-          Hover to reveal
-        </div>
-        {/* fades so the animation blends into the rounded canvas edges */}
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 80,
-          background: "linear-gradient(to bottom, rgba(3,3,10,0.6), transparent)",
-          pointerEvents: "none", zIndex: 2,
-        }} />
-        <div style={{
-          position: "absolute", bottom: 0, left: 0, right: 0, height: 80,
-          background: "linear-gradient(to top, rgba(3,3,10,0.6), transparent)",
-          pointerEvents: "none", zIndex: 2,
-        }} />
+        <InkReveal />
+        {/* no hint pill — fades removed too, since the image now supplies its own edges */}
       </div>
     </section>
   );
 }
+
 //  FEATURES — LIVE TILES
 // ══════════════════════════════════════════════════════════════════
 
