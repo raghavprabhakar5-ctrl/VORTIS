@@ -1125,10 +1125,10 @@ function VortisPetalsBackground() {
           0%,100% { transform: translate(-50%,-50%) translateY(0) scale(1) rotate(var(--r)); }
           50%     { transform: translate(-50%,-50%) translateY(-22px) scale(1.05) rotate(calc(var(--r) + 6deg)); }
         }
-       @keyframes vHintPulse {
-         0%,100% { transform: translate(-50%, -50%) translateY(0);    opacity: 0.75; }
-         50%     { transform: translate(-50%, -50%) translateY(-4px); opacity: 1;    }
-         }
+        @keyframes vHintPulse {
+          0%,100% { transform: translateX(-50%) translateY(0);    opacity: 0.75; }
+          50%     { transform: translateX(-50%) translateY(-4px); opacity: 1;    }
+        }
       `}</style>
 
       {/* base gradient, deep violet -> deep cyan, matches Vortis palette */}
@@ -1232,44 +1232,6 @@ function InkRevealSection() {
           </h2>
         </div>
 
-   <div style={{
-  position: "relative", width: "100%",
-  height: 720,
-  overflow: "hidden", borderRadius: 20,
-  border: "1px solid rgba(255,255,255,0.06)",
-}}>
-  <VortisAnimation />
-  <InkReveal />
-
-  <div style={{
-    position: "absolute",
-    top: "50%",
-    left: "50%",
-    transform: "translate(-50%, -50%)",
-    zIndex: 2,
-    pointerEvents: "none",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "10px 22px",
-    borderRadius: 99,
-    background: "rgba(3,3,10,0.75)",
-    backdropFilter: "blur(14px)",
-    border: "1px solid rgba(139,92,246,0.45)",
-    boxShadow: "0 0 40px rgba(124,58,237,0.25)",
-    fontFamily: "'JetBrains Mono',monospace",
-    fontSize: 12,
-    fontWeight: 600,
-    letterSpacing: "0.16em",
-    textTransform: "uppercase",
-    color: "rgba(168,85,247,0.95)",
-    whiteSpace: "nowrap",
-    animation: "vHintPulse 2.4s ease-in-out infinite",
-  }}>
-    <Sparkles size={14} />
-    Hover to reveal
-  </div>
-</div>
         <div style={{
           position: "relative", width: "100%",
           height: 720,
