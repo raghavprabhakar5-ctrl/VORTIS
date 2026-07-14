@@ -825,7 +825,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
 </h1>
         {/* Description Sub-headline */}
         <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
-          Chat, Vision, Code, Research — unified in one surface. Built for the way you actually think.
+         From conversations to creation—all in one place.
         </p>
         
 
@@ -3064,12 +3064,46 @@ function Pricing() {
 //  FAQ
 // ══════════════════════════════════════════════════════════════════
 const FAQS = [
-  { q: "What is Vortis AI?", a:  "Vortis is an AI assistant. It chats, searches the web, writes code, reads documents, generates images, and does deep research — all in one place." },
-  { q: "What models power Vortis?", a: "Vortis routes intelligently between proprietary ultra-low-latency models and frontier models to give you the best result for each specific task type." },
-  { q: "Is there a free trial?", a: "Yes — explore core capabilities completely free with no credit card required. Premium features like Deep Research and unlimited usage require a paid plan." },
-  { q: "How does billing work?", a: "Choose monthly, quarterly, semi-annual, or annual billing. Longer commitments unlock big discounts — annual saves 25%. Cancel any time, no questions asked." },
-  { q: "What is Deep Research mode?", a: "Autonomous agents browse the web, read documents, cross-reference sources, and synthesize comprehensive reports in minutes. Like having a research team on demand." },
-  { q: "Is my data private and secure?", a: "Absolutely. Your conversations, documents, and outputs are never used to train models or shared with third parties. Enterprise-grade AES-256 encryption at rest and in transit." },
+  {
+    q: "What is Vortis?",
+    a: "Vortis is an all-in-one AI workspace that brings together chat, coding, image generation, document analysis, web search, and intelligent reasoning into a single, seamless experience."
+  },
+  {
+    q: "What makes Vortis different?",
+    a: "Vortis combines multiple AI capabilities into one unified workspace, eliminating the need to switch between different tools. Whether you're writing, coding, researching, or creating, everything works together in one place."
+  },
+  {
+    q: "Which AI models does Vortis use?",
+    a: "Vortis gives you access to leading AI models and intelligently selects the best one for each task, balancing speed, reasoning, and quality to deliver the best possible results."
+  },
+  {
+    q: "Is Vortis free to use?",
+    a: "Yes. You can get started with Vortis for free with no credit card required. Premium plans unlock higher usage limits, advanced models, and additional features."
+  },
+  {
+    q: "How does pricing work?",
+    a: "Choose the plan that fits your needs with simple monthly or annual billing. Upgrade, downgrade, or cancel your subscription at any time."
+  },
+  {
+    q: "Are there daily usage limits?",
+    a: "Free accounts include daily usage limits to ensure fair access for everyone. Premium plans offer significantly higher limits, priority access, and an uninterrupted experience."
+  },
+  {
+    q: "Is my data private?",
+    a: "Your privacy matters. We handle your conversations and files securely and are committed to protecting your information through responsible data practices."
+  },
+  {
+    q: "What can I do with Vortis?",
+    a: "From brainstorming ideas and writing content to coding, document analysis, image generation, web search, and research, Vortis brings your entire AI workflow into one intelligent workspace."
+  },
+  {
+    q: "Can I trust the answers?",
+    a: "Vortis is designed to provide accurate and helpful responses, but AI can occasionally make mistakes. For important decisions, we recommend verifying critical information with trusted sources."
+  },
+  {
+    q: "Where can I get support?",
+    a: "Need help? Our support team is here to assist. You can reach us through our Help Center or contact us directly from the Vortis website."
+  }
 ];
 
 function FaqItem({ faq, index, inView }) {
