@@ -575,7 +575,7 @@ function HeroVisual() {
       boxShadow: "0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.1)",
     }}>
       {/* Window chrome */}
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255, 123, 123, 0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
         {["#ef4444","#f59e0b","#10b981"].map(c => (
           <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
         ))}
@@ -1084,19 +1084,18 @@ function Logos() {
 //  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
 // ═════════════════════════════════════════════════════════════════
 const PETALS = [
-  // x%, y%, size(px), blur(px), opacity, rotate(deg) — mirrors the reference photo's layout
-  { x: 48, y: 52, size: 260, blur: 0,  opacity: 1,    rotate: 8   }, // center, sharp focal logo
-  { x: 20, y: 24, size: 170, blur: 0,  opacity: 0.95, rotate: -12 }, // top-left large
+  { x: 48, y: 52, size: 260, blur: 0,  opacity: 1,    rotate: 8   },
+  { x: 20, y: 24, size: 170, blur: 0,  opacity: 0.95, rotate: -12 },
   { x: 13, y: 40, size: 70,  blur: 3,  opacity: 0.7,  rotate: 20  },
-  { x: 83, y: 12, size: 130, blur: 1,  opacity: 0.85, rotate: -6  }, // top-right large
+  { x: 83, y: 12, size: 130, blur: 1,  opacity: 0.85, rotate: -6  },
   { x: 95, y: 18, size: 55,  blur: 4,  opacity: 0.55, rotate: 30  },
   { x: 90, y: 38, size: 60,  blur: 3,  opacity: 0.6,  rotate: -18 },
   { x: 96, y: 45, size: 45,  blur: 4,  opacity: 0.5,  rotate: 12  },
   { x: 89, y: 60, size: 70,  blur: 2,  opacity: 0.7,  rotate: -8  },
-  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.75, rotate: 15  }, // bottom-left cluster
+  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.75, rotate: 15  },
   { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.6,  rotate: -20 },
   { x: 22, y: 92, size: 50,  blur: 4,  opacity: 0.5,  rotate: 25  },
-  { x: 84, y: 80, size: 100, blur: 1,  opacity: 0.8,  rotate: -10 }, // bottom-right cluster
+  { x: 84, y: 80, size: 100, blur: 1,  opacity: 0.8,  rotate: -10 },
   { x: 93, y: 90, size: 55,  blur: 3,  opacity: 0.55, rotate: 18  },
 ];
 
@@ -1110,7 +1109,6 @@ function VortisPetalsBackground() {
         }
       `}</style>
 
-      {/* striped gradient backdrop, violet -> cyan instead of purple -> green */}
       <div style={{
         position: "absolute", inset: 0,
         background: "linear-gradient(115deg, #2a1550 0%, #120a28 35%, #071b22 65%, #05201f 100%)",
@@ -1125,7 +1123,6 @@ function VortisPetalsBackground() {
         background: "linear-gradient(90deg, rgba(124,58,237,0.35), transparent 45%, transparent 55%, rgba(6,182,212,0.3))",
       }} />
 
-      {/* scattered Vortis logos, sharp centerpiece + blurred receding ones */}
       {PETALS.map((p, i) => (
         <div key={i} style={{
           position: "absolute",
@@ -1140,7 +1137,6 @@ function VortisPetalsBackground() {
         </div>
       ))}
 
-      {/* subtle vignette so any overlaid text stays readable */}
       <div style={{
         position: "absolute", inset: 0,
         background: "radial-gradient(circle at 50% 50%, transparent 35%, rgba(3,3,10,0.55) 100%)",
@@ -1149,7 +1145,35 @@ function VortisPetalsBackground() {
   );
 }
 
-// ═════════════════════════════════════════════════════════════════
+function VortisAnimation() {
+  return (
+    <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
+      <VortisPetalsBackground />
+
+      <div style={{
+        position: "absolute", left: "50%", bottom: 48, transform: "translateX(-50%)",
+        textAlign: "center", padding: "0 24px", zIndex: 1,
+      }}>
+        <h2 style={{
+          fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
+          fontSize: "clamp(1.8rem,4vw,2.8rem)", margin: "0 0 10px",
+          letterSpacing: "-0.02em", color: "#fff",
+        }}>
+          One AI.{" "}
+          <span style={{
+            background: "linear-gradient(90deg,#a855f7,#06b6d4)",
+            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
+          }}>Every capability.</span>
+        </h2>
+        <p style={{ fontSize: 15, color: "rgba(255,255,255,.6)", margin: 0 }}>
+          Chat, search, code, vision and research — unified under one roof.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
 //  INK REVEAL SLIDE -- full-width paint-to-reveal image section
 // ═════════════════════════════════════════════════════════════════
 
@@ -1189,6 +1213,7 @@ function InkRevealSection() {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════
 //  FEATURES — LIVE TILES
 // ══════════════════════════════════════════════════════════════════
 
