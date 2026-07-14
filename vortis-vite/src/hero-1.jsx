@@ -1084,19 +1084,31 @@ function Logos() {
 //  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
 // ═════════════════════════════════════════════════════════════════
 const PETALS = [
-  { x: 48, y: 52, size: 260, blur: 0,  opacity: 1,    rotate: 8   },
-  { x: 20, y: 24, size: 170, blur: 0,  opacity: 0.95, rotate: -12 },
-  { x: 13, y: 40, size: 70,  blur: 3,  opacity: 0.7,  rotate: 20  },
-  { x: 83, y: 12, size: 130, blur: 1,  opacity: 0.85, rotate: -6  },
-  { x: 95, y: 18, size: 55,  blur: 4,  opacity: 0.55, rotate: 30  },
-  { x: 90, y: 38, size: 60,  blur: 3,  opacity: 0.6,  rotate: -18 },
-  { x: 96, y: 45, size: 45,  blur: 4,  opacity: 0.5,  rotate: 12  },
-  { x: 89, y: 60, size: 70,  blur: 2,  opacity: 0.7,  rotate: -8  },
-  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.75, rotate: 15  },
-  { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.6,  rotate: -20 },
-  { x: 22, y: 92, size: 50,  blur: 4,  opacity: 0.5,  rotate: 25  },
-  { x: 84, y: 80, size: 100, blur: 1,  opacity: 0.8,  rotate: -10 },
-  { x: 93, y: 90, size: 55,  blur: 3,  opacity: 0.55, rotate: 18  },
+  // background scattered logos — mix of violet + cyan, more of them
+  { x: 20, y: 22, size: 170, blur: 0,  opacity: 0.9,  rotate: -12, color: "#a855f7" },
+  { x: 13, y: 42, size: 70,  blur: 3,  opacity: 0.6,  rotate: 20,  color: "#7C3AED" },
+  { x: 83, y: 14, size: 130, blur: 1,  opacity: 0.85, rotate: -6,  color: "#06b6d4" },
+  { x: 95, y: 20, size: 55,  blur: 4,  opacity: 0.5,  rotate: 30,  color: "#a855f7" },
+  { x: 90, y: 40, size: 60,  blur: 3,  opacity: 0.55, rotate: -18, color: "#0891b2" },
+  { x: 96, y: 48, size: 45,  blur: 4,  opacity: 0.45, rotate: 12,  color: "#7C3AED" },
+  { x: 89, y: 63, size: 70,  blur: 2,  opacity: 0.65, rotate: -8,  color: "#06b6d4" },
+  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.7,  rotate: 15,  color: "#a855f7" },
+  { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.55, rotate: -20, color: "#7C3AED" },
+  { x: 24, y: 93, size: 50,  blur: 4,  opacity: 0.45, rotate: 25,  color: "#06b6d4" },
+  { x: 84, y: 82, size: 100, blur: 1,  opacity: 0.75, rotate: -10, color: "#a855f7" },
+  { x: 93, y: 92, size: 55,  blur: 3,  opacity: 0.5,  rotate: 18,  color: "#0891b2" },
+  { x: 6,  y: 60, size: 40,  blur: 4,  opacity: 0.4,  rotate: 40,  color: "#a855f7" },
+  { x: 40, y: 8,  size: 55,  blur: 3,  opacity: 0.45, rotate: -25, color: "#06b6d4" },
+  { x: 62, y: 92, size: 65,  blur: 2,  opacity: 0.6,  rotate: 10,  color: "#7C3AED" },
+];
+
+// front-layer logos — sharper, larger, more visible motion, drift over the background ones
+const FRONT_PETALS = [
+  { x: 48, y: 50, size: 300, blur: 0, opacity: 1,    rotate: 6,   color: "#c084fc", speed: 6.5 },
+  { x: 32, y: 34, size: 110, blur: 0, opacity: 0.9,  rotate: -16, color: "#a855f7", speed: 5.2 },
+  { x: 67, y: 62, size: 130, blur: 0, opacity: 0.85, rotate: 14,  color: "#22d3ee", speed: 7.1 },
+  { x: 58, y: 30, size: 80,  blur: 0, opacity: 0.8,  rotate: -22, color: "#a855f7", speed: 4.6 },
+  { x: 36, y: 66, size: 90,  blur: 0, opacity: 0.8,  rotate: 20,  color: "#06b6d4", speed: 6.0 },
 ];
 
 function VortisPetalsBackground() {
@@ -1104,42 +1116,74 @@ function VortisPetalsBackground() {
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
       <style>{`
         @keyframes petalDrift {
-          0%,100% { transform: translateY(0) rotate(var(--r)); }
-          50%     { transform: translateY(-14px) rotate(calc(var(--r) + 3deg)); }
+          0%,100% { transform: translate(-50%,-50%) translateY(0) rotate(var(--r)); }
+          50%     { transform: translate(-50%,-50%) translateY(-16px) rotate(calc(var(--r) + 4deg)); }
+        }
+        @keyframes petalDriftFront {
+          0%,100% { transform: translate(-50%,-50%) translateY(0) scale(1) rotate(var(--r)); }
+          50%     { transform: translate(-50%,-50%) translateY(-22px) scale(1.05) rotate(calc(var(--r) + 6deg)); }
         }
       `}</style>
 
+      {/* base gradient, deep violet -> deep cyan, matches Vortis palette */}
       <div style={{
         position: "absolute", inset: 0,
-        background: "linear-gradient(115deg, #2a1550 0%, #120a28 35%, #071b22 65%, #05201f 100%)",
+        background: "linear-gradient(120deg, #2a1550 0%, #150c30 30%, #0a1424 60%, #06201f 100%)",
       }} />
       <div style={{
         position: "absolute", inset: 0,
-        backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.35) 0px, rgba(0,0,0,0.35) 4px, transparent 4px, transparent 26px)",
+        backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 4px, transparent 4px, transparent 26px)",
         mixBlendMode: "multiply",
       }} />
       <div style={{
         position: "absolute", inset: 0,
-        background: "linear-gradient(90deg, rgba(124,58,237,0.35), transparent 45%, transparent 55%, rgba(6,182,212,0.3))",
+        background: "linear-gradient(90deg, rgba(124,58,237,0.4), transparent 45%, transparent 55%, rgba(6,182,212,0.35))",
+      }} />
+      {/* extra glow pools to sell the brand colors more */}
+      <div style={{
+        position: "absolute", width: 500, height: 500, left: "10%", top: "20%",
+        background: "radial-gradient(circle, rgba(168,85,247,0.25), transparent 70%)",
+        filter: "blur(60px)",
+      }} />
+      <div style={{
+        position: "absolute", width: 460, height: 460, right: "8%", bottom: "10%",
+        background: "radial-gradient(circle, rgba(6,182,212,0.2), transparent 70%)",
+        filter: "blur(60px)",
       }} />
 
+      {/* background scattered logos */}
       {PETALS.map((p, i) => (
         <div key={i} style={{
           position: "absolute",
           left: `${p.x}%`, top: `${p.y}%`,
-          transform: `translate(-50%,-50%) rotate(${p.rotate}deg)`,
-          filter: `blur(${p.blur}px) drop-shadow(0 0 ${18 + p.blur * 4}px rgba(168,85,247,${0.35 * p.opacity}))`,
+          filter: `blur(${p.blur}px) drop-shadow(0 0 ${18 + p.blur * 4}px ${p.color}66)`,
           opacity: p.opacity,
-          animation: `petalDrift ${6 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
+          animation: `petalDrift ${6 + i * 0.35}s ease-in-out ${i * 0.25}s infinite`,
           "--r": `${p.rotate}deg`,
         }}>
-          <VortisLogo size={p.size} color={i === 0 ? "#c084fc" : "#a855f7"} />
+          <VortisLogo size={p.size} color={p.color} />
+        </div>
+      ))}
+
+      {/* front-layer logos — bigger, sharp, more motion, sit above everything */}
+      {FRONT_PETALS.map((p, i) => (
+        <div key={`f-${i}`} style={{
+          position: "absolute",
+          left: `${p.x}%`, top: `${p.y}%`,
+          zIndex: 2,
+          filter: `drop-shadow(0 0 32px ${p.color}88) drop-shadow(0 0 60px ${p.color}44)`,
+          opacity: p.opacity,
+          animation: `petalDriftFront ${p.speed}s ease-in-out ${i * 0.4}s infinite`,
+          "--r": `${p.rotate}deg`,
+        }}>
+          <VortisLogo size={p.size} color={p.color} />
         </div>
       ))}
 
       <div style={{
         position: "absolute", inset: 0,
-        background: "radial-gradient(circle at 50% 50%, transparent 35%, rgba(3,3,10,0.55) 100%)",
+        background: "radial-gradient(circle at 50% 50%, transparent 45%, rgba(3,3,10,0.45) 100%)",
+        zIndex: 1, pointerEvents: "none",
       }} />
     </div>
   );
@@ -1149,26 +1193,6 @@ function VortisAnimation() {
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
       <VortisPetalsBackground />
-
-      <div style={{
-        position: "absolute", left: "50%", bottom: 48, transform: "translateX(-50%)",
-        textAlign: "center", padding: "0 24px", zIndex: 1,
-      }}>
-        <h2 style={{
-          fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900,
-          fontSize: "clamp(1.8rem,4vw,2.8rem)", margin: "0 0 10px",
-          letterSpacing: "-0.02em", color: "#fff",
-        }}>
-          One AI.{" "}
-          <span style={{
-            background: "linear-gradient(90deg,#a855f7,#06b6d4)",
-            WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          }}>Every capability.</span>
-        </h2>
-        <p style={{ fontSize: 15, color: "rgba(255,255,255,.6)", margin: 0 }}>
-          Chat, search, code, vision and research — unified under one roof.
-        </p>
-      </div>
     </div>
   );
 }
@@ -1201,14 +1225,14 @@ function InkRevealSection() {
       </div>
 
       <div style={{
-        position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
-        height: 520, overflow: "hidden", borderRadius: 20,
-        border: "1px solid rgba(255,255,255,0.06)",
-      }}>
-        <VortisAnimation />
-        <InkReveal />
-        {/* no hint pill — fades removed too, since the image now supplies its own edges */}
-      </div>
+  position: "relative", width: "100%", maxWidth: 1200, margin: "0 auto",
+  height: 720, // was 520 — noticeably taller now
+  overflow: "hidden", borderRadius: 20,
+  border: "1px solid rgba(255,255,255,0.06)",
+}}>
+  <VortisAnimation />
+  <InkReveal />
+    </div>
     </section>
   );
 }
