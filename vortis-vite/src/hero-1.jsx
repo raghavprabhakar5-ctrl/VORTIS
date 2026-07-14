@@ -1232,9 +1232,23 @@ function InkRevealSection() {
           </h2>
         </div>
 
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
+   <div style={{
+  position: "relative", width: "100%",
+  height: 720,
+  overflow: "hidden", borderRadius: 20,
+  border: "1px solid rgba(255,255,255,0.06)",
+}}>
+  <VortisAnimation />
+  <InkReveal />
+
   <div style={{
-    display: "inline-flex",
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    zIndex: 2,
+    pointerEvents: "none",
+    display: "flex",
     alignItems: "center",
     gap: 10,
     padding: "10px 22px",
