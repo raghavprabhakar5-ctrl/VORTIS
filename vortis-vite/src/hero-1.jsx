@@ -1232,31 +1232,30 @@ function InkRevealSection() {
           </h2>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "10px 22px",
-            borderRadius: 99,
-            background: "rgba(3,3,10,0.75)",
-            backdropFilter: "blur(14px)",
-            border: "1px solid rgba(139,92,246,0.45)",
-            boxShadow: "0 0 40px rgba(124,58,237,0.25)",
-            fontFamily: "'JetBrains Mono',monospace",
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            color: "rgba(168,85,247,0.95)",
-            whiteSpace: "nowrap",
-            animation: "vHintPulse 2.4s ease-in-out infinite",
-          }}>
-            <Sparkles size={14} />
-            Hover to reveal
-          </div>
-        </div>
-
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 20, width: "100%" }}>
+  <div style={{
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 22px",
+    borderRadius: 99,
+    background: "rgba(3,3,10,0.75)",
+    backdropFilter: "blur(14px)",
+    border: "1px solid rgba(139,92,246,0.45)",
+    boxShadow: "0 0 40px rgba(124,58,237,0.25)",
+    fontFamily: "'JetBrains Mono',monospace",
+    fontSize: 12,
+    fontWeight: 600,
+    letterSpacing: "0.16em",
+    textTransform: "uppercase",
+    color: "rgba(168,85,247,0.95)",
+    whiteSpace: "nowrap",
+    animation: "vHintPulse 2.4s ease-in-out infinite",
+  }}>
+    <Sparkles size={14} />
+    Hover to reveal
+  </div>
+</div>
         <div style={{
           position: "relative", width: "100%",
           height: 720,
