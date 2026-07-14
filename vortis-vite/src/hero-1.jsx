@@ -3085,24 +3085,12 @@ const FAQS = [
     a: "Choose the plan that fits your needs with simple monthly or annual billing. Upgrade, downgrade, or cancel your subscription at any time."
   },
   {
-    q: "Are there daily usage limits?",
-    a: "Free accounts include daily usage limits to ensure fair access for everyone. Premium plans offer significantly higher limits, priority access, and an uninterrupted experience."
-  },
-  {
     q: "Is my data private?",
     a: "Your privacy matters. We handle your conversations and files securely and are committed to protecting your information through responsible data practices."
   },
   {
     q: "What can I do with Vortis?",
     a: "From brainstorming ideas and writing content to coding, document analysis, image generation, web search, and research, Vortis brings your entire AI workflow into one intelligent workspace."
-  },
-  {
-    q: "Can I trust the answers?",
-    a: "Vortis is designed to provide accurate and helpful responses, but AI can occasionally make mistakes. For important decisions, we recommend verifying critical information with trusted sources."
-  },
-  {
-    q: "Where can I get support?",
-    a: "Need help? Our support team is here to assist. You can reach us through our Help Center or contact us directly from the Vortis website."
   }
 ];
 
