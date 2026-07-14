@@ -1125,6 +1125,10 @@ function VortisPetalsBackground() {
           0%,100% { transform: translate(-50%,-50%) translateY(0) scale(1) rotate(var(--r)); }
           50%     { transform: translate(-50%,-50%) translateY(-22px) scale(1.05) rotate(calc(var(--r) + 6deg)); }
         }
+        @keyframes vHintPulse {
+          0%,100% { transform: translateX(-50%) translateY(0);    opacity: 0.75; }
+          50%     { transform: translateX(-50%) translateY(-4px); opacity: 1;    }
+        }
       `}</style>
 
       {/* base gradient, deep violet -> deep cyan, matches Vortis palette */}
@@ -1233,11 +1237,40 @@ function InkRevealSection() {
       }}>
         <VortisAnimation />
         <InkReveal />
+
+        {/* hover hint pill — sits at the top of the reveal canvas */}
+        <div style={{
+          position: "absolute",
+          top: 24,
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 4,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "10px 22px",
+          borderRadius: 99,
+          background: "rgba(3,3,10,0.75)",
+          backdropFilter: "blur(14px)",
+          border: "1px solid rgba(139,92,246,0.45)",
+          boxShadow: "0 0 40px rgba(124,58,237,0.25)",
+          fontFamily: "'JetBrains Mono',monospace",
+          fontSize: 12,
+          fontWeight: 600,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: "rgba(168,85,247,0.95)",
+          pointerEvents: "none",
+          whiteSpace: "nowrap",
+          animation: "vHintPulse 2.4s ease-in-out infinite",
+        }}>
+          <Sparkles size={14} />
+          Hover to reveal
+        </div>
       </div>
     </section>
   );
 }
-
 // ═════════════════════════════════════════════════════════════════
 //  FEATURES — LIVE TILES
 // ══════════════════════════════════════════════════════════════════
@@ -2933,7 +2966,7 @@ function Testimonials() {
             </div>
             <p style={{ fontSize: 13.5, color: "rgba(255,255,255,0.65)", lineHeight: 1.7, margin: "0 0 18px" }}>"{t.text}"</p>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto" }}>
-              <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block", border: `2px solid rgba(${t.color},0.4)` }} />
+              <img src={t.photo} alt={t.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block", border: "2px solid rgba(168,85,247,0.4)" }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>{t.name}</div>
                 <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.35)" }}>{t.role}</div>
