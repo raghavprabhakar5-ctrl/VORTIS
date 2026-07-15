@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import AICore from "./AICore";
 import InkReveal from "./ink-reveal.jsx";
 import {
@@ -9,7 +8,7 @@ import {
   BarChart3, Wifi, ChevronDown, Star, Award, Crown,
   Gem, Diamond, Medal, Trophy, Target, Rocket, Users,
   TrendingUp, Clock, Database, Search, Palette, Mic, Phone,
-  GitBranch, Menu
+  GitBranch
 } from "lucide-react";
 
 // ══════════════════════════════════════════════════════════════════
@@ -280,7 +279,6 @@ function CosmicBg() {
 // ══════════════════════════════════════════════════════════════════
 //  NAV
 // ══════════════════════════════════════════════════════════════════
-
 const NAV_LINKS = [
   { label: "About", href: "#about" },
   { label: "Capabilities", href: "#capabilities" },
@@ -289,160 +287,46 @@ const NAV_LINKS = [
   { label: "FAQ", href: "#faq" },
 ];
 
-const EXPAND_SCROLL_THRESHOLD = 80;
-
-const navContainerVariants = {
-  expanded: {
-    width: "auto",
-    paddingLeft: 32,
-    paddingRight: 32,
-    borderRadius: 999,
-    transition: {
-      type: "spring", damping: 20, stiffness: 300,
-      staggerChildren: 0.06, delayChildren: 0.1,
-    },
-  },
-  collapsed: {
-    width: 52,
-    paddingLeft: 0,
-    paddingRight: 0,
-    borderRadius: 999,
-    transition: {
-      type: "spring", damping: 20, stiffness: 300,
-      when: "afterChildren", staggerChildren: 0.04, staggerDirection: -1,
-    },
-  },
-};
-
-const navItemVariants = {
-  expanded: { opacity: 1, x: 0, transition: { type: "spring", damping: 16 } },
-  collapsed: { opacity: 0, x: -12, transition: { duration: 0.15 } },
-};
-
-const navLogoVariants = {
-  expanded: { opacity: 1, scale: 1, rotate: 0, transition: { type: "spring", damping: 15 } },
-  collapsed: { opacity: 0, scale: 0.7, rotate: -180, transition: { duration: 0.25 } },
-};
-
-const navMenuIconVariants = {
-  expanded: { opacity: 0, scale: 0.7, transition: { duration: 0.15 } },
-  collapsed: {
-    opacity: 1, scale: 1,
-    transition: { type: "spring", damping: 15, stiffness: 300, delay: 0.15 },
-  },
-};
-
 function Nav({ onLogin }) {
   const [scrolled, setScrolled] = useState(false);
-  const [navExpanded, setNavExpanded] = useState(true);
   const [showPicker, setShowPicker] = useState(false);
-
-  const { scrollY } = useScroll();
-  const lastScrollY = useRef(0);
-  const scrollPosOnCollapse = useRef(0);
-
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", h);
     return () => window.removeEventListener("scroll", h);
   }, []);
 
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    const previous = lastScrollY.current;
-
-    if (navExpanded && latest > previous && latest > 150) {
-      setNavExpanded(false);
-      scrollPosOnCollapse.current = latest;
-    } else if (
-      !navExpanded &&
-      latest < previous &&
-      scrollPosOnCollapse.current - latest > EXPAND_SCROLL_THRESHOLD
-    ) {
-      setNavExpanded(true);
-    }
-    lastScrollY.current = latest;
-  });
-
-  // Clicking the collapsed pill re-expands it instead of following links
-  const handleNavClick = (e) => {
-    if (!navExpanded) {
-      e.preventDefault();
-      setNavExpanded(true);
-    }
-  };
-
   return (
-    <motion.nav
-      initial={false}
-      animate={navExpanded ? "expanded" : "collapsed"}
-      variants={navContainerVariants}
-      onClick={handleNavClick}
-      whileHover={!navExpanded ? { scale: 1.08 } : {}}
-      whileTap={!navExpanded ? { scale: 0.95 } : {}}
-      style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 32px", height: 60,
-        background: scrolled ? "rgba(3,3,10,0.92)" : "rgba(3,3,10,0.55)",
-        backdropFilter: "blur(20px)",
-        borderBottom: scrolled ? "1px solid rgba(255,255,255,0.06)" : "1px solid transparent",
-        transition: "background 0.4s ease, border-color 0.4s ease",
-        overflow: "hidden",
-        cursor: navExpanded ? "default" : "pointer",
-        margin: navExpanded ? 0 : "0 auto",
-        maxWidth: navExpanded ? "none" : 52,
-      }}
-    >
-      
-    <a 
-        href="#"
-        onClick={(e) => !navExpanded && e.preventDefault()}
-        style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flexShrink: 0, position: "relative", zIndex: 1 }}
-      >
-        <motion.span variants={navLogoVariants} style={{ display: "flex" }}>
-          <VortisLogo size={30} color="#8b5cf6" />
-        </motion.span>
-        <motion.span
-          variants={navItemVariants}
-          style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 18, letterSpacing: "0.1em", color: "#fff", whiteSpace: "nowrap" }}
-        >
-          VORTIS
-        </motion.span>
-        <motion.span
-          variants={navItemVariants}
-          style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a855f7", letterSpacing: "0.08em", whiteSpace: "nowrap" }}
-        >
-          AI
-        </motion.span>
+    <nav style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "0 32px", height: 60,
+      background: scrolled ? "rgba(3,3,10,0.92)" : "rgba(3,3,10,0.55)",
+      backdropFilter: "blur(20px)",
+      borderBottom: scrolled ? "1px solid rgba(255,255,255,0.06)" : "1px solid transparent",
+      transition: "all 0.4s ease",
+    }}>
+      <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", animation: "slideInLeft 0.7s ease both" }}>
+        <VortisLogo size={30} color="#8b5cf6" />
+        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 18, letterSpacing: "0.1em", color: "#fff" }}>VORTIS</span>
+        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(139,92,246,0.2)", border: "1px solid rgba(139,92,246,0.4)", color: "#a855f7", letterSpacing: "0.08em" }}>AI</span>
       </a>
 
-      <motion.div
-        variants={navItemVariants}
-        style={{ display: "flex", alignItems: "center", gap: 32, whiteSpace: "nowrap", pointerEvents: navExpanded ? "auto" : "none" }}
-      >
+      <div style={{ display: "flex", alignItems: "center", gap: 32, animation: "fadeIn 0.9s 0.2s ease both" }}>
         {NAV_LINKS.map(l => (
-          <a key={l.label} href={l.href} onClick={(e) => e.stopPropagation()} style={{
+          <a key={l.label} href={l.href} style={{
             fontSize: 13.5, fontWeight: 500, color: "rgba(255,255,255,0.5)",
-            textDecoration: "none", transition: "color 0.2s",
+            textDecoration: "none", transition: "color 0.2s", position: "relative",
           }}
           onMouseEnter={e => e.target.style.color = "#fff"}
           onMouseLeave={e => e.target.style.color = "rgba(255,255,255,0.5)"}
           >{l.label}</a>
         ))}
-      </motion.div>
-
-      <motion.div variants={navItemVariants} style={{ flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-        <GlowPillButton onClick={() => setShowPicker(true)} size="sm">
-          Sign In <ArrowRight size={14} />
-        </GlowPillButton>
-      </motion.div>
-
-      {/* Menu icon shown only while collapsed, centered over the pill */}
-      <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-        <motion.div variants={navMenuIconVariants} animate={navExpanded ? "expanded" : "collapsed"}>
-          <Menu className="h-5 w-5" color="#fff" size={20} />
-        </motion.div>
       </div>
+
+      <GlowPillButton onClick={() => setShowPicker(true)} size="sm">
+  Sign In <ArrowRight size={14} />
+</GlowPillButton>
 
       {showPicker && (
         <AuthPicker
@@ -451,7 +335,7 @@ function Nav({ onLogin }) {
           onClose={() => setShowPicker(false)}
         />
       )}
-    </motion.nav>
+    </nav>
   );
 }
 
