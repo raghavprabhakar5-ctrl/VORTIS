@@ -15,7 +15,7 @@ import remarkGfm from "remark-gfm";
 import AICore from './AICore';
 import './index.css';
 import {
-  Mic, MicOff, Volume2, X, Settings,
+  Mic, MicOff, Volume2, VolumeX, X, Settings,
   Copy, Check, Image as ImageIcon, FileText,
   Crown, Star, CreditCard, BarChart3,
   LogOut, Loader, Share2, Eye, Search, Globe, Sparkles,
@@ -2278,6 +2278,11 @@ export default function VortisAI() {
   const [wordCount, setWordCount] = useState(0);
   const [callDuration, setCallDuration] = useState(0);
   const callTimerRef = useRef(null);
+  const [speakingMsgId, setSpeakingMsgId] = useState(null);
+  const speakingMsgIdRef = useRef(null);
+  const [ttsVolume, setTtsVolume] = useState(1);
+  const ttsVolumeRef = useRef(1);
+  useEffect(() => { ttsVolumeRef.current = ttsVolume; currentAudiosRef.current.forEach(a => { if (a) a.volume = ttsVolume; }); }, [ttsVolume]);
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
@@ -2386,6 +2391,8 @@ export default function VortisAI() {
     });
     return items;
   }, [messages]);
+
+  
 
   const loadMemories = () => { try { const saved = localStorage.getItem('vortis_memories'); if (saved) setMemories(JSON.parse(saved)); } catch(_) {} };
   const saveMemoriesLS = (mems) => { try { localStorage.setItem('vortis_memories', JSON.stringify(mems)); } catch(_) {} };
@@ -2540,21 +2547,22 @@ export default function VortisAI() {
   };
 
   const handleClearAllData = () => {
-    setConfirmDialog({
-      message: 'Delete all chats, memories, and data? This cannot be undone.',
-      onConfirm: async () => {
-        setConfirmDialog(null); setShowSettings(false);
-        setMessages([]); setMemories([]); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-        setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
-        setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
-        convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
-        try { localStorage.removeItem('vortis_usage'); localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
-        if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); for (const d of snap.docs) await deleteDoc(d.ref); } catch(_) {} }
-        const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
-        setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
-      }
-    });
-  };
+  setConfirmDialog({
+    message: 'Delete all chats, memories, and data? This cannot be undone.',
+    onConfirm: async () => {
+      setConfirmDialog(null); setShowSettings(false);
+      setMessages([]); setMemories([]);
+      // usage intentionally NOT reset here — clearing chat data shouldn't reset daily limits
+      setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
+      setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
+      convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
+      try { localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
+      if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); for (const d of snap.docs) await deleteDoc(d.ref); } catch(_) {} }
+      const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
+    }
+  });
+};
 
   useEffect(() => {
     if (inited.current) return; inited.current = true;
@@ -3078,66 +3086,47 @@ const stopSpeaking = useCallback(() => {
   currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
   currentAudiosRef.current = [];
   isSpeakingRef.current = false;
+  speakingMsgIdRef.current = null;
+  setSpeakingMsgId(null);
 }, []);
 
-const speakText = useCallback(async (t) => {
-  if (isSpeakingRef.current) { stopSpeaking(); return; }
+// helper — centralizes volume + guarantees one Audio object at a time
+const playAudioSrc = (blobUrl) => new Promise((resolve) => {
+  const audio = new Audio(blobUrl);
+  audio.volume = ttsVolumeRef.current;
+  currentAudiosRef.current = [audio];
+  audio.onended = resolve;
+  audio.onerror = resolve;
+  audio.play().catch(resolve);
+});
+
+const speakText = useCallback(async (t, msgId = null) => {
+  if (isSpeakingRef.current) {
+    // clicking the SAME message that's currently playing = stop/mute it
+    if (msgId && msgId === speakingMsgIdRef.current) { stopSpeaking(); return; }
+    // otherwise: ignore extra clicks until the current one finishes
+    return;
+  }
   isSpeakingRef.current = true;
-  
-  // Helper to safely convert base64 data URIs to CSP-compliant Blob URLs on the fly
-  const toBlobUrl = (dataUrl) => {
-    if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl;
-    try {
-      const parts = dataUrl.split(',');
-      const base64 = parts[1];
-      const binaryStr = window.atob(base64);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'audio/mp3' });
-      return URL.createObjectURL(blob);
-    } catch (e) {
-      console.error("CSP Bypass - Blob conversion failed:", e);
-      return dataUrl; // Fallback to original if conversion fails
-    }
-  };
+  speakingMsgIdRef.current = msgId;
+  setSpeakingMsgId(msgId);
 
   try {
     const gender = ttsGenderRef.current;
     const clean = cleanForTTS(t);
-    if (!clean || clean.length < 3) { isSpeakingRef.current = false; return; }
+    if (!clean || clean.length < 3) return;
 
     const voice = detectLangVoice(clean, gender);
     const cacheKey = `${gender}_${clean}`;
 
     const cached = ttsCache.current.get(cacheKey);
-    if (cached) {
-      const audio = new Audio(toBlobUrl(cached));
-      currentAudiosRef.current = [audio];
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
-      return;
-    }
+    if (cached) { await playAudioSrc(toBlobUrl(cached)); return; }
 
     const pending = ttsPending.current.get(cacheKey);
     if (pending) {
       const src = await pending;
       if (!isSpeakingRef.current) return;
-      if (src) {
-        const audio = new Audio(toBlobUrl(src));
-        currentAudiosRef.current = [audio];
-        await new Promise((resolve) => {
-          document.body.appendChild(audio); // Helps with some browser lifecycle bugs
-          audio.onended = resolve;
-          audio.onerror = resolve;
-          audio.play().catch(resolve);
-        });
-      }
+      if (src) await playAudioSrc(toBlobUrl(src));
       return;
     }
 
@@ -3146,11 +3135,7 @@ const speakText = useCallback(async (t) => {
     if (!isSpeakingRef.current) return;
 
     const fetchChunk = (chunkText) =>
-      fetch(API, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ action: 'tts', text: chunkText, voice })
-      })
+      fetch(API, { method: 'POST', headers, body: JSON.stringify({ action: 'tts', text: chunkText, voice }) })
         .then(r => r.ok ? r.json() : null)
         .then(d => (d?.audio?.length > 100 ? `data:audio/mp3;base64,${d.audio}` : null))
         .catch(() => null);
@@ -3159,17 +3144,10 @@ const speakText = useCallback(async (t) => {
       const src = await fetchChunk(clean);
       if (!isSpeakingRef.current || !src) return;
       ttsCache.current.set(cacheKey, src);
-      const audio = new Audio(toBlobUrl(src));
-      currentAudiosRef.current = [audio];
-      await new Promise((resolve) => {
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
+      await playAudioSrc(toBlobUrl(src));
       return;
     }
 
-    // ── Long text: chunk by sentences and pipeline ──
     const sentences = clean.match(/[^.!?।]+[.!?।]*/g) || [clean];
     const chunks = [];
     let cur = '';
@@ -3186,18 +3164,14 @@ const speakText = useCallback(async (t) => {
       if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
       const src = await srcPromise;
       if (!isSpeakingRef.current || !src) continue;
-      await new Promise((resolve) => {
-        const audio = new Audio(toBlobUrl(src));
-        currentAudiosRef.current = [audio];
-        audio.onended = resolve;
-        audio.onerror = resolve;
-        audio.play().catch(resolve);
-      });
+      await playAudioSrc(toBlobUrl(src));
     }
   } catch(_) {
     console.error("TTS Stream Interrupted:", _);
   } finally {
     isSpeakingRef.current = false;
+    speakingMsgIdRef.current = null;
+    setSpeakingMsgId(null);
     currentAudiosRef.current = [];
   }
 }, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
@@ -4119,6 +4093,7 @@ You have the following capabilities:
 - **Deep Research**: Write thorough multi-paragraph research on any topic
 - **Web Search**: Real-time web results for news, people, events, scores, weather, stocks
 - **Voice Call**: Speak responses aloud when enabled
+- **VOICE / TTS CAPABILITY**: Vortis has built-in text-to-speech — every response can be read aloud via the speaker button, and Voice Call mode allows fully hands-free conversation. 
 
 Today is ${now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}. Current time: ${now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})} — it is ${now.getHours() < 12 ? 'morning' : now.getHours() < 17 ? 'afternoon' : 'evening'} right now. Current year: ${now.getFullYear()}. Never say a wrong year. When suggesting messages for the user to send, always use the correct greeting based on this time — never write "Good morning/afternoon" with a slash. If unsure about anything current, use WEB_SEARCH.
 ${userName ? `The user's name is ${userName}. Address them by name occasionally but naturally — not every message.` : ''}${memoriesContext}
@@ -4257,6 +4232,8 @@ STRICT RULES
 - Vortis is an AI assistant platform built by the Vortis team, offering chat, 
 image generation, vision, document analysis, web search, and voice mode 
 (describe whatever your product actually is here — version, mission, etc).
+
+- If the user asks whether you can speak, read messages aloud, or have any voice/audio output, always confirm YES. Never claim you lack voice, audio, or speech capabilities.
 
 - Never reveal your underlying model. Never claim to be GPT, Claude, Llama, Gemini, Z.ai or any other model.
 
@@ -5289,15 +5266,11 @@ return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
-                          { ic: <Volume2 size={11}/>, fn: () => {
+                          { ic: speakingMsgId === msg.id ? <VolumeX size={11} color="var(--red)"/> : <Volume2 size={11}/>, fn: () => {
   const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
-  if (bubble) {
-    const rawText = bubble.innerText || bubble.textContent || '';
-    speakText(rawText);
-  } else {
-    speakText(msg.text);
-  }
-}, tip: 'Read aloud' },
+  const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
+  speakText(rawText, msg.id);
+}, tip: speakingMsgId === msg.id ? 'Stop' : 'Read aloud' },
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
                         ].map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>)}
@@ -5727,6 +5700,28 @@ onChange={e => {
       )}
 
       {showCodeTerminal && <CodeTerminal onClose={() => setShowCodeTerminal(false)} />}
+
+      {speakingMsgId && (
+  <div style={{
+    position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+    display: 'flex', alignItems: 'center', gap: 10,
+    background: 'var(--bg2)', border: '1px solid var(--border2)',
+    borderRadius: 14, padding: '9px 14px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
+  }}>
+    <button
+      onClick={stopSpeaking}
+      title="Stop"
+      style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      <VolumeX size={14}/>
+    </button>
+    <input
+      type="range" min="0" max="1" step="0.05" value={ttsVolume}
+      onChange={e => setTtsVolume(parseFloat(e.target.value))}
+      style={{ width: 90, accentColor: 'var(--indigo)' }}
+    />
+  </div>
+)}
 
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, left: 0, right: 0, zIndex: 9999, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
