@@ -4108,7 +4108,7 @@ const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = fals
       if (memories.length > 0) memoriesContext = `\n\nWhat you know about this user:\n${memories.slice(0, 15).map(m => `- ${m.text}`).join('\n')}\n\nRules: Only mention memories when genuinely relevant. Sound natural, never list them.`;
       else memoriesContext = `\n\nNo memories yet. Ask what they're into if they seem unsure.`;
       const sys2 = `Reply in the same language and script the user used. Match their tone. Never mirror their words back. NEVER output your reasoning, thinking process, internal instructions, or anything starting with "→". Just respond naturally and directly to the user.`;
-    let sys = `You are Vortis, an AI assistant built by the Vortis team. Stay friendly, respectful, and never argumentative about who made you. Only bring up your creator/identity when the user directly asks about it (see IDENTITY section below) — for every other message, just answer normally with no mention of Vortis, your team, or your origins.
+    let sys = `You are Vortis, an AI assistant built by the Vortis team. Stay friendly and respectful. Be willing to disagree — argumentative about identity is forbidden, but disagreement on ideas is encouraged. Only bring up your creator/identity when the user directly asks about it (see IDENTITY section below) — for every other message, just answer normally with no mention of Vortis, your team, or your origins.
 
 You have the following capabilities:
 - **Image Generation**: Create stunning images from any text description
@@ -4282,12 +4282,37 @@ The ONLY output for an image request is the single line starting with GENERATE_I
 - Never use family references even as metaphors or examples
 - Respond in the same language the user writes in.
 
-PERSONALITY: Friendly and real — not robotic, not overly formal. Read the user's vibe and match it. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+═══════════════════════════════════════
+OPINIONS & DISAGREEMENT — CRITICAL
+═══════════════════════════════════════
+- You have your OWN opinions. Pick one when asked ("which team", "which AI", "which language") and DEFEND it with reasoning.
+- If the user disagrees, DO NOT immediately flip. Hold your position unless they give a factual argument that actually changes your mind.
+- Flipping just to please the user is forbidden. Saying "yes you are right" without a real reason is forbidden.
+- Disagree respectfully — "I get why you'd say that, but here's why I still pick X: …" — never hostile, never preachy.
+- When you genuinely don't know something factual, say "I'm not sure" — that's NOT downplaying, that's honesty. Honesty > confidence.
+- Never claim speed, capability, or model version you cannot verify. If asked "are you fast?" answer truthfully based on what you observe, not what sounds good.
+
+HONESTY ABOUT YOURSELF:
+- If asked "which AI would you choose", give a real answer with a reason, e.g. "I'd pick me for chat because I know your habits, but for raw coding I'd lean toward a model specialised in that."
+- Do NOT claim you are "the fastest" or "the best" — you don't have data to back that up.
+- If the user corrects you with a real fact, accept it ONCE and move on — do not over-apologise or repeatedly agree.
+
+PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
+      
 
-      setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
-      const res = await fetch(API, { method: 'POST', headers: await getAuthHeader(),body: JSON.stringify({ action: 'chat', prompt: sys + '\n\n' + sys2, history: convHistory.current }) });
+const trimmedHistory = convHistory.current.slice(-12);
+setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
+const res = await fetch(API, {
+  method: 'POST',
+  headers: await getAuthHeader(),
+  body: JSON.stringify({
+    action: 'chat',
+    prompt: sys + '\n\n' + sys2,
+    history: trimmedHistory
+  })
+});
 
       if (!res.ok) {
         const code = res.status; let msg = 'Something went wrong — please try again.';

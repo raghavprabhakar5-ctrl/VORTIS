@@ -17,14 +17,13 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';      
+const GROQ_CHAT_PRIMARY = "llama-3.3-70b-versatile";      
 const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';    
-const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
-
+const GROQ_CHAT_PRIMARY = "llama-3.1-8b-instant";
 // NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
 // fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
 const NVIDIA_BASE_URL    = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-nano-30b-a3b'; // Blazing fast, lower latency
+const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct',    // Very fast, lower latency
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
 const NVIDIA_CHAT_GLM     = 'z-ai/glm-5.2'; // Flagship 753B — best for hard coding/agentic/long-context tasks
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
@@ -233,7 +232,7 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
           messages,
           max_tokens:  maxTokens,
           temperature: 0.7,
-          stream:      false,
+          stream:      true,
         }),
       },
       20000
@@ -417,7 +416,7 @@ const optimizedMessages = systemPrompt
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
+          body: JSON.stringify({ messages: optimizedMessages, stream: true, max_tokens: 1200 }),
         }
       );
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
@@ -651,12 +650,12 @@ function cleanResults(results, query) {
 
 function needsWebSearch(text) {
   const low = text.toLowerCase();
-  if (/\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|virat|kohli|rohit|dhoni|wicket|innings|over|scorecard)\b/.test(low)) return true;
-  if (/\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis|f1|formula 1)\b/.test(low)) return true;
-  if (/\b(today|tonight|yesterday|this week|this month|right now|currently|latest|breaking|live|recent)\b/.test(low)) return true;
-  if (/\b(news|update|announced|launched|released|happened|election|president|prime minister|ceo|stock price|weather)\b/.test(low)) return true;
-  if (/\b(2024|2025|2026)\b/.test(low)) return true;
-  if (/^(who is|who won|who leads|what is the current|what happened|when did|did .{1,40} win|has .{1,40} won|is .{1,40} still)\b/.test(low)) return true;
+  // Only search when the user EXPLICITLY wants current/live info
+  if (/\b(score|live score|who won|who is winning|current price|right now|today's|tonight's)\b/.test(low)) return true;
+  if (/\b(ipl|cricket|rcb|csk|kkr|srh|pbks|\bgt\b|lsg)\b/.test(low)) return true;
+  if (/\b(nba|nfl|mlb|nhl|epl|la liga|bundesliga|champions league)\b/.test(low)) return true;
+  if (/\b(stock price|weather in|election result)\b/.test(low)) return true;
+  if (/\b(breaking news|just announced|just happened)\b/.test(low)) return true;
   return false;
 }
 
