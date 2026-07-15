@@ -15,7 +15,7 @@ import remarkGfm from "remark-gfm";
 import AICore from './AICore';
 import './index.css';
 import {
-  Mic, MicOff, Volume2, VolumeX, X, Settings,
+  Mic, MicOff,Volume1, Volume2, VolumeX, X, Settings,
   Copy, Check, Image as ImageIcon, FileText,
   Crown, Star, CreditCard, BarChart3,
   LogOut, Loader, Share2, Eye, Search, Globe, Sparkles,
@@ -1301,6 +1301,36 @@ const parseUserContent = (text) => {
   return parts;
 };
 
+// Detects a normal tap vs a long-press (works for both mouse and touch)
+const useLongPress = (onLongPress, onTap, ms = 450) => {
+  const timerRef = useRef(null);
+  const firedLongPress = useRef(false);
+
+  const start = (e) => {
+    firedLongPress.current = false;
+    timerRef.current = setTimeout(() => {
+      firedLongPress.current = true;
+      onLongPress(e);
+    }, ms);
+  };
+
+  const clear = () => { if (timerRef.current) clearTimeout(timerRef.current); };
+
+  const end = (e) => {
+    clear();
+    if (!firedLongPress.current) onTap(e);
+  };
+
+  return {
+    onMouseDown: start,
+    onMouseUp: end,
+    onMouseLeave: clear,
+    onTouchStart: start,
+    onTouchEnd: end,
+    onContextMenu: (e) => e.preventDefault(), // stop the native right-click menu from also popping up on desktop
+  };
+};
+
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -2282,7 +2312,28 @@ export default function VortisAI() {
   const speakingMsgIdRef = useRef(null);
   const [ttsVolume, setTtsVolume] = useState(1);
   const ttsVolumeRef = useRef(1);
-  useEffect(() => { ttsVolumeRef.current = ttsVolume; currentAudiosRef.current.forEach(a => { if (a) a.volume = ttsVolume; }); }, [ttsVolume]);
+  const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
+  const [showVolumePanel, setShowVolumePanel] = useState(false);
+  const msgAudioCtxRef = useRef(null);
+  const msgActiveSourceRef = useRef(null); // { source, gain }
+
+useEffect(() => { ttsVolumeRef.current = ttsVolume; }, [ttsVolume]);
+useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+
+// live-adjust volume of whatever is currently playing
+useEffect(() => {
+  if (msgActiveSourceRef.current?.gain) {
+    msgActiveSourceRef.current.gain.gain.value = isMuted ? 0 : ttsVolume;
+  }
+}, [ttsVolume, isMuted]);
+
+ const getMsgAudioCtx = () => {
+  if (!msgAudioCtxRef.current) {
+    msgAudioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return msgAudioCtxRef.current;
+};
   const [showVoiceCall, setShowVoiceCall] = useState(false);
   const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
   const callRecogRef = useRef(null);
@@ -3083,30 +3134,50 @@ const getCachedAuthHeader = useCallback(async () => {
 }, []);
 
 const stopSpeaking = useCallback(() => {
-  currentAudiosRef.current.forEach(a => { a.pause(); a.src = ''; });
-  currentAudiosRef.current = [];
+  if (msgActiveSourceRef.current?.source) {
+    try { msgActiveSourceRef.current.source.stop(); } catch(_) {}
+  }
+  msgActiveSourceRef.current = null;
   isSpeakingRef.current = false;
   speakingMsgIdRef.current = null;
   setSpeakingMsgId(null);
 }, []);
 
-// helper — centralizes volume + guarantees one Audio object at a time
-const playAudioSrc = (blobUrl) => new Promise((resolve) => {
-  const audio = new Audio(blobUrl);
-  audio.volume = ttsVolumeRef.current;
-  currentAudiosRef.current = [audio];
-  audio.onended = resolve;
-  audio.onerror = resolve;
-  audio.play().catch(resolve);
+// plays audio via Web Audio API (not <audio> tag) — this stays "unlocked"
+// even across the fetch delay, which is what actually fixes silent playback
+const playMsgAudioBase64 = (base64OrDataUri) => new Promise((resolve) => {
+  (async () => {
+    try {
+      const base64 = base64OrDataUri.startsWith('data:') ? base64OrDataUri.split(',')[1] : base64OrDataUri;
+      const ctx = getMsgAudioCtx();
+      if (ctx.state === 'suspended') { try { await ctx.resume(); } catch(_) {} }
+      const audioBuffer = await ctx.decodeAudioData(base64ToArrayBuffer(base64));
+      const src = ctx.createBufferSource();
+      const gain = ctx.createGain();
+      gain.gain.value = isMutedRef.current ? 0 : ttsVolumeRef.current;
+      src.buffer = audioBuffer;
+      src.connect(gain).connect(ctx.destination);
+      msgActiveSourceRef.current = { source: src, gain };
+      src.onended = () => { msgActiveSourceRef.current = null; resolve(); };
+      src.start(0);
+    } catch (e) {
+      console.error('msg audio decode/play failed:', e);
+      resolve();
+    }
+  })();
 });
 
 const speakText = useCallback(async (t, msgId = null) => {
   if (isSpeakingRef.current) {
-    // clicking the SAME message that's currently playing = stop/mute it
     if (msgId && msgId === speakingMsgIdRef.current) { stopSpeaking(); return; }
-    // otherwise: ignore extra clicks until the current one finishes
     return;
   }
+
+  // ── THIS is the actual fix — resume audio right here, synchronously,
+  // before any await — this is what keeps the browser from blocking sound ──
+  const ctx = getMsgAudioCtx();
+  if (ctx.state === 'suspended') ctx.resume();
+
   isSpeakingRef.current = true;
   speakingMsgIdRef.current = msgId;
   setSpeakingMsgId(msgId);
@@ -3120,13 +3191,13 @@ const speakText = useCallback(async (t, msgId = null) => {
     const cacheKey = `${gender}_${clean}`;
 
     const cached = ttsCache.current.get(cacheKey);
-    if (cached) { await playAudioSrc(toBlobUrl(cached)); return; }
+    if (cached) { await playMsgAudioBase64(cached); return; }
 
     const pending = ttsPending.current.get(cacheKey);
     if (pending) {
       const src = await pending;
       if (!isSpeakingRef.current) return;
-      if (src) await playAudioSrc(toBlobUrl(src));
+      if (src) await playMsgAudioBase64(src);
       return;
     }
 
@@ -3144,7 +3215,7 @@ const speakText = useCallback(async (t, msgId = null) => {
       const src = await fetchChunk(clean);
       if (!isSpeakingRef.current || !src) return;
       ttsCache.current.set(cacheKey, src);
-      await playAudioSrc(toBlobUrl(src));
+      await playMsgAudioBase64(src);
       return;
     }
 
@@ -3164,7 +3235,7 @@ const speakText = useCallback(async (t, msgId = null) => {
       if (i + 1 < chunks.length) nextFetch = fetchChunk(chunks[i + 1]);
       const src = await srcPromise;
       if (!isSpeakingRef.current || !src) continue;
-      await playAudioSrc(toBlobUrl(src));
+      await playMsgAudioBase64(src);
     }
   } catch(_) {
     console.error("TTS Stream Interrupted:", _);
@@ -3172,7 +3243,6 @@ const speakText = useCallback(async (t, msgId = null) => {
     isSpeakingRef.current = false;
     speakingMsgIdRef.current = null;
     setSpeakingMsgId(null);
-    currentAudiosRef.current = [];
   }
 }, [cleanForTTS, getCachedAuthHeader, stopSpeaking]);
 
@@ -5210,6 +5280,7 @@ return (
 </div>
 
 
+
     {/* Hint */}
     <p style={{
       marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
@@ -5220,6 +5291,7 @@ return (
     </p>
   </div>
 )}
+
         {messages.map((msg, idx) => (
               <div key={msg.id||idx} className="msg-wrap" style={{ marginBottom: msg.type === 'system' ? 6 : 20 }}>
                 {msg.type === 'system' ? (
@@ -5266,14 +5338,25 @@ return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
-                          { ic: speakingMsgId === msg.id ? <VolumeX size={11} color="var(--red)"/> : <Volume2 size={11}/>, fn: () => {
-  const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
-  const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
-  speakText(rawText, msg.id);
-}, tip: speakingMsgId === msg.id ? 'Stop' : 'Read aloud' },
+                          { 
+  ic: speakingMsgId === msg.id ? <VolumeX size={11} color="var(--red)"/> : <Volume2 size={11}/>,
+  fn: () => {
+    const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
+    const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
+    speakText(rawText, msg.id);
+  },
+  onContext: (e) => { e.preventDefault(); setShowVolumePanel(v => !v); },
+  tip: speakingMsgId === msg.id ? 'Tap to stop · hold for volume' : 'Tap to speak · hold for volume'
+},
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
-                        ].map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>)}
+                        ].map((b, bi) => {
+  if (b.onContext) {
+    const lp = useLongPress(b.onContext, b.fn, 450);
+    return <button key={bi} {...lp} title={b.tip} className="action-btn">{b.ic}</button>;
+  }
+  return <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>;
+})}
                         <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
                         <button onClick={() => setReaction(msg.id,'up')} className={`action-btn ${reactions[msg.id]==='up'?'active-up':''}`}><ThumbsUp size={11}/></button>
                         <button onClick={() => setReaction(msg.id,'down')} className={`action-btn ${reactions[msg.id]==='down'?'active-down':''}`}><ThumbsDown size={11}/></button>
@@ -5284,6 +5367,7 @@ return (
                 )}
               </div>
             ))}
+            
 
             {isProcessing && !isStreaming && !messages.some(m => m.text === '__IMG_LOADING__') && (
               <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
@@ -5700,6 +5784,30 @@ onChange={e => {
       )}
 
       {showCodeTerminal && <CodeTerminal onClose={() => setShowCodeTerminal(false)} />}
+
+        {showVolumePanel && (
+  <div style={{
+    position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+    display: 'flex', alignItems: 'center', gap: 10,
+    background: 'var(--bg2)', border: '1px solid var(--border2)',
+    borderRadius: 14, padding: '9px 14px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
+  }}>
+    <button
+      onClick={() => setIsMuted(m => !m)}
+      title={isMuted ? 'Unmute' : 'Mute'}
+      style={{ width: 30, height: 30, borderRadius: 8, background: isMuted ? 'rgba(239,68,68,.1)' : 'var(--bg3)', border: `1px solid ${isMuted ? 'rgba(239,68,68,.3)' : 'var(--border2)'}`, color: isMuted ? '#ef4444' : 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+    >
+      {isMuted ? <VolumeX size={14}/> : ttsVolume < 0.5 ? <Volume1 size={14}/> : <Volume2 size={14}/>}
+    </button>
+    <input
+      type="range" min="0" max="1" step="0.05"
+      value={isMuted ? 0 : ttsVolume}
+      onChange={e => { setIsMuted(false); setTtsVolume(parseFloat(e.target.value)); }}
+      style={{ width: 90, accentColor: 'var(--indigo)' }}
+    />
+    <button onClick={() => setShowVolumePanel(false)} style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={13}/></button>
+  </div>
+)}
 
       {speakingMsgId && (
   <div style={{
