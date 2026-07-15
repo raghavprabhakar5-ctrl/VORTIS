@@ -294,6 +294,8 @@ const EXPAND_SCROLL_THRESHOLD = 80;
 const navContainerVariants = {
   expanded: {
     width: "auto",
+    paddingLeft: 32,
+    paddingRight: 32,
     transition: {
       type: "spring", damping: 20, stiffness: 300,
       staggerChildren: 0.06, delayChildren: 0.1,
@@ -301,6 +303,8 @@ const navContainerVariants = {
   },
   collapsed: {
     width: 56,
+    paddingLeft: 0,
+    paddingRight: 0,
     transition: {
       type: "spring", damping: 20, stiffness: 300,
       when: "afterChildren", staggerChildren: 0.04, staggerDirection: -1,
@@ -349,16 +353,6 @@ function Nav({ onLogin }) {
       initial={false}
       animate={navExpanded ? "expanded" : "collapsed"}
       variants={navContainerVariants}
-      style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0 32px", height: 60,
-        background: scrolled ? "rgba(3,3,10,0.92)" : "rgba(3,3,10,0.55)",
-        backdropFilter: "blur(20px)",
-        borderBottom: scrolled ? "1px solid rgba(255,255,255,0.06)" : "1px solid transparent",
-        transition: "background 0.4s ease, border-color 0.4s ease",
-        overflow: "hidden",
-      }}
     >
       <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flexShrink: 0 }}>
         <VortisLogo size={30} color="#8b5cf6" />
