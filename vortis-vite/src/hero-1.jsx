@@ -281,6 +281,14 @@ function CosmicBg() {
 //  NAV
 // ══════════════════════════════════════════════════════════════════
 
+const NAV_LINKS = [
+  { label: "About", href: "#about" },
+  { label: "Capabilities", href: "#capabilities" },
+  { label: "How it works", href: "#how" },
+  { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
+];
+
 const EXPAND_SCROLL_THRESHOLD = 80;
 
 const navContainerVariants = {
