@@ -24,7 +24,7 @@ const GROQ_CLASSIFIER_MODEL = "llama-3.3-70b-versatile";
 // NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
 // fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
 const NVIDIA_BASE_URL    = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct',    // Very fast, lower latency
+const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';   // Very fast, lower latency
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
 const NVIDIA_CHAT_GLM     = 'z-ai/glm-5.2'; // Flagship 753B — best for hard coding/agentic/long-context tasks
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
