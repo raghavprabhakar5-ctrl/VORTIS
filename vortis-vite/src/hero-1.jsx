@@ -353,6 +353,16 @@ function Nav({ onLogin }) {
       initial={false}
       animate={navExpanded ? "expanded" : "collapsed"}
       variants={navContainerVariants}
+      style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 32px", height: 60,
+        background: scrolled ? "rgba(3,3,10,0.92)" : "rgba(3,3,10,0.55)",
+        backdropFilter: "blur(20px)",
+        borderBottom: scrolled ? "1px solid rgba(255,255,255,0.06)" : "1px solid transparent",
+        transition: "background 0.4s ease, border-color 0.4s ease",
+        overflow: "hidden",
+      }}
     >
       <a href="#" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", flexShrink: 0 }}>
         <VortisLogo size={30} color="#8b5cf6" />
