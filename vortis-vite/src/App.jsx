@@ -528,6 +528,39 @@ const LANG_ENGINE = {
   c: 'cpp', cpp: 'cpp', 'c++': 'cpp', cc: 'cpp', h: 'cpp', hpp: 'cpp',
   json: 'json',
 };
+
+// Scores how "code-like" a pasted block of text is — requires multiple
+// real signals together, not just one loose punctuation match.
+const looksLikeCode = (text) => {
+  const trimmed = text.trim();
+  if (trimmed.length < 60) return false; // too short to bother treating as a snippet
+
+  const lines = trimmed.split('\n');
+  let score = 0;
+
+  // Strong signals — real code constructs
+  const strongPatterns = [
+    /\bfunction\s*\w*\s*\(/, /\bconst\s+\w+\s*=/, /\blet\s+\w+\s*=/, /\bvar\s+\w+\s*=/,
+    /\bclass\s+\w+/, /\bimport\s+.+\s+from\s+['"]/, /\bdef\s+\w+\s*\(/,
+    /=>\s*{?/, /<\?php/, /#include\s*</, /console\.(log|error|warn)\(/,
+    /\bpublic\s+(class|static|void)\b/, /^\s*(if|for|while)\s*\(.*\)\s*{/m,
+    /^\s*}\s*$/m, /^\s*<\/?[a-z]+[^>]*>/im, // HTML tags
+  ];
+  strongPatterns.forEach(p => { if (p.test(trimmed)) score += 2; });
+
+  // Medium signals
+  if (/;\s*$/m.test(trimmed)) score += 1;              // lines ending in semicolons
+  if (/^\s{2,}\S/m.test(trimmed)) score += 1;           // indentation
+  const braceCount = (trimmed.match(/[{}]/g) || []).length;
+  if (braceCount >= 3) score += 1;
+
+  // Negative signal — prose has long, wordy lines; code doesn't
+  const wordCount = trimmed.split(/\s+/).length;
+  const avgWordsPerLine = wordCount / Math.max(lines.length, 1);
+  if (avgWordsPerLine > 9) score -= 2;
+
+  return score >= 3;
+};
  
 // ── friendly label + button verb shown in the UI for each engine ──
 const ENGINE_META = {
@@ -5485,13 +5518,12 @@ onChange={e => {
   autoResize(e);
 }}
   onPaste={e => {
-    const text = e.clipboardData.getData('text');
-   const isCode = text.split('\n').length > 4 || /[{};=>]/.test(text) || text.includes('<?php');
-    if (isCode && text.length > 100) {
-      e.preventDefault();
-      setPendingCode({ content: text, lines: text.split('\n').length });
-    }
-  }}
+  const text = e.clipboardData.getData('text');
+  if (looksLikeCode(text)) {
+    e.preventDefault();
+    setPendingCode({ content: text, lines: text.split('\n').length });
+  }
+}}
   onKeyDown={onKey}
   disabled={isProcessing}
   placeholder={
