@@ -1363,6 +1363,14 @@ const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
   };
 };
 
+const isEmojiOnly = (text) => {
+  if (!text) return false;
+  const stripped = text.trim();
+  if (!stripped) return false;
+  const emojiOnlyPattern = /^(\p{Emoji_Presentation}|\p{Extended_Pictographic}|\s|\u200d|\ufe0f)+$/u;
+  return emojiOnlyPattern.test(stripped) && stripped.length < 30;
+};
+
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -4175,15 +4183,6 @@ const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = fals
   } finally {
     imgGenLock.current = false; setIsProcessing(false); setProcessingStatus('');
   }
-};
-
-const isEmojiOnly = (text) => {
-  if (!text) return false;
-  const stripped = text.trim();
-  if (!stripped) return false;
-  // matches only emoji + whitespace, nothing else
-  const emojiOnlyPattern = /^(\p{Emoji_Presentation}|\p{Extended_Pictographic}|\s|\u200d|\ufe0f)+$/u;
-  return emojiOnlyPattern.test(stripped) && stripped.length < 30;
 };
 
   const getAI = async (userInput, shouldSpeak) => {
