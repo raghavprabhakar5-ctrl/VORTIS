@@ -660,6 +660,10 @@ function needsWebSearch(text) {
   return false;
 }
 
+function looksLikeImageRequest(text) {
+  return /\b(image|picture|photo|draw|sketch|paint|art|wallpaper|illustration|render|pic\b)\b/i.test(text);
+}
+
 function buildSearchQuery(userMessage) {
   const now     = new Date();
   const dateStr = `${now.toLocaleString('en-US', { month: 'long' })} ${now.getFullYear()}`;
@@ -1041,8 +1045,12 @@ const identityOverride = `You are VORTIS, built by the Vortis team. Never reveal
 Use markdown: **bold** key terms, bullets for 3+ items, \`code\` for technical terms, code blocks for code, tables for comparisons.
 Be concise: 3-6 sentences for simple questions, full depth only for complex/technical tasks. Under 200 words unless detail is asked for. Never repeat or pad. Always finish complete sentences.
 If declining, briefly say why and offer an alternative.\n\n`;
-        const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
-        const sysContent   = identityOverride + prompt.trim().slice(0, 10000) + locationNote + searchContext;
+
+const imageGuard = looksLikeImageRequest(lastUserMsg) ? `
+IMAGE RULE: Before GENERATE_IMAGE:<desc>, confirm a real subject exists (this msg or earlier in chat). Words like "generate/gen/image/make it" alone are NOT a subject. No subject anywhere → ask one short question instead, don't generate blind.\n\n` : '';
+
+const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
+const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 10000) + locationNote + searchContext;
 
         const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });

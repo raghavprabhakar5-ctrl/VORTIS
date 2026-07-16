@@ -5337,13 +5337,12 @@ return (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
-                          { 
+                        { 
   ic: speakingMsgId === msg.id ? <VolumeX size={11} color="var(--red)"/> : <Volume2 size={11}/>,
   fn: () => {
     const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
     const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
     speakText(rawText, msg.id);
-    setShowVolumePanel(true);
   },
   tip: speakingMsgId === msg.id ? 'Stop' : 'Read aloud'
 },
@@ -5778,7 +5777,7 @@ onChange={e => {
 
       {showCodeTerminal && <CodeTerminal onClose={() => setShowCodeTerminal(false)} />}
 
-       {showVolumePanel && (
+       {speakingMsgId && (
   <div style={{
     position: 'fixed', top: 220, right: 28, zIndex: 9999,
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
@@ -5806,8 +5805,8 @@ onChange={e => {
     />
 
     <button
-      onClick={() => setShowVolumePanel(false)}
-      title="Close"
+      onClick={stopSpeaking}
+      title="Stop"
       style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
     >
       <X size={13}/>
