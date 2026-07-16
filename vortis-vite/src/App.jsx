@@ -5343,19 +5343,13 @@ return (
     const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
     const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
     speakText(rawText, msg.id);
+    setShowVolumePanel(true);
   },
-  onContext: (e) => { e.preventDefault(); setShowVolumePanel(v => !v); },
-  tip: speakingMsgId === msg.id ? 'Tap to stop · hold for volume' : 'Tap to speak · hold for volume'
+  tip: speakingMsgId === msg.id ? 'Stop' : 'Read aloud'
 },
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
-                        ].map((b, bi) => {
-  if (b.onContext) {
-    const dt = createDoubleTapHandlers(b.onContext, b.fn, 300);
-    return <button key={bi} {...dt} title={b.tip} className="action-btn">{b.ic}</button>;
-  }
-  return <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>;
-})}
+                        ].map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>)}
                         <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
                         <button onClick={() => setReaction(msg.id,'up')} className={`action-btn ${reactions[msg.id]==='up'?'active-up':''}`}><ThumbsUp size={11}/></button>
                         <button onClick={() => setReaction(msg.id,'down')} className={`action-btn ${reactions[msg.id]==='down'?'active-down':''}`}><ThumbsDown size={11}/></button>
@@ -5786,7 +5780,7 @@ onChange={e => {
 
         {showVolumePanel && (
   <div style={{
-    position: 'fixed', bottom: 28, left: 28, zIndex: 9999,
+    position: 'fixed', top: 70, right: 28, zIndex: 9999,
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
     background: 'var(--bg2)', border: '1px solid var(--border2)',
     borderRadius: 14, padding: '14px 10px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
@@ -5804,8 +5798,8 @@ onChange={e => {
       value={isMuted ? 0 : ttsVolume}
       onChange={e => { setIsMuted(false); setTtsVolume(parseFloat(e.target.value)); }}
       style={{
-        writingMode: 'bt-lr',        // bottom-to-top vertical fill in most browsers
-        WebkitAppearance: 'slider-vertical', // makes range input vertical on WebKit/Chrome
+        writingMode: 'bt-lr',
+        WebkitAppearance: 'slider-vertical',
         width: 24, height: 90,
         accentColor: 'var(--indigo)',
       }}
@@ -5820,6 +5814,7 @@ onChange={e => {
     </button>
   </div>
 )}
+
       {speakingMsgId && (
   <div style={{
     position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
