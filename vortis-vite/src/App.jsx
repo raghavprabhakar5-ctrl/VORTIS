@@ -5,6 +5,10 @@ import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc,
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
 import { startVoicePipeline } from './voicePipeline';
@@ -191,7 +195,7 @@ const makeStyles = (isDark) => `
 html{-webkit-text-size-adjust:100%;height:100%}
 *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{height:100%;overflow:hidden}
-body,.v-app{font-family:'Geist',sans-serif}
+body,.v-app{font-family:'Inter',ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol','Noto Color Emoji',sans-serif}
 input,textarea,select{font-size:16px}
 .scr::-webkit-scrollbar{width:3px;height:3px}
 .scr::-webkit-scrollbar-track{background:transparent}
@@ -280,8 +284,8 @@ input,textarea,select{font-size:16px}
 .rc-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rc-time{font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace}
 .msg-wrap{animation:fadeIn .15s ease}
-.bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:14px;color:#e0e7ff;line-height:1.65;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
-.bubble-ai{font-size:14.5px;color:var(--text1);line-height:1.85;max-width:94%;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:16px;color:#e0e7ff;line-height:1.6;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap}
+.bubble-ai{font-size:16px;color:var(--text1);line-height:1.6;max-width:100%;letter-spacing:-0.011em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .bubble-sys{font-size:11px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'JetBrains Mono',monospace;display:inline-flex;align-items:center;gap:6px}
 .ai-name{font-size:15px;font-weight:700;color:var(--text1);letter-spacing:.03em}
 .action-btn{width:28px;height:28px;border-radius:6px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all .12s;-webkit-tap-highlight-color:transparent}
@@ -299,9 +303,9 @@ input,textarea,select{font-size:16px}
 .dot-typing span:nth-child(3){animation-delay:.4s}
 .cursor-blink{display:inline-block;width:2px;height:14px;background:var(--indigo);margin-left:2px;vertical-align:middle;animation:blink .8s step-end infinite}
 .disclaimer{text-align:center;font-size:11px;color:var(--text4);padding:4px 16px 8px;font-family:'JetBrains Mono',monospace;flex-shrink:0}
-.md-content h1,.md-content h2,.md-content h3,.md-content h4{color:var(--text1);font-weight:600;margin:8px 0 4px;line-height:1.3}
-.md-content h1{font-size:17px}.md-content h2{font-size:15px}.md-content h3{font-size:14px;color:var(--text2)}
-.md-content p{margin-bottom:6px;color:var(--text1);line-height:1.65}
+.md-content h1,.md-content h2,.md-content h3,.md-content h4{color:var(--text1);font-weight:600;margin:14px 0 6px;line-height:1.35}
+.md-content h1{font-size:22px}.md-content h2{font-size:19px}.md-content h3{font-size:17px;color:var(--text1)}
+.md-content p{margin-bottom:10px;color:var(--text1);line-height:1.6;font-size:16px}
 .md-content table{width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;margin:10px 0;font-size:13px;display:block;overflow-x:auto}
 .md-content th{background:rgba(99,102,241,.12);padding:8px 12px;text-align:left;color:var(--text1);font-weight:600}
 .md-content td{padding:7px 12px;color:var(--text2);border-bottom:1px solid var(--border)}
@@ -310,7 +314,7 @@ input,textarea,select{font-size:16px}
 .md-content blockquote{border-left:3px solid var(--indigo);padding:8px 13px;margin:10px 0;background:rgba(99,102,241,.05);border-radius:0 9px 9px 0;color:var(--text2)}
 .md-content strong { color: var(--text1); font-weight: 700; }
 pre.code-block{background:${isDark?'#080814':'#f0f0f8'};border:1px solid var(--border);border-radius:10px;padding:14px;overflow-x:auto;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:${isDark?'#a5f3fc':'#2d2d8a'};margin:8px 0;white-space:pre-wrap;word-break:break-all}
-code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--indigo)}
+code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--indigo)}
 .ai-img-card{position:relative;display:inline-block;border-radius:12px;overflow:hidden;border:1px solid var(--border2);max-width:min(400px,100%);width:100%;cursor:pointer;transition:transform .2s,box-shadow .2s;background:var(--bg3)}
 .ai-img-card:hover{transform:translateY(-2px);box-shadow:0 12px 36px rgba(99,102,241,.2)}
 .ai-img-card img{display:block;width:100%;height:auto}
@@ -1208,8 +1212,8 @@ const CodeBlock = ({ lang, codeText }) => {
         overflowX: 'auto',
         background: 'var(--bg3)',
         fontFamily: 'JetBrains Mono, monospace',
-        fontSize: 13,
-        lineHeight: 1.7,
+        fontSize: 14,
+        lineHeight: 1.5,
         color: 'var(--cyan)',
         whiteSpace: 'pre',
         wordBreak: 'normal',
@@ -1362,6 +1366,10 @@ const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
     onClick: handle,   // covers both mouse clicks and touch taps
   };
 };
+
+if (isEmojiOnly(clean)) {
+  return <div style={{ fontSize: 40, lineHeight: 1.3 }}>{clean}</div>;
+}
 
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
@@ -1526,13 +1534,13 @@ const DeepResearchProgress = ({ data }) => {
         components={{
 
           // Headings
-          h1: ({children}) => <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text1)', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
-          h2: ({children}) => <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text1)', margin: '10px 0 4px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
-          h3: ({children}) => <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text2)', margin: '8px 0 3px', lineHeight: 1.3 }}>{children}</h3>,
-          h4: ({children}) => <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>{children}</h4>,
+         h1: ({children}) => <h1 style={{ fontSize: 22, fontWeight: 600, color: 'var(--text1)', margin: '16px 0 8px', letterSpacing: '-.02em', lineHeight: 1.35 }}>{children}</h1>,
+         h2: ({children}) => <h2 style={{ fontSize: 19, fontWeight: 600, color: 'var(--text1)', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.35 }}>{children}</h2>,
+         h3: ({children}) => <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text1)', margin: '12px 0 5px', lineHeight: 1.35 }}>{children}</h3>,
+         h4: ({children}) => <h4 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text1)', margin: '10px 0 4px' }}>{children}</h4>,
 
           // Paragraph — tight spacing, no giant gaps
-          p: ({children}) => <p style={{ margin: '0 0 7px', color: 'var(--text1)', lineHeight: 1.75, fontSize: 14.5 }}>{children}</p>,
+         p: ({children}) => <p style={{ margin: '0 0 10px', color: 'var(--text1)', lineHeight: 1.6, fontSize: 16 }}>{children}</p>,
 
           // Bold — sharp vibrant indigo
           strong: ({children}) => (
@@ -1566,7 +1574,7 @@ const DeepResearchProgress = ({ data }) => {
 
           // List item
           li: ({children}) => (
-            <li style={{ padding: '5px 0', borderBottom: '1px solid var(--border)', color: 'var(--text1)', lineHeight: 1.65, fontSize: 14 }}>
+            <li style={{ padding: '5px 0', borderBottom: '1px solid var(--border)', color: 'var(--text1)', lineHeight: 1.6, fontSize: 16 }}>
               {children}
             </li>
           ),
@@ -1589,7 +1597,7 @@ const DeepResearchProgress = ({ data }) => {
 
   if (isInline) {
     return (
-      <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
+      <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 14, color: 'var(--indigo)' }}>
         {children}
       </code>
     );
@@ -4171,6 +4179,15 @@ const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = fals
   } finally {
     imgGenLock.current = false; setIsProcessing(false); setProcessingStatus('');
   }
+};
+
+const isEmojiOnly = (text) => {
+  if (!text) return false;
+  const stripped = text.trim();
+  if (!stripped) return false;
+  // matches only emoji + whitespace, nothing else
+  const emojiOnlyPattern = /^(\p{Emoji_Presentation}|\p{Extended_Pictographic}|\s|\u200d|\ufe0f)+$/u;
+  return emojiOnlyPattern.test(stripped) && stripped.length < 30;
 };
 
   const getAI = async (userInput, shouldSpeak) => {
