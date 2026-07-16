@@ -5359,12 +5359,9 @@ return (
                     <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
                   </div>
                 ) : (
-                  <div data-msgid={msg.id} style={{ display: 'flex', gap: 12 }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
+                  <div data-msgid={msg.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <VortisAvatar size={28}/>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                     <span style={{ fontSize: 10.5, color: 'var(--cyan)', fontFamily: 'JetBrains Mono' }}>typing…</span>
-                      </div>
                       <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
@@ -5409,7 +5406,7 @@ return (
             )}
 
             {isStreaming && streamText && (
-              <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
+              <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'flex-start' }}>
                 <VortisAvatar size={28} animating/>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
@@ -5426,7 +5423,7 @@ return (
             <div ref={bottomRef}/>
           </div>
         </div>
-
+        
         <div className="input-section">
           <div className="input-inner">
             {(uploadedDoc || imgGenMode || researchMode) && (
