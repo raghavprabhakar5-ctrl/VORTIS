@@ -1367,10 +1367,6 @@ const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
   };
 };
 
-if (isEmojiOnly(clean)) {
-  return <div style={{ fontSize: 40, lineHeight: 1.3 }}>{clean}</div>;
-}
-
 const MsgContent = ({ text, onRetryImage }) => {
   const contentRef = React.useRef(null);
 
@@ -1524,7 +1520,11 @@ const DeepResearchProgress = ({ data }) => {
     return <div ref={contentRef} className="md-content" dangerouslySetInnerHTML={{ __html: clean }}/>;
   }
 
-  if (!clean) return null;
+ if (!clean) return null;
+
+if (isEmojiOnly(clean)) {
+  return <div style={{ fontSize: 40, lineHeight: 1.3 }}>{clean}</div>;
+}
 
   // ── Proper ReactMarkdown rendering ──
   return (
