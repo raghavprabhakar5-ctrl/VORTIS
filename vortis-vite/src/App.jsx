@@ -5374,10 +5374,11 @@ return (
                   <div data-msgid={msg.id} style={{ display: 'flex', gap: 12 }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
                     <VortisAvatar size={28}/>
                     <div style={{ flex: 1, minWidth: 0 }}>
+                      {starred[msg.id] && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                        <span className="ai-name">VORTIS</span>
-                        {starred[msg.id] && <Star size={10} color="var(--amber)" fill="var(--amber)"/>}
+                        <Star size={10} color="var(--amber)" fill="var(--amber)"/>
                       </div>
+                    )}
                       <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
@@ -5410,7 +5411,6 @@ return (
               <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
                 <VortisAvatar size={28} animating/>
                 <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}><span className="ai-name">VORTIS</span></div>
                   <div className="dot-typing"><span/><span/><span/></div>
                   {showAITimeout && (
                     <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
