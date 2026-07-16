@@ -5778,9 +5778,9 @@ onChange={e => {
 
       {showCodeTerminal && <CodeTerminal onClose={() => setShowCodeTerminal(false)} />}
 
-        {showVolumePanel && (
+       {showVolumePanel && (
   <div style={{
-    position: 'fixed', top: 70, right: 28, zIndex: 9999,
+    position: 'fixed', top: 220, right: 28, zIndex: 9999,
     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
     background: 'var(--bg2)', border: '1px solid var(--border2)',
     borderRadius: 14, padding: '14px 10px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
@@ -5812,28 +5812,6 @@ onChange={e => {
     >
       <X size={13}/>
     </button>
-  </div>
-)}
-
-      {speakingMsgId && (
-  <div style={{
-    position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
-    display: 'flex', alignItems: 'center', gap: 10,
-    background: 'var(--bg2)', border: '1px solid var(--border2)',
-    borderRadius: 14, padding: '9px 14px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
-  }}>
-    <button
-      onClick={stopSpeaking}
-      title="Stop"
-      style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-    >
-      <VolumeX size={14}/>
-    </button>
-    <input
-      type="range" min="0" max="1" step="0.05" value={ttsVolume}
-      onChange={e => setTtsVolume(parseFloat(e.target.value))}
-      style={{ width: 90, accentColor: 'var(--indigo)' }}
-    />
   </div>
 )}
 
