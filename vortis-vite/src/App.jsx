@@ -5361,7 +5361,7 @@ return (
                   </div>
                 ) : (
                   <div data-msgid={msg.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }} onMouseEnter={() => setHoveredMsg(idx)} onMouseLeave={() => setHoveredMsg(null)}>
-                    <VortisAvatar size={28}/>
+                    <VortisAvatar size={34}/>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
@@ -5393,7 +5393,7 @@ return (
 
             {isProcessing && !isStreaming && !messages.some(m => m.text === '__IMG_LOADING__') && (
               <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-                <VortisAvatar size={28} animating/>
+                <VortisAvatar size={34} animating/>
                 <div>
                   <div className="dot-typing"><span/><span/><span/></div>
                   {showAITimeout && (
@@ -5408,7 +5408,7 @@ return (
 
             {isStreaming && streamText && (
               <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'flex-start' }}>
-                <VortisAvatar size={28} animating/>
+                <VortisAvatar size={34} animating/>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                     <span className="ai-name">VORTIS</span>
