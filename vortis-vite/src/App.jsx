@@ -5,10 +5,6 @@ import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc,
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
-import "@fontsource/inter/700.css";
 import ReactMarkdown from "react-markdown";
 import useDevToolsGuard from './useDevToolsGuard';
 import { startVoicePipeline } from './voicePipeline';
