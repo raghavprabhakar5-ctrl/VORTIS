@@ -1301,28 +1301,32 @@ const parseUserContent = (text) => {
   return parts;
 };
 
-// Plain function — NOT a hook, safe to call inside .map() or anywhere else
-const createLongPressHandlers = (onLongPress, onTap, ms = 450) => {
-  let timer = null;
-  let fired = false;
+// Plain function (not a hook) — detects a double-tap/double-click vs a single tap
+const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
+  let lastTap = 0;
+  let singleTapTimer = null;
 
-  const start = (e) => {
-    fired = false;
-    timer = setTimeout(() => { fired = true; onLongPress(e); }, ms);
-  };
-  const clear = () => { if (timer) clearTimeout(timer); };
-  const end = (e) => {
-    clear();
-    if (!fired) onTap(e);
+  const handle = (e) => {
+    const now = Date.now();
+    const gap = now - lastTap;
+
+    if (gap < delay && gap > 0) {
+      // second tap arrived in time — it's a double tap
+      clearTimeout(singleTapTimer);
+      lastTap = 0;
+      onDoubleTap(e);
+    } else {
+      // first tap — wait to see if a second one follows
+      lastTap = now;
+      clearTimeout(singleTapTimer);
+      singleTapTimer = setTimeout(() => {
+        onTap(e);
+      }, delay);
+    }
   };
 
   return {
-    onMouseDown: start,
-    onMouseUp: end,
-    onMouseLeave: clear,
-    onTouchStart: start,
-    onTouchEnd: end,
-    onContextMenu: (e) => e.preventDefault(),
+    onClick: handle,   // covers both mouse clicks and touch taps
   };
 };
 
@@ -5346,10 +5350,10 @@ return (
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
                         ].map((b, bi) => {
- if (b.onContext) {
-  const lp = createLongPressHandlers(b.onContext, b.fn, 450);   // ✅ just a function call
-  return <button key={bi} {...lp} title={b.tip} className="action-btn">{b.ic}</button>;
-}
+  if (b.onContext) {
+    const dt = createDoubleTapHandlers(b.onContext, b.fn, 300);
+    return <button key={bi} {...dt} title={b.tip} className="action-btn">{b.ic}</button>;
+  }
   return <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>;
 })}
                         <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
@@ -5782,28 +5786,40 @@ onChange={e => {
 
         {showVolumePanel && (
   <div style={{
-    position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
-    display: 'flex', alignItems: 'center', gap: 10,
+    position: 'fixed', bottom: 28, left: 28, zIndex: 9999,
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
     background: 'var(--bg2)', border: '1px solid var(--border2)',
-    borderRadius: 14, padding: '9px 14px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
+    borderRadius: 14, padding: '14px 10px', boxShadow: '0 8px 32px rgba(0,0,0,.4)',
   }}>
     <button
       onClick={() => setIsMuted(m => !m)}
       title={isMuted ? 'Unmute' : 'Mute'}
-      style={{ width: 30, height: 30, borderRadius: 8, background: isMuted ? 'rgba(239,68,68,.1)' : 'var(--bg3)', border: `1px solid ${isMuted ? 'rgba(239,68,68,.3)' : 'var(--border2)'}`, color: isMuted ? '#ef4444' : 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ width: 30, height: 30, borderRadius: 8, background: isMuted ? 'rgba(239,68,68,.1)' : 'var(--bg3)', border: `1px solid ${isMuted ? 'rgba(239,68,68,.3)' : 'var(--border2)'}`, color: isMuted ? '#ef4444' : 'var(--text2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
     >
       {isMuted ? <VolumeX size={14}/> : ttsVolume < 0.5 ? <Volume1 size={14}/> : <Volume2 size={14}/>}
     </button>
+
     <input
       type="range" min="0" max="1" step="0.05"
       value={isMuted ? 0 : ttsVolume}
       onChange={e => { setIsMuted(false); setTtsVolume(parseFloat(e.target.value)); }}
-      style={{ width: 90, accentColor: 'var(--indigo)' }}
+      style={{
+        writingMode: 'bt-lr',        // bottom-to-top vertical fill in most browsers
+        WebkitAppearance: 'slider-vertical', // makes range input vertical on WebKit/Chrome
+        width: 24, height: 90,
+        accentColor: 'var(--indigo)',
+      }}
     />
-    <button onClick={() => setShowVolumePanel(false)} style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={13}/></button>
+
+    <button
+      onClick={() => setShowVolumePanel(false)}
+      title="Close"
+      style={{ width: 24, height: 24, borderRadius: 6, background: 'transparent', border: 'none', color: 'var(--text3)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+    >
+      <X size={13}/>
+    </button>
   </div>
 )}
-
       {speakingMsgId && (
   <div style={{
     position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
