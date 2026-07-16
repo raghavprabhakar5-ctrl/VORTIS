@@ -1301,24 +1301,19 @@ const parseUserContent = (text) => {
   return parts;
 };
 
-// Detects a normal tap vs a long-press (works for both mouse and touch)
-const useLongPress = (onLongPress, onTap, ms = 450) => {
-  const timerRef = useRef(null);
-  const firedLongPress = useRef(false);
+// Plain function — NOT a hook, safe to call inside .map() or anywhere else
+const createLongPressHandlers = (onLongPress, onTap, ms = 450) => {
+  let timer = null;
+  let fired = false;
 
   const start = (e) => {
-    firedLongPress.current = false;
-    timerRef.current = setTimeout(() => {
-      firedLongPress.current = true;
-      onLongPress(e);
-    }, ms);
+    fired = false;
+    timer = setTimeout(() => { fired = true; onLongPress(e); }, ms);
   };
-
-  const clear = () => { if (timerRef.current) clearTimeout(timerRef.current); };
-
+  const clear = () => { if (timer) clearTimeout(timer); };
   const end = (e) => {
     clear();
-    if (!firedLongPress.current) onTap(e);
+    if (!fired) onTap(e);
   };
 
   return {
@@ -1327,7 +1322,7 @@ const useLongPress = (onLongPress, onTap, ms = 450) => {
     onMouseLeave: clear,
     onTouchStart: start,
     onTouchEnd: end,
-    onContextMenu: (e) => e.preventDefault(), // stop the native right-click menu from also popping up on desktop
+    onContextMenu: (e) => e.preventDefault(),
   };
 };
 
@@ -5351,10 +5346,10 @@ return (
                           { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
                           { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
                         ].map((b, bi) => {
-  if (b.onContext) {
-    const lp = useLongPress(b.onContext, b.fn, 450);
-    return <button key={bi} {...lp} title={b.tip} className="action-btn">{b.ic}</button>;
-  }
+ if (b.onContext) {
+  const lp = createLongPressHandlers(b.onContext, b.fn, 450);   // ✅ just a function call
+  return <button key={bi} {...lp} title={b.tip} className="action-btn">{b.ic}</button>;
+}
   return <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>;
 })}
                         <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
