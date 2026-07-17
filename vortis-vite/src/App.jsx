@@ -2499,45 +2499,41 @@ useEffect(() => {
   const deleteMemory = (id) => { setMemories(prev => { const updated = prev.filter(m => m.id !== id); saveMemoriesLS(updated); return updated; }); };
   const clearMemories = () => { setMemories([]); convHistory.current = []; try { localStorage.removeItem('vortis_memories'); } catch(_) {} };
 
- const extractMemories = useCallback(async (userMsg, aiResponse, existingMemories) => {
-  if (!userMsg || userMsg.trim().length < 3) return;
+ const extractMemories = useCallback(async (userMsg) => {
+  if (!userMsg || userMsg.trim().split(/\s+/).length < 2) return;
   try {
     const res = await fetch(API, {
       method: 'POST',
       headers: await getAuthHeader(),
       body: JSON.stringify({
-        action: 'chat',
-        prompt: `You extract personal facts from user messages. Output ONLY a JSON array of strings. Each string is a short fact about the user (name, job, location, hobby, skill, preference). Max 3 facts. Return [] if nothing qualifies. No explanation, no markdown, just the array.\n\nUser said: "${userMsg.slice(0, 300)}"`,
-        history: []
+        action: 'memory',
+        userMsg: userMsg.slice(0, 500),
+        existing: memories.map(m => ({ text: m.text })),
       })
     });
     if (!res.ok) return;
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let raw = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of dec.decode(value).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const chunk = line.slice(6);
-        if (chunk === '[DONE]') break;
-        try { const p = JSON.parse(chunk); if (p.content) raw += p.content; } catch(_) {}
+    const { ops } = await res.json();
+    if (!ops?.length) return;
+
+    setMemories(prev => {
+      let updated = [...prev];
+      for (const o of ops) {
+        if (o.op === 'ADD') {
+          updated = [{ id: Date.now().toString() + Math.random(), text: o.text, createdAt: Date.now() }, ...updated].slice(0, 50);
+        } else if (o.op === 'UPDATE' && updated[o.index]) {
+          updated[o.index] = { ...updated[o.index], text: o.text };
+        } else if (o.op === 'DELETE' && updated[o.index]) {
+          updated.splice(o.index, 1);
+        }
       }
-    }
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-    const start = cleaned.indexOf('[');
-    const end = cleaned.lastIndexOf(']');
-    if (start === -1 || end === -1) return;
-    const parsed = JSON.parse(cleaned.slice(start, end + 1));
-    if (!Array.isArray(parsed)) return;
-    for (const mem of parsed) {
-      if (typeof mem === 'string' && mem.length > 3 && mem.length < 120) {
-        addMemory(mem);
+      saveMemoriesLS(updated);
+      if (userUidRef.current) {
+        setDoc(doc(db, 'users', userUidRef.current), { memories: updated }, { merge: true }).catch(() => {});
       }
-    }
+      return updated;
+    });
   } catch(_) {}
-}, [addMemory]);
+}, [memories]);
 
   const handleLogin = async (provider) => {
     setAuthLoading(true);

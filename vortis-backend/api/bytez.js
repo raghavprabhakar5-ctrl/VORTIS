@@ -46,6 +46,8 @@ const RATE_LIMITS = {
   execute: { window: 60000, max: 15 },
   transcribe: { window: 60000, max: 40 },
   nvidia_global: { window: 60000, max: 35 }, 
+  memory: { window: 60000, max: 20 },
+  
 };
 
 setInterval(() => {
@@ -716,7 +718,7 @@ export default async function handler(req, res) {
     const action = sanitizeString(body.action || '', 20);
 
     if (!action) return res.status(400).json({ error: 'Missing action' });
-    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
+    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe', 'memory'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
     // ── SERVER-SIDE TIER + USAGE ENFORCEMENT ──
@@ -1082,6 +1084,83 @@ const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 1000
       }
       return;
     }
+
+// ╔══════════════════════════════════════╗
+// ║  MEMORY  — extract facts, decide op  ║
+// ╚══════════════════════════════════════╝
+if (action === 'memory') {
+  const userMsg = sanitizeString(body.userMsg || '', 800);
+  const existing = Array.isArray(body.existing) ? body.existing.slice(0, 30) : [];
+  if (!userMsg || userMsg.trim().split(/\s+/).length < 2) {
+    return res.status(200).json({ ops: [] });
+  }
+
+  const existingList = existing.length
+    ? existing.map((m, i) => `${i}. ${m.text}`).join('\n')
+    : '(none yet)';
+
+  const sys = `You maintain a small memory bank of durable facts about a user, for a chat assistant.
+
+EXISTING MEMORIES:
+${existingList}
+
+TASK: Read the user's new message. Decide what to do with the memory bank. Output ONLY a JSON array of operations, nothing else. Each operation is one of:
+{"op":"ADD","text":"<new fact, full sentence>"}
+{"op":"UPDATE","index":<existing memory index>,"text":"<corrected full sentence>"}
+{"op":"DELETE","index":<existing memory index>}
+
+RULES — be strict, most messages produce an EMPTY array []:
+- Only extract durable facts: name, profession/job, location, stated skill, long-term preference, ongoing project, relationship, stated goal.
+- NEVER extract: single words, sentence fragments, questions, requests, opinions about the assistant, one-off tasks, transient states ("I'm tired right now"), or anything under 4 words.
+- Each "text" must be a complete, grammatical, third-person sentence like "User works as a nurse in Chicago" — never a bare word or phrase.
+- If the new message contradicts or updates an existing memory, use UPDATE with that memory's index. If it makes one obsolete, use DELETE.
+- Max 2 ops per message. If nothing durable and fact-like is stated, return [].
+- Output ONLY the JSON array — no markdown, no explanation, no backticks.`;
+
+  try {
+    const result = await Promise.race([
+      groq.chat.completions.create({
+        model: GROQ_CLASSIFIER_MODEL, // llama-3.1-8b-instant — cheap, this is a small structured task
+        messages: [
+          { role: 'system', content: sys },
+          { role: 'user', content: userMsg.slice(0, 500) },
+        ],
+        max_tokens: 300,
+        temperature: 0,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('memory timeout')), 4000)),
+    ]);
+
+    let raw = result.choices?.[0]?.message?.content || '[]';
+    raw = raw.replace(/```json|```/g, '').trim();
+    const start = raw.indexOf('[');
+    const end = raw.lastIndexOf(']');
+    if (start === -1 || end === -1) return res.status(200).json({ ops: [] });
+
+    let parsed;
+    try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { return res.status(200).json({ ops: [] }); }
+    if (!Array.isArray(parsed)) return res.status(200).json({ ops: [] });
+
+    // Validate ops server-side — this is what actually stops junk memories
+    const validOps = parsed.filter(o => {
+      if (!o || typeof o !== 'object') return false;
+      if (!['ADD', 'UPDATE', 'DELETE'].includes(o.op)) return false;
+      if (o.op === 'DELETE') return Number.isInteger(o.index) && o.index >= 0 && o.index < existing.length;
+      if (typeof o.text !== 'string') return false;
+      const t = o.text.trim();
+      if (t.length < 12 || t.length > 140) return false;          // kills single words/fragments
+      if (t.split(/\s+/).length < 4) return false;                 // kills 1-3 word junk
+      if (!/^[A-Z]/.test(t)) return false;                         // must be a real sentence, capitalized
+      if (o.op === 'UPDATE' && !(Number.isInteger(o.index) && o.index >= 0 && o.index < existing.length)) return false;
+      return true;
+    }).slice(0, 2);
+
+    return res.status(200).json({ ops: validOps });
+  } catch (e) {
+    console.error('MEMORY ERROR:', e.message);
+    return res.status(200).json({ ops: [] });
+  }
+}
 
     // ╔══════════════════════════════════════╗
     // ║  SEARCH                              ║
