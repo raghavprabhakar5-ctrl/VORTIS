@@ -8,7 +8,6 @@ import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
 import useDevToolsGuard from './useDevToolsGuard';
 import { startVoicePipeline } from './voicePipeline';
@@ -1540,7 +1539,7 @@ const DeepResearchProgress = ({ data }) => {
     <div ref={contentRef} className="md-content">
       <ReactMarkdown
      remarkPlugins={[remarkGfm, remarkMath]}
-     rehypePlugins={[rehypeRaw, rehypeKatex]}
+     rehypePlugins={[rehypeKatex]}
 
         components={{
 
