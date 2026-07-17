@@ -6,6 +6,10 @@ import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
+import "katex/dist/katex.min.css";
 import useDevToolsGuard from './useDevToolsGuard';
 import { startVoicePipeline } from './voicePipeline';
 import { transcribeAudio } from './whisper';
@@ -1535,7 +1539,9 @@ const DeepResearchProgress = ({ data }) => {
   return (
     <div ref={contentRef} className="md-content">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+     remarkPlugins={[remarkGfm, remarkMath]}
+     rehypePlugins={[rehypeRaw, rehypeKatex]}
+
         components={{
 
           // Headings
