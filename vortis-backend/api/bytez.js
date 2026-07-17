@@ -19,7 +19,7 @@ if (!admin.apps.length) {
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = "llama-3.3-70b-versatile";      
 const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';    
-const GROQ_CLASSIFIER_MODEL = "llama-3.3-70b-versatile"; 
+const GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
 
 // NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
 // fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
