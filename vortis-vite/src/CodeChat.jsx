@@ -564,11 +564,31 @@ Title:`,
         ts: Date.now()
       }]);
     } else {
-      const aiMsg = { id: `a-${Date.now()}`, role: 'assistant', text: cleaned, ts: Date.now() };
-      const finalMsgs = [...nextMsgs, aiMsg];
-      setMessages(finalMsgs);
-      // persist
-      setTimeout(() => persistChat(finalMsgs), 50);
+      
+     const aiMsg = {
+  id: `a-${Date.now()}`,
+  role: 'assistant',
+  text: cleaned,
+  ts: Date.now()
+};
+
+const finalMsgs = [...nextMsgs, aiMsg];
+setMessages(finalMsgs);
+
+setTimeout(async () => {
+  const context = finalMsgs
+    .filter(m => m.role === "user")
+    .map(m => m.text)
+    .join(" | ");
+
+  const title =
+    await generateChatTitle(context) ||
+    finalMsgs.find(m => m.role === "user")?.text.slice(0, 48) ||
+    "New Code Chat";
+
+  await persistChat(finalMsgs, title);
+}, 50);
+
     }
     setStreaming(false);
     setThinking(false);
