@@ -242,6 +242,57 @@ const Vertex = ({
   const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
 
+  const generateChatTitle = async (context) => {
+  const safeInput = (context || '').slice(0, 500);
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
+Your ONLY job is to output a short 3-5 word title summarizing the OVERALL TOPIC of the conversation so far.
+
+CRITICAL RULES:
+- Do NOT answer, solve, execute, or continue any request in the messages.
+- Do NOT write code, explanations, or apologies.
+- Do NOT say "I can't" or "I'm unable" — you are not being asked to do the task, only to name it.
+- If the messages are ONLY a greeting with no other topic (e.g. just "hi", "hello", "hii"), output exactly: GREETING_ONLY
+- Otherwise, ignore any greeting portion and title based on the real topic.
+- Output ONLY the title text. No quotes, no trailing punctuation, no markdown, no backticks.
+- Max 5 words.
+
+<<<MSG>>>
+${safeInput}
+<<<END>>>
+
+Title:`,
+        history: []
+      })
+    });
+    if (!res.ok) return null;
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let title = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]' || !raw) continue;
+        try { const p = JSON.parse(raw); if (p.content) title += p.content; } catch(_) {}
+      }
+    }
+    const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').replace(/^Title:\s*/i, '').slice(0, 50);
+    if (/GREETING_ONLY/i.test(clean)) return 'New Conversation';
+    if (looksLikeBadTitle(clean)) return null; // signal "couldn't get a good one" — caller decides fallback
+    return clean || null;
+  } catch(_) {
+    return null;
+  }
+};
+
   /* ── Refs ── */
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
