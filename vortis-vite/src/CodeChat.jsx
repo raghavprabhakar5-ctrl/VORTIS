@@ -963,12 +963,9 @@ const Vertex = ({
                 )}
               </div>
               <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
                 marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono'
               }}>
-                <span>
-                  {(STYLES.find(s => s.id === style) || STYLES[0]).label}
-                </span>
                 <span>{input.length} chars</span>
               </div>
               <div style={{ textAlign: 'center', marginTop: 6, fontSize: 9.5, color: '#4a4a4a', fontFamily: 'JetBrains Mono', letterSpacing: '.03em' }}>
