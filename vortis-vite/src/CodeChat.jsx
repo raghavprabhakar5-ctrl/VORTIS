@@ -31,26 +31,9 @@ const getAuthHeader = async () => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────
- *  Languages & style preferences
- *  (Auto and Balanced removed — always a concrete language / style)
+ *  Style preferences — no language picker anymore; the AI just infers
+ *  the language from the user's message/paste instead of a forced dropdown.
  * ──────────────────────────────────────────────────────────────────────── */
-const LANGUAGES = [
-  { id: 'javascript',  label: 'JavaScript',  color: '#f59e0b' },
-  { id: 'typescript',  label: 'TypeScript',  color: '#06b6d4' },
-  { id: 'python',      label: 'Python',      color: '#3b82f6' },
-  { id: 'react',       label: 'React',       color: '#22d3ee' },
-  { id: 'rust',        label: 'Rust',        color: '#f97316' },
-  { id: 'go',          label: 'Go',          color: '#06b6d4' },
-  { id: 'java',        label: 'Java',        color: '#ef4444' },
-  { id: 'cpp',         label: 'C++',         color: '#a78bfa' },
-  { id: 'csharp',      label: 'C#',          color: '#10b981' },
-  { id: 'sql',         label: 'SQL',         color: '#10b981' },
-  { id: 'html',        label: 'HTML/CSS',    color: '#f97316' },
-  { id: 'bash',        label: 'Bash',        color: '#10b981' },
-  { id: 'php',         label: 'PHP',         color: '#8b5cf6' },
-  { id: 'ruby',        label: 'Ruby',        color: '#e11d48' },
-];
-
 const STYLES = [
   { id: 'concise',   label: 'Concise',   hint: 'Code + 1 line max' },
   { id: 'detailed',  label: 'Detailed',  hint: 'Edge cases, alternatives, gotchas' },
@@ -71,7 +54,7 @@ const ICONS = { bug: Bug, zap: Zap, book: BookOpen, file: FileCode, refresh: Ref
 /* ────────────────────────────────────────────────────────────────────────
  *  Strong coder system prompt
  * ──────────────────────────────────────────────────────────────────────── */
-const buildCoderSystemPrompt = (lang, style) => {
+const buildCoderSystemPrompt = (style) => {
   let sys = `You are Vertex — an elite senior software engineer pair-programmer embedded inside the user's IDE, powered by Vortis. You are NOT a general assistant; you live and breathe code.
 
 YOUR JOB: help the user write, understand, debug, refactor, and ship code. You are opinionated, pragmatic, and allergic to over-engineering.
@@ -113,35 +96,57 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
   if (style === 'detailed') sys += '\n\nSTYLE: Detailed. Include edge cases, alternative approaches, performance notes, and a short "when not to use this" callout.';
   if (style === 'teach')    sys += '\n\nSTYLE: Teach mode. Add a comment above each non-obvious line of code explaining what it does. Treat the user as a curious learner. End with a one-line "key takeaway".';
 
-  if (lang) sys += `\n\nLANGUAGE FOCUS: The user has selected ${lang}. Default to ${lang} for all code examples unless they explicitly ask for another language.`;
-
   return sys;
 };
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Fallback CodeBlock — used only when parent doesn't pass a real one.
- *  Renders code with a language tag + copy button. No execution.
+ *  Renders code with a language tag + copy button, a subtle language-accent
+ *  color, and a soft entrance animation so it doesn't just pop into place.
  * ──────────────────────────────────────────────────────────────────────── */
+const CODE_LANG_COLORS = {
+  javascript: '#f59e0b', js: '#f59e0b', jsx: '#f59e0b',
+  typescript: '#06b6d4', ts: '#06b6d4', tsx: '#06b6d4',
+  python: '#3b82f6', py: '#3b82f6',
+  react: '#22d3ee',
+  rust: '#f97316', go: '#06b6d4',
+  java: '#ef4444',
+  cpp: '#a78bfa', c: '#a78bfa', 'c++': '#a78bfa',
+  csharp: '#10b981', 'c#': '#10b981',
+  sql: '#10b981', html: '#f97316', css: '#6366f1',
+  bash: '#10b981', sh: '#10b981',
+  php: '#8b5cf6', ruby: '#e11d48', rb: '#e11d48',
+  json: '#84cc16',
+};
+
 const FallbackCodeBlock = ({ lang, codeText }) => {
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const lines = codeText.split('\n');
+  const accent = CODE_LANG_COLORS[(lang || '').toLowerCase()] || '#8a8a8a';
   return (
-    <div style={{ margin: '10px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid #2a2a2a', background: '#0d0d0d' }}>
+    <div style={{
+      margin: '10px 0', borderRadius: 10, overflow: 'hidden',
+      border: '1px solid #2a2a2a', background: '#0d0d0d',
+      animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
+      boxShadow: `0 0 0 1px rgba(0,0,0,0), 0 8px 24px -12px ${accent}33`,
+    }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '6px 12px', background: '#151515', borderBottom: '1px solid #2a2a2a'
+        padding: '7px 12px', background: '#151515', borderBottom: `1px solid #2a2a2a`,
+        position: 'relative',
       }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: accent, opacity: .7 }}/>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <FileCode size={12} color="#8a8a8a"/>
-          <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#9a9a9a', letterSpacing: '.03em', fontWeight: 500 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, boxShadow: `0 0 6px ${accent}aa`, flexShrink: 0 }}/>
+          <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: accent, letterSpacing: '.06em', fontWeight: 700, textTransform: 'uppercase' }}>
             {lang || 'plaintext'}
           </span>
         </div>
         <button onClick={copy} style={{
           display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #2f2f2f',
-          borderRadius: 5, padding: '2px 8px', color: copied ? '#e6e6e6' : '#8a8a8a', fontSize: 10.5,
-          cursor: 'pointer', fontFamily: 'JetBrains Mono'
+          borderRadius: 6, padding: '3px 9px', color: copied ? '#e6e6e6' : '#8a8a8a', fontSize: 10.5,
+          cursor: 'pointer', fontFamily: 'JetBrains Mono', transition: 'all .15s'
         }}>
           {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
         </button>
@@ -156,7 +161,7 @@ const FallbackCodeBlock = ({ lang, codeText }) => {
         </div>
         <pre style={{
           margin: 0, padding: '12px 14px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5,
-          lineHeight: 1.7, color: '#e6e6e6', whiteSpace: 'pre', wordBreak: 'normal', flex: 1
+          lineHeight: 1.7, color: '#dbeafe', whiteSpace: 'pre', wordBreak: 'normal', flex: 1
         }}>{codeText}</pre>
       </div>
     </div>
@@ -228,12 +233,6 @@ const Vertex = ({
    * Guard against stale saved values (e.g. an old 'auto' / 'balanced' from
    * before those options existed) — fall back to the first valid option
    * instead of silently rendering a blank label. */
-  const [lang, setLang] = useState(() => {
-    try {
-      const saved = localStorage.getItem('vortis_code_lang');
-      return LANGUAGES.some(l => l.id === saved) ? saved : LANGUAGES[0].id;
-    } catch (_) { return LANGUAGES[0].id; }
-  });
   const [style, setStyle] = useState(() => {
     try {
       const saved = localStorage.getItem('vortis_code_style');
@@ -241,7 +240,6 @@ const Vertex = ({
     } catch (_) { return STYLES[0].id; }
   });
   const [showPrefs, setShowPrefs] = useState(false);
-  useEffect(() => { try { localStorage.setItem('vortis_code_lang', lang); } catch (_) {} }, [lang]);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
 
   /* ── Refs ── */
@@ -311,16 +309,31 @@ const Vertex = ({
   }, [showPrefs]);
 
   /* ──────────────────────────────────────────────────────────────────
-   *  Firestore ops — mirror App.js pattern, but under 'code_chats'
+   *  Firestore ops.
+   *
+   *  IMPORTANT FIX: this used to write to a separate 'code_chats'
+   *  subcollection. Your Firestore security rules only grant access to
+   *  'users/{uid}/chats' (that's the path your main app's saveChat()
+   *  already uses successfully) — so every write to 'code_chats' was
+   *  being silently rejected as permission-denied, and the old code
+   *  swallowed that error with an empty catch, so nothing ever showed up.
+   *
+   *  Fix: write into the SAME 'chats' collection your rules already
+   *  allow, tagged with `isCodeChat: true` so it doesn't get mixed up
+   *  with regular chats when you load the sidebar list elsewhere.
    * ────────────────────────────────────────────────────────────────── */
   const loadChats = useCallback(async (uid) => {
     if (!uid) { setSavedChats([]); return; }
     try {
-      const snap = await getDocs(collection(db, 'users', uid, 'code_chats'));
-      const chats = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const snap = await getDocs(collection(db, 'users', uid, 'chats'));
+      const chats = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(c => c.isCodeChat)
         .sort((a, b) => new Date(b.updated || 0) - new Date(a.updated || 0));
       setSavedChats(chats);
-    } catch (_) {}
+    } catch (e) {
+      console.error('Vertex: failed to load code chats —', e);
+    }
   }, [db]);
 
   const persistChat = useCallback(async (msgs, overrideTitle) => {
@@ -342,16 +355,20 @@ const Vertex = ({
         text: (m.text || '').slice(0, 12000),
         ts: m.ts || Date.now()
       }));
-      await setDoc(doc(db, 'users', userUidRef.current, 'code_chats', chatIdRef.current), {
+      await setDoc(doc(db, 'users', userUidRef.current, 'chats', chatIdRef.current), {
         title,
+        preview: title,
+        isCodeChat: true,
         messages: cleaned,
-        lang, style,
+        style,
         updated: new Date().toISOString(),
         createdAt: msgs[0]?.ts ? new Date(msgs[0].ts).toISOString() : new Date().toISOString()
       });
       loadChats(userUidRef.current);
-    } catch (_) {}
-  }, [db, lang, style, loadChats]);
+    } catch (e) {
+      console.error('Vertex: failed to save code chat —', e);
+    }
+  }, [db, style, loadChats]);
 
   const newChat = useCallback(() => {
     abortRef.current = true;
@@ -366,7 +383,7 @@ const Vertex = ({
   const loadChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
     try {
-      const snap = await getDoc(doc(db, 'users', userUidRef.current, 'code_chats', id));
+      const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
       if (!snap.exists()) return;
       const c = snap.data();
       setChatId(id); chatIdRef.current = id;
@@ -378,28 +395,33 @@ const Vertex = ({
       }));
       setMessages(restored);
       convHistoryRef.current = restored.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
-      if (c.lang && LANGUAGES.some(l => l.id === c.lang)) setLang(c.lang);
       if (c.style && STYLES.some(s => s.id === c.style)) setStyle(c.style);
       if (window.innerWidth <= 900) setSidebarOpen(false);
-    } catch (_) {}
+    } catch (e) {
+      console.error('Vertex: failed to load code chat —', e);
+    }
   }, [db]);
 
   const deleteChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
     try {
-      await deleteDoc(doc(db, 'users', userUidRef.current, 'code_chats', id));
+      await deleteDoc(doc(db, 'users', userUidRef.current, 'chats', id));
       await loadChats(userUidRef.current);
       if (id === chatIdRef.current) newChat();
-    } catch (_) {}
+    } catch (e) {
+      console.error('Vertex: failed to delete code chat —', e);
+    }
   }, [db, loadChats, newChat]);
 
   const renameChat = useCallback(async (id, newTitle) => {
     if (!userUidRef.current || !newTitle.trim()) { setRenamingId(null); return; }
     try {
-      await setDoc(doc(db, 'users', userUidRef.current, 'code_chats', id),
-        { title: newTitle.trim().slice(0, 80) }, { merge: true });
+      await setDoc(doc(db, 'users', userUidRef.current, 'chats', id),
+        { title: newTitle.trim().slice(0, 80), preview: newTitle.trim().slice(0, 80) }, { merge: true });
       await loadChats(userUidRef.current);
-    } catch (_) {}
+    } catch (e) {
+      console.error('Vertex: failed to rename code chat —', e);
+    }
     setRenamingId(null);
   }, [db, loadChats]);
 
@@ -424,7 +446,7 @@ const Vertex = ({
       content: m.text
     }));
 
-    const sys = buildCoderSystemPrompt(lang, style);
+    const sys = buildCoderSystemPrompt(style);
     const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
 
     let full = '';
@@ -500,7 +522,7 @@ const Vertex = ({
     setStreaming(false);
     setThinking(false);
     setStreamText('');
-  }, [input, messages, streaming, lang, style, persistChat]);
+  }, [input, messages, streaming, style, persistChat]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current = true;
@@ -605,24 +627,6 @@ const Vertex = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Language picker */}
-          <div style={{ position: 'relative' }}>
-            <select
-              value={lang}
-              onChange={e => setLang(e.target.value)}
-              style={{
-                background: '#141414', border: '1px solid #2a2a2a', color: '#c8c8c8',
-                fontSize: 12, borderRadius: 6, padding: '5px 26px 5px 10px', cursor: 'pointer',
-                fontFamily: 'JetBrains Mono', appearance: 'none',
-                backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"10\\" height=\\"10\\" viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"%23888\\" stroke-width=\\"3\\"><polyline points=\\"6 9 12 15 18 9\\"/></svg>")',
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center'
-              }}
-              title="Preferred language"
-            >
-              {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
-            </select>
-          </div>
-
           {/* Style picker */}
           <button
             onClick={() => setShowPrefs(s => !s)}
@@ -922,7 +926,7 @@ const Vertex = ({
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleInputKeyDown}
-                  placeholder={`Ask for ${(LANGUAGES.find(l => l.id === lang) || LANGUAGES[0]).label} code — paste an error, request a function, refactor something…`}
+                  placeholder="Ask anything about code — paste an error, request a function, refactor something…"
                   rows={1}
                   style={{
                     flex: 1, height: 36, minHeight: 36, maxHeight: 240, resize: 'none',
@@ -963,7 +967,7 @@ const Vertex = ({
                 marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono'
               }}>
                 <span>
-                  {(LANGUAGES.find(l => l.id === lang) || LANGUAGES[0]).label} · {(STYLES.find(s => s.id === style) || STYLES[0]).label}
+                  {(STYLES.find(s => s.id === style) || STYLES[0]).label}
                 </span>
                 <span>{input.length} chars</span>
               </div>
@@ -983,6 +987,7 @@ const Vertex = ({
         @keyframes vertexPulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
         @keyframes vertexBlink { 50% { opacity: 0 } }
         @keyframes vertexSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        @keyframes vertexCodeIn { from { opacity: 0; transform: translateY(4px) scale(.99) } to { opacity: 1; transform: translateY(0) scale(1) } }
         /* Scoped reset: everything inside [data-vertex] is immune to
            global stylesheets from the parent app. */
         [data-vertex], [data-vertex] *, [data-vertex] *::before, [data-vertex] *::after {
