@@ -9,7 +9,7 @@ import rehypeKatex from 'rehype-katex';
 import {
   X, Code2, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp,
   Loader, MessageSquare, Sparkles,
-  Zap, Bug, BookOpen, RefreshCw, FileCode,
+  Zap, Bug, BookOpen, RefreshCw, FileCode, Folder,
   PanelLeftClose, PanelLeftOpen,
   Terminal, Cog, EraserIcon,
   ChevronDown, HelpCircle, Command
@@ -127,42 +127,40 @@ const FallbackCodeBlock = ({ lang, codeText }) => {
   const accent = CODE_LANG_COLORS[(lang || '').toLowerCase()] || '#8a8a8a';
   return (
     <div style={{
-      margin: '10px 0', borderRadius: 10, overflow: 'hidden',
-      border: '1px solid #2a2a2a', background: '#0d0d0d',
+      margin: '12px 0', borderRadius: 10, overflow: 'hidden',
+      border: '1px solid #262626', background: '#000000',
       animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
-      boxShadow: `0 0 0 1px rgba(0,0,0,0), 0 8px 24px -12px ${accent}33`,
+      boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '7px 12px', background: '#151515', borderBottom: `1px solid #2a2a2a`,
-        position: 'relative',
+        padding: '8px 14px', background: '#111111', borderBottom: '1px solid #262626',
       }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, background: accent, opacity: .7 }}/>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: accent, boxShadow: `0 0 6px ${accent}aa`, flexShrink: 0 }}/>
-          <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: accent, letterSpacing: '.06em', fontWeight: 700, textTransform: 'uppercase' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 6px ${accent}aa`, flexShrink: 0 }}/>
+          <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8', letterSpacing: '.06em', fontWeight: 700, textTransform: 'uppercase' }}>
             {lang || 'plaintext'}
           </span>
         </div>
         <button onClick={copy} style={{
-          display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #2f2f2f',
-          borderRadius: 6, padding: '3px 9px', color: copied ? '#e6e6e6' : '#8a8a8a', fontSize: 10.5,
+          display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
+          borderRadius: 6, padding: '4px 10px', color: copied ? '#e6e6e6' : '#9a9a9a', fontSize: 11,
           cursor: 'pointer', fontFamily: 'JetBrains Mono', transition: 'all .15s'
         }}>
-          {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
+          {copied ? <Check size={11}/> : <Copy size={11}/>} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <div style={{ display: 'flex', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', overflowX: 'auto', background: '#000000' }}>
         <div style={{
-          flexShrink: 0, padding: '12px 10px', textAlign: 'right', userSelect: 'none',
-          color: '#4a4a4a', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, lineHeight: 1.7,
-          borderRight: '1px solid #202020', background: '#0a0a0a'
+          flexShrink: 0, padding: '14px 12px', textAlign: 'right', userSelect: 'none',
+          color: '#3f3f3f', fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
+          borderRight: '1px solid #1a1a1a', background: '#000000'
         }}>
           {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
         </div>
         <pre style={{
-          margin: 0, padding: '12px 14px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5,
-          lineHeight: 1.7, color: '#dbeafe', whiteSpace: 'pre', wordBreak: 'normal', flex: 1
+          margin: 0, padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
+          lineHeight: 1.7, color: '#e6e6e6', whiteSpace: 'pre', wordBreak: 'normal', flex: 1, background: '#000000'
         }}>{codeText}</pre>
       </div>
     </div>
@@ -270,7 +268,49 @@ const Vertex = ({
   });
   const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
-  const [showMoreChips, setShowMoreChips] = useState(false);
+  const [recentChatsOpen, setRecentChatsOpen] = useState(true);
+
+  /* ── Attach menu ("+" button next to the input) ──
+   * Lets the user pull file/project contents straight into the prompt as
+   * labeled code blocks, instead of copy-pasting by hand. */
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const attachMenuRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!showAttachMenu) return;
+    const handleClick = (e) => {
+      if (attachMenuRef.current && !attachMenuRef.current.contains(e.target)) setShowAttachMenu(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showAttachMenu]);
+
+  const handleFilesSelected = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const MAX_CHARS_PER_FILE = 20000;
+    const MAX_FILES = 12;
+    files.slice(0, MAX_FILES).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        let content = String(reader.result || '');
+        let truncated = false;
+        if (content.length > MAX_CHARS_PER_FILE) { content = content.slice(0, MAX_CHARS_PER_FILE); truncated = true; }
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const displayName = file.webkitRelativePath || file.name;
+        setInput(prev => (
+          prev + (prev ? '\n\n' : '') +
+          `File: ${displayName}\n\`\`\`${ext}\n${content}${truncated ? '\n… (truncated)' : ''}\n\`\`\``
+        ));
+      };
+      reader.readAsText(file);
+    });
+    e.target.value = '';
+    setShowAttachMenu(false);
+    setTimeout(() => inputRef.current?.focus(), 60);
+  }, []);
 
   const generateChatTitle = async (context) => {
     const safeInput = (context || '').slice(0, 500);
@@ -698,7 +738,7 @@ Title:`,
     td: ({children}) => <td style={{ padding: '6px 10px', border: '1px solid #232323', color: '#b8b8b8' }}>{children}</td>,
     code: ({inline, className, children}) => {
       if (inline) {
-        return <code style={{ background: '#1c1c1c', color: '#e6e6e6', padding: '1px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>{children}</code>;
+        return <code style={{ background: '#000000', color: '#e6e6e6', padding: '1px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>{children}</code>;
       }
       const match = /language-(\w+)/.exec(className || '');
       const codeLang = match ? match[1] : '';
@@ -925,7 +965,6 @@ Title:`,
                 invented ones. */}
             <div style={{ padding: '6px 6px 2px', borderTop: '1px solid #1c1c1c' }}>
               {[
-                { icon: Cog,        label: 'Style Preferences',  onClick: () => setShowPrefs(true) },
                 { icon: Command,    label: 'Keyboard Shortcuts', onClick: () => alert('⌘K — New chat\nEnter — Send message\nShift+Enter — New line\nEsc — Close Vertex') },
                 { icon: HelpCircle, label: 'Help',                onClick: () => alert('Vertex is your dedicated coding assistant. Paste an error, ask for a function, or request a refactor to get started.') },
                 { icon: Trash2,     label: 'Clear All Data',      onClick: clearAllData, disabled: clearing || savedChats.length === 0 },
@@ -1008,13 +1047,12 @@ Title:`,
                   Chat with Vertex and turn your ideas into reality with ease.
                 </p>
 
-                {/* Quick-action pill chips — 3 shown + a "More" toggle,
-                    mirroring "Create images / Analyze images / Code / More" */}
+                {/* Quick-action pill chips — all shown, no more/less toggle */}
                 <div style={{
                   display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
                   gap: 8, maxWidth: 640, marginTop: 12, marginBottom: savedChats.length ? 30 : 0
                 }}>
-                  {(showMoreChips ? STARTER_PROMPTS : STARTER_PROMPTS.slice(0, 3)).map(s => {
+                  {STARTER_PROMPTS.map(s => {
                     const Icon = ICONS[s.icon] || FileCode;
                     return (
                       <button key={s.label}
@@ -1031,25 +1069,20 @@ Title:`,
                       </button>
                     );
                   })}
-                  <button onClick={() => setShowMoreChips(v => !v)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', borderRadius: 999,
-                      cursor: 'pointer', background: 'transparent', border: '1px solid #232323',
-                      color: '#8a8a8a', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap'
-                    }}>
-                    {showMoreChips ? 'Less' : 'More'} <ChevronDown size={12} style={{ transform: showMoreChips ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}/>
-                  </button>
                 </div>
 
                 {/* Your recent chats — reuses saved chats, styled as cards */}
                 {savedChats.length > 0 && (
                   <div style={{ width: '100%', maxWidth: 760, textAlign: 'left' }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700,
-                      color: '#9a9a9a', marginBottom: 10
-                    }}>
-                      Your Recent chats <ChevronDown size={13} color="#6a6a6a"/>
-                    </div>
+                    <button onClick={() => setRecentChatsOpen(v => !v)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700,
+                        color: '#9a9a9a', marginBottom: 10, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0
+                      }}>
+                      Your Recent chats
+                      <ChevronDown size={13} color="#6a6a6a" style={{ transform: recentChatsOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .15s' }}/>
+                    </button>
+                    {recentChatsOpen && (
                     <div style={{
                       display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10
                     }}>
@@ -1072,6 +1105,7 @@ Title:`,
                         </button>
                       ))}
                     </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1138,6 +1172,39 @@ Title:`,
                 background: '#141414', border: '1px solid #2a2a2a',
                 borderRadius: 10, padding: 6
               }}>
+                <div ref={attachMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
+                  <button onClick={() => setShowAttachMenu(v => !v)} title="Add file or project"
+                    style={{
+                      width: 36, height: 36, borderRadius: 7, border: '1px solid #2a2a2a',
+                      background: showAttachMenu ? '#232323' : 'transparent', color: '#9a9a9a',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+                    }}>
+                    <Plus size={16}/>
+                  </button>
+                  {showAttachMenu && (
+                    <div style={{
+                      position: 'absolute', bottom: 44, left: 0, zIndex: 60,
+                      background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
+                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 190,
+                      animation: 'vertexScaleIn .15s ease'
+                    }}>
+                      <button onClick={() => fileInputRef.current?.click()}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                        <FileCode size={14} color="#9a9a9a"/> Add file
+                      </button>
+                      <button onClick={() => folderInputRef.current?.click()}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                        <Folder size={14} color="#9a9a9a"/> Add project folder
+                      </button>
+                    </div>
+                  )}
+                  <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFilesSelected} />
+                  <input ref={folderInputRef} type="file" multiple webkitdirectory="" directory="" style={{ display: 'none' }} onChange={handleFilesSelected} />
+                </div>
                 <textarea
                   ref={inputRef}
                   value={input}
