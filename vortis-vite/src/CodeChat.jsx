@@ -11,7 +11,8 @@ import {
   Loader, MessageSquare, Sparkles,
   Zap, Bug, BookOpen, RefreshCw, FileCode,
   PanelLeftClose, PanelLeftOpen,
-  Terminal, Cog, EraserIcon
+  Terminal, Cog, EraserIcon,
+  ChevronDown, HelpCircle, Command
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -269,6 +270,7 @@ const Vertex = ({
   });
   const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
+  const [showMoreChips, setShowMoreChips] = useState(false);
 
   const generateChatTitle = async (context) => {
     const safeInput = (context || '').slice(0, 500);
@@ -765,6 +767,18 @@ Title:`,
             <Cog size={12}/> {(STYLES.find(s => s.id === style) || STYLES[0]).label}
           </button>
 
+          <button
+            onClick={() => alert('Vertex is your dedicated coding assistant, powered by GLM-5.2 — a 753B-parameter flagship model. Paste an error, ask for a function, or request a refactor to get started.')}
+            title="Help"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, background: '#141414',
+              border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6,
+              padding: '5px 10px', cursor: 'pointer'
+            }}
+          >
+            <HelpCircle size={12}/> Help
+          </button>
+
           <div style={{ width: 1, height: 18, background: '#2a2a2a', margin: '0 4px' }} />
 
           <button onClick={onClose} title="Close"
@@ -922,6 +936,51 @@ Title:`,
               )}
             </div>
 
+            {/* Nav rows — mirrors the reference's "Gem Manager / Help / Activity /
+                Settings" block, mapped to Vertex's real features instead of
+                invented ones. */}
+            <div style={{ padding: '6px 6px 2px', borderTop: '1px solid #1c1c1c' }}>
+              {[
+                { icon: Cog,        label: 'Style Preferences',  onClick: () => setShowPrefs(true) },
+                { icon: Command,    label: 'Keyboard Shortcuts', onClick: () => alert('⌘K — New chat\nEnter — Send message\nShift+Enter — New line\nEsc — Close Vertex') },
+                { icon: HelpCircle, label: 'Help',                onClick: () => alert('Vertex is your dedicated coding assistant, powered by GLM-5.2. Paste an error, ask for a function, or request a refactor to get started.') },
+                { icon: Trash2,     label: 'Clear All Data',      onClick: clearAllData, disabled: clearing || savedChats.length === 0 },
+              ].map(item => (
+                <button key={item.label} onClick={item.onClick} disabled={item.disabled}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
+                    borderRadius: 6, background: 'transparent', border: 'none',
+                    color: item.disabled ? '#4a4a4a' : '#9a9a9a', fontSize: 12.5,
+                    cursor: item.disabled ? 'not-allowed' : 'pointer', marginBottom: 1, transition: 'background .12s'
+                  }}
+                  onMouseEnter={e => { if (!item.disabled) e.currentTarget.style.background = '#161616'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <item.icon size={13}/> {item.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Promo card — mirrors the reference's "Unlimited Conversations /
+                Upgrade" card slot, but with real info rather than an invented
+                paid tier. */}
+            <div style={{
+              margin: '8px 10px 10px', padding: 12, borderRadius: 10,
+              background: '#161616', border: '1px solid #262626'
+            }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#e6e6e6', marginBottom: 2 }}>Powered by GLM-5.2</div>
+              <div style={{ fontSize: 10.5, color: '#7a7a7a', marginBottom: 9, lineHeight: 1.5 }}>
+                753B-parameter flagship coding model, 1M-token context.
+              </div>
+              <button onClick={() => setShowPrefs(true)}
+                style={{
+                  width: '100%', padding: '7px 0', borderRadius: 6, background: '#e6e6e6',
+                  border: 'none', color: '#0a0a0a', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}>
+                Style Preferences
+              </button>
+            </div>
+
             {/* Sidebar footer */}
             <div style={{
               padding: '9px 12px', borderTop: '1px solid #212121', background: '#111111',
@@ -936,24 +995,13 @@ Title:`,
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 600, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {user?.displayName || 'User'}
+                  {user?.displayName || user?.email || 'User'}
                 </div>
                 <div style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono' }}>
                   {savedChats.length} code {savedChats.length === 1 ? 'chat' : 'chats'}
                 </div>
               </div>
-              {/* FIX #2: clear-all-data button */}
-              <button
-                onClick={clearAllData}
-                disabled={clearing || savedChats.length === 0}
-                title="Clear all saved code chats"
-                style={{
-                  background: 'transparent', border: '1px solid #2a2a2a', color: clearing ? '#4a4a4a' : '#8a8a8a',
-                  cursor: (clearing || savedChats.length === 0) ? 'not-allowed' : 'pointer',
-                  padding: '4px 6px', borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center'
-                }}>
-                <Trash2 size={12}/>
-              </button>
+              <ChevronDown size={14} color="#5a5a5a" style={{ flexShrink: 0 }}/>
             </div>
           </aside>
         )}
@@ -963,52 +1011,102 @@ Title:`,
           {/* Messages / empty state */}
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} className="scr">
             {messages.length === 0 && !streaming ? (
-              /* ── Empty state — greeting hero + quick chips + recent chats,
-                   styled after the ChatFusion reference layout. Vertex's own
-                   logo mark stays exactly as it was (top bar), untouched. ── */
+              /* ── Empty state — greeting hero, fully wired centered input,
+                   quick chips, and recent chats — matching the reference
+                   layout. Vertex's own logo mark (top bar) stays untouched. ── */
               <div style={{
                 minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 padding: '30px 24px', textAlign: 'center'
               }}>
-                <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', letterSpacing: '.05em', marginBottom: 10 }}>
-                  {style === 'concise' ? 'CONCISE MODE' : style === 'detailed' ? 'DETAILED MODE' : 'TEACH MODE'}
-                </div>
+                {/* Status pill — mirrors "Using limited free plan  Upgrade." */}
+                <button onClick={() => setShowPrefs(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#9a9a9a',
+                    background: '#141414', border: '1px solid #2a2a2a', borderRadius: 999,
+                    padding: '5px 13px', marginBottom: 16, cursor: 'pointer'
+                  }}>
+                  Using {(STYLES.find(s => s.id === style) || STYLES[0]).label} mode
+                  <span style={{ color: '#e6e6e6', fontWeight: 700 }}>Change</span>
+                </button>
+
                 <h1 style={{ fontSize: 26, fontWeight: 700, color: '#f0f0f0', margin: '0 0 6px', letterSpacing: '-.02em' }}>
                   {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block' }}>👋</span>
                 </h1>
-                <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 26px' }}>
-                  Chat with Vertex and turn your ideas into working code.
+                <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 24px' }}>
+                  Chat with Vertex and turn your ideas into reality with ease.
                 </p>
 
-                {/* Centered input capsule — mirrors the docked input below */}
-                <div style={{ width: '100%', maxWidth: 640, marginBottom: 22 }}>
+                {/* Centered input — fully functional, same state/handlers as
+                    the docked bar below (which only appears once a chat
+                    has started). */}
+                <div style={{ width: '100%', maxWidth: 640, marginBottom: 10, textAlign: 'left' }}>
                   <div style={{
-                    background: '#141414', border: '1px solid #2a2a2a', borderRadius: 12,
-                    padding: '14px 16px 12px', textAlign: 'left'
+                    background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14,
+                    padding: '14px 16px 10px'
                   }}>
-                    <div style={{ fontSize: 13.5, color: '#6a6a6a', marginBottom: 10 }}>
-                      How can Vertex help you today?
-                    </div>
+                    <textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={handleInputKeyDown}
+                      placeholder="How can Vertex help you today?"
+                      rows={2}
+                      style={{
+                        width: '100%', minHeight: 44, maxHeight: 200, resize: 'none', background: 'transparent',
+                        border: 'none', outline: 'none', color: '#e6e6e6', fontSize: 14, lineHeight: 1.5,
+                        fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box'
+                      }}
+                      onInput={e => {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
+                      }}
+                    />
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', gap: 10, color: '#5a5a5a' }}>
-                        <FileCode size={14}/>
-                        <Code2 size={14}/>
-                        <Zap size={14}/>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <button type="button" title="Insert a code block"
+                          onClick={() => { setInput(v => v + (v ? '\n\n' : '') + '```\n\n```'); setTimeout(() => inputRef.current?.focus(), 20); }}
+                          style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', display: 'flex' }}>
+                          <FileCode size={15}/>
+                        </button>
+                        <span title="Coding mode — always on" style={{ color: '#6a6a6a', display: 'flex' }}>
+                          <Code2 size={15}/>
+                        </span>
+                        <span title="GLM-5.2 — flagship coding model" style={{ color: '#6a6a6a', display: 'flex' }}>
+                          <Zap size={15}/>
+                        </span>
+                        <div style={{ width: 1, height: 16, background: '#2a2a2a' }}/>
+                        <button type="button" onClick={() => setShowPrefs(s => !s)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none',
+                            color: '#8a8a8a', fontSize: 11.5, cursor: 'pointer', fontFamily: 'JetBrains Mono'
+                          }}>
+                          {(STYLES.find(s => s.id === style) || STYLES[0]).label} <ChevronDown size={12}/>
+                        </button>
                       </div>
-                      <span style={{
-                        fontSize: 10.5, fontFamily: 'JetBrains Mono', color: '#6a6a6a',
-                        border: '1px solid #2a2a2a', borderRadius: 5, padding: '2px 7px'
-                      }}>GLM-5.2</span>
+                      <button onClick={() => send()} disabled={!input.trim()} title="Send"
+                        style={{
+                          width: 34, height: 34, borderRadius: '50%', border: 'none',
+                          cursor: input.trim() ? 'pointer' : 'not-allowed',
+                          background: input.trim() ? '#e6e6e6' : '#2a2a2a',
+                          color: input.trim() ? '#0a0a0a' : '#5a5a5a',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                        }}>
+                        <ArrowUp size={16}/>
+                      </button>
                     </div>
+                  </div>
+                  <div style={{ textAlign: 'center', fontSize: 11, color: '#5a5a5a', marginTop: 10 }}>
+                    Collaborate with Vertex using code, errors, and more.
                   </div>
                 </div>
 
-                {/* Quick-action pill chips */}
+                {/* Quick-action pill chips — 3 shown + a "More" toggle,
+                    mirroring "Create images / Analyze images / Code / More" */}
                 <div style={{
                   display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
-                  gap: 8, maxWidth: 640, marginBottom: savedChats.length ? 30 : 0
+                  gap: 8, maxWidth: 640, marginTop: 12, marginBottom: savedChats.length ? 30 : 0
                 }}>
-                  {STARTER_PROMPTS.map(s => {
+                  {(showMoreChips ? STARTER_PROMPTS : STARTER_PROMPTS.slice(0, 3)).map(s => {
                     const Icon = ICONS[s.icon] || FileCode;
                     return (
                       <button key={s.label}
@@ -1025,15 +1123,25 @@ Title:`,
                       </button>
                     );
                   })}
+                  <button onClick={() => setShowMoreChips(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5, padding: '8px 14px', borderRadius: 999,
+                      cursor: 'pointer', background: 'transparent', border: '1px solid #232323',
+                      color: '#8a8a8a', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap'
+                    }}>
+                    {showMoreChips ? 'Less' : 'More'} <ChevronDown size={12} style={{ transform: showMoreChips ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}/>
+                  </button>
                 </div>
 
                 {/* Your recent chats — reuses saved chats, styled as cards */}
                 {savedChats.length > 0 && (
                   <div style={{ width: '100%', maxWidth: 760, textAlign: 'left' }}>
                     <div style={{
-                      fontSize: 11, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.06em',
-                      fontFamily: 'JetBrains Mono', textTransform: 'uppercase', marginBottom: 10
-                    }}>Your recent chats</div>
+                      display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700,
+                      color: '#9a9a9a', marginBottom: 10
+                    }}>
+                      Your Recent chats <ChevronDown size={13} color="#6a6a6a"/>
+                    </div>
                     <div style={{
                       display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10
                     }}>
