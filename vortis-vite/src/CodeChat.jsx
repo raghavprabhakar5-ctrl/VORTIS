@@ -466,9 +466,9 @@ Title:`,
         const firstUser = msgs.find(m => m.role === 'user');
         if (firstUser) {
           title = firstUser.text.replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 48);
-          if (!title) title = 'New Code Chat';
+          if (!title) title = 'New Chat';
         } else {
-          title = 'New Code Chat';
+          title = 'New Chat';
         }
       }
       const cleaned = msgs.map(m => ({
