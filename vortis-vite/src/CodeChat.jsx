@@ -194,6 +194,18 @@ const relTime = (iso) => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────
+ *  Utility — deterministic accent color for a user's initial avatar,
+ *  so it doesn't just render as flat gray.
+ * ──────────────────────────────────────────────────────────────────────── */
+const AVATAR_COLORS = ['#f59e0b', '#06b6d4', '#8b5cf6', '#10b981', '#ef4444', '#3b82f6', '#ec4899', '#84cc16'];
+const getAvatarColor = (seed) => {
+  const s = seed || 'U';
+  let hash = 0;
+  for (let i = 0; i < s.length; i++) hash = s.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+};
+
+/* ────────────────────────────────────────────────────────────────────────
  *  FIX #1: this function was called in generateChatTitle but never
  *  defined anywhere — every call threw a ReferenceError, which was
  *  silently swallowed by the surrounding try/catch. That meant
@@ -466,9 +478,9 @@ Title:`,
         const firstUser = msgs.find(m => m.role === 'user');
         if (firstUser) {
           title = firstUser.text.replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 48);
-          if (!title) title = 'New Chat';
+          if (!title) title = 'New Code Chat';
         } else {
-          title = 'New Chat';
+          title = 'New Code Chat';
         }
       }
       const cleaned = msgs.map(m => ({
@@ -1002,27 +1014,31 @@ Title:`,
               </button>
             </div>
 
-            {/* Sidebar footer */}
+            {/* Account footer — clean static row, colored avatar for a
+                nicer look, no click menu / sign out */}
             <div style={{
-              padding: '9px 12px', borderTop: '1px solid #212121', background: '#111111',
-              display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a8a8a'
+              padding: '10px 12px', borderTop: '1px solid #212121', background: '#111111',
+              display: 'flex', alignItems: 'center', gap: 9
             }}>
               {user?.photoURL ? (
-                <img src={user.photoURL} alt="" style={{ width: 22, height: 22, borderRadius: '50%', filter: 'grayscale(1)' }}/>
+                <img src={user.photoURL} alt="" style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0 }}/>
               ) : (
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#2a2a2a', border: '1px solid #3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e6e6e6', fontSize: 10, fontWeight: 700 }}>
+                <div style={{
+                  width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
+                  background: getAvatarColor(user?.displayName || user?.email || 'U'),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0a0a0a', fontSize: 11, fontWeight: 700
+                }}>
                   {(user?.displayName || user?.email || '?')[0].toUpperCase()}
                 </div>
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {user?.displayName || user?.email || 'User'}
                 </div>
-                <div style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono' }}>
-                  {savedChats.length} code {savedChats.length === 1 ? 'chat' : 'chats'}
+                <div style={{ fontSize: 10, color: '#6a6a6a' }}>
+                  {savedChats.length} {savedChats.length === 1 ? 'saved chat' : 'saved chats'}
                 </div>
               </div>
-              <ChevronDown size={14} color="#5a5a5a" style={{ flexShrink: 0 }}/>
             </div>
           </aside>
         )}
