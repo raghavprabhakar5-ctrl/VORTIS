@@ -560,7 +560,7 @@ Title:`,
         headers: await getAuthHeader(),
         body: JSON.stringify({
           action: 'chat',
-          mode: 'code',                  // ← routes to GLM-5.2 only on the backend
+          mode: 'code',                  // ← routes to Vertex's coding model on the backend
           prompt: fullPrompt,
           history: historyForBackend
         })
@@ -746,29 +746,13 @@ Title:`,
             }}>
               <Terminal size={14} color="#0a0a0a"/>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
-              <div style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono', lineHeight: 1 }}>by Vortis</div>
-            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
           </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Style picker */}
           <button
-            onClick={() => setShowPrefs(s => !s)}
-            title="Coder style preferences"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, background: showPrefs ? '#232323' : '#141414',
-              border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6,
-              padding: '5px 10px', cursor: 'pointer', fontFamily: 'JetBrains Mono'
-            }}
-          >
-            <Cog size={12}/> {(STYLES.find(s => s.id === style) || STYLES[0]).label}
-          </button>
-
-          <button
-            onClick={() => alert('Vertex is your dedicated coding assistant, powered by GLM-5.2 — a 753B-parameter flagship model. Paste an error, ask for a function, or request a refactor to get started.')}
+            onClick={() => alert('Vertex is your dedicated coding assistant. Paste an error, ask for a function, or request a refactor to get started.')}
             title="Help"
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: '#141414',
@@ -943,7 +927,7 @@ Title:`,
               {[
                 { icon: Cog,        label: 'Style Preferences',  onClick: () => setShowPrefs(true) },
                 { icon: Command,    label: 'Keyboard Shortcuts', onClick: () => alert('⌘K — New chat\nEnter — Send message\nShift+Enter — New line\nEsc — Close Vertex') },
-                { icon: HelpCircle, label: 'Help',                onClick: () => alert('Vertex is your dedicated coding assistant, powered by GLM-5.2. Paste an error, ask for a function, or request a refactor to get started.') },
+                { icon: HelpCircle, label: 'Help',                onClick: () => alert('Vertex is your dedicated coding assistant. Paste an error, ask for a function, or request a refactor to get started.') },
                 { icon: Trash2,     label: 'Clear All Data',      onClick: clearAllData, disabled: clearing || savedChats.length === 0 },
               ].map(item => (
                 <button key={item.label} onClick={item.onClick} disabled={item.disabled}
@@ -961,16 +945,14 @@ Title:`,
               ))}
             </div>
 
-            {/* Promo card — mirrors the reference's "Unlimited Conversations /
-                Upgrade" card slot, but with real info rather than an invented
-                paid tier. */}
+            {/* Promo card */}
             <div style={{
               margin: '8px 10px 10px', padding: 12, borderRadius: 10,
               background: '#161616', border: '1px solid #262626'
             }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#e6e6e6', marginBottom: 2 }}>Powered by GLM-5.2</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#e6e6e6', marginBottom: 2 }}>Vertex</div>
               <div style={{ fontSize: 10.5, color: '#7a7a7a', marginBottom: 9, lineHeight: 1.5 }}>
-                753B-parameter flagship coding model, 1M-token context.
+                Your dedicated coding assistant with large context for whole-file edits.
               </div>
               <button onClick={() => setShowPrefs(true)}
                 style={{
@@ -1011,94 +993,20 @@ Title:`,
           {/* Messages / empty state */}
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} className="scr">
             {messages.length === 0 && !streaming ? (
-              /* ── Empty state — greeting hero, fully wired centered input,
-                   quick chips, and recent chats — matching the reference
-                   layout. Vertex's own logo mark (top bar) stays untouched. ── */
+              /* ── Empty state — greeting hero, quick chips, and recent
+                   chats. The actual message input always lives in the
+                   single docked bar below (outside this conditional), so
+                   there is only ever one input box on screen. ── */
               <div style={{
                 minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 padding: '30px 24px', textAlign: 'center'
               }}>
-                {/* Status pill — mirrors "Using limited free plan  Upgrade." */}
-                <button onClick={() => setShowPrefs(true)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#9a9a9a',
-                    background: '#141414', border: '1px solid #2a2a2a', borderRadius: 999,
-                    padding: '5px 13px', marginBottom: 16, cursor: 'pointer'
-                  }}>
-                  Using {(STYLES.find(s => s.id === style) || STYLES[0]).label} mode
-                  <span style={{ color: '#e6e6e6', fontWeight: 700 }}>Change</span>
-                </button>
-
                 <h1 style={{ fontSize: 26, fontWeight: 700, color: '#f0f0f0', margin: '0 0 6px', letterSpacing: '-.02em' }}>
                   {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block' }}>👋</span>
                 </h1>
                 <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 24px' }}>
                   Chat with Vertex and turn your ideas into reality with ease.
                 </p>
-
-                {/* Centered input — fully functional, same state/handlers as
-                    the docked bar below (which only appears once a chat
-                    has started). */}
-                <div style={{ width: '100%', maxWidth: 640, marginBottom: 10, textAlign: 'left' }}>
-                  <div style={{
-                    background: '#141414', border: '1px solid #2a2a2a', borderRadius: 14,
-                    padding: '14px 16px 10px'
-                  }}>
-                    <textarea
-                      ref={inputRef}
-                      value={input}
-                      onChange={e => setInput(e.target.value)}
-                      onKeyDown={handleInputKeyDown}
-                      placeholder="How can Vertex help you today?"
-                      rows={2}
-                      style={{
-                        width: '100%', minHeight: 44, maxHeight: 200, resize: 'none', background: 'transparent',
-                        border: 'none', outline: 'none', color: '#e6e6e6', fontSize: 14, lineHeight: 1.5,
-                        fontFamily: 'inherit', marginBottom: 8, boxSizing: 'border-box'
-                      }}
-                      onInput={e => {
-                        e.target.style.height = 'auto';
-                        e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
-                      }}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <button type="button" title="Insert a code block"
-                          onClick={() => { setInput(v => v + (v ? '\n\n' : '') + '```\n\n```'); setTimeout(() => inputRef.current?.focus(), 20); }}
-                          style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', display: 'flex' }}>
-                          <FileCode size={15}/>
-                        </button>
-                        <span title="Coding mode — always on" style={{ color: '#6a6a6a', display: 'flex' }}>
-                          <Code2 size={15}/>
-                        </span>
-                        <span title="GLM-5.2 — flagship coding model" style={{ color: '#6a6a6a', display: 'flex' }}>
-                          <Zap size={15}/>
-                        </span>
-                        <div style={{ width: 1, height: 16, background: '#2a2a2a' }}/>
-                        <button type="button" onClick={() => setShowPrefs(s => !s)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none',
-                            color: '#8a8a8a', fontSize: 11.5, cursor: 'pointer', fontFamily: 'JetBrains Mono'
-                          }}>
-                          {(STYLES.find(s => s.id === style) || STYLES[0]).label} <ChevronDown size={12}/>
-                        </button>
-                      </div>
-                      <button onClick={() => send()} disabled={!input.trim()} title="Send"
-                        style={{
-                          width: 34, height: 34, borderRadius: '50%', border: 'none',
-                          cursor: input.trim() ? 'pointer' : 'not-allowed',
-                          background: input.trim() ? '#e6e6e6' : '#2a2a2a',
-                          color: input.trim() ? '#0a0a0a' : '#5a5a5a',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                        }}>
-                        <ArrowUp size={16}/>
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'center', fontSize: 11, color: '#5a5a5a', marginTop: 10 }}>
-                    Collaborate with Vertex using code, errors, and more.
-                  </div>
-                </div>
 
                 {/* Quick-action pill chips — 3 shown + a "More" toggle,
                     mirroring "Create images / Analyze images / Code / More" */}
@@ -1215,7 +1123,9 @@ Title:`,
             )}
           </div>
 
-          {/* ── Input area ── */}
+          {/* ── Input area — the ONLY chat input on screen, always docked
+              at the bottom of the main pane, whether the chat is empty
+              or has messages. ── */}
           <div style={{
             flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
             padding: '12px 22px 16px'
