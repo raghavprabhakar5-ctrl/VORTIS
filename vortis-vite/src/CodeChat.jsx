@@ -11,9 +11,12 @@
  *     language picker, style preference, keyboard shortcuts.
  *
  * Backend: same https://vortis-backend.vercel.app/api/bytez endpoint as the
- * main chat (action: 'chat'), but conversations are persisted under a
- * SEPARATE Firestore subcollection: users/{uid}/code_chats/{chatId}
- * so coding history never pollutes the main chat list.
+ * main chat (action: 'chat'), but every request carries `mode: 'code'`.
+ * The backend reads this flag and routes the request to NVIDIA's
+ * z-ai/glm-5.2 model ONLY — no Groq, no Cloudflare, no other-model
+ * fallback. Conversations are also persisted under a SEPARATE Firestore
+ * subcollection: users/{uid}/code_chats/{chatId} so coding history never
+ * pollutes the main chat list.
  *
  * Integration (3 small edits in your existing App.js):
  *   1. import CodeChat from './CodeChat';
@@ -31,6 +34,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
@@ -249,6 +253,39 @@ const CodeChat = ({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streamText, thinking]);
 
+  /* ── Lock body scroll while CodeChat is mounted ──
+   * Prevents the main chat behind from scrolling under the overlay.
+   * Also bumps body to position:fixed so iOS Safari doesn't scroll
+   * underneath either. Restored on unmount. */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const body = document.body;
+    const prev = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+    };
+    const scrollY = window.scrollY;
+    body.style.overflow = 'hidden';
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+    return () => {
+      body.style.overflow = prev.overflow;
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.right = prev.right;
+      body.style.width = prev.width;
+      if (prev.position !== 'fixed') window.scrollTo(0, scrollY);
+    };
+  }, []);
+
   /* ── Keyboard shortcuts ── */
   useEffect(() => {
     const handler = (e) => {
@@ -397,6 +434,7 @@ const CodeChat = ({
         headers: await getAuthHeader(),
         body: JSON.stringify({
           action: 'chat',
+          mode: 'code',                  // ← routes to GLM-5.2 only on the backend
           prompt: fullPrompt,
           history: historyForBackend
         })
@@ -518,18 +556,29 @@ const CodeChat = ({
   /* ════════════════════════════════════════════════════════════════
    *  RENDER
    * ════════════════════════════════════════════════════════════════ */
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'var(--bg1)', color: 'var(--text1)',
+  // CRITICAL: render through a portal into document.body so the overlay
+  // escapes any ancestor that has transform / filter / will-change / contain
+  // set — those properties create a new containing block and break
+  // position:fixed, which was causing the main chat UI to show through.
+  if (typeof document === 'undefined') return null;
+  return createPortal(
+    <div data-vortis-code style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      width: '100vw', height: '100vh', height: '100dvh',
+      zIndex: 2147483647,                  // max int — always on top
+      background: 'var(--bg1, #0a0a12)',
+      color: 'var(--text1, #e7e7ee)',
       display: 'flex', flexDirection: 'column',
-      fontFamily: '"Geist Sans", -apple-system, system-ui, sans-serif',
-      animation: 'fadeIn .18s ease',
+      fontFamily: '"Geist Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+      animation: 'vortisCodeFadeIn .18s ease',
+      // Lock the body so the main chat behind can't scroll
+      overflow: 'hidden',
+      isolation: 'isolate',                // new stacking context — nothing leaks in or out
     }}>
       {/* ═══ Top bar ═══ */}
       <div style={{
         height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 14px', borderBottom: '1px solid var(--border2)', background: 'var(--bg2)',
+        padding: '0 14px', borderBottom: '1px solid var(--border2, #1f1f2e)', background: 'var(--bg2, #12121c)',
         backdropFilter: 'blur(10px)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -601,7 +650,7 @@ const CodeChat = ({
           position: 'absolute', top: 56, right: 14, zIndex: 100,
           background: 'var(--bg2)', border: '1px solid var(--border2)', borderRadius: 12,
           boxShadow: '0 12px 36px rgba(0,0,0,.4)', padding: 12, minWidth: 260,
-          animation: 'scaleIn .15s ease'
+          animation: 'vortisCodeScaleIn .15s ease'
         }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
           {STYLES.map(s => (
@@ -631,7 +680,7 @@ const CodeChat = ({
           <aside style={{
             width: 256, flexShrink: 0, borderRight: '1px solid var(--border2)', background: 'var(--bg2)',
             display: 'flex', flexDirection: 'column', minHeight: 0,
-            animation: 'slideInLeft .18s ease'
+            animation: 'vortisCodeSlideInLeft .18s ease'
           }}>
             {/* New chat */}
             <div style={{ padding: 10 }}>
@@ -843,7 +892,7 @@ const CodeChat = ({
                           {[0,1,2].map(i => (
                             <div key={i} style={{
                               width: 6, height: 6, borderRadius: '50%', background: 'var(--indigo)',
-                              animation: `pulse 1.2s ease-in-out ${i*0.15}s infinite`
+                              animation: `vortisCodePulse 1.2s ease-in-out ${i*0.15}s infinite`
                             }}/>
                           ))}
                         </div>
@@ -855,7 +904,7 @@ const CodeChat = ({
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
                             {streamText}
                           </ReactMarkdown>
-                          <span style={{ display: 'inline-block', width: 7, height: 14, background: 'var(--indigo)', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'blink 1s steps(2) infinite' }}/>
+                          <span style={{ display: 'inline-block', width: 7, height: 14, background: 'var(--indigo, #6366f1)', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vortisCodeBlink 1s steps(2) infinite' }}/>
                         </div>
                       ) : null}
                     </div>
@@ -902,7 +951,7 @@ const CodeChat = ({
                         width: 34, height: 34, borderRadius: 8, border: 'none', cursor: 'pointer',
                         background: 'var(--red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center'
                       }}>
-                      <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/>
+                      <Loader size={14} style={{ animation: 'vortisCodeSpin 1s linear infinite' }}/>
                     </button>
                   ) : (
                     <button onClick={() => send()} disabled={!input.trim()}
@@ -932,18 +981,38 @@ const CodeChat = ({
         </main>
       </div>
 
-      {/* Inline keyframes */}
+      {/* Inline keyframes + reset */}
       <style>{`
-        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes scaleIn { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
-        @keyframes slideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
-        @keyframes pulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
-        @keyframes blink { 50% { opacity: 0 } }
-        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        @keyframes vortisCodeFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes vortisCodeScaleIn { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
+        @keyframes vortisCodeSlideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes vortisCodePulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
+        @keyframes vortisCodeBlink { 50% { opacity: 0 } }
+        @keyframes vortisCodeSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        /* Scoped reset: everything inside [data-vortis-code] is immune to
+           global stylesheets from the parent app. This was the second root
+           cause of the broken layout — Tailwind/global CSS was leaking in. */
+        [data-vortis-code], [data-vortis-code] *, [data-vortis-code] *::before, [data-vortis-code] *::after {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+          border: 0;
+          font: inherit;
+          font-size: inherit;
+          color: inherit;
+          background: transparent;
+          list-style: none;
+          text-decoration: none;
+          vertical-align: baseline;
+        }
+        [data-vortis-code] button { cursor: pointer; background: transparent; border: none; color: inherit; font: inherit; }
+        [data-vortis-code] input, [data-vortis-code] textarea, [data-vortis-code] select { font: inherit; color: inherit; background: transparent; border: none; outline: none; }
+        [data-vortis-code] img { max-width: 100%; display: block; }
         .chat-item:hover .chat-row-actions,
         div:hover > div > .chat-row-actions { opacity: 1 !important; }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 };
 
