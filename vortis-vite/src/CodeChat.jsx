@@ -224,9 +224,22 @@ const Vertex = ({
   const [renameVal, setRenameVal] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  /* ── Preferences ── */
-  const [lang, setLang] = useState(() => { try { return localStorage.getItem('vortis_code_lang') || LANGUAGES[0].id; } catch (_) { return LANGUAGES[0].id; } });
-  const [style, setStyle] = useState(() => { try { return localStorage.getItem('vortis_code_style') || STYLES[0].id; } catch (_) { return STYLES[0].id; } });
+  /* ── Preferences ──
+   * Guard against stale saved values (e.g. an old 'auto' / 'balanced' from
+   * before those options existed) — fall back to the first valid option
+   * instead of silently rendering a blank label. */
+  const [lang, setLang] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vortis_code_lang');
+      return LANGUAGES.some(l => l.id === saved) ? saved : LANGUAGES[0].id;
+    } catch (_) { return LANGUAGES[0].id; }
+  });
+  const [style, setStyle] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vortis_code_style');
+      return STYLES.some(s => s.id === saved) ? saved : STYLES[0].id;
+    } catch (_) { return STYLES[0].id; }
+  });
   const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('vortis_code_lang', lang); } catch (_) {} }, [lang]);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
@@ -365,8 +378,8 @@ const Vertex = ({
       }));
       setMessages(restored);
       convHistoryRef.current = restored.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
-      if (c.lang) setLang(c.lang);
-      if (c.style) setStyle(c.style);
+      if (c.lang && LANGUAGES.some(l => l.id === c.lang)) setLang(c.lang);
+      if (c.style && STYLES.some(s => s.id === c.style)) setStyle(c.style);
       if (window.innerWidth <= 900) setSidebarOpen(false);
     } catch (_) {}
   }, [db]);
@@ -587,12 +600,7 @@ const Vertex = ({
             }}>
               <Terminal size={14} color="#0a0a0a"/>
             </div>
-            <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
-              <div style={{ fontSize: 10, color: '#6a6a6a', fontFamily: 'JetBrains Mono', marginTop: 2 }}>
-                Powered by Vortis
-              </div>
-            </div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
           </div>
         </div>
 
@@ -625,7 +633,7 @@ const Vertex = ({
               padding: '5px 10px', cursor: 'pointer', fontFamily: 'JetBrains Mono'
             }}
           >
-            <Cog size={12}/> {STYLES.find(s => s.id === style)?.label}
+            <Cog size={12}/> {(STYLES.find(s => s.id === style) || STYLES[0]).label}
           </button>
 
           <div style={{ width: 1, height: 18, background: '#2a2a2a', margin: '0 4px' }} />
@@ -914,13 +922,18 @@ const Vertex = ({
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleInputKeyDown}
-                  placeholder={`Ask for ${LANGUAGES.find(l => l.id === lang)?.label} code — paste an error, request a function, refactor something…`}
+                  placeholder={`Ask for ${(LANGUAGES.find(l => l.id === lang) || LANGUAGES[0]).label} code — paste an error, request a function, refactor something…`}
                   rows={1}
                   style={{
-                    flex: 1, minHeight: 40, maxHeight: 240, resize: 'none',
-                    padding: '10px 8px', background: 'transparent', border: 'none', outline: 'none',
-                    color: '#e6e6e6', fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit',
+                    flex: 1, height: 36, minHeight: 36, maxHeight: 240, resize: 'none',
+                    padding: '8px 8px', background: 'transparent', border: 'none', outline: 'none',
+                    color: '#e6e6e6', fontSize: 14, lineHeight: 1.4, fontFamily: 'inherit',
                     boxSizing: 'border-box'
+                  }}
+                  onInput={e => {
+                    // auto-grow, capped at maxHeight, without ever shrinking the button row
+                    e.target.style.height = '36px';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 240) + 'px';
                   }}
                 />
                 {streaming ? (
@@ -928,7 +941,7 @@ const Vertex = ({
                     style={{
                       width: 36, height: 36, borderRadius: 7, border: '1px solid #3a3a3a', cursor: 'pointer',
                       background: '#1c1c1c', color: '#e6e6e6', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      flexShrink: 0
+                      flexShrink: 0, lineHeight: 0
                     }}>
                     <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
                   </button>
@@ -939,7 +952,7 @@ const Vertex = ({
                       width: 36, height: 36, borderRadius: 7, border: '1px solid ' + (input.trim() ? '#e6e6e6' : '#2a2a2a'), cursor: input.trim() ? 'pointer' : 'not-allowed',
                       background: input.trim() ? '#e6e6e6' : '#1a1a1a',
                       color: input.trim() ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      transition: 'all .15s', flexShrink: 0
+                      transition: 'all .15s', flexShrink: 0, lineHeight: 0
                     }}>
                     <ArrowUp size={15}/>
                   </button>
@@ -950,9 +963,12 @@ const Vertex = ({
                 marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono'
               }}>
                 <span>
-                  {LANGUAGES.find(l => l.id === lang)?.label} · {STYLES.find(s => s.id === style)?.label}
+                  {(LANGUAGES.find(l => l.id === lang) || LANGUAGES[0]).label} · {(STYLES.find(s => s.id === style) || STYLES[0]).label}
                 </span>
                 <span>{input.length} chars</span>
+              </div>
+              <div style={{ textAlign: 'center', marginTop: 6, fontSize: 9.5, color: '#4a4a4a', fontFamily: 'JetBrains Mono', letterSpacing: '.03em' }}>
+                Powered by Vortis
               </div>
             </div>
           </div>
