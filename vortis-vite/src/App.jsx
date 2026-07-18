@@ -10,6 +10,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import useDevToolsGuard from './useDevToolsGuard';
+import CodeChat from './CodeChat';
 import { startVoicePipeline } from './voicePipeline';
 import { transcribeAudio } from './whisper';
 import { franc } from 'franc-min';
@@ -2308,6 +2309,7 @@ export default function VortisAI() {
   const [copiedUserIdx, setCopiedUserIdx] = useState(null);
   const [toast, setToast] = useState(null);
   const [showCodeTerminal, setShowCodeTerminal] = useState(false);
+  const [showCodeChat, setShowCodeChat] = useState(false);
   const [uploadedDoc, setUploadedDoc] = useState(null);
   const [imgGenMode, setImgGenMode] = useState(false);
   const [imgGenStyle, setImgGenStyle] = useState('realistic');
@@ -5538,10 +5540,10 @@ onChange={e => {
   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
 
-  {/* NEW — Code Terminal button */}
-  <button className="mic-btn" onClick={() => setShowCodeTerminal(true)} title="Code Terminal">
-    <Code2 size={14}/>
-  </button>
+  {/* Code Chat button — opens full-screen coding assistant */}
+<button className="mic-btn" onClick={() => setShowCodeChat(true)} title="Code Chat">
+  <Code2 size={14}/>
+</button>
 
   {/* Voice call (soundwave) button */}
   <button className="mic-btn" onClick={startVoiceCall} title="Voice call" disabled={isProcessing}>
@@ -5802,6 +5804,16 @@ onChange={e => {
       )}
 
       {showCodeTerminal && <CodeTerminal onClose={() => setShowCodeTerminal(false)} />}
+
+      {showCodeChat && (
+    <CodeChat
+    onClose={() => setShowCodeChat(false)}
+    CodeBlock={CodeBlock}
+    safeExecuteCodeLocally={safeExecuteCodeLocally}
+    LANG_ENGINE={LANG_ENGINE}
+    ENGINE_META={ENGINE_META}
+  />
+)}
 
        {speakingMsgId && (
   <div style={{
