@@ -8,14 +8,14 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
   X, Code2, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp,
-  Loader, Settings, MessageSquare, Send, Cpu, Sparkles, Lightbulb,
-  Zap, Bug, BookOpen, RefreshCw, FileCode, ChevronDown, Clock,
-  PanelLeftClose, PanelLeftOpen, CornerDownLeft, AlertCircle,
-  Terminal, Cog, Wand2
+  Loader, MessageSquare, Sparkles,
+  Zap, Bug, BookOpen, RefreshCw, FileCode,
+  PanelLeftClose, PanelLeftOpen,
+  Terminal, Cog
 } from 'lucide-react';
- 
+
 const API = 'https://vortis-backend.vercel.app/api/bytez';
- 
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Auth header helper (self-contained — mirrors App.js getAuthHeader)
  * ──────────────────────────────────────────────────────────────────────── */
@@ -29,12 +29,12 @@ const getAuthHeader = async () => {
     return { 'Content-Type': 'application/json' };
   }
 };
- 
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Languages & style preferences
+ *  (Auto and Balanced removed — always a concrete language / style)
  * ──────────────────────────────────────────────────────────────────────── */
 const LANGUAGES = [
-  { id: 'auto',        label: 'Auto',        color: '#94a3b8' },
   { id: 'javascript',  label: 'JavaScript',  color: '#f59e0b' },
   { id: 'typescript',  label: 'TypeScript',  color: '#06b6d4' },
   { id: 'python',      label: 'Python',      color: '#3b82f6' },
@@ -50,14 +50,13 @@ const LANGUAGES = [
   { id: 'php',         label: 'PHP',         color: '#8b5cf6' },
   { id: 'ruby',        label: 'Ruby',        color: '#e11d48' },
 ];
- 
+
 const STYLES = [
-  { id: 'balanced',  label: 'Balanced',  hint: 'Code + 2-3 line explanation' },
   { id: 'concise',   label: 'Concise',   hint: 'Code + 1 line max' },
   { id: 'detailed',  label: 'Detailed',  hint: 'Edge cases, alternatives, gotchas' },
   { id: 'teach',     label: 'Teach',     hint: 'Line-by-line comments, learner-friendly' },
 ];
- 
+
 const STARTER_PROMPTS = [
   { icon: 'bug',     label: 'Debug an error',     prompt: "I'm getting this error and need help fixing it:\n\n```\n\n```" },
   { icon: 'zap',     label: 'Optimize code',      prompt: 'Help me optimize this function for performance and readability:\n\n```\n\n```' },
@@ -66,59 +65,59 @@ const STARTER_PROMPTS = [
   { icon: 'refresh', label: 'Refactor',           prompt: 'Refactor this code to be cleaner and more idiomatic:\n\n```\n\n```' },
   { icon: 'sparkles',label: 'Code review',        prompt: 'Review this code for bugs, security issues, and improvements:\n\n```\n\n```' },
 ];
- 
+
 const ICONS = { bug: Bug, zap: Zap, book: BookOpen, file: FileCode, refresh: RefreshCw, sparkles: Sparkles };
- 
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Strong coder system prompt
  * ──────────────────────────────────────────────────────────────────────── */
 const buildCoderSystemPrompt = (lang, style) => {
-  let sys = `You are Vortis Code — an elite senior software engineer pair-programmer embedded inside the user's IDE. You are NOT a general assistant; you live and breathe code.
- 
+  let sys = `You are Vertex — an elite senior software engineer pair-programmer embedded inside the user's IDE, powered by Vortis. You are NOT a general assistant; you live and breathe code.
+
 YOUR JOB: help the user write, understand, debug, refactor, and ship code. You are opinionated, pragmatic, and allergic to over-engineering.
- 
+
 ═══ CODE QUALITY BAR ═══
 - Every code block MUST be runnable as-is when possible. Include imports. No "..." placeholders unless absolutely necessary.
 - Prefer modern, idiomatic syntax for the chosen language (ES2022+ for JS, Python 3.10+ features where they help, etc.).
 - Show the SIMPLEST solution first. Only show advanced patterns if the user asks or if they're clearly needed.
 - If you don't know the exact API, say so — NEVER fabricate function names, method signatures, or library APIs.
 - Always specify the language in code fences: \`\`\`python, \`\`\`typescript, \`\`\`bash, etc.
- 
+
 ═══ EXPLAINING ═══
 - Lead with the code, then explain WHY it works in 1-3 tight sentences. Don't over-explain.
 - When there's a trade-off (perf vs readability, lib vs hand-rolled, sync vs async), pick a side and DEFEND it. Mention the alternative in one line.
 - Use comments inside code only when the logic is non-obvious. Don't comment obvious lines.
- 
+
 ═══ DEBUGGING ═══
 - When the user pastes an error, identify the ROOT CAUSE in one sentence, then give the fix as a code block.
 - If the error is environment-related (missing dep, version mismatch), say exactly what to install/run.
- 
+
 ═══ REFACTORING ═══
 - Show before→after only when the diff is small. For large refactors, show only the new version with a one-line summary of what changed.
 - Never silently rewrite working code. If you're refactoring, label it: "Refactored version:".
- 
+
 ═══ CLARIFYING ═══
 - If the request is ambiguous in a way that changes the answer significantly (which language, which framework, what input shape), ask ONE concise question before answering.
 - If it's only mildly ambiguous, make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
- 
+
 ═══ RESPONSE LENGTH ═══
 - Code-first, prose-second. A typical response is: 1 line of context, the code block, 2-3 lines of explanation.
 - NEVER pad. NEVER write "Certainly! Here's..." or "I'd be happy to help" or "Sure!" — just answer.
 - For multi-step tasks, use a numbered list with code blocks under each step.
 - Never truncate — always complete your full answer.
- 
+
 ═══ NON-CODING REQUESTS ═══
 - You are NOT a general assistant. If the user asks a non-coding question, briefly redirect: "I'm your coding assistant — for general chat, switch to the main Vortis chat. For code, I'm here."`;
- 
+
   if (style === 'concise')  sys += '\n\nSTYLE: Ultra-concise. Code + 1 line of explanation max. No pleasantries.';
   if (style === 'detailed') sys += '\n\nSTYLE: Detailed. Include edge cases, alternative approaches, performance notes, and a short "when not to use this" callout.';
   if (style === 'teach')    sys += '\n\nSTYLE: Teach mode. Add a comment above each non-obvious line of code explaining what it does. Treat the user as a curious learner. End with a one-line "key takeaway".';
- 
-  if (lang && lang !== 'auto') sys += `\n\nLANGUAGE FOCUS: The user has selected ${lang}. Default to ${lang} for all code examples unless they explicitly ask for another language.`;
- 
+
+  if (lang) sys += `\n\nLANGUAGE FOCUS: The user has selected ${lang}. Default to ${lang} for all code examples unless they explicitly ask for another language.`;
+
   return sys;
 };
- 
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Fallback CodeBlock — used only when parent doesn't pass a real one.
  *  Renders code with a language tag + copy button. No execution.
@@ -129,7 +128,6 @@ const FallbackCodeBlock = ({ lang, codeText }) => {
   const lines = codeText.split('\n');
   return (
     <div style={{ margin: '10px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid #2a2a2a', background: '#0d0d0d' }}>
-      {/* Codex-style file/lang header — flat black, no color accents */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '6px 12px', background: '#151515', borderBottom: '1px solid #2a2a2a'
@@ -148,7 +146,6 @@ const FallbackCodeBlock = ({ lang, codeText }) => {
           {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      {/* Code surface — pure grayscale, no syntax color, thin line-number gutter like Codex diff view */}
       <div style={{ display: 'flex', overflowX: 'auto' }}>
         <div style={{
           flexShrink: 0, padding: '12px 10px', textAlign: 'right', userSelect: 'none',
@@ -165,7 +162,7 @@ const FallbackCodeBlock = ({ lang, codeText }) => {
     </div>
   );
 };
- 
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Utility — format relative time
  * ──────────────────────────────────────────────────────────────────────── */
@@ -179,11 +176,11 @@ const relTime = (iso) => {
   if (day < 7) return `${day}d ago`;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
- 
+
 /* ────────────────────────────────────────────────────────────────────────
- *  Main CodeChat component
+ *  Main Vertex component (powered by Vortis)
  * ──────────────────────────────────────────────────────────────────────── */
-const CodeChat = ({
+const Vertex = ({
   onClose,
   // Optional props from parent — wire these up to get runnable code blocks:
   CodeBlock,                // parent's CodeBlock component ({lang, codeText}) => JSX
@@ -194,7 +191,7 @@ const CodeChat = ({
   /* ── Firebase singletons ── */
   const auth = useMemo(() => getAuth(), []);
   const db   = useMemo(() => getFirestore(), []);
- 
+
   /* ── Identity ── */
   const [user, setUser] = useState(auth.currentUser);
   const userUidRef = useRef(auth.currentUser?.uid || '');
@@ -208,7 +205,7 @@ const CodeChat = ({
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
- 
+
   /* ── Chat state ── */
   const [messages, setMessages] = useState([]);          // [{id, role:'user'|'assistant', text, ts}]
   const [input, setInput] = useState('');
@@ -219,33 +216,33 @@ const CodeChat = ({
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const convHistoryRef = useRef([]);                     // [{role, content}] for backend
- 
+
   /* ── Sidebar state ── */
   const [savedChats, setSavedChats] = useState([]);
   const [search, setSearch] = useState('');
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
- 
+
   /* ── Preferences ── */
-  const [lang, setLang] = useState(() => { try { return localStorage.getItem('vortis_code_lang') || 'auto'; } catch (_) { return 'auto'; } });
-  const [style, setStyle] = useState(() => { try { return localStorage.getItem('vortis_code_style') || 'balanced'; } catch (_) { return 'balanced'; } });
+  const [lang, setLang] = useState(() => { try { return localStorage.getItem('vortis_code_lang') || LANGUAGES[0].id; } catch (_) { return LANGUAGES[0].id; } });
+  const [style, setStyle] = useState(() => { try { return localStorage.getItem('vortis_code_style') || STYLES[0].id; } catch (_) { return STYLES[0].id; } });
   const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('vortis_code_lang', lang); } catch (_) {} }, [lang]);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
- 
+
   /* ── Refs ── */
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(false);
- 
+
   /* ── Scroll to bottom on new content ── */
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streamText, thinking]);
- 
-  /* ── Lock body scroll while CodeChat is mounted ──
+
+  /* ── Lock body scroll while Vertex is mounted ──
    * Prevents the main chat behind from scrolling under the overlay.
    * Also bumps body to position:fixed so iOS Safari doesn't scroll
    * underneath either. Restored on unmount. */
@@ -277,15 +274,13 @@ const CodeChat = ({
       if (prev.position !== 'fixed') window.scrollTo(0, scrollY);
     };
   }, []);
- 
-  /* ── Keyboard shortcuts ── */
+
+  /* ── Keyboard shortcuts ──
+   * Enter (in the textarea) sends the message; Shift+Enter makes a new line.
+   * That's handled directly on the textarea's onKeyDown below.
+   * Here we just keep the global "new chat" and "close" shortcuts. */
   useEffect(() => {
     const handler = (e) => {
-      // Cmd/Ctrl + Enter → send
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        if (!streaming && input.trim()) send();
-      }
       // Cmd/Ctrl + K → new chat
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -300,8 +295,8 @@ const CodeChat = ({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, streaming, showPrefs]);
- 
+  }, [showPrefs]);
+
   /* ──────────────────────────────────────────────────────────────────
    *  Firestore ops — mirror App.js pattern, but under 'code_chats'
    * ────────────────────────────────────────────────────────────────── */
@@ -314,7 +309,7 @@ const CodeChat = ({
       setSavedChats(chats);
     } catch (_) {}
   }, [db]);
- 
+
   const persistChat = useCallback(async (msgs, overrideTitle) => {
     if (!userUidRef.current) return;
     try {
@@ -344,7 +339,7 @@ const CodeChat = ({
       loadChats(userUidRef.current);
     } catch (_) {}
   }, [db, lang, style, loadChats]);
- 
+
   const newChat = useCallback(() => {
     abortRef.current = true;
     setStreaming(false); setThinking(false); setStreamText('');
@@ -354,7 +349,7 @@ const CodeChat = ({
     setInput('');
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
- 
+
   const loadChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
     try {
@@ -375,7 +370,7 @@ const CodeChat = ({
       if (window.innerWidth <= 900) setSidebarOpen(false);
     } catch (_) {}
   }, [db]);
- 
+
   const deleteChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
     try {
@@ -384,7 +379,7 @@ const CodeChat = ({
       if (id === chatIdRef.current) newChat();
     } catch (_) {}
   }, [db, loadChats, newChat]);
- 
+
   const renameChat = useCallback(async (id, newTitle) => {
     if (!userUidRef.current || !newTitle.trim()) { setRenamingId(null); return; }
     try {
@@ -394,14 +389,14 @@ const CodeChat = ({
     } catch (_) {}
     setRenamingId(null);
   }, [db, loadChats]);
- 
+
   /* ──────────────────────────────────────────────────────────────────
    *  Send message + stream response
    * ────────────────────────────────────────────────────────────────── */
   const send = useCallback(async (overrideText) => {
     const text = (overrideText ?? input).trim();
     if (!text || streaming) return;
- 
+
     const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
     const nextMsgs = [...messages, userMsg];
     setMessages(nextMsgs);
@@ -410,15 +405,15 @@ const CodeChat = ({
     setThinking(true);
     setStreamText('');
     abortRef.current = false;
- 
+
     const historyForBackend = nextMsgs.slice(-12).map(m => ({
       role: m.role === 'user' ? 'user' : 'assistant',
       content: m.text
     }));
- 
+
     const sys = buildCoderSystemPrompt(lang, style);
     const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
- 
+
     let full = '';
     try {
       const res = await fetch(API, {
@@ -431,7 +426,7 @@ const CodeChat = ({
           history: historyForBackend
         })
       });
- 
+
       if (!res.ok) {
         let errMsg = `Request failed (${res.status}).`;
         if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
@@ -442,11 +437,11 @@ const CodeChat = ({
         setStreaming(false); setThinking(false); setStreamText('');
         return;
       }
- 
+
       setThinking(false);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
- 
+
       while (true) {
         if (abortRef.current) break;
         const { done, value } = await reader.read();
@@ -473,7 +468,7 @@ const CodeChat = ({
       setStreaming(false); setStreamText('');
       return;
     }
- 
+
     const cleaned = full.trim();
     if (!cleaned) {
       setMessages(prev => [...prev, {
@@ -493,7 +488,7 @@ const CodeChat = ({
     setThinking(false);
     setStreamText('');
   }, [input, messages, streaming, lang, style, persistChat]);
- 
+
   const stopStreaming = useCallback(() => {
     abortRef.current = true;
     setStreaming(false);
@@ -504,17 +499,25 @@ const CodeChat = ({
     }
     setStreamText('');
   }, [streamText]);
- 
+
+  /* ── Enter sends, Shift+Enter makes a newline ── */
+  const handleInputKeyDown = useCallback((e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!streaming && input.trim()) send();
+    }
+  }, [streaming, input, send]);
+
   /* ── Filtered chat list ── */
   const filteredChats = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return savedChats;
     return savedChats.filter(c => (c.title || '').toLowerCase().includes(q));
   }, [savedChats, search]);
- 
+
   /* ── The CodeBlock to use for rendering ── */
   const RendererCodeBlock = CodeBlock || FallbackCodeBlock;
- 
+
   /* ── Markdown components (match App.js styling) ── */
   const mdComponents = useMemo(() => ({
     h1: ({children}) => <h1 style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
@@ -544,7 +547,7 @@ const CodeChat = ({
       return <RendererCodeBlock lang={codeLang} codeText={codeText} safeExecuteCodeLocally={safeExecuteCodeLocally} LANG_ENGINE={LANG_ENGINE} ENGINE_META={ENGINE_META} />;
     },
   }), [RendererCodeBlock, safeExecuteCodeLocally, LANG_ENGINE, ENGINE_META]);
- 
+
   /* ════════════════════════════════════════════════════════════════
    *  RENDER
    * ════════════════════════════════════════════════════════════════ */
@@ -554,7 +557,7 @@ const CodeChat = ({
   // position:fixed, which was causing the main chat UI to show through.
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div data-vortis-code style={{
+    <div data-vertex style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       width: '100vw', height: '100vh', height: '100dvh',
       zIndex: 2147483647,                  // max int — always on top
@@ -562,7 +565,7 @@ const CodeChat = ({
       color: '#e6e6e6',
       display: 'flex', flexDirection: 'column',
       fontFamily: '"Geist Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-      animation: 'vortisCodeFadeIn .18s ease',
+      animation: 'vertexFadeIn .18s ease',
       // Lock the body so the main chat behind can't scroll
       overflow: 'hidden',
       isolation: 'isolate',                // new stacking context — nothing leaks in or out
@@ -573,7 +576,7 @@ const CodeChat = ({
         padding: '0 14px', borderBottom: '1px solid #212121', background: '#0f0f0f'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar (Cmd/Ctrl+B)"
+          <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar"
             style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
             {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
           </button>
@@ -585,14 +588,14 @@ const CodeChat = ({
               <Terminal size={14} color="#0a0a0a"/>
             </div>
             <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vortis Code</div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
               <div style={{ fontSize: 10, color: '#6a6a6a', fontFamily: 'JetBrains Mono', marginTop: 2 }}>
-                {LANGUAGES.find(l => l.id === lang)?.label || 'Auto'} · {STYLES.find(s => s.id === style)?.label || 'Balanced'}
+                Powered by Vortis
               </div>
             </div>
           </div>
         </div>
- 
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {/* Language picker */}
           <div style={{ position: 'relative' }}>
@@ -611,7 +614,7 @@ const CodeChat = ({
               {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
             </select>
           </div>
- 
+
           {/* Style picker */}
           <button
             onClick={() => setShowPrefs(s => !s)}
@@ -622,25 +625,25 @@ const CodeChat = ({
               padding: '5px 10px', cursor: 'pointer', fontFamily: 'JetBrains Mono'
             }}
           >
-            <Cog size={12}/> {STYLES.find(s => s.id === style)?.label || 'Balanced'}
+            <Cog size={12}/> {STYLES.find(s => s.id === style)?.label}
           </button>
- 
+
           <div style={{ width: 1, height: 18, background: '#2a2a2a', margin: '0 4px' }} />
- 
-          <button onClick={onClose} title="Close (Esc)"
+
+          <button onClick={onClose} title="Close"
             style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#141414', border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6, padding: '6px 11px', cursor: 'pointer' }}>
             <X size={13}/> Exit
           </button>
         </div>
       </div>
- 
+
       {/* ═══ Preferences popover ═══ */}
       {showPrefs && (
         <div style={{
           position: 'absolute', top: 56, right: 14, zIndex: 100,
           background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
           boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 12, minWidth: 260,
-          animation: 'vortisCodeScaleIn .15s ease'
+          animation: 'vertexScaleIn .15s ease'
         }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
           {STYLES.map(s => (
@@ -655,14 +658,9 @@ const CodeChat = ({
               <span style={{ fontSize: 11, color: '#7a7a7a' }}>{s.hint}</span>
             </button>
           ))}
-          <div style={{ borderTop: '1px solid #2a2a2a', marginTop: 8, paddingTop: 8, fontSize: 10.5, color: '#6a6a6a', fontFamily: 'JetBrains Mono', lineHeight: 1.5 }}>
-            ⌘/Ctrl + Enter → send<br/>
-            ⌘/Ctrl + K → new chat<br/>
-            Esc → close
-          </div>
         </div>
       )}
- 
+
       {/* ═══ Body: sidebar + main ═══ */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* ── Sidebar ── */}
@@ -670,7 +668,7 @@ const CodeChat = ({
           <aside style={{
             width: 256, flexShrink: 0, borderRight: '1px solid #212121', background: '#0f0f0f',
             display: 'flex', flexDirection: 'column', minHeight: 0,
-            animation: 'vortisCodeSlideInLeft .18s ease'
+            animation: 'vertexSlideInLeft .18s ease'
           }}>
             {/* New chat — flat monochrome, Codex "New task" style */}
             <div style={{ padding: 10 }}>
@@ -684,7 +682,7 @@ const CodeChat = ({
                 <Plus size={14}/> New Code Chat
               </button>
             </div>
- 
+
             {/* Search */}
             <div style={{ padding: '0 10px 8px' }}>
               <div style={{ position: 'relative' }}>
@@ -701,7 +699,7 @@ const CodeChat = ({
                 />
               </div>
             </div>
- 
+
             {/* Chat list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px' }} className="scr">
               {filteredChats.length === 0 ? (
@@ -775,7 +773,7 @@ const CodeChat = ({
                 ))
               )}
             </div>
- 
+
             {/* Sidebar footer */}
             <div style={{
               padding: '9px 12px', borderTop: '1px solid #212121', background: '#111111',
@@ -799,7 +797,7 @@ const CodeChat = ({
             </div>
           </aside>
         )}
- 
+
         {/* ── Main chat area ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0a0a0a' }}>
           {/* Messages / empty state */}
@@ -824,7 +822,7 @@ const CodeChat = ({
                 <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 24px' }}>
                   I'm your dedicated coding assistant — debug errors, refactor messy code, ship features, or learn a new pattern. Code-first, no fluff.
                 </p>
- 
+
                 <div style={{
                   display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                   gap: 10, maxWidth: 620, width: '100%'
@@ -849,10 +847,6 @@ const CodeChat = ({
                     );
                   })}
                 </div>
- 
-                <div style={{ marginTop: 26, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono', letterSpacing: '.04em' }}>
-                  ⌘/Ctrl + Enter to send  ·  ⌘/Ctrl + K for new chat  ·  Esc to exit
-                </div>
               </div>
             ) : (
               /* ── Messages list ── */
@@ -861,7 +855,7 @@ const CodeChat = ({
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
                     mdComponents={mdComponents} />
                 ))}
- 
+
                 {/* Streaming bubble */}
                 {(streaming || thinking) && (
                   <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
@@ -873,14 +867,14 @@ const CodeChat = ({
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', marginBottom: 5, fontWeight: 600 }}>
-                        VORTIS CODE {thinking && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
+                        VERTEX {thinking && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
                       </div>
                       {thinking ? (
                         <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}>
                           {[0,1,2].map(i => (
                             <div key={i} style={{
                               width: 6, height: 6, borderRadius: '50%', background: '#8a8a8a',
-                              animation: `vortisCodePulse 1.2s ease-in-out ${i*0.15}s infinite`
+                              animation: `vertexPulse 1.2s ease-in-out ${i*0.15}s infinite`
                             }}/>
                           ))}
                         </div>
@@ -892,7 +886,7 @@ const CodeChat = ({
                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
                             {streamText}
                           </ReactMarkdown>
-                          <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vortisCodeBlink 1s steps(2) infinite' }}/>
+                          <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vertexBlink 1s steps(2) infinite' }}/>
                         </div>
                       ) : null}
                     </div>
@@ -901,58 +895,55 @@ const CodeChat = ({
               </div>
             )}
           </div>
- 
+
           {/* ── Input area ── */}
           <div style={{
             flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
             padding: '12px 22px 16px'
           }}>
             <div style={{ maxWidth: 820, margin: '0 auto' }}>
+              {/* Flex row layout — textarea and send button sit side by side,
+                  so the button never overlaps the text as the textarea grows. */}
               <div style={{
-                position: 'relative', background: '#141414', border: '1px solid #2a2a2a',
-                borderRadius: 10, transition: 'border-color .15s'
+                display: 'flex', alignItems: 'flex-end', gap: 8,
+                background: '#141414', border: '1px solid #2a2a2a',
+                borderRadius: 10, padding: 6
               }}>
                 <textarea
                   ref={inputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); }
-                  }}
-                  placeholder={lang === 'auto'
-                    ? 'Ask anything about code — paste an error, request a function, refactor something…'
-                    : `Ask for ${LANGUAGES.find(l => l.id === lang)?.label} code — paste an error, request a function, refactor something…`
-                  }
+                  onKeyDown={handleInputKeyDown}
+                  placeholder={`Ask for ${LANGUAGES.find(l => l.id === lang)?.label} code — paste an error, request a function, refactor something…`}
                   rows={1}
                   style={{
-                    width: '100%', minHeight: 52, maxHeight: 240, resize: 'none',
-                    padding: '13px 56px 13px 14px', background: 'transparent', border: 'none', outline: 'none',
+                    flex: 1, minHeight: 40, maxHeight: 240, resize: 'none',
+                    padding: '10px 8px', background: 'transparent', border: 'none', outline: 'none',
                     color: '#e6e6e6', fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit',
                     boxSizing: 'border-box'
                   }}
                 />
-                <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', gap: 4 }}>
-                  {streaming ? (
-                    <button onClick={stopStreaming} title="Stop"
-                      style={{
-                        width: 34, height: 34, borderRadius: 7, border: '1px solid #3a3a3a', cursor: 'pointer',
-                        background: '#1c1c1c', color: '#e6e6e6', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}>
-                      <Loader size={14} style={{ animation: 'vortisCodeSpin 1s linear infinite' }}/>
-                    </button>
-                  ) : (
-                    <button onClick={() => send()} disabled={!input.trim()}
-                      title="Send (⌘/Ctrl + Enter)"
-                      style={{
-                        width: 34, height: 34, borderRadius: 7, border: '1px solid ' + (input.trim() ? '#e6e6e6' : '#2a2a2a'), cursor: input.trim() ? 'pointer' : 'not-allowed',
-                        background: input.trim() ? '#e6e6e6' : '#1a1a1a',
-                        color: input.trim() ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all .15s'
-                      }}>
-                      <ArrowUp size={15}/>
-                    </button>
-                  )}
-                </div>
+                {streaming ? (
+                  <button onClick={stopStreaming} title="Stop"
+                    style={{
+                      width: 36, height: 36, borderRadius: 7, border: '1px solid #3a3a3a', cursor: 'pointer',
+                      background: '#1c1c1c', color: '#e6e6e6', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                    <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
+                  </button>
+                ) : (
+                  <button onClick={() => send()} disabled={!input.trim()}
+                    title="Send"
+                    style={{
+                      width: 36, height: 36, borderRadius: 7, border: '1px solid ' + (input.trim() ? '#e6e6e6' : '#2a2a2a'), cursor: input.trim() ? 'pointer' : 'not-allowed',
+                      background: input.trim() ? '#e6e6e6' : '#1a1a1a',
+                      color: input.trim() ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all .15s', flexShrink: 0
+                    }}>
+                    <ArrowUp size={15}/>
+                  </button>
+                )}
               </div>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -967,19 +958,18 @@ const CodeChat = ({
           </div>
         </main>
       </div>
- 
+
       {/* Inline keyframes + reset */}
       <style>{`
-        @keyframes vortisCodeFadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes vortisCodeScaleIn { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
-        @keyframes vortisCodeSlideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
-        @keyframes vortisCodePulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
-        @keyframes vortisCodeBlink { 50% { opacity: 0 } }
-        @keyframes vortisCodeSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
-        /* Scoped reset: everything inside [data-vortis-code] is immune to
-           global stylesheets from the parent app. This was the second root
-           cause of the broken layout — Tailwind/global CSS was leaking in. */
-        [data-vortis-code], [data-vortis-code] *, [data-vortis-code] *::before, [data-vortis-code] *::after {
+        @keyframes vertexFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes vertexScaleIn { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
+        @keyframes vertexSlideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes vertexPulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
+        @keyframes vertexBlink { 50% { opacity: 0 } }
+        @keyframes vertexSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        /* Scoped reset: everything inside [data-vertex] is immune to
+           global stylesheets from the parent app. */
+        [data-vertex], [data-vertex] *, [data-vertex] *::before, [data-vertex] *::after {
           box-sizing: border-box;
           margin: 0;
           padding: 0;
@@ -992,9 +982,9 @@ const CodeChat = ({
           text-decoration: none;
           vertical-align: baseline;
         }
-        [data-vortis-code] button { cursor: pointer; background: transparent; border: none; color: inherit; font: inherit; }
-        [data-vortis-code] input, [data-vortis-code] textarea, [data-vortis-code] select { font: inherit; color: inherit; background: transparent; border: none; outline: none; }
-        [data-vortis-code] img { max-width: 100%; display: block; }
+        [data-vertex] button { cursor: pointer; background: transparent; border: none; color: inherit; font: inherit; }
+        [data-vertex] input, [data-vertex] textarea, [data-vertex] select { font: inherit; color: inherit; background: transparent; border: none; outline: none; }
+        [data-vertex] img { max-width: 100%; display: block; }
         .chat-item:hover .chat-row-actions,
         div:hover > div > .chat-row-actions { opacity: 1 !important; }
       `}</style>
@@ -1002,7 +992,7 @@ const CodeChat = ({
     document.body
   );
 };
- 
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Single message bubble
  * ──────────────────────────────────────────────────────────────────────── */
@@ -1010,7 +1000,7 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
- 
+
   if (isUser) {
     // Codex-style user turn: flat gray pill, right-aligned, no color accent
     return (
@@ -1025,7 +1015,7 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
       </div>
     );
   }
- 
+
   // Codex-style assistant turn: plain flow, outlined mark, no bubble background color
   return (
     <div style={{ display: 'flex', gap: 12, marginBottom: 22 }}>
@@ -1040,7 +1030,7 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
           display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
           fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', fontWeight: 600, letterSpacing: '.02em'
         }}>
-          VORTIS CODE
+          VERTEX
           {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
           <button onClick={copy} title="Copy response"
             style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -1056,5 +1046,5 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
     </div>
   );
 });
- 
-export default CodeChat;
+
+export default Vertex;
