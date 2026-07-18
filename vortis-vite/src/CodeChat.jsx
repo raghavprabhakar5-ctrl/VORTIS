@@ -7,14 +7,16 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import {
-  X, Code2, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp,
-  Loader, Settings, MessageSquare, Send, Cpu, Sparkles, Lightbulb,
-  Zap, Bug, BookOpen, RefreshCw, FileCode, ChevronDown, Clock,
-  PanelLeftClose, PanelLeftOpen, CornerDownLeft, AlertCircle,
-  Terminal, Cog, Wand2
+  X, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp, Play,
+  Loader, MessageSquare, Bug, BookOpen, RefreshCw, FileCode,
+  PanelLeftClose, PanelLeftOpen, Terminal, Sparkles, Zap
 } from 'lucide-react';
  
 const API = 'https://vortis-backend.vercel.app/api/bytez';
+ 
+// Fixed defaults — no picker UI, but the backend prompt still uses these.
+const DEFAULT_LANG = 'auto';
+const DEFAULT_STYLE = 'balanced';
  
 /* ────────────────────────────────────────────────────────────────────────
  *  Auth header helper (self-contained — mirrors App.js getAuthHeader)
@@ -31,49 +33,22 @@ const getAuthHeader = async () => {
 };
  
 /* ────────────────────────────────────────────────────────────────────────
- *  Languages & style preferences
+ *  Starter prompts
  * ──────────────────────────────────────────────────────────────────────── */
-const LANGUAGES = [
-  { id: 'auto',        label: 'Auto',        color: '#94a3b8' },
-  { id: 'javascript',  label: 'JavaScript',  color: '#f59e0b' },
-  { id: 'typescript',  label: 'TypeScript',  color: '#06b6d4' },
-  { id: 'python',      label: 'Python',      color: '#3b82f6' },
-  { id: 'react',       label: 'React',       color: '#22d3ee' },
-  { id: 'rust',        label: 'Rust',        color: '#f97316' },
-  { id: 'go',          label: 'Go',          color: '#06b6d4' },
-  { id: 'java',        label: 'Java',        color: '#ef4444' },
-  { id: 'cpp',         label: 'C++',         color: '#a78bfa' },
-  { id: 'csharp',      label: 'C#',          color: '#10b981' },
-  { id: 'sql',         label: 'SQL',         color: '#10b981' },
-  { id: 'html',        label: 'HTML/CSS',    color: '#f97316' },
-  { id: 'bash',        label: 'Bash',        color: '#10b981' },
-  { id: 'php',         label: 'PHP',         color: '#8b5cf6' },
-  { id: 'ruby',        label: 'Ruby',        color: '#e11d48' },
-];
- 
-const STYLES = [
-  { id: 'balanced',  label: 'Balanced',  hint: 'Code + 2-3 line explanation' },
-  { id: 'concise',   label: 'Concise',   hint: 'Code + 1 line max' },
-  { id: 'detailed',  label: 'Detailed',  hint: 'Edge cases, alternatives, gotchas' },
-  { id: 'teach',     label: 'Teach',     hint: 'Line-by-line comments, learner-friendly' },
-];
- 
 const STARTER_PROMPTS = [
-  { icon: 'bug',     label: 'Debug an error',     prompt: "I'm getting this error and need help fixing it:\n\n```\n\n```" },
-  { icon: 'zap',     label: 'Optimize code',      prompt: 'Help me optimize this function for performance and readability:\n\n```\n\n```' },
-  { icon: 'book',    label: 'Explain code',       prompt: 'Walk me through what this code does, step by step:\n\n```\n\n```' },
-  { icon: 'file',    label: 'Write a function',   prompt: 'Write me a function that …' },
-  { icon: 'refresh', label: 'Refactor',           prompt: 'Refactor this code to be cleaner and more idiomatic:\n\n```\n\n```' },
-  { icon: 'sparkles',label: 'Code review',        prompt: 'Review this code for bugs, security issues, and improvements:\n\n```\n\n```' },
+  { icon: 'bug',     label: 'Debug an error',   prompt: "I'm getting this error and need help fixing it:\n\n```\n\n```" },
+  { icon: 'zap',     label: 'Optimize code',    prompt: 'Help me optimize this function for performance and readability:\n\n```\n\n```' },
+  { icon: 'book',    label: 'Explain code',     prompt: 'Walk me through what this code does, step by step:\n\n```\n\n```' },
+  { icon: 'file',    label: 'Write a function', prompt: 'Write me a function that …' },
+  { icon: 'refresh', label: 'Refactor',         prompt: 'Refactor this code to be cleaner and more idiomatic:\n\n```\n\n```' },
+  { icon: 'sparkles',label: 'Code review',      prompt: 'Review this code for bugs, security issues, and improvements:\n\n```\n\n```' },
 ];
- 
 const ICONS = { bug: Bug, zap: Zap, book: BookOpen, file: FileCode, refresh: RefreshCw, sparkles: Sparkles };
  
 /* ────────────────────────────────────────────────────────────────────────
- *  Strong coder system prompt
+ *  Strong coder system prompt (fixed defaults, no user-facing toggles)
  * ──────────────────────────────────────────────────────────────────────── */
-const buildCoderSystemPrompt = (lang, style) => {
-  let sys = `You are Vortis Code — an elite senior software engineer pair-programmer embedded inside the user's IDE. You are NOT a general assistant; you live and breathe code.
+const buildCoderSystemPrompt = () => `You are Vertex — an elite senior software engineer pair-programmer, built by Vortis. You are NOT a general assistant; you live and breathe code.
  
 YOUR JOB: help the user write, understand, debug, refactor, and ship code. You are opinionated, pragmatic, and allergic to over-engineering.
  
@@ -108,60 +83,37 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - Never truncate — always complete your full answer.
  
 ═══ NON-CODING REQUESTS ═══
-- You are NOT a general assistant. If the user asks a non-coding question, briefly redirect: "I'm your coding assistant — for general chat, switch to the main Vortis chat. For code, I'm here."`;
- 
-  if (style === 'concise')  sys += '\n\nSTYLE: Ultra-concise. Code + 1 line of explanation max. No pleasantries.';
-  if (style === 'detailed') sys += '\n\nSTYLE: Detailed. Include edge cases, alternative approaches, performance notes, and a short "when not to use this" callout.';
-  if (style === 'teach')    sys += '\n\nSTYLE: Teach mode. Add a comment above each non-obvious line of code explaining what it does. Treat the user as a curious learner. End with a one-line "key takeaway".';
- 
-  if (lang && lang !== 'auto') sys += `\n\nLANGUAGE FOCUS: The user has selected ${lang}. Default to ${lang} for all code examples unless they explicitly ask for another language.`;
- 
-  return sys;
-};
+- You are NOT a general assistant. If the user asks a non-coding question, briefly redirect: "I'm Vertex, your coding assistant — for general chat, switch to the main Vortis chat. For code, I'm here."`;
  
 /* ────────────────────────────────────────────────────────────────────────
  *  Fallback CodeBlock — used only when parent doesn't pass a real one.
- *  Renders code with a language tag + copy button. No execution.
+ *  Clean, minimal code card: language chip + copy button, no line numbers,
+ *  no syntax color noise — just readable monospace on a slightly-raised
+ *  dark surface so it separates from the page background.
  * ──────────────────────────────────────────────────────────────────────── */
 const FallbackCodeBlock = ({ lang, codeText }) => {
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
-  const lines = codeText.split('\n');
   return (
-    <div style={{ margin: '10px 0', borderRadius: 8, overflow: 'hidden', border: '1px solid #2a2a2a', background: '#0d0d0d' }}>
-      {/* Codex-style file/lang header — flat black, no color accents */}
+    <div style={{ margin: '12px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid #262626', background: '#161616' }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '6px 12px', background: '#151515', borderBottom: '1px solid #2a2a2a'
+        padding: '8px 14px', borderBottom: '1px solid #262626'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <FileCode size={12} color="#8a8a8a"/>
-          <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#9a9a9a', letterSpacing: '.03em', fontWeight: 500 }}>
-            {lang || 'plaintext'}
-          </span>
-        </div>
+        <span style={{ fontSize: 12, fontFamily: 'ui-monospace, "JetBrains Mono", monospace', color: '#8a8a8a', letterSpacing: '.01em' }}>
+          {lang || 'text'}
+        </span>
         <button onClick={copy} style={{
-          display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #2f2f2f',
-          borderRadius: 5, padding: '2px 8px', color: copied ? '#e6e6e6' : '#8a8a8a', fontSize: 10.5,
-          cursor: 'pointer', fontFamily: 'JetBrains Mono'
+          display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: 'none',
+          color: copied ? '#e6e6e6' : '#8a8a8a', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', padding: '2px 4px'
         }}>
-          {copied ? <Check size={10}/> : <Copy size={10}/>} {copied ? 'Copied' : 'Copy'}
+          {copied ? <Check size={13}/> : <Copy size={13}/>} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      {/* Code surface — pure grayscale, no syntax color, thin line-number gutter like Codex diff view */}
-      <div style={{ display: 'flex', overflowX: 'auto' }}>
-        <div style={{
-          flexShrink: 0, padding: '12px 10px', textAlign: 'right', userSelect: 'none',
-          color: '#4a4a4a', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, lineHeight: 1.7,
-          borderRight: '1px solid #202020', background: '#0a0a0a'
-        }}>
-          {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
-        </div>
-        <pre style={{
-          margin: 0, padding: '12px 14px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5,
-          lineHeight: 1.7, color: '#e6e6e6', whiteSpace: 'pre', wordBreak: 'normal', flex: 1
-        }}>{codeText}</pre>
-      </div>
+      <pre style={{
+        margin: 0, padding: '14px 16px', fontFamily: 'ui-monospace, "JetBrains Mono", monospace', fontSize: 13,
+        lineHeight: 1.65, color: '#e2e2e2', whiteSpace: 'pre', overflowX: 'auto'
+      }}><code>{codeText}</code></pre>
     </div>
   );
 };
@@ -181,21 +133,18 @@ const relTime = (iso) => {
 };
  
 /* ────────────────────────────────────────────────────────────────────────
- *  Main CodeChat component
+ *  Main Vertex component
  * ──────────────────────────────────────────────────────────────────────── */
-const CodeChat = ({
+const Vertex = ({
   onClose,
-  // Optional props from parent — wire these up to get runnable code blocks:
-  CodeBlock,                // parent's CodeBlock component ({lang, codeText}) => JSX
-  safeExecuteCodeLocally,   // parent's runner (lang, code, onBoot) => Promise<{isError, output}>
-  LANG_ENGINE,              // parent's lang→engine map
-  ENGINE_META,              // parent's engine→meta map
+  CodeBlock,
+  safeExecuteCodeLocally,
+  LANG_ENGINE,
+  ENGINE_META,
 }) => {
-  /* ── Firebase singletons ── */
   const auth = useMemo(() => getAuth(), []);
   const db   = useMemo(() => getFirestore(), []);
  
-  /* ── Identity ── */
   const [user, setUser] = useState(auth.currentUser);
   const userUidRef = useRef(auth.currentUser?.uid || '');
   useEffect(() => {
@@ -209,8 +158,7 @@ const CodeChat = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
  
-  /* ── Chat state ── */
-  const [messages, setMessages] = useState([]);          // [{id, role:'user'|'assistant', text, ts}]
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
@@ -218,93 +166,58 @@ const CodeChat = ({
   const [chatId, setChatId] = useState(() => Date.now().toString());
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
-  const convHistoryRef = useRef([]);                     // [{role, content}] for backend
  
-  /* ── Sidebar state ── */
   const [savedChats, setSavedChats] = useState([]);
   const [search, setSearch] = useState('');
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
  
-  /* ── Preferences ── */
-  const [lang, setLang] = useState(() => { try { return localStorage.getItem('vortis_code_lang') || 'auto'; } catch (_) { return 'auto'; } });
-  const [style, setStyle] = useState(() => { try { return localStorage.getItem('vortis_code_style') || 'balanced'; } catch (_) { return 'balanced'; } });
-  const [showPrefs, setShowPrefs] = useState(false);
-  useEffect(() => { try { localStorage.setItem('vortis_code_lang', lang); } catch (_) {} }, [lang]);
-  useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
- 
-  /* ── Refs ── */
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const abortRef = useRef(false);
  
-  /* ── Scroll to bottom on new content ── */
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streamText, thinking]);
  
-  /* ── Lock body scroll while CodeChat is mounted ──
-   * Prevents the main chat behind from scrolling under the overlay.
-   * Also bumps body to position:fixed so iOS Safari doesn't scroll
-   * underneath either. Restored on unmount. */
+  /* Lock body scroll while Vertex is mounted */
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
     const prev = {
-      overflow: body.style.overflow,
-      position: body.style.position,
-      top: body.style.top,
-      left: body.style.left,
-      right: body.style.right,
-      width: body.style.width,
+      overflow: body.style.overflow, position: body.style.position,
+      top: body.style.top, left: body.style.left, right: body.style.right, width: body.style.width,
     };
     const scrollY = window.scrollY;
     body.style.overflow = 'hidden';
     body.style.position = 'fixed';
     body.style.top = `-${scrollY}px`;
-    body.style.left = '0';
-    body.style.right = '0';
-    body.style.width = '100%';
+    body.style.left = '0'; body.style.right = '0'; body.style.width = '100%';
     return () => {
-      body.style.overflow = prev.overflow;
-      body.style.position = prev.position;
-      body.style.top = prev.top;
-      body.style.left = prev.left;
-      body.style.right = prev.right;
-      body.style.width = prev.width;
+      body.style.overflow = prev.overflow; body.style.position = prev.position;
+      body.style.top = prev.top; body.style.left = prev.left; body.style.right = prev.right; body.style.width = prev.width;
       if (prev.position !== 'fixed') window.scrollTo(0, scrollY);
     };
   }, []);
  
-  /* ── Keyboard shortcuts ── */
+  /* Keyboard shortcuts: Esc to close, Cmd/Ctrl+K for new chat */
   useEffect(() => {
     const handler = (e) => {
-      // Cmd/Ctrl + Enter → send
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-        e.preventDefault();
-        if (!streaming && input.trim()) send();
-      }
-      // Cmd/Ctrl + K → new chat
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         newChat();
       }
-      // Esc → close (only if not typing in an input)
       if (e.key === 'Escape' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
-        if (showPrefs) { setShowPrefs(false); return; }
         onClose?.();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input, streaming, showPrefs]);
+  }, [streaming]);
  
-  /* ──────────────────────────────────────────────────────────────────
-   *  Firestore ops — mirror App.js pattern, but under 'code_chats'
-   * ────────────────────────────────────────────────────────────────── */
   const loadChats = useCallback(async (uid) => {
     if (!uid) { setSavedChats([]); return; }
     try {
@@ -318,39 +231,32 @@ const CodeChat = ({
   const persistChat = useCallback(async (msgs, overrideTitle) => {
     if (!userUidRef.current) return;
     try {
-      // Generate a short title from the first user message if not provided
       let title = overrideTitle;
       if (!title) {
         const firstUser = msgs.find(m => m.role === 'user');
         if (firstUser) {
           title = firstUser.text.replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 48);
-          if (!title) title = 'New Code Chat';
+          if (!title) title = 'New chat';
         } else {
-          title = 'New Code Chat';
+          title = 'New chat';
         }
       }
-      const cleaned = msgs.map(m => ({
-        role: m.role,
-        text: (m.text || '').slice(0, 12000),
-        ts: m.ts || Date.now()
-      }));
+      const cleaned = msgs.map(m => ({ role: m.role, text: (m.text || '').slice(0, 12000), ts: m.ts || Date.now() }));
       await setDoc(doc(db, 'users', userUidRef.current, 'code_chats', chatIdRef.current), {
-        title,
-        messages: cleaned,
-        lang, style,
+        title, messages: cleaned, lang: DEFAULT_LANG, style: DEFAULT_STYLE,
         updated: new Date().toISOString(),
         createdAt: msgs[0]?.ts ? new Date(msgs[0].ts).toISOString() : new Date().toISOString()
       });
       loadChats(userUidRef.current);
     } catch (_) {}
-  }, [db, lang, style, loadChats]);
+  }, [db, loadChats]);
  
   const newChat = useCallback(() => {
     abortRef.current = true;
     setStreaming(false); setThinking(false); setStreamText('');
     const newId = Date.now().toString();
     setChatId(newId); chatIdRef.current = newId;
-    setMessages([]); convHistoryRef.current = [];
+    setMessages([]);
     setInput('');
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
@@ -363,15 +269,9 @@ const CodeChat = ({
       const c = snap.data();
       setChatId(id); chatIdRef.current = id;
       const restored = (c.messages || []).map((m, i) => ({
-        id: `${id}-${i}`,
-        role: m.role,
-        text: m.text,
-        ts: typeof m.ts === 'number' ? m.ts : Date.now()
+        id: `${id}-${i}`, role: m.role, text: m.text, ts: typeof m.ts === 'number' ? m.ts : Date.now()
       }));
       setMessages(restored);
-      convHistoryRef.current = restored.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
-      if (c.lang) setLang(c.lang);
-      if (c.style) setStyle(c.style);
       if (window.innerWidth <= 900) setSidebarOpen(false);
     } catch (_) {}
   }, [db]);
@@ -388,16 +288,12 @@ const CodeChat = ({
   const renameChat = useCallback(async (id, newTitle) => {
     if (!userUidRef.current || !newTitle.trim()) { setRenamingId(null); return; }
     try {
-      await setDoc(doc(db, 'users', userUidRef.current, 'code_chats', id),
-        { title: newTitle.trim().slice(0, 80) }, { merge: true });
+      await setDoc(doc(db, 'users', userUidRef.current, 'code_chats', id), { title: newTitle.trim().slice(0, 80) }, { merge: true });
       await loadChats(userUidRef.current);
     } catch (_) {}
     setRenamingId(null);
   }, [db, loadChats]);
  
-  /* ──────────────────────────────────────────────────────────────────
-   *  Send message + stream response
-   * ────────────────────────────────────────────────────────────────── */
   const send = useCallback(async (overrideText) => {
     const text = (overrideText ?? input).trim();
     if (!text || streaming) return;
@@ -411,34 +307,23 @@ const CodeChat = ({
     setStreamText('');
     abortRef.current = false;
  
-    const historyForBackend = nextMsgs.slice(-12).map(m => ({
-      role: m.role === 'user' ? 'user' : 'assistant',
-      content: m.text
-    }));
- 
-    const sys = buildCoderSystemPrompt(lang, style);
-    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+    const historyForBackend = nextMsgs.slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+    const fullPrompt = buildCoderSystemPrompt() + '\n\n=== USER REQUEST ===\n' + text;
  
     let full = '';
     try {
       const res = await fetch(API, {
         method: 'POST',
         headers: await getAuthHeader(),
-        body: JSON.stringify({
-          action: 'chat',
-          mode: 'code',                  // ← routes to GLM-5.2 only on the backend
-          prompt: fullPrompt,
-          history: historyForBackend
-        })
+        body: JSON.stringify({ action: 'chat', mode: 'code', prompt: fullPrompt, history: historyForBackend })
       });
  
       if (!res.ok) {
         let errMsg = `Request failed (${res.status}).`;
         if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
         else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
-        else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
-        const errMsgFinal = errMsg;
-        setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: `⚠️ ${errMsgFinal}`, ts: Date.now() }]);
+        else if (res.status === 503) errMsg = 'Vertex is temporarily unavailable — please try again shortly.';
+        setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: `⚠️ ${errMsg}`, ts: Date.now() }]);
         setStreaming(false); setThinking(false); setStreamText('');
         return;
       }
@@ -465,10 +350,8 @@ const CodeChat = ({
     } catch (e) {
       setThinking(false);
       setMessages(prev => [...prev, {
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        text: `⚠️ Network error: ${e?.message || 'unknown'}\n\nPlease check your connection and try again.`,
-        ts: Date.now()
+        id: `a-${Date.now()}`, role: 'assistant',
+        text: `⚠️ Network error: ${e?.message || 'unknown'}\n\nPlease check your connection and try again.`, ts: Date.now()
       }]);
       setStreaming(false); setStreamText('');
       return;
@@ -476,23 +359,17 @@ const CodeChat = ({
  
     const cleaned = full.trim();
     if (!cleaned) {
-      setMessages(prev => [...prev, {
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        text: '_(empty response — try rephrasing your request)_',
-        ts: Date.now()
-      }]);
+      setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: '_(empty response — try rephrasing your request)_', ts: Date.now() }]);
     } else {
       const aiMsg = { id: `a-${Date.now()}`, role: 'assistant', text: cleaned, ts: Date.now() };
       const finalMsgs = [...nextMsgs, aiMsg];
       setMessages(finalMsgs);
-      // persist
       setTimeout(() => persistChat(finalMsgs), 50);
     }
     setStreaming(false);
     setThinking(false);
     setStreamText('');
-  }, [input, messages, streaming, lang, style, persistChat]);
+  }, [input, messages, streaming, persistChat]);
  
   const stopStreaming = useCallback(() => {
     abortRef.current = true;
@@ -505,38 +382,35 @@ const CodeChat = ({
     setStreamText('');
   }, [streamText]);
  
-  /* ── Filtered chat list ── */
   const filteredChats = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return savedChats;
     return savedChats.filter(c => (c.title || '').toLowerCase().includes(q));
   }, [savedChats, search]);
  
-  /* ── The CodeBlock to use for rendering ── */
   const RendererCodeBlock = CodeBlock || FallbackCodeBlock;
  
-  /* ── Markdown components (match App.js styling) ── */
   const mdComponents = useMemo(() => ({
     h1: ({children}) => <h1 style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
     h2: ({children}) => <h2 style={{ fontSize: 16.5, fontWeight: 700, color: '#f0f0f0', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
     h3: ({children}) => <h3 style={{ fontSize: 14.5, fontWeight: 600, color: '#dcdcdc', margin: '10px 0 4px', lineHeight: 1.3 }}>{children}</h3>,
     h4: ({children}) => <h4 style={{ fontSize: 13.5, fontWeight: 600, color: '#dcdcdc', margin: '8px 0 3px' }}>{children}</h4>,
-    p: ({children}) => <p style={{ margin: '0 0 8px', color: '#dcdcdc', lineHeight: 1.7, fontSize: 14 }}>{children}</p>,
+    p: ({children}) => <p style={{ margin: '0 0 10px', color: '#dcdcdc', lineHeight: 1.7, fontSize: 14.5 }}>{children}</p>,
     strong: ({children}) => <strong style={{ color: '#f0f0f0', fontWeight: 700 }}>{children}</strong>,
     em: ({children}) => <em style={{ color: '#9a9a9a' }}>{children}</em>,
-    ul: ({children}) => <ul style={{ margin: '6px 0 10px', paddingLeft: 20 }}>{children}</ul>,
-    ol: ({children}) => <ol style={{ margin: '6px 0 10px', paddingLeft: 20 }}>{children}</ol>,
-    li: ({children}) => <li style={{ margin: '3px 0', color: '#dcdcdc', lineHeight: 1.65, fontSize: 14 }}>{children}</li>,
+    ul: ({children}) => <ul style={{ margin: '6px 0 12px', paddingLeft: 20 }}>{children}</ul>,
+    ol: ({children}) => <ol style={{ margin: '6px 0 12px', paddingLeft: 20 }}>{children}</ol>,
+    li: ({children}) => <li style={{ margin: '4px 0', color: '#dcdcdc', lineHeight: 1.65, fontSize: 14.5 }}>{children}</li>,
     a: ({href, children}) => <a href={href} target="_blank" rel="noreferrer" style={{ color: '#e6e6e6', textDecoration: 'none', borderBottom: '1px solid #4a4a4a' }}>{children}</a>,
-    blockquote: ({children}) => <blockquote style={{ borderLeft: '3px solid #3a3a3a', margin: '8px 0', padding: '4px 12px', color: '#9a9a9a', background: '#141414', borderRadius: '0 6px 6px 0' }}>{children}</blockquote>,
-    hr: () => <hr style={{ border: 'none', borderTop: '1px solid #232323', margin: '12px 0' }} />,
-    table: ({children}) => <div style={{ overflowX: 'auto', margin: '8px 0' }}><table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>{children}</table></div>,
-    thead: ({children}) => <thead style={{ background: '#141414' }}>{children}</thead>,
-    th: ({children}) => <th style={{ padding: '6px 10px', border: '1px solid #232323', textAlign: 'left', color: '#e6e6e6', fontWeight: 600 }}>{children}</th>,
-    td: ({children}) => <td style={{ padding: '6px 10px', border: '1px solid #232323', color: '#b8b8b8' }}>{children}</td>,
+    blockquote: ({children}) => <blockquote style={{ borderLeft: '3px solid #3a3a3a', margin: '8px 0', padding: '4px 12px', color: '#9a9a9a', background: '#161616', borderRadius: '0 6px 6px 0' }}>{children}</blockquote>,
+    hr: () => <hr style={{ border: 'none', borderTop: '1px solid #232323', margin: '14px 0' }} />,
+    table: ({children}) => <div style={{ overflowX: 'auto', margin: '10px 0' }}><table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>{children}</table></div>,
+    thead: ({children}) => <thead style={{ background: '#161616' }}>{children}</thead>,
+    th: ({children}) => <th style={{ padding: '7px 11px', border: '1px solid #262626', textAlign: 'left', color: '#e6e6e6', fontWeight: 600 }}>{children}</th>,
+    td: ({children}) => <td style={{ padding: '7px 11px', border: '1px solid #262626', color: '#b8b8b8' }}>{children}</td>,
     code: ({inline, className, children}) => {
       if (inline) {
-        return <code style={{ background: '#1c1c1c', color: '#e6e6e6', padding: '1px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>{children}</code>;
+        return <code style={{ background: '#1e1e1e', color: '#e6e6e6', padding: '2px 6px', borderRadius: 5, fontFamily: 'ui-monospace, "JetBrains Mono", monospace', fontSize: 13, border: '1px solid #2a2a2a' }}>{children}</code>;
       }
       const match = /language-(\w+)/.exec(className || '');
       const codeLang = match ? match[1] : '';
@@ -545,157 +419,85 @@ const CodeChat = ({
     },
   }), [RendererCodeBlock, safeExecuteCodeLocally, LANG_ENGINE, ENGINE_META]);
  
-  /* ════════════════════════════════════════════════════════════════
-   *  RENDER
-   * ════════════════════════════════════════════════════════════════ */
-  // CRITICAL: render through a portal into document.body so the overlay
-  // escapes any ancestor that has transform / filter / will-change / contain
-  // set — those properties create a new containing block and break
-  // position:fixed, which was causing the main chat UI to show through.
   if (typeof document === 'undefined') return null;
   return createPortal(
-    <div data-vortis-code style={{
+    <div data-vertex style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       width: '100vw', height: '100vh', height: '100dvh',
-      zIndex: 2147483647,                  // max int — always on top
-      background: '#0a0a0a',
-      color: '#e6e6e6',
+      zIndex: 2147483647,
+      background: '#0a0a0a', color: '#e6e6e6',
       display: 'flex', flexDirection: 'column',
       fontFamily: '"Geist Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-      animation: 'vortisCodeFadeIn .18s ease',
-      // Lock the body so the main chat behind can't scroll
-      overflow: 'hidden',
-      isolation: 'isolate',                // new stacking context — nothing leaks in or out
+      animation: 'vertexFadeIn .18s ease',
+      overflow: 'hidden', isolation: 'isolate',
     }}>
-      {/* ═══ Top bar ═══ */}
+      {/* ═══ Top bar — minimal: sidebar toggle, wordmark, close ═══ */}
       <div style={{
-        height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 14px', borderBottom: '1px solid #212121', background: '#0f0f0f'
+        height: 54, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 16px', borderBottom: '1px solid #1c1c1c', background: '#0a0a0a'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar (Cmd/Ctrl+B)"
+          <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar"
             style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
-            {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{
-              width: 26, height: 26, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: '#e6e6e6', border: '1px solid #e6e6e6'
-            }}>
-              <Terminal size={14} color="#0a0a0a"/>
-            </div>
-            <div>
-              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vortis Code</div>
-              <div style={{ fontSize: 10, color: '#6a6a6a', fontFamily: 'JetBrains Mono', marginTop: 2 }}>
-                {LANGUAGES.find(l => l.id === lang)?.label || 'Auto'} · {STYLES.find(s => s.id === style)?.label || 'Balanced'}
-              </div>
-            </div>
-          </div>
-        </div>
- 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Language picker */}
-          <div style={{ position: 'relative' }}>
-            <select
-              value={lang}
-              onChange={e => setLang(e.target.value)}
-              style={{
-                background: '#141414', border: '1px solid #2a2a2a', color: '#c8c8c8',
-                fontSize: 12, borderRadius: 6, padding: '5px 26px 5px 10px', cursor: 'pointer',
-                fontFamily: 'JetBrains Mono', appearance: 'none',
-                backgroundImage: 'url("data:image/svg+xml;utf8,<svg xmlns=\\"http://www.w3.org/2000/svg\\" width=\\"10\\" height=\\"10\\" viewBox=\\"0 0 24 24\\" fill=\\"none\\" stroke=\\"%23888\\" stroke-width=\\"3\\"><polyline points=\\"6 9 12 15 18 9\\"/></svg>")',
-                backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center'
-              }}
-              title="Preferred language"
-            >
-              {LANGUAGES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
-            </select>
-          </div>
- 
-          {/* Style picker */}
-          <button
-            onClick={() => setShowPrefs(s => !s)}
-            title="Coder style preferences"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, background: showPrefs ? '#232323' : '#141414',
-              border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6,
-              padding: '5px 10px', cursor: 'pointer', fontFamily: 'JetBrains Mono'
-            }}
-          >
-            <Cog size={12}/> {STYLES.find(s => s.id === style)?.label || 'Balanced'}
-          </button>
- 
-          <div style={{ width: 1, height: 18, background: '#2a2a2a', margin: '0 4px' }} />
- 
-          <button onClick={onClose} title="Close (Esc)"
-            style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#141414', border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6, padding: '6px 11px', cursor: 'pointer' }}>
-            <X size={13}/> Exit
+            {sidebarOpen ? <PanelLeftClose size={17}/> : <PanelLeftOpen size={17}/>}
           </button>
         </div>
+ 
+        <button onClick={onClose} title="Close (Esc)"
+          style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
+          <X size={17}/>
+        </button>
       </div>
- 
-      {/* ═══ Preferences popover ═══ */}
-      {showPrefs && (
-        <div style={{
-          position: 'absolute', top: 56, right: 14, zIndex: 100,
-          background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
-          boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 12, minWidth: 260,
-          animation: 'vortisCodeScaleIn .15s ease'
-        }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
-          {STYLES.map(s => (
-            <button key={s.id} onClick={() => { setStyle(s.id); setShowPrefs(false); }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
-                background: style === s.id ? '#232323' : 'transparent',
-                border: '1px solid ' + (style === s.id ? '#3a3a3a' : 'transparent'),
-                marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 2
-              }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#e6e6e6' }}>{s.label}</span>
-              <span style={{ fontSize: 11, color: '#7a7a7a' }}>{s.hint}</span>
-            </button>
-          ))}
-          <div style={{ borderTop: '1px solid #2a2a2a', marginTop: 8, paddingTop: 8, fontSize: 10.5, color: '#6a6a6a', fontFamily: 'JetBrains Mono', lineHeight: 1.5 }}>
-            ⌘/Ctrl + Enter → send<br/>
-            ⌘/Ctrl + K → new chat<br/>
-            Esc → close
-          </div>
-        </div>
-      )}
  
       {/* ═══ Body: sidebar + main ═══ */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* ── Sidebar ── */}
         {sidebarOpen && (
           <aside style={{
-            width: 256, flexShrink: 0, borderRight: '1px solid #212121', background: '#0f0f0f',
+            width: 264, flexShrink: 0, borderRight: '1px solid #1c1c1c', background: '#0d0d0d',
             display: 'flex', flexDirection: 'column', minHeight: 0,
-            animation: 'vortisCodeSlideInLeft .18s ease'
+            animation: 'vertexSlideInLeft .18s ease'
           }}>
-            {/* New chat — flat monochrome, Codex "New task" style */}
-            <div style={{ padding: 10 }}>
+            {/* Wordmark */}
+            <div style={{ padding: '16px 16px 10px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: '#e6e6e6'
+              }}>
+                <Terminal size={16} color="#0a0a0a"/>
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#f0f0f0', letterSpacing: '-.01em', lineHeight: 1.1 }}>Vertex</div>
+                <div style={{ fontSize: 10, color: '#666', letterSpacing: '.02em', marginTop: 1 }}>Powered by Vortis</div>
+              </div>
+            </div>
+ 
+            {/* New chat — plain, minimal, like a list item, not a loud button */}
+            <div style={{ padding: '4px 10px 8px' }}>
               <button onClick={newChat}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                  padding: '9px 12px', borderRadius: 7, cursor: 'pointer',
-                  background: '#e6e6e6',
-                  border: '1px solid #e6e6e6', color: '#0a0a0a', fontSize: 13, fontWeight: 600
-                }}>
-                <Plus size={14}/> New Code Chat
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
+                  background: 'transparent', border: '1px solid #262626', color: '#e6e6e6', fontSize: 13, fontWeight: 500
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#161616'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                <Plus size={15}/> New chat
               </button>
             </div>
  
             {/* Search */}
             <div style={{ padding: '0 10px 8px' }}>
               <div style={{ position: 'relative' }}>
-                <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#6a6a6a' }}/>
+                <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#5a5a5a' }}/>
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search chats..."
                   style={{
                     width: '100%', padding: '7px 10px 7px 28px', fontSize: 12,
-                    background: '#141414', border: '1px solid #262626', borderRadius: 6,
+                    background: '#141414', border: '1px solid #232323', borderRadius: 6,
                     color: '#e6e6e6', outline: 'none', fontFamily: 'inherit'
                   }}
                 />
@@ -703,24 +505,21 @@ const CodeChat = ({
             </div>
  
             {/* Chat list */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px' }} className="scr">
+            <div style={{ flex: 1, overflowY: 'auto', padding: '4px 6px' }} className="scr">
               {filteredChats.length === 0 ? (
                 <div style={{ padding: 20, textAlign: 'center', color: '#5a5a5a', fontSize: 11.5, lineHeight: 1.6 }}>
-                  <MessageSquare size={22} style={{ opacity: .4, marginBottom: 8 }}/>
-                  <div>{search ? 'No matches found.' : 'No saved code chats yet.'}</div>
-                  <div style={{ marginTop: 4, fontSize: 10.5 }}>Start a conversation to see it here.</div>
+                  <MessageSquare size={20} style={{ opacity: .4, marginBottom: 8 }}/>
+                  <div>{search ? 'No matches found.' : 'No saved chats yet.'}</div>
                 </div>
               ) : (
                 filteredChats.map(c => (
                   <div key={c.id}
                     onClick={() => loadChat(c.id)}
                     style={{
-                      padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
-                      background: c.id === chatId ? '#1c1c1c' : 'transparent',
-                      border: '1px solid ' + (c.id === chatId ? '#2e2e2e' : 'transparent'),
-                      transition: 'background .12s'
+                      padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 1,
+                      background: c.id === chatId ? '#1a1a1a' : 'transparent'
                     }}
-                    onMouseEnter={e => { if (c.id !== chatId) e.currentTarget.style.background = '#151515'; }}
+                    onMouseEnter={e => { if (c.id !== chatId) e.currentTarget.style.background = '#141414'; }}
                     onMouseLeave={e => { if (c.id !== chatId) e.currentTarget.style.background = 'transparent'; }}
                   >
                     {renamingId === c.id ? (
@@ -732,16 +531,12 @@ const CodeChat = ({
                             if (e.key === 'Enter') renameChat(c.id, renameVal);
                             if (e.key === 'Escape') setRenamingId(null);
                           }}
-                          style={{
-                            flex: 1, fontSize: 12, padding: '3px 6px', background: '#0a0a0a',
-                            border: '1px solid #4a4a4a', borderRadius: 4, color: '#e6e6e6', outline: 'none'
-                          }}
+                          style={{ flex: 1, fontSize: 12, padding: '3px 6px', background: '#0a0a0a', border: '1px solid #4a4a4a', borderRadius: 4, color: '#e6e6e6', outline: 'none' }}
                         />
                         <button onClick={() => renameChat(c.id, renameVal)} style={{ background: 'transparent', border: 'none', color: '#e6e6e6', cursor: 'pointer', padding: 2 }}><Check size={12}/></button>
                       </div>
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                        <Code2 size={12} style={{ marginTop: 2, flexShrink: 0, color: c.id === chatId ? '#e6e6e6' : '#5a5a5a' }}/>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{
                             fontSize: 12.5, fontWeight: c.id === chatId ? 600 : 500, color: '#dcdcdc',
@@ -749,22 +544,15 @@ const CodeChat = ({
                           }}>
                             {c.title || 'Untitled'}
                           </div>
-                          <div style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono', marginTop: 2 }}>
-                            {relTime(c.updated)}
-                          </div>
+                          <div style={{ fontSize: 10, color: '#5a5a5a', marginTop: 2 }}>{relTime(c.updated)}</div>
                         </div>
                         <div style={{ display: 'flex', gap: 2, opacity: 0, transition: 'opacity .12s' }}
-                          className="chat-row-actions"
-                          onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => { setRenamingId(c.id); setRenameVal(c.title || ''); }}
-                            title="Rename"
+                          className="chat-row-actions" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => { setRenamingId(c.id); setRenameVal(c.title || ''); }} title="Rename"
                             style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 2, borderRadius: 3 }}>
                             <Edit2 size={11}/>
                           </button>
-                          <button
-                            onClick={() => { if (confirm('Delete this code chat?')) deleteChat(c.id); }}
-                            title="Delete"
+                          <button onClick={() => { if (confirm('Delete this chat?')) deleteChat(c.id); }} title="Delete"
                             style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 2, borderRadius: 3 }}>
                             <Trash2 size={11}/>
                           </button>
@@ -777,24 +565,16 @@ const CodeChat = ({
             </div>
  
             {/* Sidebar footer */}
-            <div style={{
-              padding: '9px 12px', borderTop: '1px solid #212121', background: '#111111',
-              display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a8a8a'
-            }}>
+            <div style={{ padding: '10px 14px', borderTop: '1px solid #1c1c1c', display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a8a8a' }}>
               {user?.photoURL ? (
                 <img src={user.photoURL} alt="" style={{ width: 22, height: 22, borderRadius: '50%', filter: 'grayscale(1)' }}/>
               ) : (
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#2a2a2a', border: '1px solid #3a3a3a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e6e6e6', fontSize: 10, fontWeight: 700 }}>
+                <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#232323', border: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#e6e6e6', fontSize: 10, fontWeight: 700 }}>
                   {(user?.displayName || user?.email || '?')[0].toUpperCase()}
                 </div>
               )}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {user?.displayName || 'User'}
-                </div>
-                <div style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono' }}>
-                  {savedChats.length} code {savedChats.length === 1 ? 'chat' : 'chats'}
-                </div>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 500, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {user?.displayName || 'User'}
               </div>
             </div>
           </aside>
@@ -802,46 +582,31 @@ const CodeChat = ({
  
         {/* ── Main chat area ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0a0a0a' }}>
-          {/* Messages / empty state */}
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} className="scr">
             {messages.length === 0 && !streaming ? (
-              /* ── Empty state with suggestion chips ── */
-              <div style={{
-                height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                padding: 30, textAlign: 'center'
-              }}>
-                <div style={{
-                  width: 60, height: 60, borderRadius: 12, marginBottom: 18,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#141414',
-                  border: '1px solid #2a2a2a'
-                }}>
-                  <Terminal size={28} color="#e6e6e6"/>
+              <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30, textAlign: 'center' }}>
+                <div style={{ width: 56, height: 56, borderRadius: 14, marginBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#141414', border: '1px solid #262626' }}>
+                  <Terminal size={26} color="#e6e6e6"/>
                 </div>
-                <h1 style={{ fontSize: 22, fontWeight: 600, color: '#e6e6e6', margin: '0 0 6px', letterSpacing: '-.02em' }}>
+                <h1 style={{ fontSize: 23, fontWeight: 600, color: '#f0f0f0', margin: '0 0 6px', letterSpacing: '-.02em' }}>
                   What are we building today?
                 </h1>
-                <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 24px' }}>
-                  I'm your dedicated coding assistant — debug errors, refactor messy code, ship features, or learn a new pattern. Code-first, no fluff.
+                <p style={{ fontSize: 14, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 26px' }}>
+                  I'm Vertex — debug errors, refactor messy code, ship features, or learn a new pattern. Code-first, no fluff.
                 </p>
- 
-                <div style={{
-                  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                  gap: 10, maxWidth: 620, width: '100%'
-                }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, maxWidth: 620, width: '100%' }}>
                   {STARTER_PROMPTS.map(s => {
                     const Icon = ICONS[s.icon] || FileCode;
                     return (
                       <button key={s.label}
                         onClick={() => { setInput(s.prompt); setTimeout(() => inputRef.current?.focus(), 30); }}
                         style={{
-                          textAlign: 'left', padding: '11px 13px', borderRadius: 8, cursor: 'pointer',
-                          background: '#111111', border: '1px solid #232323',
-                          color: '#dcdcdc', display: 'flex', flexDirection: 'column', gap: 5,
-                          transition: 'all .14s'
+                          textAlign: 'left', padding: '12px 14px', borderRadius: 9, cursor: 'pointer',
+                          background: '#121212', border: '1px solid #232323', color: '#dcdcdc',
+                          display: 'flex', flexDirection: 'column', gap: 6, transition: 'all .14s'
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#3f3f3f'; e.currentTarget.style.background = '#171717'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#121212'; }}
                       >
                         <Icon size={15} color="#9a9a9a"/>
                         <span style={{ fontSize: 12.5, fontWeight: 600 }}>{s.label}</span>
@@ -849,154 +614,112 @@ const CodeChat = ({
                     );
                   })}
                 </div>
- 
-                <div style={{ marginTop: 26, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono', letterSpacing: '.04em' }}>
-                  ⌘/Ctrl + Enter to send  ·  ⌘/Ctrl + K for new chat  ·  Esc to exit
+                <div style={{ marginTop: 26, fontSize: 11, color: '#4a4a4a' }}>
+                  Enter to send · Shift+Enter for a new line · Esc to exit
                 </div>
               </div>
             ) : (
-              /* ── Messages list ── */
-              <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
+              <div style={{ maxWidth: 780, margin: '0 auto', padding: '24px 22px 12px' }}>
                 {messages.map(m => (
-                  <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
-                    mdComponents={mdComponents} />
+                  <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts} mdComponents={mdComponents} />
                 ))}
  
-                {/* Streaming bubble */}
                 {(streaming || thinking) && (
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                    <div style={{
-                      width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: '#141414', border: '1px solid #2a2a2a'
-                    }}>
-                      <Terminal size={14} color="#c8c8c8"/>
+                  <div style={{ marginBottom: 22 }}>
+                    <div style={{ fontSize: 11, color: '#5a5a5a', fontWeight: 600, letterSpacing: '.02em', marginBottom: 8 }}>
+                      VERTEX {thinking && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
                     </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', marginBottom: 5, fontWeight: 600 }}>
-                        VORTIS CODE {thinking && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
+                    {thinking ? (
+                      <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}>
+                        {[0,1,2].map(i => (
+                          <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: '#8a8a8a', animation: `vertexPulse 1.2s ease-in-out ${i*0.15}s infinite` }}/>
+                        ))}
                       </div>
-                      {thinking ? (
-                        <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}>
-                          {[0,1,2].map(i => (
-                            <div key={i} style={{
-                              width: 6, height: 6, borderRadius: '50%', background: '#8a8a8a',
-                              animation: `vortisCodePulse 1.2s ease-in-out ${i*0.15}s infinite`
-                            }}/>
-                          ))}
-                        </div>
-                      ) : streamText ? (
-                        <div style={{
-                          background: '#111111', border: '1px solid #232323', borderRadius: '0 10px 10px 10px',
-                          padding: '12px 14px'
-                        }}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
-                            {streamText}
-                          </ReactMarkdown>
-                          <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vortisCodeBlink 1s steps(2) infinite' }}/>
-                        </div>
-                      ) : null}
-                    </div>
+                    ) : streamText ? (
+                      <div style={{ color: '#dcdcdc' }}>
+                        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
+                          {streamText}
+                        </ReactMarkdown>
+                        <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vertexBlink 1s steps(2) infinite' }}/>
+                      </div>
+                    ) : null}
                   </div>
                 )}
               </div>
             )}
           </div>
  
-          {/* ── Input area ── */}
-          <div style={{
-            flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
-            padding: '12px 22px 16px'
-          }}>
-            <div style={{ maxWidth: 820, margin: '0 auto' }}>
+          {/* ── Input area — rounded pill composer, Enter sends ── */}
+          <div style={{ flexShrink: 0, padding: '10px 22px 20px' }}>
+            <div style={{ maxWidth: 780, margin: '0 auto' }}>
               <div style={{
                 position: 'relative', background: '#141414', border: '1px solid #2a2a2a',
-                borderRadius: 10, transition: 'border-color .15s'
+                borderRadius: 26, transition: 'border-color .15s'
               }}>
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); }
+                  onChange={e => {
+                    setInput(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px';
                   }}
-                  placeholder={lang === 'auto'
-                    ? 'Ask anything about code — paste an error, request a function, refactor something…'
-                    : `Ask for ${LANGUAGES.find(l => l.id === lang)?.label} code — paste an error, request a function, refactor something…`
-                  }
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (!streaming && input.trim()) send();
+                    }
+                  }}
+                  placeholder="Ask anything about code — paste an error, request a function, refactor something…"
                   rows={1}
                   style={{
-                    width: '100%', minHeight: 52, maxHeight: 240, resize: 'none',
-                    padding: '13px 56px 13px 14px', background: 'transparent', border: 'none', outline: 'none',
-                    color: '#e6e6e6', fontSize: 14, lineHeight: 1.55, fontFamily: 'inherit',
-                    boxSizing: 'border-box'
+                    width: '100%', minHeight: 48, maxHeight: 200, resize: 'none',
+                    padding: '13px 56px 13px 20px', background: 'transparent', border: 'none', outline: 'none',
+                    color: '#e6e6e6', fontSize: 14.5, lineHeight: 1.5, fontFamily: 'inherit', boxSizing: 'border-box'
                   }}
                 />
-                <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', gap: 4 }}>
+                <div style={{ position: 'absolute', right: 7, bottom: 7, display: 'flex', gap: 4 }}>
                   {streaming ? (
                     <button onClick={stopStreaming} title="Stop"
-                      style={{
-                        width: 34, height: 34, borderRadius: 7, border: '1px solid #3a3a3a', cursor: 'pointer',
-                        background: '#1c1c1c', color: '#e6e6e6', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                      }}>
-                      <Loader size={14} style={{ animation: 'vortisCodeSpin 1s linear infinite' }}/>
+                      style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid #3a3a3a', cursor: 'pointer', background: '#1c1c1c', color: '#e6e6e6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
                     </button>
                   ) : (
-                    <button onClick={() => send()} disabled={!input.trim()}
-                      title="Send (⌘/Ctrl + Enter)"
+                    <button onClick={() => send()} disabled={!input.trim()} title="Send (Enter)"
                       style={{
-                        width: 34, height: 34, borderRadius: 7, border: '1px solid ' + (input.trim() ? '#e6e6e6' : '#2a2a2a'), cursor: input.trim() ? 'pointer' : 'not-allowed',
-                        background: input.trim() ? '#e6e6e6' : '#1a1a1a',
-                        color: input.trim() ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'all .15s'
+                        width: 34, height: 34, borderRadius: '50%', border: 'none', cursor: input.trim() ? 'pointer' : 'not-allowed',
+                        background: input.trim() ? '#e6e6e6' : '#232323', color: input.trim() ? '#0a0a0a' : '#5a5a5a',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .15s'
                       }}>
-                      <ArrowUp size={15}/>
+                      <ArrowUp size={16}/>
                     </button>
                   )}
                 </div>
               </div>
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono'
-              }}>
-                <span>
-                  {LANGUAGES.find(l => l.id === lang)?.label} · {STYLES.find(s => s.id === style)?.label}
-                </span>
-                <span>{input.length} chars</span>
+              <div style={{ textAlign: 'center', marginTop: 8, fontSize: 10.5, color: '#4a4a4a' }}>
+                Vertex can make mistakes. Check important code before running it.
               </div>
             </div>
           </div>
         </main>
       </div>
  
-      {/* Inline keyframes + reset */}
       <style>{`
-        @keyframes vortisCodeFadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes vortisCodeScaleIn { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
-        @keyframes vortisCodeSlideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
-        @keyframes vortisCodePulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
-        @keyframes vortisCodeBlink { 50% { opacity: 0 } }
-        @keyframes vortisCodeSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
-        /* Scoped reset: everything inside [data-vortis-code] is immune to
-           global stylesheets from the parent app. This was the second root
-           cause of the broken layout — Tailwind/global CSS was leaking in. */
-        [data-vortis-code], [data-vortis-code] *, [data-vortis-code] *::before, [data-vortis-code] *::after {
-          box-sizing: border-box;
-          margin: 0;
-          padding: 0;
-          border: 0;
-          font: inherit;
-          font-size: inherit;
-          color: inherit;
-          background: transparent;
-          list-style: none;
-          text-decoration: none;
-          vertical-align: baseline;
+        @keyframes vertexFadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes vertexSlideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes vertexPulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
+        @keyframes vertexBlink { 50% { opacity: 0 } }
+        @keyframes vertexSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        [data-vertex], [data-vertex] *, [data-vertex] *::before, [data-vertex] *::after {
+          box-sizing: border-box; margin: 0; padding: 0; border: 0; font: inherit; font-size: inherit;
+          color: inherit; background: transparent; list-style: none; text-decoration: none; vertical-align: baseline;
         }
-        [data-vortis-code] button { cursor: pointer; background: transparent; border: none; color: inherit; font: inherit; }
-        [data-vortis-code] input, [data-vortis-code] textarea, [data-vortis-code] select { font: inherit; color: inherit; background: transparent; border: none; outline: none; }
-        [data-vortis-code] img { max-width: 100%; display: block; }
-        .chat-item:hover .chat-row-actions,
+        [data-vertex] button { cursor: pointer; background: transparent; border: none; color: inherit; font: inherit; }
+        [data-vertex] input, [data-vertex] textarea, [data-vertex] select { font: inherit; color: inherit; background: transparent; border: none; outline: none; }
+        [data-vertex] img { max-width: 100%; display: block; }
         div:hover > div > .chat-row-actions { opacity: 1 !important; }
+        .scr::-webkit-scrollbar { width: 8px; }
+        .scr::-webkit-scrollbar-thumb { background: #262626; border-radius: 4px; }
       `}</style>
     </div>,
     document.body
@@ -1004,7 +727,9 @@ const CodeChat = ({
 };
  
 /* ────────────────────────────────────────────────────────────────────────
- *  Single message bubble
+ *  Single message — user turns as a flat gray pill, assistant turns as
+ *  plain text flow (no bubble, no avatar) — closest to how modern
+ *  ChatGPT/Codex-style chats present a conversation.
  * ──────────────────────────────────────────────────────────────────────── */
 const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
   const isUser = role === 'user';
@@ -1012,13 +737,11 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
  
   if (isUser) {
-    // Codex-style user turn: flat gray pill, right-aligned, no color accent
     return (
-      <div style={{ display: 'flex', gap: 12, marginBottom: 18, justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', marginBottom: 22, justifyContent: 'flex-end' }}>
         <div style={{
-          maxWidth: '78%', background: '#1e1e1e', border: '1px solid #2a2a2a',
-          color: '#e6e6e6', borderRadius: 10, padding: '10px 14px',
-          fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+          maxWidth: '80%', background: '#1e1e1e', color: '#f0f0f0', borderRadius: 16,
+          padding: '11px 16px', fontSize: 14.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
         }}>
           {text}
         </div>
@@ -1026,35 +749,23 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
     );
   }
  
-  // Codex-style assistant turn: plain flow, outlined mark, no bubble background color
   return (
-    <div style={{ display: 'flex', gap: 12, marginBottom: 22 }}>
-      <div style={{
-        width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#141414', border: '1px solid #2a2a2a', marginTop: 1
-      }}>
-        <Terminal size={13} color="#c8c8c8"/>
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontSize: 11, color: '#5a5a5a', fontWeight: 600, letterSpacing: '.02em' }}>
+        VERTEX
+        {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
+        <button onClick={copy} title="Copy response"
+          style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+          {copied ? <Check size={12} color="#e6e6e6"/> : <Copy size={12}/>} {copied ? 'Copied' : ''}
+        </button>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-          fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', fontWeight: 600, letterSpacing: '.02em'
-        }}>
-          VORTIS CODE
-          {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
-          <button onClick={copy} title="Copy response"
-            style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-            {copied ? <Check size={11} color="#e6e6e6"/> : <Copy size={11}/>} {copied ? 'Copied' : ''}
-          </button>
-        </div>
-        <div style={{ color: '#dcdcdc' }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
-            {text}
-          </ReactMarkdown>
-        </div>
+      <div style={{ color: '#dcdcdc' }}>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
+          {text}
+        </ReactMarkdown>
       </div>
     </div>
   );
 });
  
-export default CodeChat;
+export default Vertex;
