@@ -11,7 +11,7 @@ import {
   Loader, MessageSquare, Sparkles,
   Zap, Bug, BookOpen, RefreshCw, FileCode,
   PanelLeftClose, PanelLeftOpen,
-  Terminal, Cog
+  Terminal, Cog, EraserIcon
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -90,7 +90,7 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - Never truncate — always complete your full answer.
 
 ═══ NON-CODING REQUESTS ═══
-- You are NOT a general assistant. If the user asks a non-coding question, briefly redirect: "I'm your coding assistant — for general chat, switch to the main Vortis chat. For code, I'm here."`;
+- You are NOT a general assistant. If the user asks a non-coding question, briefly redirect in your own words each time — vary the phrasing, don't repeat a fixed sentence. The gist: you're a coding assistant, and for general chat they should switch to the main Vortis chat.`;
 
   if (style === 'concise')  sys += '\n\nSTYLE: Ultra-concise. Code + 1 line of explanation max. No pleasantries.';
   if (style === 'detailed') sys += '\n\nSTYLE: Detailed. Include edge cases, alternative approaches, performance notes, and a short "when not to use this" callout.';
@@ -183,6 +183,22 @@ const relTime = (iso) => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────
+ *  FIX #1: this function was called in generateChatTitle but never
+ *  defined anywhere — every call threw a ReferenceError, which was
+ *  silently swallowed by the surrounding try/catch. That meant
+ *  generateChatTitle ALWAYS returned null, and titles ALWAYS fell back
+ *  to the raw truncated first user message. Defining it here actually
+ *  lets AI-generated titles through.
+ * ──────────────────────────────────────────────────────────────────────── */
+const looksLikeBadTitle = (t) => {
+  if (!t) return true;
+  const trimmed = t.trim();
+  if (trimmed.length < 3 || trimmed.length > 60) return true;
+  const badPatterns = /^(i can'?t|i'?m unable|sorry|as an ai|title:|here'?s a title|i cannot|no title)/i;
+  return badPatterns.test(trimmed);
+};
+
+/* ────────────────────────────────────────────────────────────────────────
  *  Main Vertex component (powered by Vortis)
  * ──────────────────────────────────────────────────────────────────────── */
 const Vertex = ({
@@ -243,14 +259,14 @@ const Vertex = ({
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
 
   const generateChatTitle = async (context) => {
-  const safeInput = (context || '').slice(0, 500);
-  try {
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({
-        action: 'chat',
-        prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
+    const safeInput = (context || '').slice(0, 500);
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({
+          action: 'chat',
+          prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
 Your ONLY job is to output a short 3-5 word title summarizing the OVERALL TOPIC of the conversation so far.
 
 CRITICAL RULES:
@@ -267,31 +283,31 @@ ${safeInput}
 <<<END>>>
 
 Title:`,
-        history: []
-      })
-    });
-    if (!res.ok) return null;
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let title = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of dec.decode(value).split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try { const p = JSON.parse(raw); if (p.content) title += p.content; } catch(_) {}
+          history: []
+        })
+      });
+      if (!res.ok) return null;
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let title = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of dec.decode(value).split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]' || !raw) continue;
+          try { const p = JSON.parse(raw); if (p.content) title += p.content; } catch(_) {}
+        }
       }
+      const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').replace(/^Title:\s*/i, '').slice(0, 50);
+      if (/GREETING_ONLY/i.test(clean)) return 'New Conversation';
+      if (looksLikeBadTitle(clean)) return null; // signal "couldn't get a good one" — caller decides fallback
+      return clean || null;
+    } catch(_) {
+      return null;
     }
-    const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').replace(/^Title:\s*/i, '').slice(0, 50);
-    if (/GREETING_ONLY/i.test(clean)) return 'New Conversation';
-    if (looksLikeBadTitle(clean)) return null; // signal "couldn't get a good one" — caller decides fallback
-    return clean || null;
-  } catch(_) {
-    return null;
-  }
-};
+  };
 
   /* ── Refs ── */
   const scrollRef = useRef(null);
@@ -476,6 +492,29 @@ Title:`,
     setRenamingId(null);
   }, [db, loadChats]);
 
+  /* ────────────────────────────────────────────────────────────────────
+   *  FIX #2: "clear all data" — deletes every saved code chat for this
+   *  user from Firestore and resets local state. Wired to a button in
+   *  the sidebar footer below.
+   * ──────────────────────────────────────────────────────────────────── */
+  const [clearing, setClearing] = useState(false);
+  const clearAllData = useCallback(async () => {
+    if (!userUidRef.current || clearing) return;
+    if (!confirm('Delete ALL saved code chats? This cannot be undone.')) return;
+    setClearing(true);
+    try {
+      const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats'));
+      const codeChatDocs = snap.docs.filter(d => d.data().isCodeChat);
+      await Promise.all(codeChatDocs.map(d => deleteDoc(d.ref)));
+      await loadChats(userUidRef.current);
+      newChat();
+    } catch (e) {
+      console.error('Vertex: failed to clear all data —', e);
+    } finally {
+      setClearing(false);
+    }
+  }, [db, loadChats, newChat, clearing]);
+
   /* ──────────────────────────────────────────────────────────────────
    *  Send message + stream response
    * ────────────────────────────────────────────────────────────────── */
@@ -564,30 +603,30 @@ Title:`,
         ts: Date.now()
       }]);
     } else {
-      
-     const aiMsg = {
-  id: `a-${Date.now()}`,
-  role: 'assistant',
-  text: cleaned,
-  ts: Date.now()
-};
 
-const finalMsgs = [...nextMsgs, aiMsg];
-setMessages(finalMsgs);
+      const aiMsg = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        text: cleaned,
+        ts: Date.now()
+      };
 
-setTimeout(async () => {
-  const context = finalMsgs
-    .filter(m => m.role === "user")
-    .map(m => m.text)
-    .join(" | ");
+      const finalMsgs = [...nextMsgs, aiMsg];
+      setMessages(finalMsgs);
 
-  const title =
-    await generateChatTitle(context) ||
-    finalMsgs.find(m => m.role === "user")?.text.slice(0, 48) ||
-    "New Code Chat";
+      setTimeout(async () => {
+        const context = finalMsgs
+          .filter(m => m.role === "user")
+          .map(m => m.text)
+          .join(" | ");
 
-  await persistChat(finalMsgs, title);
-}, 50);
+        const title =
+          await generateChatTitle(context) ||
+          finalMsgs.find(m => m.role === "user")?.text.slice(0, 48) ||
+          "New Code Chat";
+
+        await persistChat(finalMsgs, title);
+      }, 50);
 
     }
     setStreaming(false);
@@ -877,6 +916,18 @@ setTimeout(async () => {
                   {savedChats.length} code {savedChats.length === 1 ? 'chat' : 'chats'}
                 </div>
               </div>
+              {/* FIX #2: clear-all-data button */}
+              <button
+                onClick={clearAllData}
+                disabled={clearing || savedChats.length === 0}
+                title="Clear all saved code chats"
+                style={{
+                  background: 'transparent', border: '1px solid #2a2a2a', color: clearing ? '#4a4a4a' : '#8a8a8a',
+                  cursor: (clearing || savedChats.length === 0) ? 'not-allowed' : 'pointer',
+                  padding: '4px 6px', borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center'
+                }}>
+                <Trash2 size={12}/>
+              </button>
             </div>
           </aside>
         )}
