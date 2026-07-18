@@ -169,6 +169,18 @@ const FallbackCodeBlock = ({ lang, codeText }) => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────
+ *  Utility — time-of-day greeting for the empty-state hero
+ * ──────────────────────────────────────────────────────────────────────── */
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 5)  return 'Working late';
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  if (h < 22) return 'Good evening';
+  return 'Working late';
+};
+
+/* ────────────────────────────────────────────────────────────────────────
  *  Utility — format relative time
  * ──────────────────────────────────────────────────────────────────────── */
 const relTime = (iso) => {
@@ -732,7 +744,10 @@ Title:`,
             }}>
               <Terminal size={14} color="#0a0a0a"/>
             </div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
+              <div style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono', lineHeight: 1 }}>by Vortis</div>
+            </div>
           </div>
         </div>
 
@@ -796,12 +811,16 @@ Title:`,
             <div style={{ padding: 10 }}>
               <button onClick={newChat}
                 style={{
-                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 7,
                   padding: '9px 12px', borderRadius: 7, cursor: 'pointer',
                   background: '#e6e6e6',
                   border: '1px solid #e6e6e6', color: '#0a0a0a', fontSize: 13, fontWeight: 600
                 }}>
-                <Plus size={14}/> New Code Chat
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Plus size={14}/> New Code Chat</span>
+                <span style={{
+                  fontSize: 10, fontFamily: 'JetBrains Mono', color: '#5a5a5a', background: 'rgba(10,10,10,.08)',
+                  border: '1px solid rgba(10,10,10,.15)', borderRadius: 4, padding: '1px 5px'
+                }}>⌘K</span>
               </button>
             </div>
 
@@ -821,6 +840,13 @@ Title:`,
                 />
               </div>
             </div>
+
+            {!search && filteredChats.length > 0 && (
+              <div style={{
+                padding: '2px 16px 6px', fontSize: 10.5, fontWeight: 700, color: '#5a5a5a',
+                letterSpacing: '.06em', fontFamily: 'JetBrains Mono', textTransform: 'uppercase'
+              }}>Recent</div>
+            )}
 
             {/* Chat list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px' }} className="scr">
@@ -937,29 +963,50 @@ Title:`,
           {/* Messages / empty state */}
           <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} className="scr">
             {messages.length === 0 && !streaming ? (
-              /* ── Empty state with suggestion chips ── */
+              /* ── Empty state — greeting hero + quick chips + recent chats,
+                   styled after the ChatFusion reference layout. Vertex's own
+                   logo mark stays exactly as it was (top bar), untouched. ── */
               <div style={{
-                height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                padding: 30, textAlign: 'center'
+                minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                padding: '30px 24px', textAlign: 'center'
               }}>
-                <div style={{
-                  width: 60, height: 60, borderRadius: 12, marginBottom: 18,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#141414',
-                  border: '1px solid #2a2a2a'
-                }}>
-                  <Terminal size={28} color="#e6e6e6"/>
+                <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', letterSpacing: '.05em', marginBottom: 10 }}>
+                  {style === 'concise' ? 'CONCISE MODE' : style === 'detailed' ? 'DETAILED MODE' : 'TEACH MODE'}
                 </div>
-                <h1 style={{ fontSize: 22, fontWeight: 600, color: '#e6e6e6', margin: '0 0 6px', letterSpacing: '-.02em' }}>
-                  What are we building today?
+                <h1 style={{ fontSize: 26, fontWeight: 700, color: '#f0f0f0', margin: '0 0 6px', letterSpacing: '-.02em' }}>
+                  {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block' }}>👋</span>
                 </h1>
-                <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 24px' }}>
-                  I'm your dedicated coding assistant — debug errors, refactor messy code, ship features, or learn a new pattern. Code-first, no fluff.
+                <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 26px' }}>
+                  Chat with Vertex and turn your ideas into working code.
                 </p>
 
+                {/* Centered input capsule — mirrors the docked input below */}
+                <div style={{ width: '100%', maxWidth: 640, marginBottom: 22 }}>
+                  <div style={{
+                    background: '#141414', border: '1px solid #2a2a2a', borderRadius: 12,
+                    padding: '14px 16px 12px', textAlign: 'left'
+                  }}>
+                    <div style={{ fontSize: 13.5, color: '#6a6a6a', marginBottom: 10 }}>
+                      How can Vertex help you today?
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', gap: 10, color: '#5a5a5a' }}>
+                        <FileCode size={14}/>
+                        <Code2 size={14}/>
+                        <Zap size={14}/>
+                      </div>
+                      <span style={{
+                        fontSize: 10.5, fontFamily: 'JetBrains Mono', color: '#6a6a6a',
+                        border: '1px solid #2a2a2a', borderRadius: 5, padding: '2px 7px'
+                      }}>GLM-5.2</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick-action pill chips */}
                 <div style={{
-                  display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-                  gap: 10, maxWidth: 620, width: '100%'
+                  display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
+                  gap: 8, maxWidth: 640, marginBottom: savedChats.length ? 30 : 0
                 }}>
                   {STARTER_PROMPTS.map(s => {
                     const Icon = ICONS[s.icon] || FileCode;
@@ -967,20 +1014,50 @@ Title:`,
                       <button key={s.label}
                         onClick={() => { setInput(s.prompt); setTimeout(() => inputRef.current?.focus(), 30); }}
                         style={{
-                          textAlign: 'left', padding: '11px 13px', borderRadius: 8, cursor: 'pointer',
-                          background: '#111111', border: '1px solid #232323',
-                          color: '#dcdcdc', display: 'flex', flexDirection: 'column', gap: 5,
-                          transition: 'all .14s'
+                          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999,
+                          cursor: 'pointer', background: '#111111', border: '1px solid #232323',
+                          color: '#dcdcdc', fontSize: 12.5, fontWeight: 600, transition: 'all .14s', whiteSpace: 'nowrap'
                         }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
                       >
-                        <Icon size={15} color="#9a9a9a"/>
-                        <span style={{ fontSize: 12.5, fontWeight: 600 }}>{s.label}</span>
+                        <Icon size={13} color="#9a9a9a"/> {s.label}
                       </button>
                     );
                   })}
                 </div>
+
+                {/* Your recent chats — reuses saved chats, styled as cards */}
+                {savedChats.length > 0 && (
+                  <div style={{ width: '100%', maxWidth: 760, textAlign: 'left' }}>
+                    <div style={{
+                      fontSize: 11, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.06em',
+                      fontFamily: 'JetBrains Mono', textTransform: 'uppercase', marginBottom: 10
+                    }}>Your recent chats</div>
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10
+                    }}>
+                      {savedChats.slice(0, 3).map(c => (
+                        <button key={c.id} onClick={() => loadChat(c.id)}
+                          style={{
+                            textAlign: 'left', padding: '12px 14px', borderRadius: 9, cursor: 'pointer',
+                            background: '#111111', border: '1px solid #232323', color: '#dcdcdc',
+                            display: 'flex', flexDirection: 'column', gap: 6, transition: 'all .14s'
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
+                        >
+                          <MessageSquare size={13} color="#6a6a6a"/>
+                          <span style={{
+                            fontSize: 12.5, fontWeight: 600, lineHeight: 1.4,
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+                          }}>{c.title || c.preview || 'Untitled'}</span>
+                          <span style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono' }}>{relTime(c.updated)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               /* ── Messages list ── */
