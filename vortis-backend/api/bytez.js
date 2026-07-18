@@ -923,7 +923,7 @@ export default async function handler(req, res) {
         // Build the message array the same way the main chat handler does,
         // minus the auto-web-search context (code questions rarely need it
         // and it adds latency before the user sees the first token).
-        const codeSysContent = (prompt.trim().slice(0, 12000)) + '\n\n---\nCODE MODE: GLM-5.2 streaming active. No Groq/Cloudflare fallback will be attempted.';
+        const codeSysContent = (prompt.trim().slice(0, 12000)) + '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted.';
         const codeMessages = [{ role: 'system', content: codeSysContent }];
         codeMessages.push(...sanitizeHistory(history, 12));
         if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
@@ -935,7 +935,7 @@ export default async function handler(req, res) {
           // GLM failed — DO NOT fall back to Groq/CF (that would defeat
           // the whole point of code mode). Surface a clean error instead.
           if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ content: 'GLM-5.2 is temporarily unavailable. Please try again in a moment.' })}\n\n`);
+            res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable. Please try again in a moment.' })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
           }
