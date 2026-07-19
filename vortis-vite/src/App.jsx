@@ -2717,10 +2717,20 @@ useEffect(() => {
     if (userUidRef.current) setDoc(doc(db, 'users', userUidRef.current), { usage: n }, { merge: true }).catch(() => {});
   };
 
-  const loadChats = async (uid) => {
-    try { const snap = await getDocs(collection(db, 'users', uid, 'chats')); const chats = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(b.updated) - new Date(a.updated)); setSavedChats(chats); } catch(_) {}
-  };
-
+  const loadChat = async (id) => {
+  try {
+    if (!userUidRef.current) return;
+    const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
+    if (snap.exists()) {
+      const c = snap.data();
+      if (c.isCodeChat) return; // ← don't load a code chat into the main chat UI
+      setChatId(id); chatIdRef.current = id;
+      setMessages((c.messages || []).filter(m => !(m.type === 'vortis' && m.text?.toLowerCase().includes("hello, i'm vortis"))));
+      convHistory.current = [];
+    }
+  } catch(_) {}
+  if (window.innerWidth <= 768) setShowSidebar(false);
+};
 
  const looksLikeBadTitle = (t) => {
   if (!t) return true;
@@ -2845,8 +2855,17 @@ const saveChat = useCallback(async (msgsToSave) => {
 }, [isIncognito]);
 
 
-  const startNewChat = async () => {
-    if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); if (snap.docs.length >= 10) { const oldest = snap.docs.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0]; if (oldest) await deleteDoc(oldest.ref); } } catch(_) {} }
+ const startNewChat = async () => {
+  if (userUidRef.current) {
+    try {
+      const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats'));
+      const regularChats = snap.docs.filter(d => !d.data().isCodeChat); // ← add this
+      if (regularChats.length >= 10) {
+        const oldest = regularChats.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0];
+        if (oldest) await deleteDoc(oldest.ref);
+      }
+    } catch(_) {}
+  }
     const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
     setMessages([]); setUploadedDoc(null); setShowMenu(false); setImgGenMode(false);
     setLastImagePrompt(null); convHistory.current = []; setProcessingStatus('');
