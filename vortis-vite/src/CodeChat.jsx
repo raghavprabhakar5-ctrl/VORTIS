@@ -12,7 +12,7 @@ import {
   Zap, Bug, BookOpen, RefreshCw, FileCode, Folder,
   PanelLeftClose, PanelLeftOpen,
   Terminal, Cog, EraserIcon,
-  ChevronDown, HelpCircle, Command
+  ChevronDown, HelpCircle
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -122,7 +122,6 @@ const CODE_LANG_COLORS = {
 
 const FallbackCodeBlock = ({ lang, codeText }) => {
   const [copied, setCopied] = useState(false);
-  const [attachments, setAttachments] = useState([]);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const lines = codeText.split('\n');
   const accent = CODE_LANG_COLORS[(lang || '').toLowerCase()] || '#8a8a8a';
@@ -222,53 +221,6 @@ const looksLikeBadTitle = (t) => {
   return badPatterns.test(trimmed);
 };
 
-
-const handlePaste = useCallback((e) => {
-  const items = e.clipboardData?.items || [];
-
-  // ── Check for pasted image first ──
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      e.preventDefault();
-      const file = item.getAsFile();
-      if (!file) continue;
-      const reader = new FileReader();
-      reader.onload = () => {
-        setAttachments(prev => [...prev, {
-          id: `img-${Date.now()}`,
-          type: 'image',
-          name: file.name || 'Pasted image',
-          content: reader.result, // base64 data URL
-        }]);
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-  }
-
-  // ── Otherwise check for a big/code-like text paste ──
-  const text = e.clipboardData.getData('text');
-  if (!text) return;
-  const isBig = text.length > 200 || text.split('\n').length > 6;
-  if (!isBig) return; // short pastes just go into the textarea normally
-
-  e.preventDefault();
-  const lines = text.split('\n');
-  const preview = lines.slice(0, 6).join('\n');
-  setAttachments(prev => [...prev, {
-    id: `txt-${Date.now()}`,
-    type: 'text',
-    name: `Pasted text`,
-    preview,
-    content: text,
-    lines: lines.length,
-  }]);
-}, []);
-
-const removeAttachment = useCallback((id) => {
-  setAttachments(prev => prev.filter(a => a.id !== id));
-}, []);
-
 /* ────────────────────────────────────────────────────────────────────────
  *  Main Vertex component (powered by Vortis)
  * ──────────────────────────────────────────────────────────────────────── */
@@ -329,6 +281,58 @@ const Vertex = ({
   const [showPrefs, setShowPrefs] = useState(false);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
   const [recentChatsOpen, setRecentChatsOpen] = useState(true);
+
+  /* ── Paste attachments ("PASTED" cards above the input) ──
+   * Big/code-like text pastes and pasted images get intercepted and shown
+   * as removable attachment cards instead of being dumped raw into the
+   * textarea. Folded into the outgoing message text on send(). */
+  const [attachments, setAttachments] = useState([]);
+
+  const handlePaste = useCallback((e) => {
+    const items = e.clipboardData?.items || [];
+
+    // ── Check for pasted image first ──
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const reader = new FileReader();
+        reader.onload = () => {
+          setAttachments(prev => [...prev, {
+            id: `img-${Date.now()}`,
+            type: 'image',
+            name: file.name || 'Pasted image',
+            content: reader.result, // base64 data URL
+          }]);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    }
+
+    // ── Otherwise check for a big/code-like text paste ──
+    const text = e.clipboardData.getData('text');
+    if (!text) return;
+    const isBig = text.length > 200 || text.split('\n').length > 6;
+    if (!isBig) return; // short pastes just go into the textarea normally
+
+    e.preventDefault();
+    const lines = text.split('\n');
+    const preview = lines.slice(0, 6).join('\n');
+    setAttachments(prev => [...prev, {
+      id: `txt-${Date.now()}`,
+      type: 'text',
+      name: `Pasted text`,
+      preview,
+      content: text,
+      lines: lines.length,
+    }]);
+  }, []);
+
+  const removeAttachment = useCallback((id) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
 
   /* ── Attach menu ("+" button next to the input) ──
    * Lets the user pull file/project contents straight into the prompt as
@@ -558,6 +562,7 @@ Title:`,
     setChatId(newId); chatIdRef.current = newId;
     setMessages([]); convHistoryRef.current = [];
     setInput('');
+    setAttachments([]);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
@@ -633,150 +638,161 @@ Title:`,
    *  Send message + stream response
    * ────────────────────────────────────────────────────────────────── */
   const send = useCallback(async (overrideText) => {
-  const rawText = (overrideText ?? input).trim();
+    const rawText = (overrideText ?? input).trim();
 
-  // ── Merge any pending attachments into the outgoing message ──
-  let text = rawText;
-  if (attachments.length > 0) {
-    const attachmentBlocks = attachments.map(att => {
-      if (att.type === 'text') {
-        return `\`\`\`\n${att.content}\n\`\`\``;
+    // ── Merge any pending attachments into the outgoing message ──
+    let text = rawText;
+    if (attachments.length > 0) {
+      const attachmentBlocks = attachments.map(att => {
+        if (att.type === 'text') {
+          return `\`\`\`\n${att.content}\n\`\`\``;
+        }
+        return `[Attached image: ${att.name}]`;
+      }).join('\n\n');
+      text = attachmentBlocks + (rawText ? '\n\n' + rawText : '');
+    }
+
+    if (!text || streaming) return;
+    setAttachments([]); // clear once folded into the message
+
+    const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
+    const nextMsgs = [...messages, userMsg];
+    setMessages(nextMsgs);
+    setInput('');
+    setStreaming(true);
+    setThinking(true);
+    setStreamText('');
+    abortRef.current = false;
+
+    const historyForBackend = nextMsgs.slice(-12).map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.text
+    }));
+
+    const sys = buildCoderSystemPrompt(style);
+    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+
+    let full = '';
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({
+          action: 'chat',
+          mode: 'code',                  // ← routes to Vertex's coding model on the backend
+          prompt: fullPrompt,
+          history: historyForBackend
+        })
+      });
+
+      if (!res.ok) {
+        let errMsg = `Request failed (${res.status}).`;
+        if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
+        else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
+        else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
+        const errMsgFinal = errMsg;
+        setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: `⚠️ ${errMsgFinal}`, ts: Date.now() }]);
+        setStreaming(false); setThinking(false); setStreamText('');
+        return;
       }
-      return `[Attached image: ${att.name}]`;
-    }).join('\n\n');
-    text = attachmentBlocks + (rawText ? '\n\n' + rawText : '');
-  }
 
-  if (!text || streaming) return;
-  setAttachments([]); // clear once folded into the message
+      setThinking(false);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buffer = '';
 
-  const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
-  const nextMsgs = [...messages, userMsg];
-  setMessages(nextMsgs);
-  setInput('');
-  setStreaming(true);
-  setThinking(true);
-  setStreamText('');
-  abortRef.current = false;
+      while (true) {
+        if (abortRef.current) break;
+        const { done, value } = await reader.read();
+        if (done) break;
 
-  const historyForBackend = nextMsgs.slice(-12).map(m => ({
-    role: m.role === 'user' ? 'user' : 'assistant',
-    content: m.text
-  }));
+        buffer += dec.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep the trailing partial line for next chunk
 
-  const sys = buildCoderSystemPrompt(style);
-  const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]' || !raw) continue;
+          try {
+            const p = JSON.parse(raw);
+            if (p.content) { full += p.content; setStreamText(full); }
+          } catch (_) {}
+        }
+      }
 
-  let full = '';
-  try {
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({
-        action: 'chat',
-        mode: 'code',                  // ← routes to Vertex's coding model on the backend
-        prompt: fullPrompt,
-        history: historyForBackend
-      })
-    });
-
-    if (!res.ok) {
-      let errMsg = `Request failed (${res.status}).`;
-      if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
-      else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
-      else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
-      const errMsgFinal = errMsg;
-      setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: `⚠️ ${errMsgFinal}`, ts: Date.now() }]);
-      setStreaming(false); setThinking(false); setStreamText('');
+      // flush any leftover partial line once the stream ends
+      if (buffer.startsWith('data: ')) {
+        const raw = buffer.slice(6).trim();
+        if (raw && raw !== '[DONE]') {
+          try {
+            const p = JSON.parse(raw);
+            if (p.content) { full += p.content; setStreamText(full); }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      setThinking(false);
+      setMessages(prev => [...prev, {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        text: `⚠️ Network error: ${e?.message || 'unknown'}\n\nPlease check your connection and try again.`,
+        ts: Date.now()
+      }]);
+      setStreaming(false); setStreamText('');
       return;
     }
 
-    setThinking(false);
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buffer = '';
+    const cleaned = full.trim();
+    if (!cleaned) {
+      setMessages(prev => [...prev, {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        text: '_(empty response — try rephrasing your request)_',
+        ts: Date.now()
+      }]);
+    } else {
 
-    while (true) {
-      if (abortRef.current) break;
-      const { done, value } = await reader.read();
-      if (done) break;
+      const aiMsg = {
+        id: `a-${Date.now()}`,
+        role: 'assistant',
+        text: cleaned,
+        ts: Date.now()
+      };
 
-      buffer += dec.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // keep the trailing partial line for next chunk
+      const finalMsgs = [...nextMsgs, aiMsg];
+      setMessages(finalMsgs);
 
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]' || !raw) continue;
-        try {
-          const p = JSON.parse(raw);
-          if (p.content) { full += p.content; setStreamText(full); }
-        } catch (_) {}
-      }
+      setTimeout(async () => {
+        const context = finalMsgs
+          .filter(m => m.role === "user")
+          .map(m => m.text)
+          .join(" | ");
+
+        const title =
+          await generateChatTitle(context) ||
+          finalMsgs.find(m => m.role === "user")?.text.slice(0, 48) ||
+          "New Code Chat";
+
+        await persistChat(finalMsgs, title);
+      }, 50);
+
     }
-
-    // flush any leftover partial line once the stream ends
-    if (buffer.startsWith('data: ')) {
-      const raw = buffer.slice(6).trim();
-      if (raw && raw !== '[DONE]') {
-        try {
-          const p = JSON.parse(raw);
-          if (p.content) { full += p.content; setStreamText(full); }
-        } catch (_) {}
-      }
-    }
-  } catch (e) {
+    setStreaming(false);
     setThinking(false);
-    setMessages(prev => [...prev, {
-      id: `a-${Date.now()}`,
-      role: 'assistant',
-      text: `⚠️ Network error: ${e?.message || 'unknown'}\n\nPlease check your connection and try again.`,
-      ts: Date.now()
-    }]);
-    setStreaming(false); setStreamText('');
-    return;
-  }
+    setStreamText('');
+  }, [input, messages, streaming, style, persistChat, attachments]);
 
-  const cleaned = full.trim();
-  if (!cleaned) {
-    setMessages(prev => [...prev, {
-      id: `a-${Date.now()}`,
-      role: 'assistant',
-      text: '_(empty response — try rephrasing your request)_',
-      ts: Date.now()
-    }]);
-  } else {
-
-    const aiMsg = {
-      id: `a-${Date.now()}`,
-      role: 'assistant',
-      text: cleaned,
-      ts: Date.now()
-    };
-
-    const finalMsgs = [...nextMsgs, aiMsg];
-    setMessages(finalMsgs);
-
-    setTimeout(async () => {
-      const context = finalMsgs
-        .filter(m => m.role === "user")
-        .map(m => m.text)
-        .join(" | ");
-
-      const title =
-        await generateChatTitle(context) ||
-        finalMsgs.find(m => m.role === "user")?.text.slice(0, 48) ||
-        "New Code Chat";
-
-      await persistChat(finalMsgs, title);
-    }, 50);
-
-  }
-  setStreaming(false);
-  setThinking(false);
-  setStreamText('');
-}, [input, messages, streaming, style, persistChat, attachments]);
+  const stopStreaming = useCallback(() => {
+    abortRef.current = true;
+    setStreaming(false);
+    setThinking(false);
+    if (streamText.trim()) {
+      const aiMsg = { id: `a-${Date.now()}`, role: 'assistant', text: streamText.trim() + '\n\n_(stopped)_', ts: Date.now() };
+      setMessages(prev => [...prev, aiMsg]);
+    }
+    setStreamText('');
+  }, [streamText]);
 
   /* ── Enter sends, Shift+Enter makes a newline ── */
   const handleInputKeyDown = useCallback((e) => {
@@ -1044,7 +1060,6 @@ Title:`,
                 invented ones. */}
             <div style={{ padding: '6px 6px 2px', borderTop: '1px solid #1c1c1c' }}>
               {[
-                { icon: Command,    label: 'Keyboard Shortcuts', onClick: () => alert('⌘K — New chat\nEnter — Send message\nShift+Enter — New line\nEsc — Close Vertex') },
                 { icon: HelpCircle, label: 'Help',                onClick: () => alert('Vertex is your dedicated coding assistant. Paste an error, ask for a function, or request a refactor to get started.') },
                 { icon: Trash2,     label: 'Clear All Data',      onClick: clearAllData, disabled: clearing || savedChats.length === 0 },
               ].map(item => (
@@ -1248,6 +1263,52 @@ Title:`,
             padding: '12px 22px 16px'
           }}>
             <div style={{ maxWidth: 820, margin: '0 auto' }}>
+
+              {/* ── Attachment cards ("PASTED" preview) — shown above the input row ── */}
+              {attachments.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+                  {attachments.map(att => (
+                    <div key={att.id} style={{
+                      background: '#171717', border: '1px solid #2a2a2a', borderRadius: 12,
+                      padding: '12px 14px', maxWidth: 340,
+                    }}>
+                      {att.type === 'image' ? (
+                        <img src={att.content} alt={att.name}
+                          style={{ maxWidth: '100%', borderRadius: 8, display: 'block', marginBottom: 10 }} />
+                      ) : (
+                        <pre style={{
+                          margin: 0, marginBottom: 10, fontFamily: 'JetBrains Mono, monospace',
+                          fontSize: 12, lineHeight: 1.6, color: '#c8c8c8',
+                          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                          overflow: 'hidden', maxHeight: 110,
+                          WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
+                        }}>
+                          {att.preview}{att.lines > 6 ? '\n…' : ''}
+                        </pre>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5,
+                          padding: '4px 12px', borderRadius: 999,
+                          background: '#232323', border: '1px solid #333333',
+                          color: '#dcdcdc', fontSize: 12, fontWeight: 600,
+                          fontFamily: 'JetBrains Mono, monospace',
+                        }}>
+                          <Check size={11} color="#8a8a8a" /> PASTED
+                        </span>
+                        <button onClick={() => removeAttachment(att.id)}
+                          style={{
+                            background: 'transparent', border: 'none', color: '#6a6a6a',
+                            cursor: 'pointer', padding: 4, display: 'flex',
+                          }}>
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Flex row layout — textarea and send button sit side by side,
                   so the button never overlaps the text as the textarea grows. */}
               <div style={{
@@ -1318,61 +1379,18 @@ Title:`,
                     <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
                   </button>
                 ) : (
-                  <button onClick={() => send()} disabled={!input.trim()}
+                  <button onClick={() => send()} disabled={!input.trim() && attachments.length === 0}
                     title="Send"
                     style={{
-                      width: 36, height: 36, borderRadius: 7, border: '1px solid ' + (input.trim() ? '#e6e6e6' : '#2a2a2a'), cursor: input.trim() ? 'pointer' : 'not-allowed',
-                      background: input.trim() ? '#e6e6e6' : '#1a1a1a',
-                      color: input.trim() ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 36, height: 36, borderRadius: 7, border: '1px solid ' + ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a'), cursor: (input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed',
+                      background: (input.trim() || attachments.length > 0) ? '#e6e6e6' : '#1a1a1a',
+                      color: (input.trim() || attachments.length > 0) ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all .15s', flexShrink: 0, lineHeight: 0
                     }}>
                     <ArrowUp size={15}/>
                   </button>
                 )}
               </div>
-              {attachments.length > 0 && (
-  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
-    {attachments.map(att => (
-      <div key={att.id} style={{
-        background: '#171717', border: '1px solid #2a2a2a', borderRadius: 12,
-        padding: '12px 14px', maxWidth: 340,
-      }}>
-        {att.type === 'image' ? (
-          <img src={att.content} alt={att.name}
-            style={{ maxWidth: '100%', borderRadius: 8, display: 'block', marginBottom: 10 }} />
-        ) : (
-          <pre style={{
-            margin: 0, marginBottom: 10, fontFamily: 'JetBrains Mono, monospace',
-            fontSize: 12, lineHeight: 1.6, color: '#c8c8c8',
-            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-            overflow: 'hidden', maxHeight: 110,
-            WebkitMaskImage: 'linear-gradient(to bottom, black 60%, transparent 100%)',
-          }}>
-            {att.preview}{att.lines > 6 ? '\n…' : ''}
-          </pre>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '4px 12px', borderRadius: 999,
-            background: '#232323', border: '1px solid #333333',
-            color: '#dcdcdc', fontSize: 12, fontWeight: 600,
-            fontFamily: 'JetBrains Mono, monospace',
-          }}>
-            <Check size={11} color="#8a8a8a" /> PASTED
-          </span>
-          <button onClick={() => removeAttachment(att.id)}
-            style={{
-              background: 'transparent', border: 'none', color: '#6a6a6a',
-              cursor: 'pointer', padding: 4, display: 'flex',
-            }}>
-            <X size={13} />
-          </button>
-        </div>
-      </div>
-    ))}
-  </div>
-)}
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
                 marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono'
