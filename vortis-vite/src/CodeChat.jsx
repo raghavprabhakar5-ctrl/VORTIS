@@ -1551,7 +1551,7 @@ Title:`,
                         <Folder size={14} color="#9a9a9a"/> Add project folder
                       </button>
                       <button onClick={() => imageFileInputRef.current?.click()}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <ImageIcon size={14} color="#9a9a9a"/> Add image or screenshot
