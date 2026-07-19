@@ -1,5 +1,5 @@
 export const config = {
-  maxDuration: 60,
+  maxDuration: 180,
   api: {
     bodyParser: {
       sizeLimit: '5mb',
@@ -295,7 +295,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
           stream:          true,
         }),
       },
-      60000   // GLM-5.2 is a 753B flagship — give it headroom
+      180000   // GLM-5.2 is a 753B flagship — give it headroom
     );
 
     if (!nvRes.ok) {
@@ -393,9 +393,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
     console.log(`GLM-only stream OK - ${written} chars written`);
     return true;
   } catch (e) {
-    console.error('GLM-only stream error:', e.message);
-    return false;
+  console.error('GLM-only stream error:', e.message);
+  if (written > 0) {
+    // We already sent partial content — tell the client it was cut short
+    // instead of just dropping the connection with no signal.
+    try {
+      res.write(`data: ${JSON.stringify({ content: '\n\n_(response cut short — please try again)_' })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (_) {}
   }
+  return false;
+}
 }
 
 // ── GLOBAL NVIDIA RATE GUARD (protects shared API key across all users) ──
