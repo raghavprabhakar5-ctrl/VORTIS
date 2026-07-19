@@ -12,7 +12,8 @@ import {
   Zap, Bug, BookOpen, RefreshCw, FileCode, Folder,
   PanelLeftClose, PanelLeftOpen,
   Terminal, Cog, EraserIcon,
-  ChevronDown, HelpCircle
+  ChevronDown, HelpCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -41,13 +42,17 @@ const STYLES = [
   { id: 'teach',     label: 'Teach',     hint: 'Line-by-line comments, learner-friendly' },
 ];
 
+// NOTE: these prompts intentionally do NOT contain empty ``` ``` fences —
+// a plain <textarea> can't render markdown, so empty fences used to just
+// show up as raw backtick clutter with nothing useful inside them. Big/code
+// pastes are already handled separately by the paste-attachment flow below.
 const STARTER_PROMPTS = [
-  { icon: 'bug',     label: 'Debug an error',     prompt: "I'm getting this error and need help fixing it:\n\n```\n\n```" },
-  { icon: 'zap',     label: 'Optimize code',      prompt: 'Help me optimize this function for performance and readability:\n\n```\n\n```' },
-  { icon: 'book',    label: 'Explain code',       prompt: 'Walk me through what this code does, step by step:\n\n```\n\n```' },
-  { icon: 'file',    label: 'Write a function',   prompt: 'Write me a function that …' },
-  { icon: 'refresh', label: 'Refactor',           prompt: 'Refactor this code to be cleaner and more idiomatic:\n\n```\n\n```' },
-  { icon: 'sparkles',label: 'Code review',        prompt: 'Review this code for bugs, security issues, and improvements:\n\n```\n\n```' },
+  { icon: 'bug',      label: 'Debug an error',   prompt: "I'm getting this error and need help fixing it:\n\n" },
+  { icon: 'zap',      label: 'Optimize code',    prompt: 'Help me optimize this function for performance and readability:\n\n' },
+  { icon: 'book',     label: 'Explain code',     prompt: 'Walk me through what this code does, step by step:\n\n' },
+  { icon: 'file',     label: 'Write a function', prompt: 'Write me a function that ' },
+  { icon: 'refresh',  label: 'Refactor',         prompt: 'Refactor this code to be cleaner and more idiomatic:\n\n' },
+  { icon: 'sparkles', label: 'Code review',      prompt: 'Review this code for bugs, security issues, and improvements:\n\n' },
 ];
 
 const ICONS = { bug: Bug, zap: Zap, book: BookOpen, file: FileCode, refresh: RefreshCw, sparkles: Sparkles };
@@ -101,69 +106,212 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 };
 
 /* ────────────────────────────────────────────────────────────────────────
- *  Fallback CodeBlock — used only when parent doesn't pass a real one.
- *  Renders code with a language tag + copy button, a subtle language-accent
- *  color, and a soft entrance animation so it doesn't just pop into place.
+ *  VertexCodeBlock — the ONLY code renderer Vertex uses internally.
+ *
+ *  IMPORTANT: Vertex used to fall back to whatever `CodeBlock` the parent
+ *  app passed in as a prop, and render that inside the chat. That parent
+ *  component is styled for the MAIN app's indigo/violet/cyan theme (blue
+ *  code text, colored per-language dots/labels — e.g. amber for JSX). Sat
+ *  inside Vertex's black/monochrome terminal shell, it looked completely
+ *  out of place. Vertex now always renders its own themed block instead,
+ *  matching its terminal aesthetic (grayscale, JetBrains Mono, no per-
+ *  language color coding). The parent's CodeBlock/exec props are still
+ *  used for actually RUNNING code (via safeExecuteCodeLocally), just not
+ *  for rendering it.
+ *
+ *  Long blocks collapse to a short preview with a footer button that
+ *  opens the code in the right-hand split panel instead of pushing the
+ *  chat message endlessly tall.
  * ──────────────────────────────────────────────────────────────────────── */
-const CODE_LANG_COLORS = {
-  javascript: '#f59e0b', js: '#f59e0b', jsx: '#f59e0b',
-  typescript: '#06b6d4', ts: '#06b6d4', tsx: '#06b6d4',
-  python: '#3b82f6', py: '#3b82f6',
-  react: '#22d3ee',
-  rust: '#f97316', go: '#06b6d4',
-  java: '#ef4444',
-  cpp: '#a78bfa', c: '#a78bfa', 'c++': '#a78bfa',
-  csharp: '#10b981', 'c#': '#10b981',
-  sql: '#10b981', html: '#f97316', css: '#6366f1',
-  bash: '#10b981', sh: '#10b981',
-  php: '#8b5cf6', ruby: '#e11d48', rb: '#e11d48',
-  json: '#84cc16',
-};
+const LONG_BLOCK_LINES = 8;
 
-const FallbackCodeBlock = ({ lang, codeText }) => {
+const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
   const lines = codeText.split('\n');
-  const accent = CODE_LANG_COLORS[(lang || '').toLowerCase()] || '#8a8a8a';
+  const isLong = lines.length > LONG_BLOCK_LINES;
+  const preview = isLong ? lines.slice(0, LONG_BLOCK_LINES - 2).join('\n') : codeText;
+
   return (
     <div style={{
       margin: '12px 0', borderRadius: 10, overflow: 'hidden',
-      border: '1px solid #262626', background: '#000000',
+      border: '1px solid #262626', background: '#0a0a0a',
       animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
       boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
     }}>
+      {/* header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 14px', background: '#111111', borderBottom: '1px solid #262626',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 6px ${accent}aa`, flexShrink: 0 }}/>
-          <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8', letterSpacing: '.06em', fontWeight: 700, textTransform: 'uppercase' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#5a5a5a', flexShrink: 0 }} />
+          <span style={{
+            fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8',
+            letterSpacing: '.06em', fontWeight: 700, textTransform: 'uppercase', flexShrink: 0,
+          }}>
             {lang || 'plaintext'}
           </span>
+          <span style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            · {lines.length} {lines.length === 1 ? 'line' : 'lines'}
+          </span>
         </div>
-        <button onClick={copy} style={{
-          display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
-          borderRadius: 6, padding: '4px 10px', color: copied ? '#e6e6e6' : '#9a9a9a', fontSize: 11,
-          cursor: 'pointer', fontFamily: 'JetBrains Mono', transition: 'all .15s'
-        }}>
-          {copied ? <Check size={11}/> : <Copy size={11}/>} {copied ? 'Copied' : 'Copy'}
-        </button>
+
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <button
+            onClick={() => onOpenPanel({ lang, code: codeText })}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, background: '#1c1c1c', border: '1px solid #333333',
+              borderRadius: 6, padding: '4px 10px', color: '#dcdcdc', fontSize: 11, cursor: 'pointer',
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, transition: 'all .15s',
+            }}
+          >
+            <Terminal size={11} /> Open
+          </button>
+          <button
+            onClick={copy}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
+              borderRadius: 6, padding: '4px 10px', color: copied ? '#e6e6e6' : '#9a9a9a', fontSize: 11,
+              cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', transition: 'all .15s',
+            }}
+          >
+            {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
       </div>
-      <div style={{ display: 'flex', overflowX: 'auto', background: '#000000' }}>
-        <div style={{
-          flexShrink: 0, padding: '14px 12px', textAlign: 'right', userSelect: 'none',
-          color: '#3f3f3f', fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
-          borderRight: '1px solid #1a1a1a', background: '#000000'
-        }}>
-          {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
-        </div>
-        <pre style={{
+
+      {/* code preview */}
+      <pre
+        onClick={() => onOpenPanel({ lang, code: codeText })}
+        title={isLong ? 'Click to open full code in panel' : undefined}
+        style={{
           margin: 0, padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
-          lineHeight: 1.7, color: '#e6e6e6', whiteSpace: 'pre', wordBreak: 'normal', flex: 1, background: '#000000'
-        }}>{codeText}</pre>
-      </div>
+          lineHeight: 1.7, color: '#dcdcdc', whiteSpace: 'pre', wordBreak: 'normal',
+          overflowX: 'auto', maxHeight: isLong ? 168 : 'none', overflowY: 'hidden',
+          cursor: 'pointer', background: '#0a0a0a',
+        }}
+      >{preview}{isLong ? '\n…' : ''}</pre>
+
+      {isLong && (
+        <button
+          onClick={() => onOpenPanel({ lang, code: codeText })}
+          style={{
+            width: '100%', padding: '8px 0', background: '#111111', border: 'none', borderTop: '1px solid #1a1a1a',
+            color: '#9a9a9a', fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', cursor: 'pointer',
+            letterSpacing: '.03em', transition: 'color .15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#dcdcdc'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#9a9a9a'; }}
+        >
+          View full code in panel →
+        </button>
+      )}
     </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  CodePanel — right-side split view. Opened from any code block in the
+ *  chat (via VertexCodeBlock's "Open" button or by clicking the code, or
+ *  automatically for long blocks). Shows the full file plus a Run button
+ *  and a console-style output pane underneath, all in Vertex's monochrome
+ *  theme so it never clashes with whatever block color the parent app
+ *  might otherwise have used.
+ * ──────────────────────────────────────────────────────────────────────── */
+const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onRun }) => {
+  const [copied, setCopied] = useState(false);
+  if (!panelCode) return null;
+
+  const copy = () => { navigator.clipboard.writeText(panelCode.code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
+  return (
+    <aside style={{
+      width: 'min(46%, 640px)', flexShrink: 0, borderLeft: '1px solid #212121',
+      background: '#0f0f0f', display: 'flex', flexDirection: 'column', minHeight: 0,
+      animation: 'vertexSlideInRight .18s ease',
+    }}>
+      {/* header */}
+      <div style={{
+        height: 46, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 14px', borderBottom: '1px solid #212121',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <FileCode size={13} color="#8a8a8a" style={{ flexShrink: 0 }} />
+          <span style={{
+            fontSize: 12.5, fontWeight: 700, color: '#e6e6e6', fontFamily: 'JetBrains Mono, monospace',
+            textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>
+            {panelCode.lang || 'code'}
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          <button
+            onClick={onRun}
+            disabled={running}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+              border: '1px solid rgba(16,185,129,.3)', background: running ? '#1c1c1c' : 'rgba(16,185,129,.08)',
+              color: running ? '#8a8a8a' : '#10b981', fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
+              fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', transition: 'all .15s',
+            }}
+          >
+            {running
+              ? <Loader size={11} style={{ animation: 'vertexSpin 1s linear infinite' }} />
+              : <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>}
+            {running ? 'Running…' : 'Run'}
+          </button>
+          <button
+            onClick={copy}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+              border: '1px solid #333333', background: 'transparent', color: copied ? '#e6e6e6' : '#9a9a9a',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, cursor: 'pointer', transition: 'all .15s',
+            }}
+          >
+            {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? 'Copied' : 'Copy'}
+          </button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 4, display: 'flex' }}>
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* full code */}
+      <div style={{ flex: '1 1 55%', minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #1a1a1a' }} className="scr">
+        <pre style={{
+          margin: 0, padding: '16px 18px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
+          lineHeight: 1.75, color: '#dcdcdc', whiteSpace: 'pre', background: '#0a0a0a',
+        }}>{panelCode.code}</pre>
+      </div>
+
+      {/* output console */}
+      <div style={{ flex: '1 1 45%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#080808' }}>
+        <div style={{
+          padding: '8px 16px', fontSize: 10.5, color: hasError ? '#ef4444' : '#5a5a5a',
+          fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+          borderBottom: '1px solid #1a1a1a', flexShrink: 0,
+        }}>
+          {output === null ? 'OUTPUT' : hasError ? 'ERROR' : 'OUTPUT'}
+        </div>
+        {running && bootMsg && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px',
+            fontSize: 10.5, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
+          }}>
+            <Loader size={10} style={{ animation: 'vertexSpin 1s linear infinite' }} /> {bootMsg}
+          </div>
+        )}
+        <pre className="scr" style={{
+          flex: 1, minHeight: 0, overflowY: 'auto', margin: 0, padding: '14px 16px',
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
+          color: hasError ? '#f87171' : '#dcdcdc', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+        }}>
+          {output === null ? 'Click Run to see output here…' : output}
+        </pre>
+      </div>
+    </aside>
   );
 };
 
@@ -206,12 +354,7 @@ const getAvatarColor = (seed) => {
 };
 
 /* ────────────────────────────────────────────────────────────────────────
- *  FIX #1: this function was called in generateChatTitle but never
- *  defined anywhere — every call threw a ReferenceError, which was
- *  silently swallowed by the surrounding try/catch. That meant
- *  generateChatTitle ALWAYS returned null, and titles ALWAYS fell back
- *  to the raw truncated first user message. Defining it here actually
- *  lets AI-generated titles through.
+ *  Title-quality check used by generateChatTitle below.
  * ──────────────────────────────────────────────────────────────────────── */
 const looksLikeBadTitle = (t) => {
   if (!t) return true;
@@ -227,7 +370,7 @@ const looksLikeBadTitle = (t) => {
 const Vertex = ({
   onClose,
   // Optional props from parent — wire these up to get runnable code blocks:
-  CodeBlock,                // parent's CodeBlock component ({lang, codeText}) => JSX
+  CodeBlock,                // no longer used for rendering (kept for backwards compat, unused)
   safeExecuteCodeLocally,   // parent's runner (lang, code, onBoot) => Promise<{isError, output}>
   LANG_ENGINE,              // parent's lang→engine map
   ENGINE_META,              // parent's engine→meta map
@@ -267,6 +410,45 @@ const Vertex = ({
   const [renamingId, setRenamingId] = useState(null);
   const [renameVal, setRenameVal] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  /* ── Right-side code panel state ── */
+  const [panelCode, setPanelCode] = useState(null);       // { lang, code } | null
+  const [panelOutput, setPanelOutput] = useState(null);
+  const [panelRunning, setPanelRunning] = useState(false);
+  const [panelHasError, setPanelHasError] = useState(false);
+  const [panelBootMsg, setPanelBootMsg] = useState('');
+
+  const openCodePanel = useCallback(({ lang, code }) => {
+    setPanelCode({ lang, code });
+    setPanelOutput(null);
+    setPanelHasError(false);
+  }, []);
+
+  const closeCodePanel = useCallback(() => {
+    setPanelCode(null);
+    setPanelOutput(null);
+    setPanelHasError(false);
+    setPanelBootMsg('');
+  }, []);
+
+  const runPanelCode = useCallback(async () => {
+    if (!panelCode || panelRunning || !safeExecuteCodeLocally) return;
+    setPanelRunning(true);
+    setPanelOutput(null);
+    setPanelHasError(false);
+    setPanelBootMsg('');
+    try {
+      const result = await safeExecuteCodeLocally(panelCode.lang, panelCode.code, (m) => setPanelBootMsg(m));
+      setPanelHasError(!!result.isError);
+      setPanelOutput(typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2));
+    } catch (e) {
+      setPanelHasError(true);
+      setPanelOutput('Error: ' + (e?.message || String(e)));
+    } finally {
+      setPanelRunning(false);
+      setPanelBootMsg('');
+    }
+  }, [panelCode, panelRunning, safeExecuteCodeLocally]);
 
   /* ── Preferences ──
    * Guard against stale saved values (e.g. an old 'auto' / 'balanced' from
@@ -335,12 +517,13 @@ const Vertex = ({
   }, []);
 
   /* ── Attach menu ("+" button next to the input) ──
-   * Lets the user pull file/project contents straight into the prompt as
-   * labeled code blocks, instead of copy-pasting by hand. */
+   * Lets the user pull file/project contents, or an image/screenshot,
+   * straight into the prompt instead of copy-pasting by hand. */
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const attachMenuRef = useRef(null);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
+  const imageFileInputRef = useRef(null);
 
   useEffect(() => {
     if (!showAttachMenu) return;
@@ -374,6 +557,26 @@ const Vertex = ({
     e.target.value = '';
     setShowAttachMenu(false);
     setTimeout(() => inputRef.current?.focus(), 60);
+  }, []);
+
+  const handleImageFilesSelected = useCallback((e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.slice(0, 6).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        setAttachments(prev => [...prev, {
+          id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'image',
+          name: file.name || 'Screenshot',
+          content: reader.result,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+    setShowAttachMenu(false);
   }, []);
 
   const generateChatTitle = async (context) => {
@@ -482,8 +685,9 @@ Title:`,
         e.preventDefault();
         newChat();
       }
-      // Esc → close (only if not typing in an input)
+      // Esc → close panel first, then prefs, then the whole overlay
       if (e.key === 'Escape' && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') {
+        if (panelCode) { closeCodePanel(); return; }
         if (showPrefs) { setShowPrefs(false); return; }
         onClose?.();
       }
@@ -491,7 +695,7 @@ Title:`,
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPrefs]);
+  }, [showPrefs, panelCode]);
 
   /* ──────────────────────────────────────────────────────────────────
    *  Firestore ops.
@@ -506,6 +710,9 @@ Title:`,
    *  Fix: write into the SAME 'chats' collection your rules already
    *  allow, tagged with `isCodeChat: true` so it doesn't get mixed up
    *  with regular chats when you load the sidebar list elsewhere.
+   *  (The main app's own loadChats/loadChat must filter OUT isCodeChat
+   *  docs — otherwise these leak into the main chat's sidebar. See the
+   *  matching fix in App.jsx.)
    * ────────────────────────────────────────────────────────────────── */
   const loadChats = useCallback(async (uid) => {
     if (!uid) { setSavedChats([]); return; }
@@ -563,8 +770,9 @@ Title:`,
     setMessages([]); convHistoryRef.current = [];
     setInput('');
     setAttachments([]);
+    closeCodePanel();
     setTimeout(() => inputRef.current?.focus(), 50);
-  }, []);
+  }, [closeCodePanel]);
 
   const loadChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
@@ -582,11 +790,12 @@ Title:`,
       setMessages(restored);
       convHistoryRef.current = restored.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
       if (c.style && STYLES.some(s => s.id === c.style)) setStyle(c.style);
+      closeCodePanel();
       if (window.innerWidth <= 900) setSidebarOpen(false);
     } catch (e) {
       console.error('Vertex: failed to load code chat —', e);
     }
-  }, [db]);
+  }, [db, closeCodePanel]);
 
   const deleteChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
@@ -612,10 +821,10 @@ Title:`,
   }, [db, loadChats]);
 
   /* ────────────────────────────────────────────────────────────────────
-   *  FIX #2: "clear all data" — deletes every saved code chat for this
+   *  "Clear all data" — deletes every saved code chat for this
    *  user from Firestore and resets local state. Wired to a button in
    *  the sidebar footer below.
-   * ──────────────────────────────────────────────────────────────────── */
+   * ────────────────────────────────────────────────────────────────── */
   const [clearing, setClearing] = useState(false);
   const clearAllData = useCallback(async () => {
     if (!userUidRef.current || clearing) return;
@@ -809,10 +1018,9 @@ Title:`,
     return savedChats.filter(c => (c.title || '').toLowerCase().includes(q));
   }, [savedChats, search]);
 
-  /* ── The CodeBlock to use for rendering ── */
-  const RendererCodeBlock = CodeBlock || FallbackCodeBlock;
-
-  /* ── Markdown components (match App.js styling) ── */
+  /* ── Markdown components — always render code via Vertex's own themed
+       block, never the parent app's CodeBlock (see VertexCodeBlock docs
+       above for why). ── */
   const mdComponents = useMemo(() => ({
     h1: ({children}) => <h1 style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
     h2: ({children}) => <h2 style={{ fontSize: 16.5, fontWeight: 700, color: '#f0f0f0', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
@@ -838,9 +1046,9 @@ Title:`,
       const match = /language-(\w+)/.exec(className || '');
       const codeLang = match ? match[1] : '';
       const codeText = String(children).replace(/\n$/, '');
-      return <RendererCodeBlock lang={codeLang} codeText={codeText} safeExecuteCodeLocally={safeExecuteCodeLocally} LANG_ENGINE={LANG_ENGINE} ENGINE_META={ENGINE_META} />;
+      return <VertexCodeBlock lang={codeLang} codeText={codeText} onOpenPanel={openCodePanel} />;
     },
-  }), [RendererCodeBlock, safeExecuteCodeLocally, LANG_ENGINE, ENGINE_META]);
+  }), [openCodePanel]);
 
   /* ════════════════════════════════════════════════════════════════
    *  RENDER
@@ -853,7 +1061,7 @@ Title:`,
   return createPortal(
     <div data-vertex style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      width: '100vw', height: '100vh', height: '100dvh',
+      width: '100vw', height: '100dvh',
       zIndex: 2147483647,                  // max int — always on top
       background: '#0a0a0a',
       color: '#e6e6e6',
@@ -931,7 +1139,7 @@ Title:`,
         </div>
       )}
 
-      {/* ═══ Body: sidebar + main ═══ */}
+      {/* ═══ Body: sidebar + main + code panel ═══ */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* ── Sidebar ── */}
         {sidebarOpen && (
@@ -1055,9 +1263,7 @@ Title:`,
               )}
             </div>
 
-            {/* Nav rows — mirrors the reference's "Gem Manager / Help / Activity /
-                Settings" block, mapped to Vertex's real features instead of
-                invented ones. */}
+            {/* Nav rows */}
             <div style={{ padding: '6px 6px 2px', borderTop: '1px solid #1c1c1c' }}>
               {[
                 { icon: HelpCircle, label: 'Help',                onClick: () => alert('Vertex is your dedicated coding assistant. Paste an error, ask for a function, or request a refactor to get started.') },
@@ -1096,8 +1302,7 @@ Title:`,
               </button>
             </div>
 
-            {/* Account footer — clean static row, colored avatar for a
-                nicer look, no click menu / sign out */}
+            {/* Account footer */}
             <div style={{
               padding: '10px 12px', borderTop: '1px solid #212121', background: '#111111',
               display: 'flex', alignItems: 'center', gap: 9
@@ -1294,7 +1499,8 @@ Title:`,
                           color: '#dcdcdc', fontSize: 12, fontWeight: 600,
                           fontFamily: 'JetBrains Mono, monospace',
                         }}>
-                          <Check size={11} color="#8a8a8a" /> PASTED
+                          {att.type === 'image' ? <ImageIcon size={11} color="#8a8a8a" /> : <Check size={11} color="#8a8a8a" />}
+                          {att.type === 'image' ? 'IMAGE' : 'PASTED'}
                         </span>
                         <button onClick={() => removeAttachment(att.id)}
                           style={{
@@ -1317,7 +1523,7 @@ Title:`,
                 borderRadius: 10, padding: 6
               }}>
                 <div ref={attachMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
-                  <button onClick={() => setShowAttachMenu(v => !v)} title="Add file or project"
+                  <button onClick={() => setShowAttachMenu(v => !v)} title="Add file, image, or project"
                     style={{
                       width: 36, height: 36, borderRadius: 7, border: '1px solid #2a2a2a',
                       background: showAttachMenu ? '#232323' : 'transparent', color: '#9a9a9a',
@@ -1329,7 +1535,7 @@ Title:`,
                     <div style={{
                       position: 'absolute', bottom: 44, left: 0, zIndex: 60,
                       background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
-                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 190,
+                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 200,
                       animation: 'vertexScaleIn .15s ease'
                     }}>
                       <button onClick={() => fileInputRef.current?.click()}
@@ -1344,10 +1550,17 @@ Title:`,
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <Folder size={14} color="#9a9a9a"/> Add project folder
                       </button>
+                      <button onClick={() => imageFileInputRef.current?.click()}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                        <ImageIcon size={14} color="#9a9a9a"/> Add image or screenshot
+                      </button>
                     </div>
                   )}
                   <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFilesSelected} />
                   <input ref={folderInputRef} type="file" multiple webkitdirectory="" directory="" style={{ display: 'none' }} onChange={handleFilesSelected} />
+                  <input ref={imageFileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImageFilesSelected} />
                 </div>
                 <textarea
                   ref={inputRef}
@@ -1403,6 +1616,17 @@ Title:`,
             </div>
           </div>
         </main>
+
+        {/* ── Right-side split code panel ── */}
+        <CodePanel
+          panelCode={panelCode}
+          onClose={closeCodePanel}
+          output={panelOutput}
+          running={panelRunning}
+          hasError={panelHasError}
+          bootMsg={panelBootMsg}
+          onRun={runPanelCode}
+        />
       </div>
 
       {/* Inline keyframes + reset */}
@@ -1410,6 +1634,7 @@ Title:`,
         @keyframes vertexFadeIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes vertexScaleIn { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: scale(1) } }
         @keyframes vertexSlideInLeft { from { transform: translateX(-100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes vertexSlideInRight { from { transform: translateX(100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
         @keyframes vertexPulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
         @keyframes vertexBlink { 50% { opacity: 0 } }
         @keyframes vertexSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
