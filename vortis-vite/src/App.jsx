@@ -2873,11 +2873,6 @@ const saveChat = useCallback(async (msgsToSave) => {
     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
   };
 
-  const loadChat = async (id) => {
-    try { if (!userUidRef.current) return; const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id)); if (snap.exists()) { const c = snap.data(); setChatId(id); chatIdRef.current = id; setMessages((c.messages || []).filter(m => !(m.type === 'vortis' && m.text?.toLowerCase().includes("hello, i'm vortis")))); convHistory.current = []; } } catch(_) {}
-    if (window.innerWidth <= 768) setShowSidebar(false);
-  };
-
   const delChat = (id) => {
     setConfirmDialog({ message: 'Delete this chat? This cannot be undone.', onConfirm: async () => {
       setConfirmDialog(null);
