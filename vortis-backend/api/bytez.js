@@ -23,10 +23,10 @@ const GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
 
 // NVIDIA NIM (build.nvidia.com) — free OpenAI-compatible endpoints, used as a
 // fallback layer between Groq and Cloudflare. Same /v1/chat/completions shape.
-const NVIDIA_BASE_URL    = 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';   // Very fast, lower latency
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
-const NVIDIA_CHAT_GLM     = 'z-ai/glm-5.2'; // Flagship 753B — best for hard coding/agentic/long-context tasks
+const NVIDIA_CHAT_CODE    = 'deepseek-ai/deepseek-v4-flash'; // 284B MoE, 13B active — fast, coding-optimized
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
 const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
 
@@ -393,7 +393,7 @@ const optimizedMessages = systemPrompt
   // ── NVIDIA NIM BACKUP FALLBACK (between Groq and Cloudflare) ────
   if (checkGlobalLimit('nvidia_global')) {
     const nvidiaModelsToTry = isHard
-      ? [NVIDIA_CHAT_GLM, NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
+      ? [NVIDIA_CHAT_CODE, NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
       : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
 
     for (const nvModel of nvidiaModelsToTry) {
@@ -762,25 +762,26 @@ export default async function handler(req, res) {
     const isVoiceCall = Boolean(body.isVoiceCall);
     const isCodeMode  = Boolean(body.mode === 'code' || body.isCodeChat === true);
 
-    // ── GLM-5.2-ONLY STREAMING (for Code Chat mode) ───────────────────
+
+// ── CODE-CHAT STREAMING (DeepSeek V4 Flash) ───────────────────
 // Used when the frontend sends mode:'code' — bypasses Groq + Cloudflare
-// entirely and streams directly from NVIDIA's z-ai/glm-5.2 endpoint.
-// No model fallback: if GLM fails, we surface a clean error to the
+// entirely and streams directly from NVIDIA's deepseek-v4-flash endpoint.
+// No model fallback: if it fails, we surface a clean error to the
 // client instead of silently switching models.
-//
+const NVIDIA_CHAT_CODE = 'deepseek-ai/deepseek-v4-flash';
 // Returns true on success (response already streamed + res.end() called),
 // false on failure (caller decides how to respond).
-async function streamNvidiaGLMOnly(messages, res, maxTokens = 2000) {
+async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
-    console.error('GLM-only stream: NVIDIA_API_KEY missing');
+    console.error('Code-chat stream: NVIDIA_API_KEY missing');
     return false;
   }
 
   // Respect the shared NVIDIA global rate guard so the API key doesn't
   // get burned across users.
   if (!checkGlobalLimit('nvidia_global')) {
-    console.warn('GLM-only stream: NVIDIA global rate limit reached');
+    console.warn('Code-chat stream: NVIDIA global rate limit reached');
     return false;
   }
 
@@ -797,7 +798,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 2000) {
           'Content-Type':  'application/json',
         },
         body: JSON.stringify({
-          model:           NVIDIA_CHAT_GLM,   // 'z-ai/glm-5.2'
+          model:           NVIDIA_CHAT_CODE,   // 'deepseek-ai/deepseek-v4-flash'
           messages,
           max_tokens:      maxTokens,
           temperature:     0.5,                // slightly lower — coding benefits from determinism
@@ -805,13 +806,13 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 2000) {
           stream:          true,
         }),
       },
-      180000   // GLM-5.2 is a 753B flagship — give it headroom
+      55000   // stay safely under Vercel Hobby's 60s hard cap
     );
 
     if (!nvRes.ok) {
       let errBody = '';
       try { errBody = await nvRes.text(); } catch (_) {}
-      console.error(`GLM-only stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
+      console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
       return false;
     }
 
@@ -891,18 +892,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 2000) {
     }
 
     if (written === 0) {
-      console.error('GLM-only stream: model returned 0 tokens');
+      console.error('Code-chat stream: model returned 0 tokens');
       return false;
     }
 
     res.write('data: [DONE]\n\n');
     res.end();
-    console.log(`GLM-only stream OK - ${written} chars written`);
+    console.log(`Code-chat stream OK (deepseek-v4-flash) - ${written} chars written`);
     return true;
 
   } catch (e) {
-    console.error('GLM-only stream error:', e.message);
-    // FIX: `written` is now in scope here since it was declared outside try
+    console.error('Code-chat stream error:', e.message);
+    // `written` is in scope here since it was declared outside try
     if (written > 0) {
       // We already sent partial content — tell the client it was cut short
       // instead of just dropping the connection with no signal.
@@ -918,8 +919,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 2000) {
   }
 }
 
-// ── ROUTE TO CODE-CHAT (GLM-only) BEFORE the regular chat handler ──
-// This is the piece that was missing: without this block, isCodeMode
+// ── ROUTE TO CODE-CHAT BEFORE the regular chat handler ──
+// This is the piece that was missing before: without this block, isCodeMode
 // was computed but never checked, so every Vertex request fell through
 // to the normal Groq chat handler below.
 if (isCodeMode && action === 'chat') {
@@ -937,7 +938,7 @@ if (isCodeMode && action === 'chat') {
       codeMessages.push({ role: 'user', content: prompt.trim() });
     }
 
-    const ok = await streamNvidiaGLMOnly(codeMessages, res, 2000);
+    const ok = await streamNvidiaGLMOnly(codeMessages, res, 4096);
     if (!ok) {
       if (!res.writableEnded) {
         res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable. Please try again in a moment.' })}\n\n`);
@@ -956,7 +957,7 @@ if (isCodeMode && action === 'chat') {
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;  
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;  
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
-    
+
     // ╔══════════════════════════════════════╗
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
