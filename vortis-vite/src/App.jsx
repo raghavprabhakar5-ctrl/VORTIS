@@ -292,7 +292,7 @@ input,textarea,select{font-size:16px}
 .rc-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rc-time{font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace}
 .msg-wrap{animation:fadeIn .15s ease}
-.bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:15.5px;color:#e0e7ff;line-height:1.7;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap;font-family:'Source Serif 4',Georgia,serif}
+.bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:15.5px;color:#e0e7ff;line-height:1.7;width:fit-content;max-width:100%;margin-left:auto;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap;font-family:'Source Serif 4',Georgia,serif}
 .bubble-ai{font-size:17px;color:var(--text1);line-height:1.75;max-width:94%;font-family:'Source Serif 4',Georgia,serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .bubble-sys{font-size:11px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'JetBrains Mono',monospace;display:inline-flex;align-items:center;gap:6px}
 .ai-name{font-size:15px;font-weight:700;color:var(--text1);letter-spacing:.03em}
