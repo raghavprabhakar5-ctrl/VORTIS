@@ -1996,61 +1996,6 @@ const SettingsModal = ({
     </>
   );
 
-  // ── USAGE TAB ──
-  const UsageTab = () => {
-    const items = [
-      { k: 'messages',  label: 'Messages',       color: 'var(--indigo)', icon: <MessageSquare size={14}/> },
-      { k: 'images',    label: 'Image gen',       color: 'var(--cyan)',   icon: <ImageIcon size={14}/> },
-      { k: 'documents', label: 'Documents',       color: 'var(--green)',  icon: <FileText size={14}/> },
-      { k: 'vision',    label: 'Vision',          color: 'var(--violet)', icon: <Eye size={14}/> },
-    ];
-    return (
-      <>
-        <div style={S.sTitle}>Usage</div>
-        <div style={S.sSub}>Daily limits — resets at midnight</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {items.map(({ k, label, color, icon }) => {
-            const limit = LIMITS[tier][k];
-            const pct = usagePct(k);
-            const unlimited = limit >= 999999;
-            return (
-              <div key={k} style={S.card}>
-                <div style={{ padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    <div style={{ ...S.rowIcon(`${color}18`), color }}>{icon}</div>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text1)' }}>{label}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 13, color, fontFamily: 'JetBrains Mono,monospace', fontWeight: 700 }}>
-                      {usage[k]} / {unlimited ? '∞' : limit}
-                    </span>
-                  </div>
-                  <div style={{ height: 4, borderRadius: 4, background: 'var(--bg4)', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', width: `${unlimited ? 0 : pct}%`,
-                      background: color, borderRadius: 4, transition: 'width .4s',
-                    }}/>
-                  </div>
-                  {unlimited && (
-                    <div style={{ fontSize: 11.5, color: 'var(--green)', marginTop: 6, fontFamily: 'JetBrains Mono,monospace' }}>
-                      ✓ Unlimited on your plan
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {tier === 'free' && (
-          <div style={{ marginTop: 4, padding: '12px 14px', background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.18)', borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <p style={{ fontSize: 12.5, color: 'var(--text2)' }}>Upgrade for more daily limits</p>
-            <button style={S.btnPrimary} onClick={() => { setShowUpgrade(true); onClose(); }}>
-              <Crown size={12}/> Upgrade
-            </button>
-          </div>
-        )}
-      </>
-    );
-  };
-
   // ── DISPLAY TAB ──
   const DisplayTab = () => (
     <>
