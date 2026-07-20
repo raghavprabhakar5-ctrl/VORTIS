@@ -273,114 +273,129 @@ function checkGlobalLimit(action) {
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
 
-
- 
   const recentConversations = messages
     .filter(m => m.role !== 'system')
     .slice(-12);
 
-const optimizedMessages = systemPrompt
-  ? [systemPrompt, ...recentConversations]
-  : [...recentConversations];
+  const optimizedMessages = systemPrompt
+    ? [systemPrompt, ...recentConversations]
+    : [...recentConversations];
 
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
-  // ── ESCALATE ONLY ON A REAL CODE FENCE — no punctuation guessing ──
-  // Triple-backtick fences are the only reliable signal that the user
-  // pasted/asked for actual multi-line code. Inline single-backticks,
-  // symbols, and keywords no longer trigger the expensive model.
   const hasCodeFence = /```/.test(lastMsg);
-  const isHard = hasCodeFence;
+  const looksLikeCodeRequest = isObviouslyHard(lastMsg);
+  const isHard = hasCodeFence || looksLikeCodeRequest;
 
   const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const maxTokens = isHard ? 4096 : 1200;
+  const maxTokens = isHard ? 8192 : 2048; // raised floor for both tiers
 
-  console.log(`Routing: codeFence=${hasCodeFence} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: hard=${isHard} (fence=${hasCodeFence}, heuristic=${looksLikeCodeRequest}) → model: ${model} → maxTokens: ${maxTokens}`);
+
+  const MAX_CONTINUATIONS = 3; // hard safety cap so we never loop forever
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
     try {
-      const stream = await groq.chat.completions.create({
-        model:       modelToTry,
-        messages:    optimizedMessages,
-        max_tokens:  maxTokens,
-        temperature: 0.7,
-        stream:      true,
-        ...(modelToTry === GROQ_CHAT_QUALITY ? { reasoning_effort: 'low' } : {}),
-      });
+      let convoMessages = [...optimizedMessages];
+      let fullBuffer = '';
+      let continuations = 0;
+      let streamedAnything = false;
 
-      let buffer = '';
-      let chunkCount = 0;
-      let finishReason = null;
-      let inThink = false;
-      let pending = ''; // holds text that might be a partial <think>/</think> tag
+      while (true) {
+        const stream = await groq.chat.completions.create({
+          model:       modelToTry,
+          messages:    convoMessages,
+          max_tokens:  maxTokens,
+          temperature: 0.7,
+          stream:      true,
+          ...(modelToTry === GROQ_CHAT_QUALITY ? { reasoning_effort: 'low' } : {}),
+        });
 
-      for await (const chunk of stream) {
-        const token = chunk.choices?.[0]?.delta?.content;
-        finishReason = chunk.choices?.[0]?.finish_reason || finishReason;
-        if (!token) continue;
+        let buffer = '';
+        let finishReason = null;
+        let inThink = false;
+        let pending = '';
 
-        buffer += token;
-        pending += token;
+        for await (const chunk of stream) {
+          const token = chunk.choices?.[0]?.delta?.content;
+          finishReason = chunk.choices?.[0]?.finish_reason || finishReason;
+          if (!token) continue;
 
-        // ── Strip <think>...</think> live, even across chunk boundaries ──
-        let safe = '';
-        while (true) {
-          if (!inThink) {
-            const openIdx = pending.indexOf('<think>');
-            if (openIdx === -1) {
-              const holdBack = Math.min(pending.length, 8);
-              safe += pending.slice(0, pending.length - holdBack);
-              pending = pending.slice(pending.length - holdBack);
-              break;
+          buffer += token;
+          pending += token;
+
+          let safe = '';
+          while (true) {
+            if (!inThink) {
+              const openIdx = pending.indexOf('<think>');
+              if (openIdx === -1) {
+                const holdBack = Math.min(pending.length, 8);
+                safe += pending.slice(0, pending.length - holdBack);
+                pending = pending.slice(pending.length - holdBack);
+                break;
+              } else {
+                safe += pending.slice(0, openIdx);
+                pending = pending.slice(openIdx + '<think>'.length);
+                inThink = true;
+              }
             } else {
-              safe += pending.slice(0, openIdx);
-              pending = pending.slice(openIdx + '<think>'.length);
-              inThink = true;
+              const closeIdx = pending.indexOf('</think>');
+              if (closeIdx === -1) {
+                const holdBack = Math.min(pending.length, 9);
+                pending = pending.slice(pending.length - holdBack);
+                break;
+              } else {
+                pending = pending.slice(closeIdx + '</think>'.length);
+                inThink = false;
+              }
             }
-          } else {
-            const closeIdx = pending.indexOf('</think>');
-            if (closeIdx === -1) {
-              const holdBack = Math.min(pending.length, 9);
-              pending = pending.slice(pending.length - holdBack);
-              break;
-            } else {
-              pending = pending.slice(closeIdx + '</think>'.length);
-              inThink = false;
-            }
+          }
+
+          if (safe) {
+            streamedAnything = true;
+            res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+            if (res.flush) res.flush();
           }
         }
 
-        if (safe) {
-          chunkCount++;
-          res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-          if (res.flush) res.flush();
+        if (!inThink && pending) {
+          streamedAnything = true;
+          res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+          pending = '';
         }
-      }
 
-      // ── FLUSH LEFTOVER LOOKAHEAD BUFFER ──────────────────────────
-      // The loop above always holds back up to 8-9 trailing chars in
-      // `pending` in case they're the start of a <think>/</think> tag.
-      // Once the stream ends, that tail is never written unless we
-      // flush it here — this was silently truncating short replies.
-      if (!inThink && pending) {
-        chunkCount++;
-        res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
-        pending = '';
-      }
-      // If inThink is still true, the model opened <think> but never
-      // closed it (likely cut off) — drop it intentionally so raw
-      // reasoning text never leaks to the client.
+        fullBuffer += buffer;
 
-      if (stripInternalReasoning(buffer).trim().length > 0) {
-        if (finishReason === 'length') {
-          console.warn(`Response truncated by max_tokens (${maxTokens}) — model: ${modelToTry}`);
+        const gotRealContent = stripInternalReasoning(buffer).trim().length > 0;
+
+        // ── Model hit the token cap — continue the SAME logical response ──
+        if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
+          continuations++;
+          console.warn(`Truncated by max_tokens (${maxTokens}) on ${modelToTry} — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
+
+          // Feed back exactly what the model produced so far, then ask it
+          // to continue with no repetition and no re-greeting.
+          convoMessages = [
+            ...convoMessages,
+            { role: 'assistant', content: buffer },
+            { role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text, do not restart, do not add any preamble.' },
+          ];
+          continue; // loop again with same modelToTry, appended history
         }
-        res.write('data: [DONE]\n\n');
-        res.end();
-        return true;
-      }
 
-      console.warn(`Model ${modelToTry} returned empty — trying fallback`);
+        // ── Done (either finished naturally, or hit continuation cap) ──
+        if (gotRealContent || streamedAnything) {
+          if (finishReason === 'length') {
+            console.warn(`Still truncated after ${continuations} continuations — ending stream (model: ${modelToTry})`);
+          }
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return true;
+        }
+
+        console.warn(`Model ${modelToTry} returned empty — trying fallback`);
+        break; // empty response, fall through to next model in outer for-loop
+      }
     } catch (e) {
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
       if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {

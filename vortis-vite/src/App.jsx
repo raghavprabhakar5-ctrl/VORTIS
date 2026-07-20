@@ -1783,7 +1783,6 @@ const SettingsModal = ({
     { id: 'account',   label: 'Account',   color: '#6366f1', icon: <Crown size={13}/> },
     { id: 'memories',  label: 'Memories',  color: '#8b5cf6', icon: <Brain size={13}/> },
     { id: 'billing',   label: 'Billing',   color: '#f59e0b', icon: <CreditCard size={13}/> },
-    { id: 'usage',     label: 'Usage',     color: '#10b981', icon: <BarChart3 size={13}/> },
     { id: 'display',   label: 'Display',   color: '#06b6d4', icon: <Sun size={13}/> },
     { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899', icon: <Settings size={13}/> },
     { id: 'about',     label: 'About',     color: '#888780', icon: <Sparkles size={13}/> },
@@ -2200,7 +2199,6 @@ const SettingsModal = ({
     account:   <AccountTab/>,
     memories:  <MemoriesTab/>,
     billing:   <BillingTab/>,
-    usage:     <UsageTab/>,
     display:   <DisplayTab/>,
     shortcuts: <ShortcutsTab/>,
     about:     <AboutTab/>,
@@ -2234,7 +2232,6 @@ const SettingsModal = ({
               onMouseEnter={e => { if (tab !== item.id) { e.currentTarget.style.background = 'rgba(99,102,241,.06)'; e.currentTarget.style.color = 'var(--text2)'; } }}
               onMouseLeave={e => { if (tab !== item.id) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text3)'; } }}
             >
-              <div style={S.navDot(item.color, tab === item.id)}/>
               <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ opacity: tab === item.id ? 1 : 0.6 }}>{item.icon}</span>
                 {item.label}
@@ -2575,16 +2572,20 @@ useEffect(() => {
       try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
 
       try {
-        const userSnap = await getDoc(doc(db, 'users', u.uid));
-        if (userSnap.exists()) {
-          const data = userSnap.data();
-          if (data.tier) setTier(data.tier); else setTier('free');
-          if (data.usage) setUsage(data.usage); else setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-        } else {
-          setTier('free'); setUsage({ messages: 0, documents: 0, images: 0, vision: 0 });
-          await setDoc(doc(db, 'users', u.uid), { tier: 'free', usage: { messages: 0, documents: 0, images: 0, vision: 0 }, email: u.email, name: displayName, createdAt: new Date().toISOString() });
-        }
-      } catch(_) {}
+  const userSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+  if (userSnap.exists()) {
+    const data = userSnap.data();
+    if (data.tier) { setTier(data.tier); try { localStorage.setItem('vortis_tier', data.tier); } catch(_) {} }
+    const today = new Date().toDateString();
+    if (data.usage && data.usageDate === today) {
+      setUsage(data.usage);
+    } else {
+      const z = { messages: 0, documents: 0, images: 0, vision: 0 };
+      setUsage(z);
+      setDoc(doc(db, 'users', firebaseUser.uid), { usage: z, usageDate: today }, { merge: true }).catch(() => {});
+    }
+  }
+} catch(_) {}
 
       setShowLogin(false);
       addMemory(`User's name is ${displayName.split(' ')[0]}`);
@@ -2693,9 +2694,38 @@ useEffect(() => {
   }, []);
 
   const checkReset = () => {
-    const today = new Date().toDateString();
-    if (resetDay !== today) { const z = { messages: 0, documents: 0, images: 0, vision: 0 }; setUsage(z); setResetDay(today); try { localStorage.setItem('vortis_usage', JSON.stringify(z)); localStorage.setItem('vortis_reset', today); } catch(_) {} }
-  };
+  const today = new Date().toDateString();
+  if (resetDay !== today) {
+    const z = { messages: 0, documents: 0, images: 0, vision: 0 };
+    setUsage(z);
+    setResetDay(today);
+    try {
+      localStorage.setItem('vortis_usage', JSON.stringify(z));
+      localStorage.setItem('vortis_reset', today);
+    } catch (_) {}
+    if (userUidRef.current) {
+      setDoc(doc(db, 'users', userUidRef.current), { usage: z, usageDate: today }, { merge: true }).catch(() => {});
+    }
+    return z; // ← fresh value, not stale state
+  }
+  return usage;
+};
+
+const canDo = (k) => {
+  const u = checkReset();
+  return u[k] < LIMITS[tier][k];
+};
+
+const incrUsage = (k) => {
+  const today = new Date().toDateString();
+  const u = checkReset(); // always increment against the fresh value
+  const n = { ...u, [k]: u[k] + 1 };
+  setUsage(n);
+  try { localStorage.setItem('vortis_usage', JSON.stringify(n)); } catch (_) {}
+  if (userUidRef.current) {
+    setDoc(doc(db, 'users', userUidRef.current), { usage: n, usageDate: today }, { merge: true }).catch(() => {});
+  }
+};
 
   const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
   const hitLimit = (k = 'messages') => {
