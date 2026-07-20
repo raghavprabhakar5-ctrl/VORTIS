@@ -2672,21 +2672,6 @@ const incrUsage = (k) => {
   }
 };
 
-  const canDo = (k) => { checkReset(); return usage[k] < LIMITS[tier][k]; };
-  const hitLimit = (k = 'messages') => {
-    const limit = LIMITS[tier][k];
-    const label = { messages: 'messages', vision: 'vision analyses', images: 'image generations', documents: 'document uploads' }[k] || k;
-    const display = limit >= 999999 ? 'unlimited' : `${limit}`;
-    showToast(`Daily ${label} limit reached (${display}/day). Upgrade for more!`, 'var(--red)');
-    setTimeout(() => setShowUpgrade(true), 800);
-  };
-
-  const incrUsage = (k) => {
-    const n = { ...usage, [k]: usage[k]+1 }; setUsage(n);
-    try { localStorage.setItem('vortis_usage', JSON.stringify(n)); } catch(_) {}
-    if (userUidRef.current) setDoc(doc(db, 'users', userUidRef.current), { usage: n }, { merge: true }).catch(() => {});
-  };
-
   const loadChats = async (uid) => {
   if (!uid || isIncognito) return;
   try {
