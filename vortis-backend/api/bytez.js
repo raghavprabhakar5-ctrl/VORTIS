@@ -1069,6 +1069,10 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
     return false;
   }
 }
+    const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;  
+    const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;  
+    if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
+
     // ╔══════════════════════════════════════╗
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
