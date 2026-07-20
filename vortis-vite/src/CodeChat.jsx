@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { FaGithub } from "react-icons/fa";
-<FaGithub size={13} />
 import {
   Layers, MessageSquare, FolderGit2, FileCode2, Eye,
   Settings, Plus, Search, GitBranch, Circle, Hash, Bell, Share2,
@@ -884,10 +883,14 @@ function Home() {
             <GitBranch size={13} />
             <span className="absolute -bottom-0.5 -right-0.5 rounded bg-vertex-blue px-1 text-[7.5px] font-bold text-white">{ws.branch.length > 4 ? ws.branch.slice(0, 3) + '…' : ws.branch}</span>
           </button>
-          <button onClick={() => showToast('FolderGit2 sync — 0 conflicts')} className="group relative grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="FolderGit2 sync">
-            <FolderGit2 size={13} />
-            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-vertex-blue ring-2 ring-[#0a0a0a]" />
-          </button>
+          <button
+  onClick={() => showToast('GitHub sync — 0 conflicts')}
+  className="group relative grid h-7 w-7 place-items-center rounded-md ..."
+  title="GitHub sync"
+>
+  <FaGithub size={13} />
+  <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-vertex-blue ring-2 ring-[#0a0a0a]" />
+</button>
           <button onClick={() => showToast('Share link copied')} className="grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="Share">
             <Share2 size={13} />
           </button>
