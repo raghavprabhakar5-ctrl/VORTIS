@@ -105,9 +105,23 @@ const UserAvatar = ({ avatar, name = '', size = 28 }) => {
 };
 
 const VortisAvatar = ({ size = 28, animating = false }) => (
-  <VortisLogo size={size} animate={animating}/>
+  <div style={{ 
+    width: size, 
+    height: size, 
+    borderRadius: Math.round(size * 0.28), 
+    background: 'transparent', 
+    border: `1px solid rgba(124,58,237,${animating ? '0.7' : '0.5'})`, 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    flexShrink: 0,
+    flexGrow: 0,
+    boxShadow: animating ? '0 0 16px rgba(124,58,237,0.5)' : '0 0 10px rgba(124,58,237,0.2)', 
+    animation: animating ? 'glow 2s ease-in-out infinite' : 'none' 
+  }}>
+    <VortisLogo size={size * 0.65} animate={animating}/>
+  </div>
 );
-
 
 const ImageGeneratingPlaceholder = () => {
   const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
@@ -5402,11 +5416,10 @@ return (
             ))}
             
 
-            {isProcessing && !streamText && !messages.some(m => m.text === '__IMG_LOADING__') && (
+         {isProcessing && !streamText && !messages.some(m => m.text === '__IMG_LOADING__') && (
   <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
     <VortisAvatar size={30} animating/>
     <div>
-      <div className="dot-typing"><span/><span/><span/></div>
       {showAITimeout && (
         <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>Taking longer than usual…</span>
