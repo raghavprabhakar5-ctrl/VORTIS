@@ -5417,36 +5417,36 @@ return (
             ))}
             
 
-            {isProcessing && !isStreaming && !messages.some(m => m.text === '__IMG_LOADING__') && (
-              <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
-                <VortisAvatar size={30} animating/>
-                <div>
-                  <div className="dot-typing"><span/><span/><span/></div>
-                  {showAITimeout && (
-                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>Taking longer than usual…</span>
-                      <button onClick={() => { setIsProcessing(false); setIsStreaming(false); setProcessingStatus(''); setShowAITimeout(false); clearTimeout(aiTimeoutRef.current); }} style={{ fontSize: 11, color: 'var(--red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>Cancel</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+            {isProcessing && !streamText && !messages.some(m => m.text === '__IMG_LOADING__') && (
+  <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
+    <VortisAvatar size={30} animating/>
+    <div>
+      <div className="dot-typing"><span/><span/><span/></div>
+      {showAITimeout && (
+        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>Taking longer than usual…</span>
+          <button onClick={() => { setIsProcessing(false); setIsStreaming(false); setProcessingStatus(''); setShowAITimeout(false); clearTimeout(aiTimeoutRef.current); }} style={{ fontSize: 11, color: 'var(--red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', fontFamily: 'JetBrains Mono' }}>Cancel</button>
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
-            {isStreaming && streamText && (
-              <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'flex-start' }}>
-                <VortisAvatar size={30} animating/>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                    <span className="ai-name">VORTIS</span>
-                    <span style={{ fontSize: 10.5, color: 'var(--cyan)', fontFamily: 'JetBrains Mono' }}>typing…</span>
-                  </div>
-                  <div className="bubble-ai">
-                   <MsgContent text={cleanStream(streamText)}/>
-                    <span className="cursor-blink"/>
-                  </div>
-                </div>
-              </div>
-            )}
+{isStreaming && streamText && (
+  <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18, alignItems: 'flex-start' }}>
+    <VortisAvatar size={30} animating/>
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+        <span className="ai-name">VORTIS</span>
+        <span style={{ fontSize: 10.5, color: 'var(--cyan)', fontFamily: 'JetBrains Mono' }}>typing…</span>
+      </div>
+      <div className="bubble-ai">
+        <MsgContent text={cleanStream(streamText)}/>
+        <span className="cursor-blink"/>
+      </div>
+    </div>
+  </div>
+)}
             <div ref={bottomRef}/>
           </div>
         </div>
