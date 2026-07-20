@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
-  Layers, MessageSquare, FolderGit2, FileCode2, Github, Eye,
+  Layers, MessageSquare, FolderGit2, FileCode2, Eye,
   Settings, Plus, Search, GitBranch, Circle, Hash, Bell, Share2,
   Play, ChevronDown, ChevronRight, PanelLeft, Sparkles, Check,
   ArrowUp, ArrowDown, CornerDownLeft, Copy, RefreshCw, Pencil,
@@ -262,7 +262,7 @@ const NAV_ITEMS = [
   { id: 'sessions', label: 'Sessions', icon: MessageSquare, badge: 5 },
   { id: 'projects', label: 'Projects', icon: FolderGit2 },
   { id: 'files', label: 'Files', icon: FileCode2 },
-  { id: 'github', label: 'GitHub', icon: Github, badge: 2 },
+  { id: 'github', label: 'GitHub', icon: GithubIcon, badge: 2 },
   { id: 'preview', label: 'Preview', icon: Eye },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -293,7 +293,7 @@ const NOTIFICATIONS = [
   { id: 'n1', icon: GitBranch, text: 'PR #248 ready for review', time: '5m', color: 'text-vertex-blue-bright' },
   { id: 'n2', icon: AlertCircle, text: 'Build failed on feat/jwt-auth', time: '12m', color: 'text-red-400' },
   { id: 'n3', icon: Check, text: 'Type check passed', time: '1h', color: 'text-emerald-400' },
-  { id: 'n4', icon: Github, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
+  { id: 'n4', icon: GithubIcon, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
 ]
 
 const STARTER_PROMPTS = ['Debug an error', 'Optimize code', 'Explain code', 'Write a function', 'Refactor', 'Code review']
@@ -657,7 +657,7 @@ function Home({ onClose }) {
   // Editor
   const [activeFile, setActiveFile] = useState('src/server/router.ts')
   const [openTabs, setOpenTabs] = useState(['src/server/router.ts', 'src/lib/auth.ts'])
-  const [expandedFolders, setExpandedFolders] = useState>(new Set(['src', 'src/server', 'src/lib']))
+  const [expandedFolders, setExpandedFolders] = useState(new Set(['src', 'src/server', 'src/lib']))
   const [suggestionVisible, setSuggestionVisible] = useState(true)
 
   // Chat
@@ -985,7 +985,7 @@ function Home({ onClose }) {
             <span className="absolute -bottom-0.5 -right-0.5 rounded bg-vertex-blue px-1 text-[7.5px] font-bold text-white">{ws.branch.length > 4 ? ws.branch.slice(0, 3) + '…' : ws.branch}</span>
           </button>
           <button onClick={() => showToast('GitHub sync — 0 conflicts')} className="group relative grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="GitHub sync">
-            <Github size={13} />
+            <GithubIcon size={13} />
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-vertex-blue ring-2 ring-[#0a0a0a]" />
           </button>
           <button onClick={() => showToast('Share link copied')} className="grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="Share">
@@ -1728,7 +1728,7 @@ function RightPanel({
                     const Icon = TAB_ICONS[ext] ?? FileCode2
                     const active = p === activeFile
                     return (
-                      <button key={p} onClick={() => onOpen(p)} className={'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ' + (active ? 'bg-vertex-blue/10 text-white' : 'text-white/65 hover:bg-white/[0.03] hover:text-white/90')}>
+                       <button key={p} onClick={() => onOpenFile(p)} className={'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ' + (active ? 'bg-vertex-blue/10 text-white' : 'text-white/65 hover:bg-white/[0.03] hover:text-white/90')}>
                         <Icon size={11} className={active ? 'text-vertex-blue' : 'text-white/40'} />
                         <span className="flex-1 truncate font-mono text-[10.5px]">{p}</span>
                       </button>
@@ -1966,7 +1966,7 @@ function SettingsModal({ open, onClose, showToast }) {
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
     { id: 'ai', label: 'AI', icon: Sparkles },
-    { id: 'github', label: 'GitHub', icon: Github },
+    { id: 'github', label: 'GitHub', icon: GithubIcon },
   ]
   return (
     <AnimatePresence>
