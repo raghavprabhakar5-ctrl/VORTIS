@@ -67,9 +67,10 @@ const pushHistory = (historyRef, role, content) => {
 
 // ── EXACT LOGO COMPONENTS FROM DOC 3/4 ──
 const VortisLogo = ({ size = 36, color = "#8b5cf6", animate = false }) => (
-  <svg width={size} height={size} viewBox="0 0 1254 1254" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg width={size} height={size} viewBox="0 0 1254 1254" style={animate ? { animation: 'vortisOuterSpin 8s linear infinite' } : undefined}>
     {animate && (
       <style>{`
+        @keyframes vortisOuterSpin{to{transform:rotate(360deg)}}
         @keyframes vpb1{0%{transform:translate(0,0)}50%{transform:translate(-46px,32px)}100%{transform:translate(0,0)}}
         @keyframes vpb2{0%{transform:translate(0,0)}50%{transform:translate(38px,-46px)}100%{transform:translate(0,0)}}
         @keyframes vpb3{0%{transform:translate(0,0)}50%{transform:translate(12px,54px)}100%{transform:translate(0,0)}}
@@ -88,9 +89,7 @@ const VortisLogo = ({ size = 36, color = "#8b5cf6", animate = false }) => (
 );
 
 const VortisLogoMark = ({ size = 26, color = "#8b5cf6", animate = false }) => (
-  <div style={{ width: size, height: size, borderRadius: Math.round(size * 0.28), background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-    <VortisLogo size={size * 0.72} color={color} animate={animate}/>
-  </div>
+  <VortisLogo size={size} color={color} animate={animate}/>
 );
 
 const UserAvatar = ({ avatar, name = '', size = 28 }) => {
@@ -106,23 +105,9 @@ const UserAvatar = ({ avatar, name = '', size = 28 }) => {
 };
 
 const VortisAvatar = ({ size = 28, animating = false }) => (
-  <div style={{ 
-    width: size, 
-    height: size, 
-    borderRadius: Math.round(size * 0.28), 
-    background: 'transparent', 
-    border: `1px solid rgba(124,58,237,${animating ? '0.7' : '0.5'})`, 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    flexShrink: 0,
-    flexGrow: 0,
-    boxShadow: animating ? '0 0 16px rgba(124,58,237,0.5)' : '0 0 10px rgba(124,58,237,0.2)', 
-    animation: animating ? 'glow 2s ease-in-out infinite' : 'none' 
-  }}>
-    <VortisLogo size={size * 0.65} animate={animating}/>
-  </div>
+  <VortisLogo size={size} animate={animating}/>
 );
+
 
 const ImageGeneratingPlaceholder = () => {
   const colors = ['#4f46e5','#7c3aed','#6366f1','#8b5cf6','#a78bfa'];
