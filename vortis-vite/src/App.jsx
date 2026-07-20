@@ -292,8 +292,8 @@ input,textarea,select{font-size:16px}
 .rc-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .rc-time{font-size:10.5px;color:var(--text4);font-family:'JetBrains Mono',monospace}
 .msg-wrap{animation:fadeIn .15s ease}
-.bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:15px;color:#e0e7ff;line-height:1.7;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap;font-family:'Source Serif 4',Georgia,serif}
-.bubble-ai{font-size:15px;color:var(--text1);line-height:1.75;max-width:94%;font-family:'Source Serif 4',Georgia,serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+.bubble-user{background:linear-gradient(135deg,#4f46e5,#6366f1);border-radius:18px 18px 4px 18px;padding:10px 15px;font-size:17px;color:#e0e7ff;line-height:1.7;max-width:100%;box-shadow:0 4px 16px rgba(99,102,241,.25);word-break:break-word;overflow-wrap:anywhere;white-space:pre-wrap;font-family:'Source Serif 4',Georgia,serif}
+.bubble-ai{font-size:17px;color:var(--text1);line-height:1.75;max-width:94%;font-family:'Source Serif 4',Georgia,serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 .bubble-sys{font-size:11px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);padding:4px 12px;border-radius:20px;font-family:'JetBrains Mono',monospace;display:inline-flex;align-items:center;gap:6px}
 .ai-name{font-size:15px;font-weight:700;color:var(--text1);letter-spacing:.03em}
 .action-btn{width:28px;height:28px;border-radius:6px;background:transparent;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all .12s;-webkit-tap-highlight-color:transparent}
@@ -313,7 +313,7 @@ input,textarea,select{font-size:16px}
 .disclaimer{text-align:center;font-size:11px;color:var(--text4);padding:4px 16px 8px;font-family:'JetBrains Mono',monospace;flex-shrink:0}
 .md-content h1,.md-content h2,.md-content h3,.md-content h4{color:var(--text1);font-weight:600;margin:8px 0 4px;line-height:1.3}
 .md-content h1{font-size:17px}.md-content h2{font-size:15px}.md-content h3{font-size:14px;color:var(--text2)}
-.md-content p{margin-bottom:6px;color:var(--text1);line-height:1.7;font-size:15px;font-family:'Source Serif 4',Georgia,serif}
+.md-content p{margin-bottom:6px;color:var(--text1);line-height:1.7;font-size:17px;font-family:'Source Serif 4',Georgia,serif}
 .md-content table{width:100%;border-collapse:collapse;border-radius:10px;overflow:hidden;margin:10px 0;font-size:13px;display:block;overflow-x:auto}
 .md-content th{background:rgba(99,102,241,.12);padding:8px 12px;text-align:left;color:var(--text1);font-weight:600}
 .md-content td{padding:7px 12px;color:var(--text2);border-bottom:1px solid var(--border)}
@@ -1518,13 +1518,13 @@ const DeepResearchProgress = ({ data }) => {
         components={{
 
           // Headings
-          h1: ({children}) => <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text1)', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
-          h2: ({children}) => <h2 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text1)', margin: '10px 0 4px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
-          h3: ({children}) => <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--text2)', margin: '8px 0 3px', lineHeight: 1.3 }}>{children}</h3>,
-          h4: ({children}) => <h4 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>{children}</h4>,
+          h1: ({children}) => <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text1)', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
+          h2: ({children}) => <h2 style={{ fontSize: 19, fontWeight: 700, color: 'var(--text1)', margin: '10px 0 4px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
+          h3: ({children}) => <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text2)', margin: '8px 0 3px', lineHeight: 1.3 }}>{children}</h3>,
+          h4: ({children}) => <h4 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>{children}</h4>,
 
           // Paragraph — tight spacing, no giant gaps
-          p: ({children}) => <p style={{ margin: '0 0 7px', color: 'var(--text1)', lineHeight: 1.75, fontSize: 14.5 }}>{children}</p>,
+         p: ({children}) => <p style={{ margin: '0 0 8px', color: 'var(--text1)', lineHeight: 1.8, fontSize: 16.5 }}>{children}</p>,
 
           // Bold — sharp vibrant indigo
           strong: ({children}) => (
@@ -2723,6 +2723,45 @@ useEffect(() => {
     setSavedChats(chats);
   } catch (e) {
     console.error('loadChats failed:', e);
+  }
+};
+
+const loadChat = async (id) => {
+  if (!userUidRef.current || isIncognito) return;
+  try {
+    const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
+    if (!snap.exists()) { showToast('Chat not found', 'var(--red)'); return; }
+    const data = snap.data();
+
+    setChatId(id);
+    chatIdRef.current = id;
+    setMessages(data.messages || []);
+    setUploadedDoc(null);
+    setImgGenMode(false);
+    setResearchMode(null);
+    setLastImagePrompt(null);
+    setProcessingStatus('');
+    imgGenLock.current = false;
+    savingRef.current = false;
+    setShowAITimeout(false);
+    clearTimeout(aiTimeoutRef.current);
+
+    // rebuild AI context memory from the loaded messages
+    convHistory.current = (data.messages || [])
+      .filter(m => m.type === 'user' || m.type === 'vortis')
+      .slice(-30)
+      .map(m => ({
+        role: m.type === 'user' ? 'user' : 'assistant',
+        content: (m.text || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 4000)
+      }))
+      .filter(m => m.content);
+
+    setShowMenu(false);
+    if (window.innerWidth <= 768) setShowSidebar(false);
+    setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }, 100);
+  } catch (e) {
+    console.error('loadChat failed:', e);
+    showToast('Failed to load chat', 'var(--red)');
   }
 };
 
@@ -5162,7 +5201,7 @@ return (
               savedChats.length > 0 ? (
                 <div className="recent-grid" style={{ maxWidth: 680 }}>
                   {savedChats.slice(0, 3).map(c => (
-                    <div key={c.id} className="recent-card" onClick={() => loadChat(c.id)}>
+                   <div className="recent-card" onClick={() => loadChat(c.id)}>
                       <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
                       <div className="rc-title">{c.preview}</div>
                       <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
