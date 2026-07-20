@@ -657,7 +657,7 @@ function Home() {
   // Editor
   const [activeFile, setActiveFile] = useState('src/server/router.ts')
   const [openTabs, setOpenTabs] = useState(['src/server/router.ts', 'src/lib/auth.ts'])
-  const [expandedFolders, setExpandedFolders] = useState>(new Set(['src', 'src/server', 'src/lib']))
+  const [expandedFolders, setExpandedFolders] = useState(new Set(['src', 'src/server', 'src/lib']))
   const [suggestionVisible, setSuggestionVisible] = useState(true)
 
   // Chat
@@ -1616,7 +1616,7 @@ function RightPanel({
                     const Icon = TAB_ICONS[ext] ?? FileCode2
                     const active = p === activeFile
                     return (
-                      <button key={p} onClick={() => onOpen(p)} className={'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ' + (active ? 'bg-vertex-blue/10 text-white' : 'text-white/65 hover:bg-white/[0.03] hover:text-white/90')}>
+                     <button key={p} onClick={() => onOpenFile(p)} className={'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ' + (active ? 'bg-vertex-blue/10 text-white' : 'text-white/65 hover:bg-white/[0.03] hover:text-white/90')}>
                         <Icon size={11} className={active ? 'text-vertex-blue' : 'text-white/40'} />
                         <span className="flex-1 truncate font-mono text-[10.5px]">{p}</span>
                       </button>
