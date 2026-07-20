@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import { FaGithub } from "react-icons/fa";
 import {
-  Layers, MessageSquare, FolderGit2, FileCode2, Eye,
+  Layers, MessageSquare, FolderGit2, FileCode2, Github, Eye,
   Settings, Plus, Search, GitBranch, Circle, Hash, Bell, Share2,
   Play, ChevronDown, ChevronRight, PanelLeft, Sparkles, Check,
   ArrowUp, ArrowDown, CornerDownLeft, Copy, RefreshCw, Pencil,
@@ -262,7 +262,7 @@ const NAV_ITEMS = [
   { id: 'sessions', label: 'Sessions', icon: MessageSquare, badge: 5 },
   { id: 'projects', label: 'Projects', icon: FolderGit2 },
   { id: 'files', label: 'Files', icon: FileCode2 },
-  { id: 'github', label: 'GitHub', icon: FolderGit2, badge: 2 },
+  { id: 'github', label: 'GitHub', icon: Github, badge: 2 },
   { id: 'preview', label: 'Preview', icon: Eye },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -293,7 +293,7 @@ const NOTIFICATIONS = [
   { id: 'n1', icon: GitBranch, text: 'PR #248 ready for review', time: '5m', color: 'text-vertex-blue-bright' },
   { id: 'n2', icon: AlertCircle, text: 'Build failed on feat/jwt-auth', time: '12m', color: 'text-red-400' },
   { id: 'n3', icon: Check, text: 'Type check passed', time: '1h', color: 'text-emerald-400' },
-  { id: 'n4', icon: FolderGit2, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
+  { id: 'n4', icon: Github, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
 ]
 
 const STARTER_PROMPTS = ['Debug an error', 'Optimize code', 'Explain code', 'Write a function', 'Refactor', 'Code review']
@@ -640,7 +640,7 @@ function Logo({ size = 26, showText = true }) {
 //  MAIN HOME COMPONENT
 // ═══════════════════════════════════════════════════════════════════════
 
-function Home() {
+function Home({ onClose }) {
   // Layout state
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [rightCollapsed, setRightCollapsed] = useState(false)
@@ -657,7 +657,7 @@ function Home() {
   // Editor
   const [activeFile, setActiveFile] = useState('src/server/router.ts')
   const [openTabs, setOpenTabs] = useState(['src/server/router.ts', 'src/lib/auth.ts'])
-  const [expandedFolders, setExpandedFolders] = useState(new Set(['src', 'src/server', 'src/lib']))
+  const [expandedFolders, setExpandedFolders] = useState>(new Set(['src', 'src/server', 'src/lib']))
   const [suggestionVisible, setSuggestionVisible] = useState(true)
 
   // Chat
@@ -683,6 +683,65 @@ function Home() {
   // Toast helper
   const showToast = useCallback((msg) => {
     setToast(msg); setTimeout(() => setToast(null), 2000)
+  }, [])
+
+  // Lock body scroll while Vertex is mounted (portal escapes parent,
+  // but we also need to stop the main app behind from scrolling)
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+
+    // ── Inject Tailwind Play CDN if the host app doesn't have Tailwind ──
+    // This makes all the className utilities in this file actually work,
+    // regardless of whether VORTIS uses Tailwind or not.
+    if (!window.__vertexTailwindLoaded) {
+      window.__vertexTailwindLoaded = true
+      const script = document.createElement('script')
+      script.src = 'https://cdn.tailwindcss.com/3.4.16'
+      script.id = 'vertex-tailwind-cdn'
+      script.onload = () => {
+        // Configure custom colors after Tailwind loads
+        if (window.tailwind) {
+          window.tailwind.config = {
+            theme: {
+              extend: {
+                colors: {
+                  'vertex-blue': '#3b82f6',
+                  'vertex-blue-bright': '#60a5fa',
+                  'vertex-blue-dim': '#2563eb',
+                },
+              },
+            },
+          }
+        }
+      }
+      document.head.appendChild(script)
+    }
+
+    const body = document.body
+    const prev = {
+      overflow: body.style.overflow,
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+    }
+    const scrollY = window.scrollY
+    body.style.overflow = 'hidden'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+    return () => {
+      body.style.overflow = prev.overflow
+      body.style.position = prev.position
+      body.style.top = prev.top
+      body.style.left = prev.left
+      body.style.right = prev.right
+      body.style.width = prev.width
+      if (prev.position !== 'fixed') window.scrollTo(0, scrollY)
+    }
   }, [])
 
   // Effects
@@ -715,12 +774,14 @@ function Home() {
         if (showModelMenu) { setShowModelMenu(false); return }
         if (showProfileMenu) { setShowProfileMenu(false); return }
         if (suggestionVisible) { setSuggestionVisible(false); return }
+        // Last resort — close the whole Vertex overlay
+        if (onClose && document.activeElement?.tagName !== 'TEXTAREA' && document.activeElement?.tagName !== 'INPUT') onClose()
       }
       if (e.key === '?' && !inField) setShowShortcuts(true)
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [cmdOpen, showNotifs, showSettings, showShortcuts, showModelMenu, showProfileMenu, suggestionVisible])
+  }, [cmdOpen, showNotifs, showSettings, showShortcuts, showModelMenu, showProfileMenu, suggestionVisible, onClose])
 
   // Actions
   const openFile = useCallback((path) => {
@@ -811,8 +872,48 @@ function Home() {
   const ws = currentWs
 
   // ═══════════ RENDER ═══════════
-  return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0a0a0a] text-white flex-col font-sans">
+  // CRITICAL: render through a portal into document.body so the overlay
+  // escapes any ancestor that has transform / filter / will-change / contain
+  // set — those properties create a new containing block and break
+  // position:fixed, which was causing Vertex to render inside the parent
+  // app's narrow column instead of taking over the full viewport.
+  if (typeof document === 'undefined') return null
+  return createPortal(
+    <div
+      data-vertex
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        width: '100vw',
+        height: '100dvh',
+        zIndex: 2147483647,
+        background: '#0a0a0a',
+        color: '#ededed',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        isolation: 'isolate',
+        fontFamily: '"Geist Sans", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+      }}
+      className="vertex-root"
+    >
+      {/* Inline scoped reset — everything inside [data-vertex] is immune
+          to global stylesheets from the parent VORTIS app. */}
+      <style>{`
+        [data-vertex], [data-vertex] *, [data-vertex] *::before, [data-vertex] *::after {
+          box-sizing: border-box;
+        }
+        [data-vertex] button { cursor: pointer; }
+        [data-vertex] input, [data-vertex] textarea, [data-vertex] select {
+          font: inherit; color: inherit; background: transparent; border: none; outline: none;
+        }
+        [data-vertex] img { max-width: 100%; display: block; }
+        [data-vertex] pre, [data-vertex] code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        [data-vertex] ::-webkit-scrollbar { width: 8px; height: 8px; }
+        [data-vertex] ::-webkit-scrollbar-track { background: transparent; }
+        [data-vertex] ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+        [data-vertex] ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+      `}</style>
       {/* ═══ TOP NAV ═══ */}
       <header className="relative z-30 flex h-11 shrink-0 items-center gap-2 border-b border-white/[0.06] bg-[#0a0a0a]/95 px-3 backdrop-blur-xl">
         <button onClick={() => setSidebarCollapsed(v => !v)} className="grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="Toggle sidebar (⌘B)">
@@ -883,14 +984,10 @@ function Home() {
             <GitBranch size={13} />
             <span className="absolute -bottom-0.5 -right-0.5 rounded bg-vertex-blue px-1 text-[7.5px] font-bold text-white">{ws.branch.length > 4 ? ws.branch.slice(0, 3) + '…' : ws.branch}</span>
           </button>
-          <button
-  onClick={() => showToast('GitHub sync — 0 conflicts')}
-  className="group relative grid h-7 w-7 place-items-center rounded-md ..."
-  title="GitHub sync"
->
-  <FaGithub size={13} />
-  <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-vertex-blue ring-2 ring-[#0a0a0a]" />
-</button>
+          <button onClick={() => showToast('GitHub sync — 0 conflicts')} className="group relative grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="GitHub sync">
+            <Github size={13} />
+            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-vertex-blue ring-2 ring-[#0a0a0a]" />
+          </button>
           <button onClick={() => showToast('Share link copied')} className="grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="Share">
             <Share2 size={13} />
           </button>
@@ -946,12 +1043,26 @@ function Home() {
                       <button onClick={() => { setShowProfileMenu(false); setShowSettings(true) }} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors"><Settings size={12} /> Settings</button>
                       <button onClick={() => { setShowProfileMenu(false); setShowShortcuts(true) }} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12px] text-white/75 hover:text-white hover:bg-white/[0.06] transition-colors"><Keyboard size={12} /> Shortcuts</button>
                       <button onClick={() => { setShowProfileMenu(false); showToast('Pro plan active') }} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12px] text-vertex-blue-bright hover:bg-vertex-blue/10 transition-colors"><Sparkles size={12} /> Upgrade</button>
+                      {onClose && (
+                        <button onClick={() => { setShowProfileMenu(false); onClose() }} className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[12px] text-red-400 hover:bg-red-500/10 transition-colors border-t border-white/[0.06] mt-1 pt-2"><X size={12} /> Exit Vertex</button>
+                      )}
                     </div>
                   </motion.div>
                 </>
               )}
             </AnimatePresence>
           </div>
+
+          {/* Exit button — always visible in top-right */}
+          {onClose && (
+            <button
+              onClick={onClose}
+              title="Exit Vertex (Esc)"
+              className="ml-1 grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </header>
 
@@ -1075,7 +1186,8 @@ function Home() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -1616,7 +1728,7 @@ function RightPanel({
                     const Icon = TAB_ICONS[ext] ?? FileCode2
                     const active = p === activeFile
                     return (
-                     <button key={p} onClick={() => onOpenFile(p)} className={'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ' + (active ? 'bg-vertex-blue/10 text-white' : 'text-white/65 hover:bg-white/[0.03] hover:text-white/90')}>
+                      <button key={p} onClick={() => onOpen(p)} className={'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11.5px] transition-colors ' + (active ? 'bg-vertex-blue/10 text-white' : 'text-white/65 hover:bg-white/[0.03] hover:text-white/90')}>
                         <Icon size={11} className={active ? 'text-vertex-blue' : 'text-white/40'} />
                         <span className="flex-1 truncate font-mono text-[10.5px]">{p}</span>
                       </button>
@@ -1854,7 +1966,7 @@ function SettingsModal({ open, onClose, showToast }) {
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
     { id: 'ai', label: 'AI', icon: Sparkles },
-    { id: 'github', label: 'GitHub', icon: FolderGit2 },
+    { id: 'github', label: 'GitHub', icon: Github },
   ]
   return (
     <AnimatePresence>
