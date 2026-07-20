@@ -1069,10 +1069,46 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
     return false;
   }
 }
+
+// ── ROUTE TO CODE-CHAT (GLM-only) BEFORE the regular chat handler ──
+// This is the piece that was missing: without this block, isCodeMode
+// was computed but never checked, so every Vertex request fell through
+// to the normal Groq chat handler below.
+if (isCodeMode && action === 'chat') {
+  if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  try {
+    const codeSysContent = (prompt.trim().slice(0, 12000)) + '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted.';
+    const codeMessages = [{ role: 'system', content: codeSysContent }];
+    codeMessages.push(...sanitizeHistory(history, 12));
+    if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
+      codeMessages.push({ role: 'user', content: prompt.trim() });
+    }
+
+    const ok = await streamNvidiaGLMOnly(codeMessages, res, 4096);
+    if (!ok) {
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable. Please try again in a moment.' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+    }
+  } catch (err) {
+    console.error('CODE CHAT ERROR:', err.message);
+    if (!res.headersSent) return res.status(500).json({ error: 'Code chat request failed' });
+    if (!res.writableEnded) { res.write('data: [DONE]\n\n'); res.end(); }
+  }
+  return;
+}
+
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;  
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;  
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
-
+    
     // ╔══════════════════════════════════════╗
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
