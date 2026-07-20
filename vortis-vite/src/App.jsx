@@ -2712,19 +2712,18 @@ useEffect(() => {
     if (userUidRef.current) setDoc(doc(db, 'users', userUidRef.current), { usage: n }, { merge: true }).catch(() => {});
   };
 
-  const loadChat = async (id) => {
+  const loadChats = async (uid) => {
+  if (!uid || isIncognito) return;
   try {
-    if (!userUidRef.current) return;
-    const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
-    if (snap.exists()) {
-      const c = snap.data();
-      if (c.isCodeChat) return; // ← don't load a code chat into the main chat UI
-      setChatId(id); chatIdRef.current = id;
-      setMessages((c.messages || []).filter(m => !(m.type === 'vortis' && m.text?.toLowerCase().includes("hello, i'm vortis"))));
-      convHistory.current = [];
-    }
-  } catch(_) {}
-  if (window.innerWidth <= 768) setShowSidebar(false);
+    const snap = await getDocs(collection(db, 'users', uid, 'chats'));
+    const chats = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(c => !c.isCodeChat)
+      .sort((a, b) => new Date(b.updated || 0) - new Date(a.updated || 0));
+    setSavedChats(chats);
+  } catch (e) {
+    console.error('loadChats failed:', e);
+  }
 };
 
  const looksLikeBadTitle = (t) => {
