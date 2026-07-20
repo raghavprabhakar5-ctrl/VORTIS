@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import {
-  Layers, MessageSquare, FolderGit2, FileCode2, Github, Eye,
+  Layers, MessageSquare, FolderGit2, FileCode2, GitHub, Eye,
   Settings, Plus, Search, GitBranch, Circle, Hash, Bell, Share2,
   Play, ChevronDown, ChevronRight, PanelLeft, Sparkles, Check,
   ArrowUp, ArrowDown, CornerDownLeft, Copy, RefreshCw, Pencil,
@@ -261,7 +261,7 @@ const NAV_ITEMS = [
   { id: 'sessions', label: 'Sessions', icon: MessageSquare, badge: 5 },
   { id: 'projects', label: 'Projects', icon: FolderGit2 },
   { id: 'files', label: 'Files', icon: FileCode2 },
-  { id: 'github', label: 'GitHub', icon: Github, badge: 2 },
+  { id: 'github', label: 'GitHub', icon: GitHub, badge: 2 },
   { id: 'preview', label: 'Preview', icon: Eye },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -292,7 +292,7 @@ const NOTIFICATIONS = [
   { id: 'n1', icon: GitBranch, text: 'PR #248 ready for review', time: '5m', color: 'text-vertex-blue-bright' },
   { id: 'n2', icon: AlertCircle, text: 'Build failed on feat/jwt-auth', time: '12m', color: 'text-red-400' },
   { id: 'n3', icon: Check, text: 'Type check passed', time: '1h', color: 'text-emerald-400' },
-  { id: 'n4', icon: Github, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
+  { id: 'n4', icon: GitHub, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
 ]
 
 const STARTER_PROMPTS = ['Debug an error', 'Optimize code', 'Explain code', 'Write a function', 'Refactor', 'Code review']
@@ -1849,7 +1849,7 @@ function SettingsModal({ open, onClose, showToast }) {
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
     { id: 'ai', label: 'AI', icon: Sparkles },
-    { id: 'github', label: 'GitHub', icon: Github },
+    { id: 'github', label: 'GitHub', icon: GitHub },
   ]
   return (
     <AnimatePresence>
