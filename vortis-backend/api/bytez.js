@@ -255,158 +255,6 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
   }
 }
 
-// ── GLM-5.2-ONLY STREAMING (for Code Chat mode) ───────────────────
-// Used when the frontend sends mode:'code' — bypasses Groq + Cloudflare
-// entirely and streams directly from NVIDIA's z-ai/glm-5.2 endpoint.
-// No model fallback: if GLM fails, we surface a clean error to the
-// client instead of silently switching models.
-//
-// Returns true on success (response already streamed + res.end() called),
-// false on failure (caller decides how to respond).
-async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
-  const key = process.env.NVIDIA_API_KEY;
-  if (!key) {
-    console.error('GLM-only stream: NVIDIA_API_KEY missing');
-    return false;
-  }
-
-  // Respect the shared NVIDIA global rate guard so the API key doesn't
-  // get burned across users.
-  if (!checkGlobalLimit('nvidia_global')) {
-    console.warn('GLM-only stream: NVIDIA global rate limit reached');
-    return false;
-  }
-
-  try {
-    const nvRes = await fetchWithTimeout(
-      `${NVIDIA_BASE_URL}/chat/completions`,
-      {
-        method:  'POST',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type':  'application/json',
-        },
-        body: JSON.stringify({
-          model:           NVIDIA_CHAT_GLM,   // 'z-ai/glm-5.2'
-          messages,
-          max_tokens:      maxTokens,
-          temperature:     0.5,                // slightly lower — coding benefits from determinism
-          top_p:           0.9,
-          stream:          true,
-        }),
-      },
-      180000   // GLM-5.2 is a 753B flagship — give it headroom
-    );
-
-    if (!nvRes.ok) {
-      let errBody = '';
-      try { errBody = await nvRes.text(); } catch (_) {}
-      console.error(`GLM-only stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
-      return false;
-    }
-
-    // ── True SSE streaming — NVIDIA uses OpenAI-compatible chunked JSON ──
-    // Each line looks like:  data: {"choices":[{"delta":{"content":"..."}}]}
-    // Terminator:             data: [DONE]
-    const reader  = nvRes.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer    = '';
-    let written   = 0;
-    let inThink   = false;
-    let pending   = '';   // holds text that might be a partial <think>/</think> tag
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      // Process complete SSE lines
-      let nlIdx;
-      while ((nlIdx = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, nlIdx).trim();
-        buffer = buffer.slice(nlIdx + 1);
-
-        if (!line || !line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]') continue;
-
-        let payload;
-        try { payload = JSON.parse(raw); } catch (_) { continue; }
-
-        const token = payload?.choices?.[0]?.delta?.content;
-        if (!token) continue;
-
-        // ── Strip <think>...</think> live, even across chunk boundaries ──
-        // (mirrors the logic in streamAI — GLM-5.2 sometimes emits reasoning
-        // tags and we never want them leaking to the client.)
-        pending += token;
-        let safe = '';
-        while (true) {
-          if (!inThink) {
-            const openIdx = pending.indexOf('<think>');
-            if (openIdx === -1) {
-              const holdBack = Math.min(pending.length, 8);
-              safe += pending.slice(0, pending.length - holdBack);
-              pending = pending.slice(pending.length - holdBack);
-              break;
-            } else {
-              safe += pending.slice(0, openIdx);
-              pending = pending.slice(openIdx + '<think>'.length);
-              inThink = true;
-            }
-          } else {
-            const closeIdx = pending.indexOf('</think>');
-            if (closeIdx === -1) {
-              const holdBack = Math.min(pending.length, 9);
-              pending = pending.slice(pending.length - holdBack);
-              break;
-            } else {
-              pending = pending.slice(closeIdx + '</think>'.length);
-              inThink = false;
-            }
-          }
-        }
-
-        if (safe) {
-          written += safe.length;
-          res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-          if (res.flush) res.flush();
-        }
-      }
-    }
-
-    // Flush any leftover lookahead buffer
-    if (!inThink && pending) {
-      written += pending.length;
-      res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
-      pending = '';
-    }
-
-    if (written === 0) {
-      console.error('GLM-only stream: model returned 0 tokens');
-      return false;
-    }
-
-    res.write('data: [DONE]\n\n');
-    res.end();
-    console.log(`GLM-only stream OK - ${written} chars written`);
-    return true;
-  } catch (e) {
-  console.error('GLM-only stream error:', e.message);
-  if (written > 0) {
-    // We already sent partial content — tell the client it was cut short
-    // instead of just dropping the connection with no signal.
-    try {
-      res.write(`data: ${JSON.stringify({ content: '\n\n_(response cut short — please try again)_' })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-    } catch (_) {}
-  }
-  return false;
-}
-}
-
 // ── GLOBAL NVIDIA RATE GUARD (protects shared API key across all users) ──
 function checkGlobalLimit(action) {
   const limit    = RATE_LIMITS[action];
@@ -913,7 +761,6 @@ export default async function handler(req, res) {
     const history = sanitizeHistory(body.history || []);
     const isVoiceCall = Boolean(body.isVoiceCall);
     const isCodeMode  = Boolean(body.mode === 'code' || body.isCodeChat === true);
-    console.log('[VDBG] action=', action, 'mode=', body.mode, 'isCodeChat=', body.isCodeChat, 'isCodeMode=', isCodeMode);
 
     // ── GLM-5.2-ONLY STREAMING (for Code Chat mode) ───────────────────
 // Used when the frontend sends mode:'code' — bypasses Groq + Cloudflare
@@ -923,8 +770,7 @@ export default async function handler(req, res) {
 //
 // Returns true on success (response already streamed + res.end() called),
 // false on failure (caller decides how to respond).
-async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
-  console.log('[VDBG] streamNvidiaGLMOnly CALLED, key present:', !!process.env.NVIDIA_API_KEY);
+async function streamNvidiaGLMOnly(messages, res, maxTokens = 2000) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
     console.error('GLM-only stream: NVIDIA_API_KEY missing');
@@ -1049,14 +895,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
       return false;
     }
 
-    if (!nvRes.ok) {
-      let errBody = '';
-      try { errBody = await nvRes.text(); } catch (_) {}
-      console.error(`[VDBG] GLM HTTP FAIL: ${nvRes.status} - ${errBody.slice(0, 300)}`);
-      return false;
-    }
-    console.log('[VDBG] GLM HTTP OK, starting stream read');
-
     res.write('data: [DONE]\n\n');
     res.end();
     console.log(`GLM-only stream OK - ${written} chars written`);
@@ -1085,7 +923,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
 // was computed but never checked, so every Vertex request fell through
 // to the normal Groq chat handler below.
 if (isCodeMode && action === 'chat') {
-   console.log('[VDBG] ENTERED code-chat routing block');
   if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1100,7 +937,7 @@ if (isCodeMode && action === 'chat') {
       codeMessages.push({ role: 'user', content: prompt.trim() });
     }
 
-    const ok = await streamNvidiaGLMOnly(codeMessages, res, 4096);
+    const ok = await streamNvidiaGLMOnly(codeMessages, res, 2000);
     if (!ok) {
       if (!res.writableEnded) {
         res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable. Please try again in a moment.' })}\n\n`);
@@ -1119,7 +956,7 @@ if (isCodeMode && action === 'chat') {
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;  
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;  
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
-
+    
     // ╔══════════════════════════════════════╗
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
