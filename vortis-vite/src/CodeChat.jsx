@@ -690,32 +690,6 @@ function Home({ onClose }) {
   useEffect(() => {
     if (typeof document === 'undefined') return
 
-    // ── Inject Tailwind Play CDN if the host app doesn't have Tailwind ──
-    // This makes all the className utilities in this file actually work,
-    // regardless of whether VORTIS uses Tailwind or not.
-    if (!window.__vertexTailwindLoaded) {
-      window.__vertexTailwindLoaded = true
-      const script = document.createElement('script')
-      script.src = 'https://cdn.tailwindcss.com/3.4.16'
-      script.id = 'vertex-tailwind-cdn'
-      script.onload = () => {
-        // Configure custom colors after Tailwind loads
-        if (window.tailwind) {
-          window.tailwind.config = {
-            theme: {
-              extend: {
-                colors: {
-                  'vertex-blue': '#3b82f6',
-                  'vertex-blue-bright': '#60a5fa',
-                  'vertex-blue-dim': '#2563eb',
-                },
-              },
-            },
-          }
-        }
-      }
-      document.head.appendChild(script)
-    }
 
     const body = document.body
     const prev = {
