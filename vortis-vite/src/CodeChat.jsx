@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
+import { FaGithub } from "react-icons/fa";
+<FaGithub size={13} />
 import {
-  Layers, MessageSquare, FolderGit2, FileCode2, GitHub, Eye,
+  Layers, MessageSquare, FolderGit2, FileCode2, Eye,
   Settings, Plus, Search, GitBranch, Circle, Hash, Bell, Share2,
   Play, ChevronDown, ChevronRight, PanelLeft, Sparkles, Check,
   ArrowUp, ArrowDown, CornerDownLeft, Copy, RefreshCw, Pencil,
@@ -261,7 +263,7 @@ const NAV_ITEMS = [
   { id: 'sessions', label: 'Sessions', icon: MessageSquare, badge: 5 },
   { id: 'projects', label: 'Projects', icon: FolderGit2 },
   { id: 'files', label: 'Files', icon: FileCode2 },
-  { id: 'github', label: 'GitHub', icon: GitHub, badge: 2 },
+  { id: 'github', label: 'GitHub', icon: FolderGit2, badge: 2 },
   { id: 'preview', label: 'Preview', icon: Eye },
   { id: 'settings', label: 'Settings', icon: Settings },
 ]
@@ -292,7 +294,7 @@ const NOTIFICATIONS = [
   { id: 'n1', icon: GitBranch, text: 'PR #248 ready for review', time: '5m', color: 'text-vertex-blue-bright' },
   { id: 'n2', icon: AlertCircle, text: 'Build failed on feat/jwt-auth', time: '12m', color: 'text-red-400' },
   { id: 'n3', icon: Check, text: 'Type check passed', time: '1h', color: 'text-emerald-400' },
-  { id: 'n4', icon: GitHub, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
+  { id: 'n4', icon: FolderGit2, text: 'New comment on PR #247', time: '3h', color: 'text-white/60' },
 ]
 
 const STARTER_PROMPTS = ['Debug an error', 'Optimize code', 'Explain code', 'Write a function', 'Refactor', 'Code review']
@@ -882,8 +884,8 @@ function Home() {
             <GitBranch size={13} />
             <span className="absolute -bottom-0.5 -right-0.5 rounded bg-vertex-blue px-1 text-[7.5px] font-bold text-white">{ws.branch.length > 4 ? ws.branch.slice(0, 3) + '…' : ws.branch}</span>
           </button>
-          <button onClick={() => showToast('GitHub sync — 0 conflicts')} className="group relative grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="GitHub sync">
-            <Github size={13} />
+          <button onClick={() => showToast('FolderGit2 sync — 0 conflicts')} className="group relative grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="FolderGit2 sync">
+            <FolderGit2 size={13} />
             <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-vertex-blue ring-2 ring-[#0a0a0a]" />
           </button>
           <button onClick={() => showToast('Share link copied')} className="grid h-7 w-7 place-items-center rounded-md text-white/45 hover:text-white hover:bg-white/[0.06] transition-colors" title="Share">
@@ -1849,7 +1851,7 @@ function SettingsModal({ open, onClose, showToast }) {
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
     { id: 'ai', label: 'AI', icon: Sparkles },
-    { id: 'github', label: 'GitHub', icon: GitHub },
+    { id: 'github', label: 'GitHub', icon: FolderGit2 },
   ]
   return (
     <AnimatePresence>
