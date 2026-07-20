@@ -913,6 +913,7 @@ export default async function handler(req, res) {
     const history = sanitizeHistory(body.history || []);
     const isVoiceCall = Boolean(body.isVoiceCall);
     const isCodeMode  = Boolean(body.mode === 'code' || body.isCodeChat === true);
+    console.log('[VDBG] action=', action, 'mode=', body.mode, 'isCodeChat=', body.isCodeChat, 'isCodeMode=', isCodeMode);
 
     // ── GLM-5.2-ONLY STREAMING (for Code Chat mode) ───────────────────
 // Used when the frontend sends mode:'code' — bypasses Groq + Cloudflare
@@ -923,6 +924,7 @@ export default async function handler(req, res) {
 // Returns true on success (response already streamed + res.end() called),
 // false on failure (caller decides how to respond).
 async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
+  console.log('[VDBG] streamNvidiaGLMOnly CALLED, key present:', !!process.env.NVIDIA_API_KEY);
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
     console.error('GLM-only stream: NVIDIA_API_KEY missing');
@@ -1047,6 +1049,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
       return false;
     }
 
+    if (!nvRes.ok) {
+      let errBody = '';
+      try { errBody = await nvRes.text(); } catch (_) {}
+      console.error(`[VDBG] GLM HTTP FAIL: ${nvRes.status} - ${errBody.slice(0, 300)}`);
+      return false;
+    }
+    console.log('[VDBG] GLM HTTP OK, starting stream read');
+
     res.write('data: [DONE]\n\n');
     res.end();
     console.log(`GLM-only stream OK - ${written} chars written`);
@@ -1075,6 +1085,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
 // was computed but never checked, so every Vertex request fell through
 // to the normal Groq chat handler below.
 if (isCodeMode && action === 'chat') {
+   console.log('[VDBG] ENTERED code-chat routing block');
   if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -1108,7 +1119,7 @@ if (isCodeMode && action === 'chat') {
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;  
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;  
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
-    
+
     // ╔══════════════════════════════════════╗
     // ║  TTS                                 ║
     // ╚══════════════════════════════════════╝
