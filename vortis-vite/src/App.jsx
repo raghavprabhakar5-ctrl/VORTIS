@@ -36,10 +36,10 @@ import {
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
 const FONT_OPTIONS = [
-  { id: 'geist',    label: 'Geist (Default)', css: "'Geist', sans-serif",
-    importUrl: null }, // already imported via @fontsource
-  { id: 'inter',    label: 'Inter',           css: "'Inter', sans-serif",
+  { id: 'inter',    label: 'Inter (Default)', css: "'Inter', sans-serif",
     importUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' },
+  { id: 'geist',    label: 'Geist',           css: "'Geist', sans-serif",
+    importUrl: null },
   { id: 'poppins',  label: 'Poppins',         css: "'Poppins', sans-serif",
     importUrl: 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap' },
   { id: 'jakarta',  label: 'Plus Jakarta',    css: "'Plus Jakarta Sans', sans-serif",
@@ -195,7 +195,7 @@ const cleanGitHubName = (raw) => {
   return name.split(' ')[0] || null;
 };
 
-const makeStyles = (isDark, fontFamily = "'Geist', sans-serif") =>  `
+const makeStyles = (isDark, fontFamily = "'Inter', sans-serif") =>  `
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2301,7 +2301,7 @@ export default function VortisAI() {
   const [savedChats, setSavedChats] = useState([]);
   const [chatId, setChatId] = useState(null);
   const [uiFont, setUiFont] = useState(() => {
-  try { return localStorage.getItem('vortis_font') || 'geist'; } catch(_) { return 'geist'; }
+  try { return localStorage.getItem('vortis_font') || 'inter'; } catch(_) { return 'inter'; }
   });
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState(null);
