@@ -1870,6 +1870,81 @@ const SettingsModal = ({
     </label>
   );
 
+  const FontPickerDropdown = ({ value, onChange, options }) => {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const grouped = options.reduce((acc, f) => {
+    (acc[f.group] = acc[f.group] || []).push(f);
+    return acc;
+  }, {});
+
+  const current = options.find(f => f.id === value);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          background: 'var(--bg3)', border: '1px solid var(--border2)',
+          color: 'var(--text1)', fontSize: 12.5, borderRadius: 8,
+          padding: '6px 12px', fontFamily: current?.css || 'var(--font-main)',
+          cursor: 'pointer', minWidth: 150, justifyContent: 'space-between',
+        }}
+      >
+        <span>{current?.label || 'Select font'}</span>
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
+          width: 220, maxHeight: 280, overflowY: 'auto',
+          background: 'var(--bg2)', border: '1px solid var(--border2)',
+          borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,.4)',
+          padding: '6px 0', animation: 'fadeUp .15s ease',
+        }} className="scr">
+          {Object.entries(grouped).map(([group, fonts]) => (
+            <div key={group}>
+              <div style={{
+                fontSize: 10, color: 'var(--text4)', fontFamily: "'JetBrains Mono',monospace",
+                textTransform: 'uppercase', letterSpacing: '.08em',
+                padding: '8px 14px 4px',
+              }}>{group}</div>
+              {fonts.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => { onChange(f.id); setOpen(false); }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    padding: '8px 14px', background: f.id === value ? 'rgba(99,102,241,.1)' : 'transparent',
+                    border: 'none', color: f.id === value ? 'var(--indigo)' : 'var(--text1)',
+                    fontFamily: f.css, fontSize: 13.5, cursor: 'pointer',
+                    fontWeight: f.id === value ? 600 : 400,
+                  }}
+                  onMouseEnter={e => { if (f.id !== value) e.currentTarget.style.background = 'rgba(99,102,241,.06)'; }}
+                  onMouseLeave={e => { if (f.id !== value) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
   // ── ACCOUNT TAB ──
   const AccountTab = () => (
     <>
@@ -2133,33 +2208,14 @@ const SettingsModal = ({
               <div style={S.rowSub}>Changes the app's typeface</div>
             </div>
           </div>
-          <select
+          <FontPickerDropdown
             value={uiFont}
-            onChange={e => {
-              const val = e.target.value;
+            onChange={(val) => {
               setUiFont(val);
               try { localStorage.setItem('vortis_font', val); } catch(_) {}
             }}
-            style={{
-              background: 'var(--bg3)', border: '1px solid var(--border2)',
-              color: 'var(--text1)', fontSize: 12.5, borderRadius: 8,
-              padding: '6px 10px', fontFamily: 'var(--font-main)', cursor: 'pointer',
-              maxWidth: 180,
-            }}
-          >
-            {Object.entries(
-              FONT_OPTIONS.reduce((acc, f) => {
-                (acc[f.group] = acc[f.group] || []).push(f);
-                return acc;
-              }, {})
-            ).map(([group, fonts]) => (
-              <optgroup key={group} label={group}>
-                {fonts.map(f => (
-                  <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
+            options={FONT_OPTIONS}
+          />
         </div>
 
       </div>
