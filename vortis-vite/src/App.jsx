@@ -35,6 +35,32 @@ import {
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
+const FONT_OPTIONS = [
+  { id: 'geist',    label: 'Geist (Default)', css: "'Geist', sans-serif",
+    importUrl: null }, // already imported via @fontsource
+  { id: 'inter',    label: 'Inter',           css: "'Inter', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' },
+  { id: 'poppins',  label: 'Poppins',         css: "'Poppins', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap' },
+  { id: 'jakarta',  label: 'Plus Jakarta',    css: "'Plus Jakarta Sans', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap' },
+  { id: 'mono',     label: 'JetBrains Mono',  css: "'JetBrains Mono', monospace",
+    importUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
+  { id: 'serif',    label: 'Source Serif',    css: "'Source Serif 4', Georgia, serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500;600;700&display=swap' },
+  { id: 'system',   label: 'System UI',       css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    importUrl: null },
+];
+
+const loadGoogleFont = (url) => {
+  if (!url) return;
+  if (document.querySelector(`link[href="${url}"]`)) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = url;
+  document.head.appendChild(link);
+};
+
 // ── TINYLD — cached language detector (loaded once, reused forever) ──
 let _tinyld = null;
 const getTinyld = async () => {
@@ -169,10 +195,11 @@ const cleanGitHubName = (raw) => {
   return name.split(' ')[0] || null;
 };
 
-const makeStyles = (isDark) => `
+const makeStyles = (isDark, fontFamily = "'Geist', sans-serif") =>  `
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
+  --font-main:${fontFamily};
   --app-bg:${isDark?'#080810':'#f0f0f5'};
   --sb-bg:${isDark?'#0d0d18':'#ffffff'};
   --bg2:${isDark?'#111120':'#ffffff'};
@@ -203,7 +230,7 @@ const makeStyles = (isDark) => `
 html{-webkit-text-size-adjust:100%;height:100%}
 *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 body{height:100%;overflow:hidden}
-body,.v-app{font-family:'Geist',sans-serif}
+body,.v-app{font-family:var(--font-main)}
 input,textarea,select{font-size:16px}
 .scr::-webkit-scrollbar{width:3px;height:3px}
 .scr::-webkit-scrollbar-track{background:transparent}
@@ -2032,7 +2059,7 @@ const SettingsModal = ({
         </div>
 
         {/* Voice gender */}
-        <div style={S.rowLast}>
+        <div style={S.row}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={S.rowIcon('rgba(139,92,246,.12)')}>
               <Mic size={14} color="var(--violet)"/>
@@ -2063,6 +2090,36 @@ const SettingsModal = ({
       </div>
     </>
   );
+
+  {/* Font style */}
+<div style={S.rowLast}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={S.rowIcon('rgba(16,185,129,.12)')}>
+      <PenTool size={14} color="var(--green)"/>
+    </div>
+    <div>
+      <div style={S.rowLabel}>Font style</div>
+      <div style={S.rowSub}>Changes the app's typeface</div>
+    </div>
+  </div>
+  <select
+    value={uiFont}
+    onChange={e => {
+      const val = e.target.value;
+      setUiFont(val);
+      try { localStorage.setItem('vortis_font', val); } catch(_) {}
+    }}
+    style={{
+      background: 'var(--bg3)', border: '1px solid var(--border2)',
+      color: 'var(--text1)', fontSize: 12.5, borderRadius: 8,
+      padding: '6px 10px', fontFamily: 'var(--font-main)', cursor: 'pointer',
+    }}
+  >
+    {FONT_OPTIONS.map(f => (
+      <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>
+    ))}
+  </select>
+</div>
 
   // ── SHORTCUTS TAB ──
   const ShortcutsTab = () => {
@@ -2241,6 +2298,9 @@ export default function VortisAI() {
   const [upgradeOk, setUpgradeOk] = useState(false);
   const [savedChats, setSavedChats] = useState([]);
   const [chatId, setChatId] = useState(null);
+  const [uiFont, setUiFont] = useState(() => {
+  try { return localStorage.getItem('vortis_font') || 'geist'; } catch(_) { return 'geist'; }
+  });
   const [autoSpeak, setAutoSpeak] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [copiedUserIdx, setCopiedUserIdx] = useState(null);
@@ -2364,9 +2424,11 @@ useEffect(() => {
   const db = getFirestore();
 
   useEffect(() => {
-    if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
-    styleEl.current.textContent = makeStyles(isDark);
-  }, [isDark]);
+  const fontDef = FONT_OPTIONS.find(f => f.id === uiFont) || FONT_OPTIONS[0];
+  loadGoogleFont(fontDef.importUrl);
+  if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
+  styleEl.current.textContent = makeStyles(isDark, fontDef.css);
+}, [isDark, uiFont]);
 
   useEffect(() => {
   const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
@@ -5596,6 +5658,8 @@ onChange={e => {
     onClose={() => setShowSettings(false)}
     ttsGender={ttsGender}
     setTtsGender={setTtsGender}
+    uiFont={uiFont}
+    setUiFont={setUiFont}
   />
 )}
 
