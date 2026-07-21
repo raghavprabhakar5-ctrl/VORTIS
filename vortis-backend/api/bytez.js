@@ -1574,7 +1574,6 @@ if (action === 'transcribe') {
     const transcription = await groq.audio.transcriptions.create({
       file: audioFile,
       model: 'whisper-large-v3-turbo',
-     ...(language ? { language: language.split('-')[0] } : {}),
       response_format: 'verbose_json',
     });
 
