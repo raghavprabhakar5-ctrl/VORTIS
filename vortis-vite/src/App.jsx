@@ -1948,10 +1948,11 @@ const SettingsModal = ({
           {Object.entries(grouped).map(([group, fonts]) => (
             <div key={group}>
               <div style={{
-                fontSize: 10, color: 'var(--text4)', fontFamily: "'JetBrains Mono',monospace",
-                textTransform: 'uppercase', letterSpacing: '.08em',
-                padding: '8px 14px 4px',
-              }}>{group}</div>
+                fontSize: 10.5, color: 'var(--indigo)', fontFamily: "'JetBrains Mono',monospace",
+                textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700,
+                padding: '10px 14px 5px',
+                opacity: 0.85,
+               }}>{group}</div>
               {fonts.map(f => (
                 <button
                   key={f.id}
