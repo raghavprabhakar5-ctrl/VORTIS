@@ -5,6 +5,7 @@ import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc,
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
+import ReactDOM from 'react-dom';
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -1870,15 +1871,41 @@ const SettingsModal = ({
     </label>
   );
 
-  const FontPickerDropdown = ({ value, onChange, options }) => {
+ const FontPickerDropdown = ({ value, onChange, options }) => {
   const [open, setOpen] = useState(false);
-  const ref = React.useRef(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 220 });
+  const btnRef = React.useRef(null);
+  const panelRef = React.useRef(null);
+
+  const openPanel = () => {
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      const panelWidth = 220;
+      const panelHeight = 280;
+      let left = rect.right - panelWidth; // right-align to button
+      let top = rect.bottom + 6;
+      // flip upward if it would overflow bottom of viewport
+      if (top + panelHeight > window.innerHeight - 10) {
+        top = rect.top - panelHeight - 6;
+      }
+      // keep on-screen horizontally
+      left = Math.max(8, Math.min(left, window.innerWidth - panelWidth - 8));
+      setCoords({ top, left, width: panelWidth });
+    }
+    setOpen(o => !o);
+  };
 
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if (!open) return;
+    const handler = (e) => {
+      if (
+        btnRef.current && !btnRef.current.contains(e.target) &&
+        panelRef.current && !panelRef.current.contains(e.target)
+      ) setOpen(false);
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [open]);
 
   const grouped = options.reduce((acc, f) => {
     (acc[f.group] = acc[f.group] || []).push(f);
@@ -1888,9 +1915,10 @@ const SettingsModal = ({
   const current = options.find(f => f.id === value);
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={openPanel}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
           background: 'var(--bg3)', border: '1px solid var(--border2)',
@@ -1905,14 +1933,18 @@ const SettingsModal = ({
         </svg>
       </button>
 
-      {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50,
-          width: 220, maxHeight: 280, overflowY: 'auto',
-          background: 'var(--bg2)', border: '1px solid var(--border2)',
-          borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,.4)',
-          padding: '6px 0', animation: 'fadeUp .15s ease',
-        }} className="scr">
+      {open && ReactDOM.createPortal(
+        <div
+          ref={panelRef}
+          style={{
+            position: 'fixed', top: coords.top, left: coords.left, zIndex: 9999,
+            width: coords.width, maxHeight: 280, overflowY: 'auto',
+            background: 'var(--bg2)', border: '1px solid var(--border2)',
+            borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,.5)',
+            padding: '6px 0', animation: 'fadeUp .15s ease',
+          }}
+          className="scr"
+        >
           {Object.entries(grouped).map(([group, fonts]) => (
             <div key={group}>
               <div style={{
@@ -1939,9 +1971,10 @@ const SettingsModal = ({
               ))}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 };
 
