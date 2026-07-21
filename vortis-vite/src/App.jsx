@@ -36,20 +36,53 @@ import {
 const API = 'https://vortis-backend.vercel.app/api/bytez';
 
 const FONT_OPTIONS = [
-  { id: 'inter',    label: 'Inter (Default)', css: "'Inter', sans-serif",
+  // ── Sans-serif (clean, everyday) ──
+  { id: 'inter',    label: 'Inter (Default)', group: 'Sans-serif', css: "'Inter', sans-serif",
     importUrl: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap' },
-  { id: 'geist',    label: 'Geist',           css: "'Geist', sans-serif",
+  { id: 'geist',    label: 'Geist',           group: 'Sans-serif', css: "'Geist', sans-serif",
     importUrl: null },
-  { id: 'poppins',  label: 'Poppins',         css: "'Poppins', sans-serif",
-    importUrl: 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap' },
-  { id: 'jakarta',  label: 'Plus Jakarta',    css: "'Plus Jakarta Sans', sans-serif",
-    importUrl: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap' },
-  { id: 'mono',     label: 'JetBrains Mono',  css: "'JetBrains Mono', monospace",
-    importUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
-  { id: 'serif',    label: 'Source Serif',    css: "'Source Serif 4', Georgia, serif",
+  { id: 'system',   label: 'System UI',       group: 'Sans-serif', css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    importUrl: null },
+
+  // ── Rounded / friendly ──
+  { id: 'quicksand', label: 'Quicksand',      group: 'Rounded', css: "'Quicksand', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap' },
+  { id: 'nunito',    label: 'Nunito',         group: 'Rounded', css: "'Nunito', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap' },
+  { id: 'comfortaa', label: 'Comfortaa',      group: 'Rounded', css: "'Comfortaa', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;500;600;700&display=swap' },
+
+  // ── Bold / display ──
+  { id: 'sora',      label: 'Sora',           group: 'Bold & Modern', css: "'Sora', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap' },
+  { id: 'spacegrot', label: 'Space Grotesk',  group: 'Bold & Modern', css: "'Space Grotesk', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap' },
+  { id: 'outfit',    label: 'Outfit',         group: 'Bold & Modern', css: "'Outfit', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap' },
+
+  // ── Condensed / compact ──
+  { id: 'ibmcond',   label: 'IBM Plex Condensed', group: 'Condensed', css: "'IBM Plex Sans Condensed', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&display=swap' },
+  { id: 'archivo',   label: 'Archivo Narrow', group: 'Condensed', css: "'Archivo Narrow', sans-serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;500;600;700&display=swap' },
+
+  // ── Serif (classic / editorial) ──
+  { id: 'serif',     label: 'Source Serif',   group: 'Serif', css: "'Source Serif 4', Georgia, serif",
     importUrl: 'https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@400;500;600;700&display=swap' },
-  { id: 'system',   label: 'System UI',       css: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    importUrl: null },
+  { id: 'playfair',  label: 'Playfair Display', group: 'Serif', css: "'Playfair Display', Georgia, serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap' },
+  { id: 'lora',       label: 'Lora',           group: 'Serif', css: "'Lora', Georgia, serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap' },
+  { id: 'merriweather', label: 'Merriweather', group: 'Serif', css: "'Merriweather', Georgia, serif",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap' },
+
+  // ── Monospace (technical / retro-terminal look) ──
+  { id: 'mono',      label: 'JetBrains Mono', group: 'Monospace', css: "'JetBrains Mono', monospace",
+    importUrl: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap' },
+  { id: 'ibmplexmono', label: 'IBM Plex Mono', group: 'Monospace', css: "'IBM Plex Mono', monospace",
+    importUrl: 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap' },
+  { id: 'firacode',  label: 'Fira Code',      group: 'Monospace', css: "'Fira Code', monospace",
+    importUrl: 'https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&display=swap' },
 ];
 
 const loadGoogleFont = (url) => {
@@ -2080,7 +2113,7 @@ const SettingsModal = ({
                   border: `1px solid ${ttsGender === g ? 'rgba(99,102,241,.5)' : 'var(--border2)'}`,
                   background: ttsGender === g ? 'rgba(99,102,241,.12)' : 'var(--bg3)',
                   color: ttsGender === g ? 'var(--indigo)' : 'var(--text2)',
-                  cursor: 'pointer', fontSize: 12.5, fontFamily: 'Geist,sans-serif',
+                  cursor: 'pointer', fontSize: 12.5, fontFamily: 'var(--font-main)',
                   fontWeight: ttsGender === g ? 700 : 400,
                   transition: 'all .15s', textTransform: 'capitalize',
                 }}
@@ -2111,10 +2144,20 @@ const SettingsModal = ({
               background: 'var(--bg3)', border: '1px solid var(--border2)',
               color: 'var(--text1)', fontSize: 12.5, borderRadius: 8,
               padding: '6px 10px', fontFamily: 'var(--font-main)', cursor: 'pointer',
+              maxWidth: 180,
             }}
           >
-            {FONT_OPTIONS.map(f => (
-              <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>
+            {Object.entries(
+              FONT_OPTIONS.reduce((acc, f) => {
+                (acc[f.group] = acc[f.group] || []).push(f);
+                return acc;
+              }, {})
+            ).map(([group, fonts]) => (
+              <optgroup key={group} label={group}>
+                {fonts.map(f => (
+                  <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
