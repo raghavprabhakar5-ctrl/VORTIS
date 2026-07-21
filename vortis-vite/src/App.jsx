@@ -1678,7 +1678,8 @@ const SettingsModal = ({
   autoSpeak, setAutoSpeak, isDark, setIsDark,
   handleLogout, setShowUpgrade, onClose,
   memories, onDeleteMemory, onClearMemories,
-  setConfirmDialog, ttsGender, setTtsGender
+  setConfirmDialog, ttsGender, setTtsGender,
+  uiFont, setUiFont
 }) => {
   const [tab, setTab] = useState('account');
 
@@ -2087,39 +2088,40 @@ const SettingsModal = ({
             ))}
           </div>
         </div>
+
+        {/* Font style */}
+        <div style={S.rowLast}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={S.rowIcon('rgba(16,185,129,.12)')}>
+              <PenTool size={14} color="var(--green)"/>
+            </div>
+            <div>
+              <div style={S.rowLabel}>Font style</div>
+              <div style={S.rowSub}>Changes the app's typeface</div>
+            </div>
+          </div>
+          <select
+            value={uiFont}
+            onChange={e => {
+              const val = e.target.value;
+              setUiFont(val);
+              try { localStorage.setItem('vortis_font', val); } catch(_) {}
+            }}
+            style={{
+              background: 'var(--bg3)', border: '1px solid var(--border2)',
+              color: 'var(--text1)', fontSize: 12.5, borderRadius: 8,
+              padding: '6px 10px', fontFamily: 'var(--font-main)', cursor: 'pointer',
+            }}
+          >
+            {FONT_OPTIONS.map(f => (
+              <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>
+            ))}
+          </select>
+        </div>
+
       </div>
     </>
   );
-
-  {/* Font style */}
-<div style={S.rowLast}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-    <div style={S.rowIcon('rgba(16,185,129,.12)')}>
-      <PenTool size={14} color="var(--green)"/>
-    </div>
-    <div>
-      <div style={S.rowLabel}>Font style</div>
-      <div style={S.rowSub}>Changes the app's typeface</div>
-    </div>
-  </div>
-  <select
-    value={uiFont}
-    onChange={e => {
-      const val = e.target.value;
-      setUiFont(val);
-      try { localStorage.setItem('vortis_font', val); } catch(_) {}
-    }}
-    style={{
-      background: 'var(--bg3)', border: '1px solid var(--border2)',
-      color: 'var(--text1)', fontSize: 12.5, borderRadius: 8,
-      padding: '6px 10px', fontFamily: 'var(--font-main)', cursor: 'pointer',
-    }}
-  >
-    {FONT_OPTIONS.map(f => (
-      <option key={f.id} value={f.id} style={{ fontFamily: f.css }}>{f.label}</option>
-    ))}
-  </select>
-</div>
 
   // ── SHORTCUTS TAB ──
   const ShortcutsTab = () => {
