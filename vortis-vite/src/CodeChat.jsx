@@ -1318,6 +1318,31 @@ const Vertex = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelCode, previewOpen, filesPanelOpen, showModelMenu, showStylePrefs, showAttachMenu]);
 
+  /* ── Code panel (moved above Firestore ops so it's initialized first) ── */
+  const closeCodePanel = useCallback(() => {
+    setPanelCode(null); setPanelOutput(null); setPanelHasError(false); setPanelBootMsg('');
+  }, []);
+
+  const openCodePanel = useCallback(({ lang, code }) => {
+    setPanelCode({ lang, code });
+    setPanelOutput(null); setPanelHasError(false);
+  }, []);
+
+  const runPanelCode = useCallback(async () => {
+    if (!panelCode || panelRunning || !safeExecuteCodeLocally) return;
+    setPanelRunning(true); setPanelOutput(null); setPanelHasError(false); setPanelBootMsg('');
+    try {
+      const result = await safeExecuteCodeLocally(panelCode.lang, panelCode.code, (m) => setPanelBootMsg(m));
+      setPanelHasError(!!result.isError);
+      setPanelOutput(typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2));
+    } catch (e) {
+      setPanelHasError(true);
+      setPanelOutput('Error: ' + (e?.message || String(e)));
+    } finally {
+      setPanelRunning(false); setPanelBootMsg('');
+    }
+  }, [panelCode, panelRunning, safeExecuteCodeLocally]);
+
   /* ── Firestore ops ── */
   const loadChats = useCallback(async (uid) => {
     if (!uid) { setSavedChats([]); return; }
@@ -1432,31 +1457,6 @@ const Vertex = ({
       console.error('Vertex: failed to clear all data —', e);
     }
   }, [db, loadChats, newChat]);
-
-  /* ── Code panel ── */
-  const closeCodePanel = useCallback(() => {
-    setPanelCode(null); setPanelOutput(null); setPanelHasError(false); setPanelBootMsg('');
-  }, []);
-
-  const openCodePanel = useCallback(({ lang, code }) => {
-    setPanelCode({ lang, code });
-    setPanelOutput(null); setPanelHasError(false);
-  }, []);
-
-  const runPanelCode = useCallback(async () => {
-    if (!panelCode || panelRunning || !safeExecuteCodeLocally) return;
-    setPanelRunning(true); setPanelOutput(null); setPanelHasError(false); setPanelBootMsg('');
-    try {
-      const result = await safeExecuteCodeLocally(panelCode.lang, panelCode.code, (m) => setPanelBootMsg(m));
-      setPanelHasError(!!result.isError);
-      setPanelOutput(typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2));
-    } catch (e) {
-      setPanelHasError(true);
-      setPanelOutput('Error: ' + (e?.message || String(e)));
-    } finally {
-      setPanelRunning(false); setPanelBootMsg('');
-    }
-  }, [panelCode, panelRunning, safeExecuteCodeLocally]);
 
   /* ── Title generation ── */
   const generateChatTitle = async (context) => {
