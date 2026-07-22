@@ -173,6 +173,123 @@ Humor is welcome occasionally, but never at the user's expense.
  * ──────────────────────────────────────────────────────────────────────── */
 const LONG_BLOCK_LINES = 8;
 
+/* ── ThinkingText — rotating status messages while the AI is "thinking" ── */
+const THINKING_MESSAGES = ['Analyzing request', 'Searching docs', 'Drafting solution', 'Checking edge cases'];
+const ThinkingText = () => {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIdx(i => (i + 1) % THINKING_MESSAGES.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, []);
+  return (
+    <span style={{ transition: 'opacity .3s', animation: 'vertexFadeIn .3s ease' }}>
+      · {THINKING_MESSAGES[idx]}…
+    </span>
+  );
+};
+
+/* ── FileBrowserContent — file list + preview pane used inside the
+ *  slide-in Files panel. Lets the user browse uploaded files, preview
+ *  their contents, and insert them into the chat. ── */
+const FileBrowserContent = ({ files, onInsert }) => {
+  const [selectedIdx, setSelectedIdx] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const filtered = files.filter(f =>
+    f.name.toLowerCase().includes(search.toLowerCase()) ||
+    f.path.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = selectedIdx !== null ? filtered[selectedIdx] : null;
+
+  return (
+    <>
+      {/* Search */}
+      <div style={{ padding: '8px 14px', borderBottom: '1px solid #212121' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={12} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#6a6a6a' }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search files..."
+            style={{
+              width: '100%', padding: '6px 10px 6px 28px', fontSize: 12, background: '#141414',
+              border: '1px solid #262626', borderRadius: 6, color: '#e6e6e6', outline: 'none', fontFamily: 'inherit',
+            }} />
+        </div>
+      </div>
+
+      {/* File list */}
+      <div className="scr" style={{ maxHeight: '40%', overflowY: 'auto', padding: 6, borderBottom: '1px solid #212121' }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: 20, textAlign: 'center', color: '#5a5a5a', fontSize: 11.5 }}>
+            <FileText size={22} style={{ opacity: .4, marginBottom: 8 }} />
+            <div>{search ? 'No matches found.' : 'No files yet.'}</div>
+            {!search && <div style={{ marginTop: 4, fontSize: 10.5 }}>Click "Add files" to upload.</div>}
+          </div>
+        ) : filtered.map((f, i) => (
+          <button key={i} onClick={() => setSelectedIdx(i)}
+            style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 5,
+              background: selected === f ? '#1c1c1c' : 'transparent', border: 'none', cursor: 'pointer',
+              textAlign: 'left', transition: 'background .12s', marginBottom: 1,
+            }}
+            onMouseEnter={e => { if (selected !== f) e.currentTarget.style.background = '#151515'; }}
+            onMouseLeave={e => { if (selected !== f) e.currentTarget.style.background = 'transparent'; }}>
+            <FileCode size={12} color="#6a6a6a" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.name}</div>
+              <div style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.path}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Preview */}
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {selected ? (
+          <>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 14px', borderBottom: '1px solid #1a1a1a',
+            }}>
+              <span style={{ fontSize: 11, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {selected.path}
+              </span>
+              <button onClick={() => onInsert(selected)}
+                style={{
+                  borderRadius: 4, border: '1px solid #2a2a2a', background: '#1a1a1a', padding: '3px 8px',
+                  color: '#9a9a9a', fontSize: 10.5, fontFamily: 'JetBrains Mono, monospace', cursor: 'pointer',
+                  transition: 'all .12s', flexShrink: 0,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#3a3a3a'; e.currentTarget.style.color = '#dcdcdc'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#9a9a9a'; }}>
+                Insert
+              </button>
+            </div>
+            {selected._image ? (
+              <img src={selected._image} alt={selected.name} style={{ margin: 12, maxWidth: '100%', borderRadius: 8, objectFit: 'contain' }} />
+            ) : (
+              <pre className="scr" style={{
+                flex: 1, overflow: 'auto', margin: 0, padding: 12, background: '#0a0a0a',
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, lineHeight: 1.7, color: '#dcdcdc',
+                whiteSpace: 'pre', wordBreak: 'normal',
+              }}>
+                {selected.content}
+              </pre>
+            )}
+          </>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center', color: '#5a5a5a', fontSize: 11.5 }}>
+            <div>
+              <FileCode size={28} style={{ opacity: .4, marginBottom: 8 }} />
+              Select a file to preview.
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
 const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
@@ -628,6 +745,102 @@ const Vertex = ({
     }
   };
 
+  /* ── Auto-search toggle — on by default; searches the web for coding
+       queries that need fresh info (new releases, latest docs, etc.) ── */
+  const [autoSearch, setAutoSearch] = useState(() => {
+    try { return localStorage.getItem('vortis_auto_search') !== 'false'; }
+    catch (e) { return true; }
+  });
+  useEffect(() => { try { localStorage.setItem('vortis_auto_search', autoSearch); } catch (e) {} }, [autoSearch]);
+
+  /* ── Search state — results shown in a collapsible panel above the
+       streaming bubble while the AI is composing its answer. ── */
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  /* ── File browser panel — slide-in from the right, shows uploaded
+       project files. Replaces the old "file picker" button. ── */
+  const [filesPanelOpen, setFilesPanelOpen] = useState(false);
+  const [projectFiles, setProjectFiles] = useState([]);
+  const filesPanelInputRef = useRef(null);
+
+  /* ── Detect whether a coding query needs fresh web info ── */
+  const needsCodeSearch = useCallback((text) => {
+    const low = text.toLowerCase();
+    // New/latest/current/upcoming — always search
+    if (/\b(latest|newest|new\s+|recent|upcoming|20\d\d|current|today|this week|this month|changelog|release notes?|just (released|came out|announced)|version\s+\d)\b/i.test(low)) return true;
+    // Specific frameworks/libs that change often
+    if (/\b(next\.?js|react\s?\d?|vue\s?\d?|svelte|angular|nuxt|remix|astro|vite|tailwind|typescript|node\.?js|deno|bun|python\s?\d?|django|flask|fastapi|rust|go(lang)?|java|kotlin|swift)\b/i.test(low)) {
+      // Only search if they're asking about features/changes/best practices, not "write me a function"
+      if (/\b(feature|change|update|deprecated|removed|added|migration|upgrade|best practice|how to|difference|vs|versus|compare)\b/i.test(low)) return true;
+    }
+    // API / docs lookups
+    if (/\b(api|documentation|docs|reference|example|tutorial|guide)\b/i.test(low)) return true;
+    // Error messages — search for known solutions
+    if (/\b(error|exception|stack trace|undefined is not|cannot read|typeerror|referenceerror|module not found|npm err|pip err)\b/i.test(low)) return true;
+    return false;
+  }, []);
+
+  /* ── Call the backend's action:'search' endpoint ── */
+  const performSearch = useCallback(async (query) => {
+    setSearchLoading(true);
+    try {
+      const res = await fetch(API, {
+        method: 'POST',
+        headers: await getAuthHeader(),
+        body: JSON.stringify({ action: 'search', query: query.slice(0, 300) }),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data.results) ? data.results : [];
+    } catch (e) {
+      console.error('Search failed:', e);
+      return [];
+    } finally {
+      setSearchLoading(false);
+    }
+  }, []);
+
+  /* ── Detect if a response was truncated mid-code-block ── */
+  const isTruncated = useCallback((text) => {
+    if (!text || text.length < 50) return false;
+    // Count ``` fences — odd number means we're inside an unclosed code block
+    const fenceCount = (text.match(/```/g) || []).length;
+    if (fenceCount % 2 !== 0) return true;
+    // Ends mid-word (no punctuation, no newline, looks cut off)
+    const lastChar = text.trim().slice(-1);
+    if (!/[.!?)\]}"'`>\n]/.test(lastChar) && text.trim().length > 200) return true;
+    return false;
+  }, []);
+
+  /* ── File browser: handle file uploads ── */
+  const handleFilesPanelUpload = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const MAX_CHARS = 20000;
+    for (const file of files.slice(0, 20)) {
+      if (isImageFile(file.name, file.type)) {
+        const dataUrl = await readAsDataURL(file);
+        setProjectFiles(prev => [...prev, { name: file.name, path: file.name, content: `[Image: ${file.name}]`, _image: dataUrl }]);
+        continue;
+      }
+      if (isTextFile(file.name, file.type)) {
+        let content = await readAsText(file);
+        if (content.length > MAX_CHARS) content = content.slice(0, MAX_CHARS) + '\n… (truncated)';
+        setProjectFiles(prev => [...prev, { name: file.name, path: file.webkitRelativePath || file.name, content }]);
+      }
+    }
+    e.target.value = '';
+  }, []);
+
+  /* ── Insert a file's content into the chat input ── */
+  const insertFileIntoChat = useCallback((f) => {
+    const ext = f.name.split('.').pop() || '';
+    setInput(prev => prev + (prev ? '\n\n' : '') + `File: ${f.path}\n\`\`\`${ext}\n${f.content}\n\`\`\``);
+    setFilesPanelOpen(false);
+    setTimeout(() => inputRef.current?.focus(), 60);
+  }, []);
+
   /* ── Paste attachments ("PASTED" cards above the input) ── */
   const [attachments, setAttachments] = useState([]);
 
@@ -859,13 +1072,14 @@ Title:`,
         if (showPrefs) { setShowPrefs(false); return; }
         if (showAttachMenu) { setShowAttachMenu(false); return; }
         if (showSettings) { setShowSettings(false); return; }
+        if (filesPanelOpen) { setFilesPanelOpen(false); return; }
         onClose?.();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPrefs, panelCode, confirmDialog, infoDialog, showAttachMenu, showSettings]);
+  }, [showPrefs, panelCode, confirmDialog, infoDialog, showAttachMenu, showSettings, filesPanelOpen]);
 
   /* ── Firestore ops ── */
   const loadChats = useCallback(async (uid) => {
@@ -1065,6 +1279,7 @@ Title:`,
     setStreaming(true);
     setThinking(true);
     setStreamText('');
+    setSearchResults([]);
     abortRef.current = false;
 
     const historyForBackend = nextMsgs.slice(-12).map(m => ({
@@ -1072,19 +1287,33 @@ Title:`,
       content: m.text
     }));
 
-    const sys = buildCoderSystemPrompt(style);
-    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+    /* ── Auto-search: if the query needs fresh web info, search first ── */
+    let searchContext = '';
+    if (autoSearch && needsCodeSearch(rawText)) {
+      const results = await performSearch(rawText);
+      if (results.length > 0) {
+        setSearchResults(results);
+        const snippets = results.slice(0, 5).map((r, i) =>
+          `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 300)}\nSource: ${r.source} | Date: ${r.date}`
+        ).join('\n\n');
+        searchContext = `\n\n---\nLIVE WEB SEARCH RESULTS (use these for current info, never training data):\n${snippets}\n---`;
+      }
+    }
 
-    let full = '';
-    try {
+    const sys = buildCoderSystemPrompt(style);
+    const fullPrompt = sys + searchContext + '\n\n=== USER REQUEST ===\n' + text;
+
+    /* ── Stream helper — streams one request, returns accumulated text ── */
+    const streamOnce = async (promptToSend, historyToSend) => {
+      let accumulated = '';
       const res = await fetch(API, {
         method: 'POST',
         headers: await getAuthHeader(),
         body: JSON.stringify({
           action: 'chat',
           mode: 'code',
-          prompt: fullPrompt,
-          history: historyForBackend
+          prompt: promptToSend,
+          history: historyToSend
         })
       });
 
@@ -1093,13 +1322,9 @@ Title:`,
         if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
         else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
         else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
-        const errMsgFinal = errMsg;
-        setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: `⚠️ ${errMsgFinal}`, ts: Date.now() }]);
-        setStreaming(false); setThinking(false); setStreamText('');
-        return;
+        throw new Error(errMsg);
       }
 
-      setThinking(false);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buffer = '';
@@ -1119,8 +1344,8 @@ Title:`,
           if (raw === '[DONE]' || !raw) continue;
           try {
             const p = JSON.parse(raw);
-            if (p.content) { full += p.content; setStreamText(full); }
-          } catch (_) {}
+            if (p.content) { accumulated += p.content; setStreamText(accumulated); }
+          } catch (e) {}
         }
       }
 
@@ -1129,19 +1354,42 @@ Title:`,
         if (raw && raw !== '[DONE]') {
           try {
             const p = JSON.parse(raw);
-            if (p.content) { full += p.content; setStreamText(full); }
-          } catch (_) {}
+            if (p.content) { accumulated += p.content; setStreamText(accumulated); }
+          } catch (e) {}
         }
+      }
+      return accumulated;
+    };
+
+    let full = '';
+    try {
+      setThinking(false);
+      full = await streamOnce(fullPrompt, historyForBackend);
+
+      /* ── Auto-continuation: if the response was truncated mid-code-block,
+           send a "continue" request up to 3 times to finish it. ── */
+      let continuations = 0;
+      const MAX_CONTINUATIONS = 3;
+      while (isTruncated(full) && continuations < MAX_CONTINUATIONS && !abortRef.current) {
+        continuations++;
+        const contPrompt = buildCoderSystemPrompt(style) + '\n\nYou were generating a response that got cut off. Continue EXACTLY where you left off. Do NOT repeat any earlier text, do NOT restart, do NOT add any preamble or greeting. Just continue the code/text from where it stopped.';
+        const contHistory = [
+          ...historyForBackend,
+          { role: 'assistant', content: full },
+        ];
+        const contText = await streamOnce(contPrompt, contHistory);
+        if (!contText) break;
+        full += contText;
       }
     } catch (e) {
       setThinking(false);
       setMessages(prev => [...prev, {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        text: `⚠️ Network error: ${e?.message || 'unknown'}\n\nPlease check your connection and try again.`,
+        text: `⚠️ ${e.message || 'Network error'}\n\nPlease check your connection and try again.`,
         ts: Date.now()
       }]);
-      setStreaming(false); setStreamText('');
+      setStreaming(false); setStreamText(''); setSearchResults([]);
       return;
     }
 
@@ -1158,7 +1406,8 @@ Title:`,
         id: `a-${Date.now()}`,
         role: 'assistant',
         text: cleaned,
-        ts: Date.now()
+        ts: Date.now(),
+        search: searchResults.length > 0 ? searchResults : undefined,
       };
 
       const finalMsgs = [...nextMsgs, aiMsg];
@@ -1181,7 +1430,8 @@ Title:`,
     setStreaming(false);
     setThinking(false);
     setStreamText('');
-  }, [input, messages, streaming, style, persistChat, attachments, ocrMode]);
+    setSearchResults([]);
+  }, [input, messages, streaming, style, persistChat, attachments, ocrMode, autoSearch, needsCodeSearch, performSearch, isTruncated]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current = true;
@@ -1272,10 +1522,10 @@ Title:`,
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Files button — triggers the same file input as the + menu's "Add file" */}
+          {/* Files button — opens the file browser panel */}
           <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Add files"
+            onClick={() => setFilesPanelOpen(true)}
+            title="Browse project files"
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: '#141414',
               border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6,
@@ -1285,22 +1535,7 @@ Title:`,
             <Folder size={12}/> Files
           </button>
 
-          {/* Download chat as Markdown */}
-          <button
-            onClick={exportChat}
-            title="Download chat as Markdown"
-            disabled={messages.length === 0}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5, background: '#141414',
-              border: '1px solid #2a2a2a', color: messages.length === 0 ? '#4a4a4a' : '#c8c8c8',
-              fontSize: 12, borderRadius: 6, padding: '5px 10px',
-              cursor: messages.length === 0 ? 'not-allowed' : 'pointer'
-            }}
-          >
-            <Download size={12}/> Export
-          </button>
-
-          {/* Settings — opens a popover with code style + other options */}
+          {/* Settings — opens a popover with code style + options */}
           <div ref={settingsRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setShowSettings(v => !v)}
@@ -1317,90 +1552,103 @@ Title:`,
 
             {showSettings && (
               <div style={{
-                position: 'absolute', top: 42, right: 0, zIndex: 100, minWidth: 260,
+                position: 'absolute', top: 42, right: 0, zIndex: 100, minWidth: 280, maxWidth: 320,
                 background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
-                boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 12,
+                boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 14,
                 animation: 'vertexScaleIn .15s ease'
               }}>
                 {/* Coder style */}
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
-                {STYLES.map(s => (
-                  <button key={s.id} onClick={() => { setStyle(s.id); }}
-                    style={{
-                      width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
-                      background: style === s.id ? '#232323' : 'transparent',
-                      border: '1px solid ' + (style === s.id ? '#3a3a3a' : 'transparent'),
-                      marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 2
-                    }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e6e6e6' }}>{s.label}</span>
-                    <span style={{ fontSize: 11, color: '#7a7a7a' }}>{s.hint}</span>
-                  </button>
-                ))}
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#5a5a5a', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase' }}>Coder Style</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {STYLES.map(s => (
+                    <button key={s.id} onClick={() => setStyle(s.id)}
+                      style={{
+                        width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+                        background: style === s.id ? '#1c1c1c' : 'transparent',
+                        border: '1px solid ' + (style === s.id ? '#2a2a2a' : 'transparent'),
+                        display: 'flex', flexDirection: 'column', gap: 1, transition: 'all .12s',
+                      }}
+                      onMouseEnter={e => { if (style !== s.id) e.currentTarget.style.background = '#111'; }}
+                      onMouseLeave={e => { if (style !== s.id) e.currentTarget.style.background = 'transparent'; }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: style === s.id ? '#e6e6e6' : '#dcdcdc' }}>{s.label}</span>
+                      <span style={{ fontSize: 10.5, color: '#6a6a6a' }}>{s.hint}</span>
+                    </button>
+                  ))}
+                </div>
 
-                <div style={{ borderTop: '1px solid #1c1c1c', margin: '8px 0' }} />
+                <div style={{ borderTop: '1px solid #1c1c1c', margin: '12px 0' }} />
 
-                {/* Other options */}
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>OPTIONS</div>
+                {/* Toggles */}
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#5a5a5a', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase' }}>Options</div>
+
+                {/* Auto-search toggle */}
+                <button
+                  onClick={() => setAutoSearch(v => !v)}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+                    background: 'transparent', border: '1px solid transparent', marginBottom: 3, transition: 'background .12s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#111'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: '#e6e6e6' }}>Auto web search</span>
+                    <span style={{ fontSize: 10.5, color: '#6a6a6a' }}>Search for latest docs &amp; APIs</span>
+                  </span>
+                  <span style={{
+                    position: 'relative', width: 30, height: 16, borderRadius: 8, flexShrink: 0,
+                    background: autoSearch ? '#e6e6e6' : '#2a2a2a', transition: 'background .15s',
+                  }}>
+                    <span style={{
+                      position: 'absolute', top: 2, width: 12, height: 12, borderRadius: '50%',
+                      background: '#0a0a0a', transition: 'transform .15s',
+                      transform: autoSearch ? 'translateX(16px)' : 'translateX(2px)',
+                    }}/>
+                  </span>
+                </button>
 
                 {/* OCR mode toggle */}
                 <button
                   onClick={() => setOcrMode(v => !v)}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
-                    background: 'transparent', border: '1px solid transparent', marginBottom: 4,
+                    padding: '8px 10px', borderRadius: 6, cursor: 'pointer',
+                    background: 'transparent', border: '1px solid transparent', marginBottom: 3, transition: 'background .12s',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#161616'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e6e6e6' }}>OCR mode</span>
-                    <span style={{ fontSize: 11, color: '#7a7a7a' }}>Extract text from images on send</span>
+                  onMouseEnter={e => { e.currentTarget.style.background = '#111'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                  <span style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: '#e6e6e6' }}>OCR mode</span>
+                    <span style={{ fontSize: 10.5, color: '#6a6a6a' }}>Extract text from images</span>
                   </span>
                   <span style={{
-                    position: 'relative', width: 32, height: 18, borderRadius: 9, flexShrink: 0,
+                    position: 'relative', width: 30, height: 16, borderRadius: 8, flexShrink: 0,
                     background: ocrMode ? '#e6e6e6' : '#2a2a2a', transition: 'background .15s',
                   }}>
                     <span style={{
-                      position: 'absolute', top: 2, width: 14, height: 14, borderRadius: '50%',
+                      position: 'absolute', top: 2, width: 12, height: 12, borderRadius: '50%',
                       background: '#0a0a0a', transition: 'transform .15s',
                       transform: ocrMode ? 'translateX(16px)' : 'translateX(2px)',
                     }}/>
                   </span>
                 </button>
 
+                <div style={{ borderTop: '1px solid #1c1c1c', margin: '12px 0' }} />
+
                 {/* Export chat */}
                 <button
-                  onClick={() => { exportChat(); }}
+                  onClick={() => { exportChat(); setShowSettings(false); }}
                   disabled={messages.length === 0}
                   style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px',
-                    borderRadius: 7, cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
-                    background: 'transparent', border: '1px solid transparent', marginBottom: 4,
-                    color: messages.length === 0 ? '#4a4a4a' : '#dcdcdc', fontSize: 13, fontWeight: 600,
-                    textAlign: 'left',
-                  }}
-                  onMouseEnter={e => { if (messages.length > 0) e.currentTarget.style.background = '#161616'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <Download size={13}/> Export chat as Markdown
-                </button>
-
-                {/* Clear all data */}
-                <button
-                  onClick={() => { setShowSettings(false); clearAllData(); }}
-                  disabled={clearing || savedChats.length === 0}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px',
-                    borderRadius: 7, cursor: (clearing || savedChats.length === 0) ? 'not-allowed' : 'pointer',
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+                    borderRadius: 6, cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
                     background: 'transparent', border: '1px solid transparent',
-                    color: (clearing || savedChats.length === 0) ? '#4a4a4a' : '#ef4444', fontSize: 13, fontWeight: 600,
-                    textAlign: 'left',
+                    color: messages.length === 0 ? '#4a4a4a' : '#dcdcdc', fontSize: 12.5, fontWeight: 600,
+                    textAlign: 'left', transition: 'background .12s',
                   }}
-                  onMouseEnter={e => { if (!clearing && savedChats.length > 0) e.currentTarget.style.background = '#161616'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <Trash2 size={13}/> Clear All Data
+                  onMouseEnter={e => { if (messages.length > 0) e.currentTarget.style.background = '#111'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+                  <Download size={13}/> Export chat as Markdown
                 </button>
               </div>
             )}
@@ -1662,29 +1910,88 @@ Title:`,
               <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
                 {messages.map(m => (
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
-                    mdComponents={mdComponents} />
+                    mdComponents={mdComponents} search={m.search} />
                 ))}
 
                 {(streaming || thinking) && (
                   <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
                     <div style={{
                       width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: '#141414', border: '1px solid #2a2a2a'
+                      background: '#141414', border: '1px solid #2a2a2a',
+                      animation: thinking ? 'vertexGlow 2s ease-in-out infinite' : 'none',
                     }}>
-                      <Terminal size={14} color="#c8c8c8"/>
+                      <Terminal size={14} color={thinking ? '#e6e6e6' : '#c8c8c8'}/>
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', marginBottom: 5, fontWeight: 600 }}>
-                        VERTEX {thinking && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
+                      <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', marginBottom: 5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        VERTEX
+                        {thinking && (
+                          <span style={{ color: '#9a9a9a', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{
+                              display: 'inline-block', width: 4, height: 4, borderRadius: '50%', background: '#8a8a8a',
+                              animation: 'vertexPulse 1s ease-in-out infinite',
+                            }} />
+                            <ThinkingText />
+                          </span>
+                        )}
                       </div>
+
+                      {/* Search loading indicator */}
+                      {searchLoading && (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', marginBottom: 8,
+                          background: '#0d0d0d', border: '1px solid #1f1f1f', borderRadius: 8,
+                          fontSize: 12, color: '#7a7a7a', fontFamily: 'JetBrains Mono, monospace',
+                        }}>
+                          <Search size={12} style={{ animation: 'vertexSpin 1.5s linear infinite' }} />
+                          Searching the web for current info…
+                        </div>
+                      )}
+
+                      {/* Search results (live, while streaming) */}
+                      {searchResults.length > 0 && !searchLoading && (
+                        <div style={{
+                          marginBottom: 8, padding: '8px 12px', borderRadius: 8,
+                          background: '#0d0d0d', border: '1px solid #1f1f1f',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                            <Search size={10} /> Sources · {searchResults.length} results
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {searchResults.slice(0, 3).map((r, i) => (
+                              <div key={i} style={{ fontSize: 11, color: '#7a7a7a', lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <span style={{ color: '#5a5a5a' }}>{i + 1}.</span> {r.title}
+                                <span style={{ color: '#4a4a4a' }}> · {r.source}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {thinking ? (
-                        <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}>
-                          {[0,1,2].map(i => (
-                            <div key={i} style={{
-                              width: 6, height: 6, borderRadius: '50%', background: '#8a8a8a',
-                              animation: `vertexPulse 1.2s ease-in-out ${i*0.15}s infinite`
-                            }}/>
-                          ))}
+                        /* Premium thinking animation — animated bar + rotating dots */
+                        <div style={{ padding: '6px 0' }}>
+                          <div style={{
+                            display: 'flex', gap: 5, alignItems: 'center', marginBottom: 8,
+                          }}>
+                            {[0, 1, 2, 3].map(i => (
+                              <div key={i} style={{
+                                width: 7, height: 7, borderRadius: '50%', background: '#dcdcdc',
+                                animation: `vertexBounce 1.4s ease-in-out ${i * 0.12}s infinite`,
+                              }} />
+                            ))}
+                          </div>
+                          {/* Shimmer bar */}
+                          <div style={{
+                            width: 180, height: 3, borderRadius: 2, overflow: 'hidden',
+                            background: '#1a1a1a',
+                          }}>
+                            <div style={{
+                              width: '40%', height: '100%', borderRadius: 2,
+                              background: 'linear-gradient(90deg, transparent, #dcdcdc, transparent)',
+                              animation: 'vertexShimmer 1.8s ease-in-out infinite',
+                            }} />
+                          </div>
                         </div>
                       ) : streamText ? (
                         <div style={{
@@ -1896,6 +2203,61 @@ Title:`,
         />
       </div>
 
+      {/* ── File browser panel — slide-in from the right ── */}
+      {filesPanelOpen && (
+        <>
+          <div onClick={() => setFilesPanelOpen(false)} style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 40,
+            animation: 'vertexFadeIn .15s ease',
+          }} />
+          <aside style={{
+            position: 'fixed', right: 0, top: 52, bottom: 0, zIndex: 50,
+            width: 'min(420px, 100vw)', borderLeft: '1px solid #212121', background: '#0f0f0f',
+            display: 'flex', flexDirection: 'column', minHeight: 0,
+            animation: 'vertexSlideInRight .18s ease',
+          }}>
+            {/* Header */}
+            <div style={{
+              height: 46, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '0 14px', borderBottom: '1px solid #212121',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Folder size={14} color="#9a9a9a" />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#e6e6e6' }}>Project Files</span>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, color: '#7a7a7a', background: '#1a1a1a',
+                  border: '1px solid #2a2a2a', borderRadius: 3, padding: '1px 6px',
+                  fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase', letterSpacing: '.04em',
+                }}>
+                  {projectFiles.length} files
+                </span>
+              </div>
+              <button onClick={() => setFilesPanelOpen(false)} style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 4, display: 'flex' }}>
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Add files button */}
+            <div style={{ padding: '10px 14px', borderBottom: '1px solid #212121' }}>
+              <button onClick={() => filesPanelInputRef.current?.click()}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                  padding: '8px 0', borderRadius: 6, background: '#1a1a1a', border: '1px solid #2a2a2a',
+                  color: '#dcdcdc', fontSize: 12, fontWeight: 600, cursor: 'pointer', transition: 'all .12s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#3a3a3a'; e.currentTarget.style.background = '#1c1c1c'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.background = '#1a1a1a'; }}>
+                <Plus size={13} /> Add files
+              </button>
+              <input ref={filesPanelInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFilesPanelUpload} />
+            </div>
+
+            {/* File list + preview */}
+            <FileBrowserContent files={projectFiles} onInsert={insertFileIntoChat} />
+          </aside>
+        </>
+      )}
+
       {/* In-app dialogs — replace window.confirm() / window.alert() */}
       <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
       <InfoDialog dialog={infoDialog} onClose={() => setInfoDialog(null)} />
@@ -1908,6 +2270,9 @@ Title:`,
         @keyframes vertexPulse { 0%, 100% { opacity: .3; transform: scale(.85) } 50% { opacity: 1; transform: scale(1) } }
         @keyframes vertexBlink { 50% { opacity: 0 } }
         @keyframes vertexSpin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        @keyframes vertexBounce { 0%, 80%, 100% { transform: scale(0.5); opacity: .4 } 40% { transform: scale(1); opacity: 1 } }
+        @keyframes vertexShimmer { 0% { transform: translateX(-100%) } 100% { transform: translateX(350%) } }
+        @keyframes vertexGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0) } 50% { box-shadow: 0 0 16px 0 rgba(255,255,255,0.15) } }
         @keyframes vertexCodeIn { from { opacity: 0; transform: translateY(4px) scale(.99) } to { opacity: 1; transform: translateY(0) scale(1) } }
         [data-vertex], [data-vertex] *, [data-vertex] *::before, [data-vertex] *::after {
           box-sizing: border-box;
@@ -1933,7 +2298,7 @@ Title:`,
   );
 };
 
-const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
+const MessageBubble = React.memo(({ role, text, ts, mdComponents, search }) => {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
@@ -1972,6 +2337,26 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
             {copied ? <Check size={11} color="#e6e6e6"/> : <Copy size={11}/>} {copied ? 'Copied' : ''}
           </button>
         </div>
+        {search && search.length > 0 && (
+          <div style={{
+            marginBottom: 10, padding: '8px 12px', borderRadius: 8,
+            background: '#0d0d0d', border: '1px solid #1f1f1f',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>
+              <Search size={10} /> Sources · {search.length} results
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {search.slice(0, 4).map((r, i) => (
+                <a key={i} href={r.link} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#7a7a7a', lineHeight: 1.4, textDecoration: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = '#dcdcdc'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = '#7a7a7a'; }}>
+                  <span style={{ color: '#5a5a5a' }}>{i + 1}.</span> {r.title}
+                  <span style={{ color: '#4a4a4a' }}> · {r.source}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ color: '#dcdcdc' }}>
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
             {text}
