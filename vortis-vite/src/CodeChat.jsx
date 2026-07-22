@@ -581,6 +581,19 @@ const Vertex = ({
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
   const [recentChatsOpen, setRecentChatsOpen] = useState(true);
 
+  /* ── Settings popover state (declared early so the Esc handler below
+       can reference it without hitting a Temporal Dead Zone error) ── */
+  const [showSettings, setShowSettings] = useState(false);
+  const settingsRef = useRef(null);
+  useEffect(() => {
+    if (!showSettings) return;
+    const handleClick = (e) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) setShowSettings(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showSettings]);
+
   // Close the Style Preferences popover on outside click
   useEffect(() => {
     if (!showPrefs) return;
@@ -987,17 +1000,6 @@ Title:`,
       },
     });
   }, [db, loadChats, newChat, clearing]);
-  /* ── Settings popover state ── */
-  const [showSettings, setShowSettings] = useState(false);
-  const settingsRef = useRef(null);
-  useEffect(() => {
-    if (!showSettings) return;
-    const handleClick = (e) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target)) setShowSettings(false);
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showSettings]);
 
   /* ── Export chat as Markdown ── */
   const exportChat = useCallback(() => {
