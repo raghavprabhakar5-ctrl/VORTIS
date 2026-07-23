@@ -2106,9 +2106,6 @@ Title:`,
                         <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                           <FileText size={14} color="#9a9a9a"/> Add document
                         </span>
-                        <span style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', paddingLeft: 23 }}>
-                          docx · pdf · xlsx · pptx…
-                        </span>
                       </button>
 
                       <div style={{ borderTop: '1px solid #1c1c1c', marginTop: 4, paddingTop: 4 }}>
