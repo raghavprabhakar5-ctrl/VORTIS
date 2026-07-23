@@ -15,7 +15,7 @@ import {
   Terminal, Cog, EraserIcon,
   ChevronDown, HelpCircle,
   Image as ImageIcon, FileText, Scan,
-  Download
+  Download, Layers, Upload
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -531,7 +531,7 @@ const LANG_TO_EXT = {
 const extForLang = (lang) => LANG_TO_EXT[(lang || '').toLowerCase()] || 'txt';
 
 /* Pulls every fenced code block out of the assistant's messages so they can be
-   saved/downloaded individually from the "Saved Files" panel, instead of the
+   saved/downloaded individually from the "Artifacts" panel, instead of the
    user having to hunt through the chat and copy-paste each one by hand. */
 const extractCodeBlocksFromMessages = (messages) => {
   const blocks = [];
@@ -699,20 +699,64 @@ const Vertex = ({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showPrefs]);
 
-  /* ── Saved Files panel — lists every code block the assistant has produced
-       in this chat so far, each downloadable as its own file. Replaces the
-       old top-right "Files" button, which just re-opened the attach picker
-       and had nothing to do with saving anything. ── */
-  const [showSavedFiles, setShowSavedFiles] = useState(false);
-  const savedFilesRef = useRef(null);
+  /* ── Artifacts panel — lists every code block Vertex has produced in this
+       chat PLUS any of the user's own files added via "Add file" below, all
+       downloadable individually. This replaces the old top-right "Files"
+       button, which just re-opened the attach picker and had nothing to do
+       with saving anything. ── */
+  const [showArtifacts, setShowArtifacts] = useState(false);
+  const artifactsRef = useRef(null);
+  const artifactUploadRef = useRef(null);
+  const [userArtifacts, setUserArtifacts] = useState([]); // user-added files, kept for the session
   useEffect(() => {
-    if (!showSavedFiles) return;
+    if (!showArtifacts) return;
     const handleClick = (e) => {
-      if (savedFilesRef.current && !savedFilesRef.current.contains(e.target)) setShowSavedFiles(false);
+      if (artifactsRef.current && !artifactsRef.current.contains(e.target)) setShowArtifacts(false);
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, [showSavedFiles]);
+  }, [showArtifacts]);
+
+  /* Lets the user drop their own file straight into the Artifacts panel so it
+     sits alongside AI-generated snippets and can be grabbed again later —
+     without ever leaving Vertex. Text-y files are read as text (so "Save"
+     downloads a real, readable file); anything else is kept as a blob URL
+     built from the raw bytes so the original file downloads unchanged. */
+  const handleAddArtifact = useCallback(async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    for (const file of files.slice(0, 12)) {
+      if (isTextFile(file.name, file.type) || isDocxFile(file.name, file.type)) {
+        const content = isDocxFile(file.name, file.type) ? await extractDocxText(file) : await readAsText(file);
+        setUserArtifacts(prev => [...prev, {
+          id: `ua-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: file.name, kind: 'text', content, size: file.size, ts: Date.now(),
+        }]);
+      } else {
+        const dataUrl = await readAsDataURL(file);
+        setUserArtifacts(prev => [...prev, {
+          id: `ua-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: file.name, kind: 'blob', dataUrl, size: file.size, ts: Date.now(),
+        }]);
+      }
+    }
+    e.target.value = '';
+  }, []);
+
+  const downloadUserArtifact = useCallback((a) => {
+    if (a.kind === 'text') {
+      downloadTextAsFile(a.content, a.name);
+    } else {
+      const link = document.createElement('a');
+      link.href = a.dataUrl;
+      link.download = a.name;
+      link.click();
+    }
+  }, []);
+
+  const removeUserArtifact = useCallback((id) => {
+    setUserArtifacts(prev => prev.filter(a => a.id !== id));
+  }, []);
 
   /* ── OCR mode toggle — off by default; when on, attached images get
        their text extracted via the vision API before being sent. ── */
@@ -1002,13 +1046,14 @@ Title:`,
         if (showPrefs) { setShowPrefs(false); return; }
         if (showAttachMenu) { setShowAttachMenu(false); return; }
         if (showSettings) { setShowSettings(false); return; }
+        if (showArtifacts) { setShowArtifacts(false); return; }
         onClose?.();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPrefs, panelCode, confirmDialog, infoDialog, showAttachMenu, showSettings]);
+  }, [showPrefs, panelCode, confirmDialog, infoDialog, showAttachMenu, showSettings, showArtifacts]);
 
   /* ── Firestore ops ── */
   const loadChats = useCallback(async (uid) => {
@@ -1118,7 +1163,9 @@ Title:`,
 
   /* "Clear all data" now opens the in-app ConfirmDialog instead of the
      browser's native confirm() — that native dialog rendered OUTSIDE the
-     app UI entirely (top of the browser chrome), which read as broken. */
+     app UI entirely (top of the browser chrome), which read as broken.
+     Lives ONLY in the left sidebar — it's a destructive, rarely-used action
+     and having it duplicated in Settings too just added clutter. */
   const [clearing, setClearing] = useState(false);
   const clearAllData = useCallback(() => {
     if (!userUidRef.current || clearing) return;
@@ -1144,7 +1191,8 @@ Title:`,
     });
   }, [db, loadChats, newChat, clearing]);
 
-  /* ── Export chat as Markdown ── */
+  /* ── Export chat as Markdown — lives ONLY on the top bar "Export" button now.
+     It was previously duplicated inside Settings too, which was redundant. ── */
   const exportChat = useCallback(() => {
     if (messages.length === 0) return;
     const lines = ['# Vertex Chat Export', '', `Exported: ${new Date().toISOString()}`, '', '---', ''];
@@ -1427,46 +1475,83 @@ Title:`,
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Saved Files — every code block Vertex has generated in this chat, downloadable individually */}
-          <div ref={savedFilesRef} style={{ position: 'relative' }}>
+          {/* Artifacts — every code block Vertex has generated in this chat, PLUS any files
+              the user adds themselves via "Add file" below. Everything here is downloadable
+              on the spot without leaving Vertex. */}
+          <div ref={artifactsRef} style={{ position: 'relative' }}>
             <button
-              onClick={() => setShowSavedFiles(v => !v)}
-              title="Save generated files"
+              onClick={() => setShowArtifacts(v => !v)}
+              title="Artifacts — saved files from this chat"
               style={{
-                display: 'flex', alignItems: 'center', gap: 5, background: showSavedFiles ? '#1c1c1c' : '#141414',
-                border: '1px solid ' + (showSavedFiles ? '#3a3a3a' : '#2a2a2a'),
-                color: showSavedFiles ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 6,
+                display: 'flex', alignItems: 'center', gap: 5, background: showArtifacts ? '#1c1c1c' : '#141414',
+                border: '1px solid ' + (showArtifacts ? '#3a3a3a' : '#2a2a2a'),
+                color: showArtifacts ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 6,
                 padding: '5px 10px', cursor: 'pointer'
               }}
             >
-              <Folder size={12}/> Files{codeBlocks.length > 0 ? ` (${codeBlocks.length})` : ''}
+              <Layers size={12}/> Artifacts{(codeBlocks.length + userArtifacts.length) > 0 ? ` (${codeBlocks.length + userArtifacts.length})` : ''}
             </button>
 
-            {showSavedFiles && (
+            {showArtifacts && (
               <div style={{
-                position: 'absolute', top: 42, right: 0, zIndex: 100, width: 300,
+                position: 'absolute', top: 42, right: 0, zIndex: 100, width: 310,
                 background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
                 boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 10,
                 animation: 'vertexScaleIn .15s ease'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 8px' }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', fontFamily: 'JetBrains Mono' }}>SAVED FILES</span>
-                  {codeBlocks.length > 0 && (
-                    <button onClick={downloadAllCodeBlocks}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', fontFamily: 'JetBrains Mono' }}>ARTIFACTS</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button onClick={() => artifactUploadRef.current?.click()}
                       style={{ fontSize: 11, color: '#c8c8c8', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
-                      <Download size={11}/> Save all
+                      <Upload size={11}/> Add file
                     </button>
-                  )}
+                    {codeBlocks.length > 0 && (
+                      <button onClick={downloadAllCodeBlocks}
+                        style={{ fontSize: 11, color: '#c8c8c8', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                        <Download size={11}/> Save all
+                      </button>
+                    )}
+                  </div>
                 </div>
+                <input ref={artifactUploadRef} type="file" multiple style={{ display: 'none' }} onChange={handleAddArtifact} />
 
-                {codeBlocks.length === 0 ? (
+                {codeBlocks.length === 0 && userArtifacts.length === 0 ? (
                   <div style={{ padding: '14px 6px 16px', textAlign: 'center', color: '#5a5a5a', fontSize: 12, lineHeight: 1.6 }}>
                     <FileCode size={18} style={{ opacity: .4, marginBottom: 6 }}/>
-                    <div>No files yet.</div>
-                    <div style={{ fontSize: 10.5, marginTop: 2 }}>Code Vertex writes in this chat shows up here, ready to save.</div>
+                    <div>Nothing here yet.</div>
+                    <div style={{ fontSize: 10.5, marginTop: 2 }}>Code Vertex writes shows up here automatically — or use "Add file" to save one of your own.</div>
                   </div>
                 ) : (
-                  <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }} className="scr">
+                  <div style={{ maxHeight: 280, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }} className="scr">
+                    {userArtifacts.map((a) => (
+                      <div key={a.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
+                          background: '#1a1a1a', border: '1px solid #262626',
+                        }}>
+                        <div style={{
+                          width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: '#000', border: '1px solid #2a2a2a',
+                        }}>
+                          <FileText size={12} color="#9a9a9a"/>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {a.name}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#6a6a6a' }}>{formatBytes(a.size)} · yours</div>
+                        </div>
+                        <button onClick={() => downloadUserArtifact(a)} title="Save this file"
+                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
+                          <Download size={12}/>
+                        </button>
+                        <button onClick={() => removeUserArtifact(a.id)} title="Remove"
+                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#6a6a6a', cursor: 'pointer', padding: 5, display: 'flex' }}>
+                          <X size={12}/>
+                        </button>
+                      </div>
+                    ))}
                     {codeBlocks.map((b, i) => (
                       <div key={b.id}
                         style={{
@@ -1483,7 +1568,7 @@ Title:`,
                           <div style={{ fontSize: 12, fontWeight: 600, color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace' }}>
                             snippet-{i + 1}.{extForLang(b.lang)}
                           </div>
-                          <div style={{ fontSize: 10, color: '#6a6a6a' }}>{b.code.split('\n').length} lines</div>
+                          <div style={{ fontSize: 10, color: '#6a6a6a' }}>{b.code.split('\n').length} lines · AI-written</div>
                         </div>
                         <button onClick={() => downloadCodeBlock(b, i)} title="Save this file"
                           style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
@@ -1605,46 +1690,6 @@ Title:`,
                       transform: ocrMode ? 'translateX(16px)' : 'translateX(2px)',
                     }}/>
                   </span>
-                </button>
-
-                {/* Export chat */}
-                <button
-                  onClick={() => { exportChat(); }}
-                  disabled={messages.length === 0}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px',
-                    borderRadius: 8, cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
-                    background: 'transparent', border: '1px solid #1e1e1e', marginBottom: 5,
-                    color: messages.length === 0 ? '#4a4a4a' : '#dcdcdc', fontSize: 12.5, fontWeight: 600,
-                    textAlign: 'left',
-                  }}
-                  onMouseEnter={e => { if (messages.length > 0) e.currentTarget.style.background = '#191919'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
-                    <Download size={12} color={messages.length === 0 ? '#4a4a4a' : '#8a8a8a'}/>
-                  </div>
-                  Export chat as Markdown
-                </button>
-
-                {/* Clear all data */}
-                <button
-                  onClick={() => { setShowSettings(false); clearAllData(); }}
-                  disabled={clearing || savedChats.length === 0}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px',
-                    borderRadius: 8, cursor: (clearing || savedChats.length === 0) ? 'not-allowed' : 'pointer',
-                    background: 'transparent', border: '1px solid #1e1e1e',
-                    color: (clearing || savedChats.length === 0) ? '#4a4a4a' : '#f87171', fontSize: 12.5, fontWeight: 600,
-                    textAlign: 'left',
-                  }}
-                  onMouseEnter={e => { if (!clearing && savedChats.length > 0) e.currentTarget.style.background = 'rgba(239,68,68,.08)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-                >
-                  <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
-                    <Trash2 size={12} color={(clearing || savedChats.length === 0) ? '#4a4a4a' : '#f87171'}/>
-                  </div>
-                  Clear All Data
                 </button>
               </div>
             )}
@@ -2033,7 +2078,7 @@ Title:`,
                     <div style={{
                       position: 'absolute', bottom: 44, left: 0, zIndex: 60,
                       background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
-                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 220,
+                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 240,
                       animation: 'vertexScaleIn .15s ease'
                     }}>
                       <button onClick={() => fileInputRef.current?.click()}
@@ -2055,12 +2100,14 @@ Title:`,
                         <ImageIcon size={14} color="#9a9a9a"/> Add image
                       </button>
                       <button onClick={() => docFileInputRef.current?.click()}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
-                        <FileText size={14} color="#9a9a9a"/> Add document
-                        <span style={{ marginLeft: 'auto', fontSize: 9, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace' }}>
-                          docx · pdf · xlsx…
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <FileText size={14} color="#9a9a9a"/> Add document
+                        </span>
+                        <span style={{ fontSize: 9.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', paddingLeft: 23 }}>
+                          docx · pdf · xlsx · pptx…
                         </span>
                       </button>
 
