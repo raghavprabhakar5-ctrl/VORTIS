@@ -26,7 +26,7 @@ const GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';   // Very fast, lower latency
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
-const NVIDIA_CHAT_CODE = 'qwen/qwen3-coder-next'; // 284B MoE, 13B active — fast, coding-optimized
+const NVIDIA_CHAT_CODE    = 'qwen/qwen3-coder-next'; // 284B MoE, 13B active — fast, coding-optimized
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
 const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
 
@@ -783,7 +783,7 @@ export default async function handler(req, res) {
 // entirely and streams directly from NVIDIA's deepseek-v4-flash endpoint.
 // No model fallback: if it fails, we surface a clean error to the
 // client instead of silently switching models.
-const NVIDIA_CHAT_CODE = 'deepseek-ai/deepseek-v4-flash';
+const NVIDIA_CHAT_CODE = 'qwen/qwen3-coder-next';
 // Returns true on success (response already streamed + res.end() called),
 // false on failure (caller decides how to respond).
 async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
