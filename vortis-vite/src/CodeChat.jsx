@@ -15,7 +15,7 @@ import {
   Terminal, Cog, EraserIcon,
   ChevronDown, HelpCircle,
   Image as ImageIcon, FileText, Scan,
-  Download, Layers, Upload
+  Download, Layers, Upload, ExternalLink, RotateCcw
 } from 'lucide-react';
 
 const API = 'https://vortis-backend.vercel.app/api/bytez';
@@ -315,11 +315,12 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
 /* ────────────────────────────────────────────────────────────────────────
  *  CodePanel — right-side split view.
  * ──────────────────────────────────────────────────────────────────────── */
-const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onRun }) => {
+const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onRun, onOpenNewTab }) => {
   const [copied, setCopied] = useState(false);
   if (!panelCode) return null;
 
   const copy = () => { navigator.clipboard.writeText(panelCode.code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+  const previewable = isPreviewableLang(panelCode.lang);
 
   return (
     <aside style={{
@@ -341,21 +342,35 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
           </span>
         </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          <button
-            onClick={onRun}
-            disabled={running}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
-              border: '1px solid rgba(16,185,129,.3)', background: running ? '#1c1c1c' : 'rgba(16,185,129,.08)',
-              color: running ? '#8a8a8a' : '#10b981', fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
-              fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', transition: 'all .15s',
-            }}
-          >
-            {running
-              ? <Loader size={11} style={{ animation: 'vertexSpin 1s linear infinite' }} />
-              : <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>}
-            {running ? 'Running…' : 'Run'}
-          </button>
+          {previewable ? (
+            <button
+              onClick={() => onOpenNewTab(panelCode.code)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+                border: '1px solid rgba(16,185,129,.3)', background: 'rgba(16,185,129,.08)',
+                color: '#10b981', fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
+                fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
+              }}
+            >
+              <ExternalLink size={11} /> Open in new tab
+            </button>
+          ) : (
+            <button
+              onClick={onRun}
+              disabled={running}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+                border: '1px solid rgba(16,185,129,.3)', background: running ? '#1c1c1c' : 'rgba(16,185,129,.08)',
+                color: running ? '#8a8a8a' : '#10b981', fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
+                fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', transition: 'all .15s',
+              }}
+            >
+              {running
+                ? <Loader size={11} style={{ animation: 'vertexSpin 1s linear infinite' }} />
+                : <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21" /></svg>}
+              {running ? 'Running…' : 'Run'}
+            </button>
+          )}
           <button
             onClick={copy}
             style={{
@@ -379,30 +394,55 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
         }}>{panelCode.code}</pre>
       </div>
 
-      <div style={{ flex: '1 1 45%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#080808' }}>
-        <div style={{
-          padding: '8px 16px', fontSize: 10.5, color: hasError ? '#ef4444' : '#5a5a5a',
-          fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
-          borderBottom: '1px solid #1a1a1a', flexShrink: 0,
-        }}>
-          {output === null ? 'OUTPUT' : hasError ? 'ERROR' : 'OUTPUT'}
-        </div>
-        {running && bootMsg && (
+      {previewable ? (
+        <div style={{ flex: '1 1 45%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px',
-            fontSize: 10.5, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
+            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+            borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
           }}>
-            <Loader size={10} style={{ animation: 'vertexSpin 1s linear infinite' }} /> {bootMsg}
+            <span>PREVIEW</span>
+            <button
+              onClick={() => onOpenNewTab(panelCode.code)}
+              style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
+            >
+              <ExternalLink size={10} /> Open full tab
+            </button>
           </div>
-        )}
-        <pre className="scr" style={{
-          flex: 1, minHeight: 0, overflowY: 'auto', margin: 0, padding: '14px 16px',
-          fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
-          color: hasError ? '#f87171' : '#dcdcdc', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-        }}>
-          {output === null ? 'Click Run to see output here…' : output}
-        </pre>
-      </div>
+          <iframe
+            title="Live preview"
+            srcDoc={panelCode.code}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+            style={{ flex: 1, minHeight: 0, border: 'none', width: '100%', background: '#fff' }}
+          />
+        </div>
+      ) : (
+        <div style={{ flex: '1 1 45%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#080808' }}>
+          <div style={{
+            padding: '8px 16px', fontSize: 10.5, color: hasError ? '#ef4444' : '#5a5a5a',
+            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+            borderBottom: '1px solid #1a1a1a', flexShrink: 0,
+          }}>
+            {output === null ? 'OUTPUT' : hasError ? 'ERROR' : 'OUTPUT'}
+          </div>
+          {running && bootMsg && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px',
+              fontSize: 10.5, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
+            }}>
+              <Loader size={10} style={{ animation: 'vertexSpin 1s linear infinite' }} /> {bootMsg}
+            </div>
+          )}
+          <pre className="scr" style={{
+            flex: 1, minHeight: 0, overflowY: 'auto', margin: 0, padding: '14px 16px',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
+            color: hasError ? '#f87171' : '#dcdcdc', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>
+            {output === null ? 'Click Run to see output here…' : output}
+          </pre>
+        </div>
+      )}
     </aside>
   );
 };
@@ -530,6 +570,11 @@ const LANG_TO_EXT = {
 };
 const extForLang = (lang) => LANG_TO_EXT[(lang || '').toLowerCase()] || 'txt';
 
+// Languages that can be rendered directly as a live preview (iframe) instead of being
+// piped through the code-execution runtime — the runtime has no interpreter for markup.
+const PREVIEWABLE_LANGS = ['html', 'htm', 'svg'];
+const isPreviewableLang = (lang) => PREVIEWABLE_LANGS.includes((lang || '').toLowerCase());
+
 /* Pulls every fenced code block out of the assistant's messages so they can be
    saved/downloaded individually from the "Artifacts" panel, instead of the
    user having to hunt through the chat and copy-paste each one by hand. */
@@ -643,6 +688,20 @@ const Vertex = ({
     setPanelOutput(null);
     setPanelHasError(false);
     setPanelBootMsg('');
+  }, []);
+
+  /* Opens previewable markup (HTML/SVG) in a real new browser tab — used both by the
+     panel's "Open in new tab" button and its inline preview header. Nothing is uploaded
+     anywhere; it's a local Blob URL, so the user never leaves Vertex to see it rendered. */
+  const openHtmlInNewTab = useCallback((code) => {
+    try {
+      const blob = new Blob([code], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      console.error('Vertex: failed to open preview in new tab —', e);
+    }
   }, []);
 
   const runPanelCode = useCallback(async () => {
@@ -1219,56 +1278,12 @@ Title:`,
     });
   }, [deleteChat]);
 
-  /* ── Send message + stream response ── */
-  const send = useCallback(async (overrideText) => {
-    const rawText = (overrideText ?? input).trim();
-    const pendingAttachments = [...attachments];
-
-    let text = rawText;
-    if (pendingAttachments.length > 0) {
-      const blocks = [];
-      for (const att of pendingAttachments) {
-        if (att.type === 'image') {
-          if (ocrMode) {
-            const ocrText = await ocrImage(att.content, att.name);
-            if (ocrText && ocrText !== '[No text detected]') {
-              blocks.push(`[Image: ${att.name} — OCR extracted text:]\n\`\`\`\n${ocrText}\n\`\`\``);
-            } else {
-              blocks.push(`[Attached image: ${att.name}]`);
-            }
-          } else {
-            blocks.push(`[Attached image: ${att.name}]`);
-          }
-        } else if (att.type === 'document') {
-          blocks.push(`[Attached document: ${att.name}${att.size ? ` (${formatBytes(att.size)})` : ''} — this file type can't be read directly, ask about it by name if you want me to guess at its contents or just describe what's in it.]`);
-        } else {
-          blocks.push(`\`\`\`\n${att.content}\n\`\`\``);
-        }
-      }
-      text = blocks.join('\n\n') + (rawText ? '\n\n' + rawText : '');
-    }
-
-    if (!text || streaming) return;
-    setAttachments([]);
-
-    const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
-    const nextMsgs = [...messages, userMsg];
-    setMessages(nextMsgs);
-    setInput('');
-    setStreaming(true);
-    setThinking(true);
-    setStreamText('');
-    abortRef.current = false;
-
-    const historyForBackend = nextMsgs.slice(-12).map(m => ({
-      role: m.role === 'user' ? 'user' : 'assistant',
-      content: m.text
-    }));
-
-    const sys = buildCoderSystemPrompt(style);
-    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
-
-    let full = '';
+  /* Performs one attempt at calling the backend and streaming its reply. Returns
+     { text, errorMsg, status, isNetwork }. Used by send() below, which may call this
+     twice — once transient hiccups (a 503, a dropped connection, or a reply that
+     stream back completely empty) are common enough that a silent one-time retry
+     smooths over most of what used to surface as "Vertex is unavailable". */
+  const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend) => {
     try {
       const res = await fetch(API, {
         method: 'POST',
@@ -1286,16 +1301,14 @@ Title:`,
         if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
         else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
         else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
-        const errMsgFinal = errMsg;
-        setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: `⚠️ ${errMsgFinal}`, ts: Date.now() }]);
-        setStreaming(false); setThinking(false); setStreamText('');
-        return;
+        return { text: '', errorMsg, status: res.status, isNetwork: false };
       }
 
       setThinking(false);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buffer = '';
+      let full = '';
 
       while (true) {
         if (abortRef.current) break;
@@ -1326,25 +1339,102 @@ Title:`,
           } catch (_) {}
         }
       }
+
+      return { text: full, errorMsg: null, status: res.status, isNetwork: false };
     } catch (e) {
-      setThinking(false);
+      return { text: '', errorMsg: `Network error: ${e?.message || 'unknown'}`, status: null, isNetwork: true };
+    }
+  }, []);
+
+  /* ── Send message + stream response ── */
+  const lastSendRef = useRef('');
+  const send = useCallback(async (overrideText) => {
+    const rawText = (overrideText ?? input).trim();
+    const pendingAttachments = [...attachments];
+
+    let text = rawText;
+    if (pendingAttachments.length > 0) {
+      const blocks = [];
+      for (const att of pendingAttachments) {
+        if (att.type === 'image') {
+          if (ocrMode) {
+            const ocrText = await ocrImage(att.content, att.name);
+            if (ocrText && ocrText !== '[No text detected]') {
+              blocks.push(`[Image: ${att.name} — OCR extracted text:]\n\`\`\`\n${ocrText}\n\`\`\``);
+            } else {
+              blocks.push(`[Attached image: ${att.name}]`);
+            }
+          } else {
+            blocks.push(`[Attached image: ${att.name}]`);
+          }
+        } else if (att.type === 'document') {
+          blocks.push(`[Attached document: ${att.name}${att.size ? ` (${formatBytes(att.size)})` : ''} — this file type can't be read directly, ask about it by name if you want me to guess at its contents or just describe what's in it.]`);
+        } else {
+          blocks.push(`\`\`\`\n${att.content}\n\`\`\``);
+        }
+      }
+      text = blocks.join('\n\n') + (rawText ? '\n\n' + rawText : '');
+    }
+
+    if (!text || streaming) return;
+    setAttachments([]);
+    lastSendRef.current = text; // kept so the Retry button on a failed/empty reply can resend exactly this
+
+    const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
+    const nextMsgs = [...messages, userMsg];
+    setMessages(nextMsgs);
+    setInput('');
+    setStreaming(true);
+    setThinking(true);
+    setStreamText('');
+    abortRef.current = false;
+
+    const historyForBackend = nextMsgs.slice(-12).map(m => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.text
+    }));
+
+    const sys = buildCoderSystemPrompt(style);
+    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+
+    let result = await fetchAssistantReply(fullPrompt, historyForBackend);
+
+    // A 503, a dropped connection, or a stream that came back completely empty is often
+    // just a transient hiccup — quietly try once more before bothering the user about it.
+    const worthRetrying = !abortRef.current && (
+      (result.errorMsg && (result.status === 503 || result.isNetwork)) ||
+      (!result.errorMsg && !result.text.trim())
+    );
+    if (worthRetrying) {
+      setThinking(true);
+      setStreamText('');
+      await new Promise(r => setTimeout(r, 700));
+      const retryResult = await fetchAssistantReply(fullPrompt, historyForBackend);
+      result = retryResult;
+    }
+
+    setThinking(false);
+
+    if (result.errorMsg) {
       setMessages(prev => [...prev, {
         id: `a-${Date.now()}`,
         role: 'assistant',
-        text: `⚠️ Network error: ${e?.message || 'unknown'}\n\nPlease check your connection and try again.`,
-        ts: Date.now()
+        text: `⚠️ ${result.errorMsg}`,
+        ts: Date.now(),
+        canRetry: true,
       }]);
       setStreaming(false); setStreamText('');
       return;
     }
 
-    const cleaned = full.trim();
+    const cleaned = result.text.trim();
     if (!cleaned) {
       setMessages(prev => [...prev, {
         id: `a-${Date.now()}`,
         role: 'assistant',
         text: '_(empty response — try rephrasing your request)_',
-        ts: Date.now()
+        ts: Date.now(),
+        canRetry: true,
       }]);
     } else {
       const aiMsg = {
@@ -1375,6 +1465,15 @@ Title:`,
     setThinking(false);
     setStreamText('');
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode]);
+
+  /* Retries the last request after a failed or empty reply — pops the failed
+     assistant bubble off and resends the exact text that was last sent, so the
+     user doesn't have to retype anything. */
+  const retryLastMessage = useCallback((failedMsgId) => {
+    if (!lastSendRef.current || streaming) return;
+    setMessages(prev => prev.filter(m => m.id !== failedMsgId));
+    send(lastSendRef.current);
+  }, [send, streaming]);
 
   const stopStreaming = useCallback(() => {
     abortRef.current = true;
@@ -1951,7 +2050,7 @@ Title:`,
               <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
                 {messages.map(m => (
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
-                    mdComponents={mdComponents} />
+                    mdComponents={mdComponents} canRetry={m.canRetry} onRetry={() => retryLastMessage(m.id)} />
                 ))}
 
                 {(streaming || thinking) && (
@@ -2197,6 +2296,7 @@ Title:`,
           hasError={panelHasError}
           bootMsg={panelBootMsg}
           onRun={runPanelCode}
+          onOpenNewTab={openHtmlInNewTab}
         />
       </div>
 
@@ -2237,20 +2337,25 @@ Title:`,
   );
 };
 
-const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
+const MessageBubble = React.memo(({ role, text, ts, mdComponents, canRetry, onRetry }) => {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
 
   if (isUser) {
+    // Rendered through the same markdown pipeline as Vertex's own replies so that
+    // large pasted text/code (sent wrapped in ``` fences) shows up as the same
+    // small, collapsible rectangle — not a wall of raw text dumped in the bubble.
     return (
       <div style={{ display: 'flex', gap: 12, marginBottom: 18, justifyContent: 'flex-end' }}>
         <div style={{
           maxWidth: '78%', background: '#1e1e1e', border: '1px solid #2a2a2a',
           color: '#e6e6e6', borderRadius: 10, padding: '10px 14px',
-          fontSize: 14, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word'
+          fontSize: 14, lineHeight: 1.55, wordBreak: 'break-word'
         }}>
-          {text}
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
+            {text}
+          </ReactMarkdown>
         </div>
       </div>
     );
@@ -2281,6 +2386,18 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents }) => {
             {text}
           </ReactMarkdown>
         </div>
+        {canRetry && (
+          <button
+            onClick={onRetry}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, padding: '6px 12px',
+              borderRadius: 7, border: '1px solid #333333', background: '#141414', color: '#dcdcdc',
+              fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <RotateCcw size={12}/> Retry
+          </button>
+        )}
       </div>
     </div>
   );
