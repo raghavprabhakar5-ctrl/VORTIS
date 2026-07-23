@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import mammoth from 'mammoth';
 import {
   X, Code2, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp,
   Loader, MessageSquare, Sparkles,
@@ -61,6 +62,11 @@ const ICONS = { bug: Bug, zap: Zap, book: BookOpen, file: FileCode, refresh: Ref
  * ──────────────────────────────────────────────────────────────────────── */
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'];
 const TEXT_EXTENSIONS = ['txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'yaml', 'yml', 'toml', 'ini', 'env', 'log', 'xml', 'html', 'css', 'scss', 'sass', 'less', 'js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'php', 'sh', 'bash', 'zsh', 'sql', 'graphql', 'dockerfile', 'makefile'];
+// Word docs — text gets pulled out client-side with mammoth so they behave like any other file attachment.
+const DOCX_EXTENSIONS = ['docx'];
+// Anything else we recognize but can't parse text out of in the browser (pdf, legacy .doc, slides, sheets…).
+// These still get attached — just as a "document" card that sends the filename/metadata instead of silently vanishing.
+const OTHER_DOC_EXTENSIONS = ['pdf', 'doc', 'rtf', 'pptx', 'ppt', 'xlsx', 'xls', 'odt', 'ods', 'odp', 'pages', 'key', 'numbers'];
 
 const fileExt = (name) => {
   const parts = name.split('.');
@@ -77,6 +83,18 @@ const isTextFile = (name, mime) => {
   return TEXT_EXTENSIONS.includes(fileExt(name));
 };
 
+const isDocxFile = (name, mime) => {
+  if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return true;
+  return DOCX_EXTENSIONS.includes(fileExt(name));
+};
+
+const formatBytes = (n) => {
+  if (!n && n !== 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const readAsDataURL = (file) => new Promise((resolve, reject) => {
   const r = new FileReader();
   r.onload = () => resolve(r.result);
@@ -90,6 +108,25 @@ const readAsText = (file) => new Promise((resolve, reject) => {
   r.onerror = reject;
   r.readAsText(file);
 });
+
+const readAsArrayBuffer = (file) => new Promise((resolve, reject) => {
+  const r = new FileReader();
+  r.onload = () => resolve(r.result);
+  r.onerror = reject;
+  r.readAsArrayBuffer(file);
+});
+
+/* Extracts plain text out of a .docx in the browser via mammoth — no backend round-trip needed. */
+const extractDocxText = async (file) => {
+  try {
+    const buf = await readAsArrayBuffer(file);
+    const result = await mammoth.extractRawText({ arrayBuffer: buf });
+    return (result?.value || '').trim();
+  } catch (e) {
+    console.error('Vertex: docx extraction failed —', e);
+    return '';
+  }
+};
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Strong coder system prompt
@@ -171,15 +208,21 @@ Humor is welcome occasionally, but never at the user's expense.
 /* ────────────────────────────────────────────────────────────────────────
  *  VertexCodeBlock — the ONLY code renderer Vertex uses internally.
  * ──────────────────────────────────────────────────────────────────────── */
-const LONG_BLOCK_LINES = 8;
+// Code blocks always render in full in the chat itself — nothing is hidden away in
+// a side panel by default. Past this many lines, the block starts capped at a
+// scrollable height with an inline "Show more / Show less" toggle, exactly like it
+// works in Claude — click it and the whole thing expands right there in the chat.
+const CAP_AFTER_LINES = 14;
+const CAPPED_HEIGHT = 320;
 
 const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
   const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
 
   const lines = codeText.split('\n');
-  const isLong = lines.length > LONG_BLOCK_LINES;
-  const preview = isLong ? lines.slice(0, LONG_BLOCK_LINES - 2).join('\n') : codeText;
+  const isLong = lines.length > CAP_AFTER_LINES;
+  const capped = isLong && !expanded;
 
   return (
     <div style={{
@@ -207,6 +250,17 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
 
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
           <button
+            onClick={() => downloadTextAsFile(codeText, `snippet.${extForLang(lang)}`)}
+            title="Save this file"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
+              borderRadius: 6, padding: '4px 10px', color: '#9a9a9a', fontSize: 11, cursor: 'pointer',
+              fontFamily: 'JetBrains Mono, monospace', transition: 'all .15s',
+            }}
+          >
+            <Download size={11} /> Save
+          </button>
+          <button
             onClick={() => onOpenPanel({ lang, code: codeText })}
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: '#1c1c1c', border: '1px solid #333333',
@@ -214,7 +268,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
               fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, transition: 'all .15s',
             }}
           >
-            <Terminal size={11} /> Open
+            <Terminal size={11} /> Run
           </button>
           <button
             onClick={copy}
@@ -230,28 +284,28 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
       </div>
 
       <pre
-        onClick={() => onOpenPanel({ lang, code: codeText })}
-        title={isLong ? 'Click to open full code in panel' : undefined}
         style={{
           margin: 0, padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
           lineHeight: 1.7, color: '#dcdcdc', whiteSpace: 'pre', wordBreak: 'normal',
-          overflowX: 'auto', maxHeight: isLong ? 168 : 'none', overflowY: 'hidden',
-          cursor: 'pointer', background: '#0a0a0a',
+          overflowX: 'auto', maxHeight: capped ? CAPPED_HEIGHT : 'none', overflowY: capped ? 'auto' : 'visible',
+          background: '#0a0a0a',
         }}
-      >{preview}{isLong ? '\n…' : ''}</pre>
+      >{codeText}</pre>
 
       {isLong && (
         <button
-          onClick={() => onOpenPanel({ lang, code: codeText })}
+          onClick={() => setExpanded(v => !v)}
           style={{
-            width: '100%', padding: '8px 0', background: '#111111', border: 'none', borderTop: '1px solid #1a1a1a',
+            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+            padding: '8px 0', background: '#111111', border: 'none', borderTop: '1px solid #1a1a1a',
             color: '#9a9a9a', fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', cursor: 'pointer',
             letterSpacing: '.03em', transition: 'color .15s',
           }}
           onMouseEnter={e => { e.currentTarget.style.color = '#dcdcdc'; }}
           onMouseLeave={e => { e.currentTarget.style.color = '#9a9a9a'; }}
         >
-          View full code in panel →
+          <ChevronDown size={12} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}/>
+          {expanded ? 'Show less' : `Show all ${lines.length} lines`}
         </button>
       )}
     </div>
@@ -465,6 +519,47 @@ const getAvatarColor = (seed) => {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 };
 
+const LANG_TO_EXT = {
+  javascript: 'js', js: 'js', jsx: 'jsx', typescript: 'ts', ts: 'ts', tsx: 'tsx',
+  python: 'py', py: 'py', ruby: 'rb', rb: 'rb', go: 'go', golang: 'go', rust: 'rs', rs: 'rs',
+  java: 'java', c: 'c', cpp: 'cpp', 'c++': 'cpp', csharp: 'cs', 'c#': 'cs', cs: 'cs',
+  php: 'php', shell: 'sh', bash: 'sh', sh: 'sh', zsh: 'sh', sql: 'sql', html: 'html',
+  css: 'css', scss: 'scss', json: 'json', yaml: 'yml', yml: 'yml', xml: 'xml',
+  markdown: 'md', md: 'md', graphql: 'graphql', dockerfile: 'dockerfile', kotlin: 'kt',
+  swift: 'swift', plaintext: 'txt', text: 'txt',
+};
+const extForLang = (lang) => LANG_TO_EXT[(lang || '').toLowerCase()] || 'txt';
+
+/* Pulls every fenced code block out of the assistant's messages so they can be
+   saved/downloaded individually from the "Saved Files" panel, instead of the
+   user having to hunt through the chat and copy-paste each one by hand. */
+const extractCodeBlocksFromMessages = (messages) => {
+  const blocks = [];
+  const fence = /```(\w*)\n([\s\S]*?)```/g;
+  for (const m of messages) {
+    if (m.role !== 'assistant' && m.role !== 'model') continue;
+    let match;
+    fence.lastIndex = 0;
+    while ((match = fence.exec(m.text || ''))) {
+      const lang = (match[1] || '').trim();
+      const code = match[2].replace(/\n$/, '');
+      if (!code.trim()) continue;
+      blocks.push({ id: `${m.id}-${blocks.length}`, lang, code, ts: m.ts });
+    }
+  }
+  return blocks;
+};
+
+const downloadTextAsFile = (content, filename) => {
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
 const looksLikeBadTitle = (t) => {
   if (!t) return true;
   const trimmed = t.trim();
@@ -604,6 +699,21 @@ const Vertex = ({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showPrefs]);
 
+  /* ── Saved Files panel — lists every code block the assistant has produced
+       in this chat so far, each downloadable as its own file. Replaces the
+       old top-right "Files" button, which just re-opened the attach picker
+       and had nothing to do with saving anything. ── */
+  const [showSavedFiles, setShowSavedFiles] = useState(false);
+  const savedFilesRef = useRef(null);
+  useEffect(() => {
+    if (!showSavedFiles) return;
+    const handleClick = (e) => {
+      if (savedFilesRef.current && !savedFilesRef.current.contains(e.target)) setShowSavedFiles(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showSavedFiles]);
+
   /* ── OCR mode toggle — off by default; when on, attached images get
        their text extracted via the vision API before being sent. ── */
   const [ocrMode, setOcrMode] = useState(false);
@@ -681,6 +791,7 @@ const Vertex = ({
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const imageFileInputRef = useRef(null);
+  const docFileInputRef = useRef(null);
 
   useEffect(() => {
     if (!showAttachMenu) return;
@@ -731,6 +842,38 @@ const Vertex = ({
         }]);
         continue;
       }
+
+      // Word docs — pull the text out client-side so it reads like any other file attachment.
+      if (isDocxFile(file.name, file.type)) {
+        let content = await extractDocxText(file);
+        let truncated = false;
+        if (!content) content = '[Could not extract text from this document]';
+        if (content.length > MAX_CHARS) { content = content.slice(0, MAX_CHARS); truncated = true; }
+        const lines = content.split('\n');
+        setAttachments(prev => [...prev, {
+          id: `docx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          type: 'file',
+          name: file.name,
+          preview: lines.slice(0, 6).join('\n') + (truncated ? '\n… (truncated)' : ''),
+          content: content + (truncated ? '\n… (truncated)' : ''),
+          lines: lines.length,
+          mime: file.type,
+          size: file.size,
+        }]);
+        continue;
+      }
+
+      // Everything else (PDF, .doc, slides, sheets, etc.) — we can't parse text out of these in
+      // the browser, but the old behavior silently threw the file away with no feedback at all.
+      // Attach it as a "document" card instead so the user sees it landed and knows what to expect.
+      setAttachments(prev => [...prev, {
+        id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        type: 'document',
+        name: file.name,
+        mime: file.type,
+        size: file.size,
+        ext: fileExt(file.name),
+      }]);
     }
 
     e.target.value = '';
@@ -1048,6 +1191,8 @@ Title:`,
           } else {
             blocks.push(`[Attached image: ${att.name}]`);
           }
+        } else if (att.type === 'document') {
+          blocks.push(`[Attached document: ${att.name}${att.size ? ` (${formatBytes(att.size)})` : ''} — this file type can't be read directly, ask about it by name if you want me to guess at its contents or just describe what's in it.]`);
         } else {
           blocks.push(`\`\`\`\n${att.content}\n\`\`\``);
         }
@@ -1207,6 +1352,16 @@ Title:`,
     return savedChats.filter(c => (c.title || '').toLowerCase().includes(q));
   }, [savedChats, search]);
 
+  const codeBlocks = useMemo(() => extractCodeBlocksFromMessages(messages), [messages]);
+
+  const downloadCodeBlock = useCallback((block, index) => {
+    downloadTextAsFile(block.code, `vertex-snippet-${index + 1}.${extForLang(block.lang)}`);
+  }, []);
+
+  const downloadAllCodeBlocks = useCallback(() => {
+    codeBlocks.forEach((b, i) => setTimeout(() => downloadCodeBlock(b, i), i * 120));
+  }, [codeBlocks, downloadCodeBlock]);
+
   const mdComponents = useMemo(() => ({
     h1: ({children}) => <h1 style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
     h2: ({children}) => <h2 style={{ fontSize: 16.5, fontWeight: 700, color: '#f0f0f0', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
@@ -1272,18 +1427,75 @@ Title:`,
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Files button — triggers the same file input as the + menu's "Add file" */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Add files"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5, background: '#141414',
-              border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6,
-              padding: '5px 10px', cursor: 'pointer'
-            }}
-          >
-            <Folder size={12}/> Files
-          </button>
+          {/* Saved Files — every code block Vertex has generated in this chat, downloadable individually */}
+          <div ref={savedFilesRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowSavedFiles(v => !v)}
+              title="Save generated files"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, background: showSavedFiles ? '#1c1c1c' : '#141414',
+                border: '1px solid ' + (showSavedFiles ? '#3a3a3a' : '#2a2a2a'),
+                color: showSavedFiles ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 6,
+                padding: '5px 10px', cursor: 'pointer'
+              }}
+            >
+              <Folder size={12}/> Files{codeBlocks.length > 0 ? ` (${codeBlocks.length})` : ''}
+            </button>
+
+            {showSavedFiles && (
+              <div style={{
+                position: 'absolute', top: 42, right: 0, zIndex: 100, width: 300,
+                background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
+                boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 10,
+                animation: 'vertexScaleIn .15s ease'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 4px 8px' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', fontFamily: 'JetBrains Mono' }}>SAVED FILES</span>
+                  {codeBlocks.length > 0 && (
+                    <button onClick={downloadAllCodeBlocks}
+                      style={{ fontSize: 11, color: '#c8c8c8', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                      <Download size={11}/> Save all
+                    </button>
+                  )}
+                </div>
+
+                {codeBlocks.length === 0 ? (
+                  <div style={{ padding: '14px 6px 16px', textAlign: 'center', color: '#5a5a5a', fontSize: 12, lineHeight: 1.6 }}>
+                    <FileCode size={18} style={{ opacity: .4, marginBottom: 6 }}/>
+                    <div>No files yet.</div>
+                    <div style={{ fontSize: 10.5, marginTop: 2 }}>Code Vertex writes in this chat shows up here, ready to save.</div>
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }} className="scr">
+                    {codeBlocks.map((b, i) => (
+                      <div key={b.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
+                          background: '#1a1a1a', border: '1px solid #262626',
+                        }}>
+                        <div style={{
+                          width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: '#000', border: '1px solid #2a2a2a',
+                        }}>
+                          <FileCode size={12} color="#9a9a9a"/>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace' }}>
+                            snippet-{i + 1}.{extForLang(b.lang)}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#6a6a6a' }}>{b.code.split('\n').length} lines</div>
+                        </div>
+                        <button onClick={() => downloadCodeBlock(b, i)} title="Save this file"
+                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
+                          <Download size={12}/>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Download chat as Markdown */}
           <button
@@ -1317,45 +1529,71 @@ Title:`,
 
             {showSettings && (
               <div style={{
-                position: 'absolute', top: 42, right: 0, zIndex: 100, minWidth: 260,
-                background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
-                boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 12,
+                position: 'absolute', top: 42, right: 0, zIndex: 100, width: 288,
+                background: '#131313', border: '1px solid #262626', borderRadius: 12,
+                boxShadow: '0 16px 44px rgba(0,0,0,.55)', padding: 14,
                 animation: 'vertexScaleIn .15s ease'
               }}>
-                {/* Coder style */}
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
-                {STYLES.map(s => (
-                  <button key={s.id} onClick={() => { setStyle(s.id); }}
-                    style={{
-                      width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
-                      background: style === s.id ? '#232323' : 'transparent',
-                      border: '1px solid ' + (style === s.id ? '#3a3a3a' : 'transparent'),
-                      marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 2
-                    }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e6e6e6' }}>{s.label}</span>
-                    <span style={{ fontSize: 11, color: '#7a7a7a' }}>{s.hint}</span>
-                  </button>
-                ))}
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f0f0f0', marginBottom: 12, letterSpacing: '-.01em' }}>Settings</div>
 
-                <div style={{ borderTop: '1px solid #1c1c1c', margin: '8px 0' }} />
+                {/* Coder style */}
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.08em', marginBottom: 6, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+                  {STYLES.map(s => {
+                    const StyleIcon = s.id === 'concise' ? Zap : s.id === 'detailed' ? BookOpen : Sparkles;
+                    const active = style === s.id;
+                    return (
+                      <button key={s.id} onClick={() => { setStyle(s.id); }}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                          background: active ? 'rgba(230,230,230,.08)' : 'transparent',
+                          border: '1px solid ' + (active ? '#3a3a3a' : '#1e1e1e'),
+                          display: 'flex', alignItems: 'flex-start', gap: 9, transition: 'all .12s'
+                        }}
+                        onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#191919'; }}
+                        onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <div style={{
+                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1, display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          background: active ? '#e6e6e6' : '#1e1e1e', border: '1px solid ' + (active ? '#e6e6e6' : '#2a2a2a'),
+                        }}>
+                          <StyleIcon size={12} color={active ? '#0a0a0a' : '#8a8a8a'}/>
+                        </div>
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#f0f0f0' : '#dcdcdc' }}>{s.label}</span>
+                          <span style={{ fontSize: 10.5, color: '#6a6a6a', lineHeight: 1.35 }}>{s.hint}</span>
+                        </span>
+                        {active && <Check size={13} color="#e6e6e6" style={{ marginLeft: 'auto', flexShrink: 0, marginTop: 4 }}/>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div style={{ borderTop: '1px solid #1f1f1f', margin: '2px 0 12px' }} />
 
                 {/* Other options */}
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#8a8a8a', letterSpacing: '.06em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>OPTIONS</div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.08em', marginBottom: 6, fontFamily: 'JetBrains Mono' }}>OPTIONS</div>
 
                 {/* OCR mode toggle */}
                 <button
                   onClick={() => setOcrMode(v => !v)}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '8px 10px', borderRadius: 7, cursor: 'pointer',
-                    background: 'transparent', border: '1px solid transparent', marginBottom: 4,
+                    padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                    background: 'transparent', border: '1px solid #1e1e1e', marginBottom: 5,
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.background = '#161616'; }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#191919'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#e6e6e6' }}>OCR mode</span>
-                    <span style={{ fontSize: 11, color: '#7a7a7a' }}>Extract text from images on send</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
+                      <Scan size={12} color="#8a8a8a"/>
+                    </div>
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: '#dcdcdc' }}>OCR mode</span>
+                      <span style={{ fontSize: 10.5, color: '#6a6a6a' }}>Extract text from images on send</span>
+                    </span>
                   </span>
                   <span style={{
                     position: 'relative', width: 32, height: 18, borderRadius: 9, flexShrink: 0,
@@ -1374,16 +1612,19 @@ Title:`,
                   onClick={() => { exportChat(); }}
                   disabled={messages.length === 0}
                   style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px',
-                    borderRadius: 7, cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
-                    background: 'transparent', border: '1px solid transparent', marginBottom: 4,
-                    color: messages.length === 0 ? '#4a4a4a' : '#dcdcdc', fontSize: 13, fontWeight: 600,
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px',
+                    borderRadius: 8, cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
+                    background: 'transparent', border: '1px solid #1e1e1e', marginBottom: 5,
+                    color: messages.length === 0 ? '#4a4a4a' : '#dcdcdc', fontSize: 12.5, fontWeight: 600,
                     textAlign: 'left',
                   }}
-                  onMouseEnter={e => { if (messages.length > 0) e.currentTarget.style.background = '#161616'; }}
+                  onMouseEnter={e => { if (messages.length > 0) e.currentTarget.style.background = '#191919'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Download size={13}/> Export chat as Markdown
+                  <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
+                    <Download size={12} color={messages.length === 0 ? '#4a4a4a' : '#8a8a8a'}/>
+                  </div>
+                  Export chat as Markdown
                 </button>
 
                 {/* Clear all data */}
@@ -1391,16 +1632,19 @@ Title:`,
                   onClick={() => { setShowSettings(false); clearAllData(); }}
                   disabled={clearing || savedChats.length === 0}
                   style={{
-                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px',
-                    borderRadius: 7, cursor: (clearing || savedChats.length === 0) ? 'not-allowed' : 'pointer',
-                    background: 'transparent', border: '1px solid transparent',
-                    color: (clearing || savedChats.length === 0) ? '#4a4a4a' : '#ef4444', fontSize: 13, fontWeight: 600,
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 10px',
+                    borderRadius: 8, cursor: (clearing || savedChats.length === 0) ? 'not-allowed' : 'pointer',
+                    background: 'transparent', border: '1px solid #1e1e1e',
+                    color: (clearing || savedChats.length === 0) ? '#4a4a4a' : '#f87171', fontSize: 12.5, fontWeight: 600,
                     textAlign: 'left',
                   }}
-                  onMouseEnter={e => { if (!clearing && savedChats.length > 0) e.currentTarget.style.background = '#161616'; }}
+                  onMouseEnter={e => { if (!clearing && savedChats.length > 0) e.currentTarget.style.background = 'rgba(239,68,68,.08)'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  <Trash2 size={13}/> Clear All Data
+                  <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
+                    <Trash2 size={12} color={(clearing || savedChats.length === 0) ? '#4a4a4a' : '#f87171'}/>
+                  </div>
+                  Clear All Data
                 </button>
               </div>
             )}
@@ -1721,6 +1965,21 @@ Title:`,
                       {att.type === 'image' ? (
                         <img src={att.content} alt={att.name}
                           style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 8, display: 'block', marginBottom: 10, objectFit: 'contain' }} />
+                      ) : att.type === 'document' ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                          <div style={{
+                            width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: 'flex',
+                            alignItems: 'center', justifyContent: 'center', background: '#000000', border: '1px solid #2a2a2a',
+                          }}>
+                            <FileText size={16} color="#9a9a9a" />
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#dcdcdc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{att.name}</div>
+                            <div style={{ fontSize: 10.5, color: '#6a6a6a', fontFamily: 'JetBrains Mono, monospace', textTransform: 'uppercase' }}>
+                              {att.ext || 'file'}{att.size ? ` · ${formatBytes(att.size)}` : ''}
+                            </div>
+                          </div>
+                        </div>
                       ) : (
                         <pre style={{
                           margin: 0, marginBottom: 10, fontFamily: 'JetBrains Mono, monospace',
@@ -1740,8 +1999,8 @@ Title:`,
                           color: '#dcdcdc', fontSize: 12, fontWeight: 600,
                           fontFamily: 'JetBrains Mono, monospace',
                         }}>
-                          {att.type === 'image' ? <ImageIcon size={11} color="#8a8a8a" /> : att.type === 'file' ? <FileText size={11} color="#8a8a8a" /> : <Check size={11} color="#8a8a8a" />}
-                          {att.type === 'image' ? 'IMAGE' : att.type === 'file' ? 'FILE' : 'PASTED'}
+                          {att.type === 'image' ? <ImageIcon size={11} color="#8a8a8a" /> : att.type === 'file' ? <FileText size={11} color="#8a8a8a" /> : att.type === 'document' ? <FileText size={11} color="#8a8a8a" /> : <Check size={11} color="#8a8a8a" />}
+                          {att.type === 'image' ? 'IMAGE' : att.type === 'file' ? 'FILE' : att.type === 'document' ? 'DOCUMENT' : 'PASTED'}
                         </span>
                         <button onClick={() => removeAttachment(att.id)}
                           style={{
@@ -1795,13 +2054,13 @@ Title:`,
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <ImageIcon size={14} color="#9a9a9a"/> Add image
                       </button>
-                      <button onClick={() => fileInputRef.current?.click()}
+                      <button onClick={() => docFileInputRef.current?.click()}
                         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <FileText size={14} color="#9a9a9a"/> Add document
-                        <span style={{ marginLeft: 'auto', fontSize: 9.5, color: ocrMode ? '#dcdcdc' : '#5a5a5a', fontFamily: 'JetBrains Mono, monospace' }}>
-                          {ocrMode ? 'OCR ON' : 'OCR OFF'}
+                        <span style={{ marginLeft: 'auto', fontSize: 9, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace' }}>
+                          docx · pdf · xlsx…
                         </span>
                       </button>
 
@@ -1827,9 +2086,10 @@ Title:`,
                       </div>
                     </div>
                   )}
-                  <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }} onChange={handleFilesSelected} />
+                  <input ref={fileInputRef} type="file" multiple accept=".txt,.md,.markdown,.json,.csv,.tsv,.yaml,.yml,.toml,.ini,.env,.log,.xml,.html,.css,.scss,.sass,.less,.js,.jsx,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.sql,.graphql,.docx,.pdf,.doc,.rtf,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.odp,image/*" style={{ display: 'none' }} onChange={handleFilesSelected} />
                   <input ref={folderInputRef} type="file" multiple webkitdirectory="" directory="" style={{ display: 'none' }} onChange={handleFilesSelected} />
                   <input ref={imageFileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImageFilesSelected} />
+                  <input ref={docFileInputRef} type="file" multiple accept=".docx,.pdf,.doc,.rtf,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.odp,.txt,.md,.csv" style={{ display: 'none' }} onChange={handleFilesSelected} />
                 </div>
                 <textarea
                   ref={inputRef}
