@@ -26,6 +26,49 @@ const CF_CHAT_MODELS = [
   '@cf/qwen/qwen3-30b-a3b-fp8',
 ];
 
+// ── GROQ TPM BUDGET + COOLDOWN TRACKING ─────────────────────────
+// Fixes the "first message randomly slow, 429s cascade" issue by
+// skipping a model BEFORE hitting Groq if we know it's rate-limited
+// or would blow the per-minute token budget, instead of finding out
+// after a wasted network round trip.
+const GROQ_TPM_CAP = 6000; // matches the on_demand tier limit from the error logs
+const groqTpmTracker = new Map(); // model -> [{ tokens, time }]
+const groqCooldowns  = new Map(); // model -> timestamp when safe to retry
+
+function estimateTokens(text) {
+  return Math.ceil((text || '').length / 4); // ~4 chars/token, Groq's own rule of thumb
+}
+
+function groqTpmAvailable(model, estimatedTokens, capTpm = GROQ_TPM_CAP) {
+  const now = Date.now();
+  const windowMs = 60000;
+  const entries = (groqTpmTracker.get(model) || []).filter(e => now - e.time < windowMs);
+  groqTpmTracker.set(model, entries);
+  const used = entries.reduce((sum, e) => sum + e.tokens, 0);
+  return (used + estimatedTokens) <= capTpm;
+}
+
+function recordGroqTpm(model, tokens) {
+  const entries = groqTpmTracker.get(model) || [];
+  entries.push({ tokens, time: Date.now() });
+  groqTpmTracker.set(model, entries);
+}
+
+function isGroqCoolingDown(model) {
+  const until = groqCooldowns.get(model);
+  return until && Date.now() < until;
+}
+
+function setGroqCooldown(model, retryAfterSec = 30) {
+  groqCooldowns.set(model, Date.now() + retryAfterSec * 1000);
+  console.log(`Cooling down ${model} for ${retryAfterSec}s`);
+}
+
+function parseRetryAfterSec(errMessage) {
+  const match = errMessage?.match(/try again in ([\d.]+)s/i);
+  return match ? parseFloat(match[1]) : 30;
+}
+
 // ── RATE LIMITER ──────────────────────────────────────────────
 const rateLimiter = new Map();
 const RATE_LIMITS = {
@@ -278,20 +321,37 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const MAX_CONTINUATIONS = 3;
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
+
+    // ── Skip this model entirely if it's cooling down or would blow the TPM budget ──
+    // This is the key fix: we check BEFORE calling Groq, not after a 429 comes back.
+    const estTokens = estimateTokens(JSON.stringify(optimizedMessages)) + maxTokens;
+    if (isGroqCoolingDown(modelToTry)) {
+      console.log(`Skipping ${modelToTry} — still cooling down from a recent 429`);
+      continue;
+    }
+    if (!groqTpmAvailable(modelToTry, estTokens)) {
+      console.log(`Skipping ${modelToTry} — would exceed local TPM budget (est. ${estTokens} tokens)`);
+      continue;
+    }
+
     try {
       let convoMessages = [...optimizedMessages];
       let fullBuffer = '';
       let continuations = 0;
       let streamedAnything = false;
 
-    while (true) {
-  const stream = await groq.chat.completions.create({
-    model:       modelToTry,
-    messages:    convoMessages,
-    max_tokens:  maxTokens,
-    temperature: 0.7,
-    stream:      true,
-  });
+      while (true) {
+        const stream = await groq.chat.completions.create({
+          model:       modelToTry,
+          messages:    convoMessages,
+          max_tokens:  maxTokens,
+          temperature: 0.7,
+          stream:      true,
+        });
+
+        // Record usage as soon as the call is accepted (Groq commits the tokens then)
+        recordGroqTpm(modelToTry, estTokens);
+
         let buffer = '';
         let finishReason = null;
         let inThink = false;
@@ -376,7 +436,9 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
     } catch (e) {
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
       if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {
-        console.log('Rate limit hit, trying next model...');
+        const waitSec = parseRetryAfterSec(e.message);
+        setGroqCooldown(modelToTry, waitSec);
+        console.log(`Rate limit hit on ${modelToTry}, cooling down ${waitSec}s, trying next model...`);
         continue;
       }
       console.log('Non-rate-limit error, trying next model anyway...');
@@ -457,6 +519,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   let written = 0;
   let convoMessages = [...messages];
   let continuations = 0;
+  let fullRawBuffer = ''; // FIX: this was referenced but never declared in the original —
+                          // accumulate every turn's raw text here so the salvage path below works.
 
   try {
     while (true) {
@@ -480,12 +544,12 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
        45000
       );
 
-     if (!nvRes.ok) {
-  let errBody = '';
-  try { errBody = await nvRes.text(); } catch (_) {}
-  console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
-  return written > 0;
-}
+      if (!nvRes.ok) {
+        let errBody = '';
+        try { errBody = await nvRes.text(); } catch (_) {}
+        console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
+        return written > 0;
+      }
 
       const reader  = nvRes.body.getReader();
       const decoder = new TextDecoder();
@@ -518,6 +582,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
           if (!token) continue;
 
           turnBuffer += token;
+          fullRawBuffer += token; // FIX: accumulate raw (pre-think-strip) text across the whole response
           pending += token;
           let safe = '';
           while (true) {
@@ -576,18 +641,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     }
 
     if (written === 0) {
-
-    const salvaged = fullRawBuffer
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<think>[\s\S]*$/gi, '')  // unclosed think tag — strip everything after it
-    .trim();
-  if (salvaged.length > 0) {
-    res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
-    res.write('data: [DONE]\n\n');
-    res.end();
-    console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response`);
-    return true;
-  }
+      // FIX: fullRawBuffer is now properly defined and accumulated above
+      const salvaged = fullRawBuffer
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<think>[\s\S]*$/gi, '')  // unclosed think tag — strip everything after it
+        .trim();
+      if (salvaged.length > 0) {
+        res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response`);
+        return true;
+      }
       console.error('Code-chat stream: model returned 0 tokens');
       return false;
     }
@@ -862,6 +927,55 @@ app.use((req, res, next) => {
 // ── Health check — Render pings this to know the service is alive ──
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 app.get('/', (req, res) => res.status(200).send('Vortis backend is running.'));
+
+// ═════════════════════════════════════════════════════════════
+// ── WARMUP + KEEP-ALIVE
+// ═════════════════════════════════════════════════════════════
+// FIX for "first message is slow": your screenshot confirms Render's free
+// tier spins the instance down after inactivity ("can delay requests by
+// 50 seconds or more"). Pinging localhost from inside the same process
+// does NOT count as external activity to Render's proxy, so it does NOT
+// prevent spin-down — that was the bug in the previous version.
+//
+// The only things that reliably prevent spin-down on Render's free tier:
+//   1) An external uptime service (UptimeRobot, cron-job.org, etc.)
+//      hitting your PUBLIC URL every few minutes — this is the real fix.
+//   2) Upgrading off the free tier (removes spin-down entirely).
+//
+// Below, we still warm up in-process connections (Firestore, Groq, NVIDIA
+// TLS handshakes) so that once a request *does* arrive, it's not also
+// paying for cold connection setup on top of the Render wake-up delay.
+// We also self-ping the public RENDER_EXTERNAL_URL if Render provides one,
+// which at least helps for paid/instant-scaling tiers or short idle gaps —
+// but this is a supplement, not a substitute for an external pinger.
+
+async function warmUp() {
+  try {
+    await admin.firestore().collection('_warmup').limit(1).get();
+    console.log('Firestore warmed');
+  } catch (e) {
+    console.log('Firestore warmup skipped:', e.message);
+  }
+  try {
+    await fetch('https://api.groq.com', { method: 'HEAD' });
+    console.log('Groq TLS warmed');
+  } catch (_) {}
+  try {
+    await fetch(NVIDIA_BASE_URL, { method: 'HEAD' });
+    console.log('NVIDIA TLS warmed');
+  } catch (_) {}
+}
+warmUp();
+
+const externalUrl = process.env.RENDER_EXTERNAL_URL; // Render sets this automatically if available
+if (externalUrl) {
+  setInterval(() => {
+    fetch(`${externalUrl}/health`).catch(() => {});
+  }, 4 * 60 * 1000);
+  console.log(`Self-ping enabled via ${externalUrl}/health`);
+} else {
+  console.log('RENDER_EXTERNAL_URL not set — set up an external uptime pinger (e.g. UptimeRobot) hitting /health to prevent free-tier spin-down.');
+}
 
 // ═════════════════════════════════════════════════════════════
 // ── MAIN HANDLER  (was the Vercel default export, now a route)
@@ -1245,7 +1359,9 @@ If declining, briefly say why and offer an alternative.\n\n`;
 IMAGE RULE: Before GENERATE_IMAGE:<desc>, confirm a real subject exists (this msg or earlier in chat). Words like "generate/gen/image/make it" alone are NOT a subject. No subject anywhere → ask one short question instead, don't generate blind.\n\n` : '';
 
         const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
-        const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 10000) + locationNote + searchContext;
+        // Trimmed from 10000 → 6000 chars: cuts token cost per request without losing
+        // meaningful system-prompt content, which directly reduces how fast we hit the Groq TPM cap.
+        const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 6000) + locationNote + searchContext;
 
         const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
