@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 
 
-const API = 'https://vortis-backend.vercel.app/api/bytez';
+const API = 'https://vortis.onrender.com/api/bytez';
 
 const FONT_OPTIONS = [
   // ── Sans-serif (clean, everyday) ──
