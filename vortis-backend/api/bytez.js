@@ -26,7 +26,7 @@ const GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';   // Very fast, lower latency
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
-const NVIDIA_CHAT_CODE    = 'stepfun-ai/step-3.7-flash';    // Only 11B active parameters,very fast
+const NVIDIA_CHAT_CODE    = 'qwen/qwen3-coder-480b-a35b-instruct'; // context length up to 256K,with agent logic
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
 const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
 
@@ -778,15 +778,11 @@ export default async function handler(req, res) {
     const isCodeMode  = Boolean(body.mode === 'code' || body.isCodeChat === true);
 
 
-// ── CODE-CHAT STREAMING (DeepSeek V4 Flash) ───────────────────
+// ── CODE-CHAT STREAMING (Qwen3 Coder 480B) ───────────────────
 // Used when the frontend sends mode:'code' — bypasses Groq + Cloudflare
-// entirely and streams directly from NVIDIA's deepseek-v4-flash endpoint.
-// No model fallback: if it fails, we surface a clean error to the
-// client instead of silently switching models.
-const NVIDIA_CHAT_CODE = 'stepfun-ai/step-3.7-flash';
 // Returns true on success (response already streamed + res.end() called),
 // false on failure (caller decides how to respond).
-async function streamNvidiaGLMOnly(messages, res, maxTokens = 4096) {
+async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
     console.error('Code-chat stream: NVIDIA_API_KEY missing');
@@ -953,7 +949,7 @@ if (isCodeMode && action === 'chat') {
       codeMessages.push({ role: 'user', content: prompt.trim() });
     }
 
-    const ok = await streamNvidiaGLMOnly(codeMessages, res, 4096);
+    const ok = await streamNvidiaGLMOnly(codeMessages, res, 16000);
     if (!ok) {
       if (!res.writableEnded) {
         res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable. Please try again in a moment.' })}\n\n`);
