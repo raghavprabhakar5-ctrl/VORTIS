@@ -11,8 +11,8 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
+const GROQ_CHAT_PRIMARY = 'llama-3.1-8b-instant';
 const GROQ_CHAT_PRIMARY = 'llama-3.3-70b-versatile';
-const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'llama-3.1-8b-instant';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
@@ -484,12 +484,12 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
        45000
       );
 
-      if (!nvRes.ok) {
-        let errBody = '';
-        try { errBody = await nvRes.text(); } catch (_) {}
-        console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
-        return written > 0; // if we already streamed something, don't treat as total failure
-      }
+     if (!nvRes.ok) {
+  let errBody = '';
+  try { errBody = await nvRes.text(); } catch (_) {}
+  console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
+  return written > 0;
+}
 
       const reader  = nvRes.body.getReader();
       const decoder = new TextDecoder();
@@ -580,6 +580,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     }
 
     if (written === 0) {
+
+    const salvaged = fullRawBuffer
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/gi, '')  // unclosed think tag — strip everything after it
+    .trim();
+  if (salvaged.length > 0) {
+    res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    res.end();
+    console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response`);
+    return true;
+  }
       console.error('Code-chat stream: model returned 0 tokens');
       return false;
     }
@@ -934,7 +946,7 @@ app.post('/api/handler', async (req, res) => {
       res.setHeader('Connection', 'keep-alive');
 
       try {
-        const codeSysContent = (prompt.trim().slice(0, 12000)) + '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted.';
+        const codeSysContent = (prompt.trim().slice(0, 12000)) + '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.';
         const codeMessages = [{ role: 'system', content: codeSysContent }];
         codeMessages.push(...sanitizeHistory(history, 12));
         if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
