@@ -232,7 +232,7 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
           messages,
           max_tokens:  maxTokens,
           temperature: 0.7,
-          stream:      true,
+          stream:      false,
         }),
       },
       20000
@@ -286,16 +286,12 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
     while (true) {
   const stream = await groq.chat.completions.create({
-  model:       modelToTry,
-  messages:    convoMessages,
-  max_tokens:  maxTokens,
-  temperature: 0.7,
-  stream:      true,
-  ...(modelToTry === GROQ_CHAT_QUALITY ? { 
-    reasoning_effort: 'low',
-    reasoning_format: 'hidden'
-  } : {}),
-});
+    model:       modelToTry,
+    messages:    convoMessages,
+    max_tokens:  maxTokens,
+    temperature: 0.7,
+    stream:      true,
+  });
         let buffer = '';
         let finishReason = null;
         let inThink = false;
