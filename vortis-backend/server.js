@@ -479,7 +479,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
             stream:          true,
           }),
         },
-        280000
+       45000
       );
 
       if (!nvRes.ok) {

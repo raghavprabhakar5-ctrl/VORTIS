@@ -1009,8 +1009,7 @@ const Vertex = ({
         method: 'POST',
         headers: await getAuthHeader(),
         body: JSON.stringify({
-          action: 'chat',
-          mode: 'code',   
+          action: 'chat',  
           prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
 Your ONLY job is to output a short 3-5 word title summarizing the OVERALL TOPIC of the conversation so far.
 
