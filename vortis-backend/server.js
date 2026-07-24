@@ -455,105 +455,126 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     return false;
   }
 
+  const MAX_CONTINUATIONS = 4; // code can be long — allow a few more than chat
   let written = 0;
+  let convoMessages = [...messages];
+  let continuations = 0;
 
   try {
-    const nvRes = await fetchWithTimeout(
-      `${NVIDIA_BASE_URL}/chat/completions`,
-      {
-        method:  'POST',
-        headers: {
-          'Authorization': `Bearer ${key}`,
-          'Content-Type':  'application/json',
-        },
-        body: JSON.stringify({
-          model:           NVIDIA_CHAT_CODE,
-          messages,
-          max_tokens:      maxTokens,
-          temperature:     0.5,
-          top_p:           0.9,
-          stream:          true,
-        }),
-      },
-      // No more 55s cap needed — Render has no function timeout — but we
-      // keep a generous ceiling so a truly dead connection doesn't hang forever.
-      280000
-    );
-
-    if (!nvRes.ok) {
-      let errBody = '';
-      try { errBody = await nvRes.text(); } catch (_) {}
-      console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
-      return false;
-    }
-
-    const reader  = nvRes.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer    = '';
-    let inThink   = false;
-    let pending   = '';
-
     while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const nvRes = await fetchWithTimeout(
+        `${NVIDIA_BASE_URL}/chat/completions`,
+        {
+          method:  'POST',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type':  'application/json',
+          },
+          body: JSON.stringify({
+            model:           NVIDIA_CHAT_CODE,
+            messages:        convoMessages,
+            max_tokens:      maxTokens,
+            temperature:     0.5,
+            top_p:           0.9,
+            stream:          true,
+          }),
+        },
+        280000
+      );
 
-      buffer += decoder.decode(value, { stream: true });
+      if (!nvRes.ok) {
+        let errBody = '';
+        try { errBody = await nvRes.text(); } catch (_) {}
+        console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
+        return written > 0; // if we already streamed something, don't treat as total failure
+      }
 
-      let nlIdx;
-      while ((nlIdx = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, nlIdx).trim();
-        buffer = buffer.slice(nlIdx + 1);
+      const reader  = nvRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = '';
+      let inThink   = false;
+      let pending   = '';
+      let turnBuffer = ''; // full text of THIS turn, for continuation context
+      let finishReason = null;
 
-        if (!line || !line.startsWith('data: ')) continue;
-        const raw = line.slice(6).trim();
-        if (raw === '[DONE]') continue;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        let payload;
-        try { payload = JSON.parse(raw); } catch (_) { continue; }
+        buffer += decoder.decode(value, { stream: true });
 
-        const token = payload?.choices?.[0]?.delta?.content;
-        if (!token) continue;
+        let nlIdx;
+        while ((nlIdx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, nlIdx).trim();
+          buffer = buffer.slice(nlIdx + 1);
 
-        pending += token;
-        let safe = '';
-        while (true) {
-          if (!inThink) {
-            const openIdx = pending.indexOf('<think>');
-            if (openIdx === -1) {
-              const holdBack = Math.min(pending.length, 8);
-              safe += pending.slice(0, pending.length - holdBack);
-              pending = pending.slice(pending.length - holdBack);
-              break;
+          if (!line || !line.startsWith('data: ')) continue;
+          const raw = line.slice(6).trim();
+          if (raw === '[DONE]') continue;
+
+          let payload;
+          try { payload = JSON.parse(raw); } catch (_) { continue; }
+
+          finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
+          const token = payload?.choices?.[0]?.delta?.content;
+          if (!token) continue;
+
+          turnBuffer += token;
+          pending += token;
+          let safe = '';
+          while (true) {
+            if (!inThink) {
+              const openIdx = pending.indexOf('<think>');
+              if (openIdx === -1) {
+                const holdBack = Math.min(pending.length, 8);
+                safe += pending.slice(0, pending.length - holdBack);
+                pending = pending.slice(pending.length - holdBack);
+                break;
+              } else {
+                safe += pending.slice(0, openIdx);
+                pending = pending.slice(openIdx + '<think>'.length);
+                inThink = true;
+              }
             } else {
-              safe += pending.slice(0, openIdx);
-              pending = pending.slice(openIdx + '<think>'.length);
-              inThink = true;
-            }
-          } else {
-            const closeIdx = pending.indexOf('</think>');
-            if (closeIdx === -1) {
-              const holdBack = Math.min(pending.length, 9);
-              pending = pending.slice(pending.length - holdBack);
-              break;
-            } else {
-              pending = pending.slice(closeIdx + '</think>'.length);
-              inThink = false;
+              const closeIdx = pending.indexOf('</think>');
+              if (closeIdx === -1) {
+                const holdBack = Math.min(pending.length, 9);
+                pending = pending.slice(pending.length - holdBack);
+                break;
+              } else {
+                pending = pending.slice(closeIdx + '</think>'.length);
+                inThink = false;
+              }
             }
           }
-        }
 
-        if (safe) {
-          written += safe.length;
-          res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-          if (res.flush) res.flush();
+          if (safe) {
+            written += safe.length;
+            res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+            if (res.flush) res.flush();
+          }
         }
       }
-    }
 
-    if (!inThink && pending) {
-      written += pending.length;
-      res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
-      pending = '';
+      if (!inThink && pending) {
+        written += pending.length;
+        res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+        pending = '';
+      }
+
+      // ── Hit the token cap — continue the SAME response ──
+      if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
+        continuations++;
+        console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
+        convoMessages = [
+          ...convoMessages,
+          { role: 'assistant', content: turnBuffer },
+          { role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text, do not restart, do not add any preamble or explanation — just continue the code/text.' },
+        ];
+        continue; // loop again
+      }
+
+      break; // finished naturally, or hit continuation cap
     }
 
     if (written === 0) {
@@ -563,7 +584,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
 
     res.write('data: [DONE]\n\n');
     res.end();
-    console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written`);
+    console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, ${continuations} continuations`);
     return true;
   } catch (e) {
     console.error('Code-chat stream error:', e.message);
