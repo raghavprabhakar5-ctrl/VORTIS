@@ -284,16 +284,18 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       let continuations = 0;
       let streamedAnything = false;
 
-      while (true) {
-        const stream = await groq.chat.completions.create({
-          model:       modelToTry,
-          messages:    convoMessages,
-          max_tokens:  maxTokens,
-          temperature: 0.7,
-          stream:      true,
-          ...(modelToTry === GROQ_CHAT_QUALITY ? { reasoning_effort: 'low' } : {}),
-        });
-
+    while (true) {
+  const stream = await groq.chat.completions.create({
+  model:       modelToTry,
+  messages:    convoMessages,
+  max_tokens:  maxTokens,
+  temperature: 0.7,
+  stream:      true,
+  ...(modelToTry === GROQ_CHAT_QUALITY ? { 
+    reasoning_effort: 'low',
+    reasoning_format: 'hidden'
+  } : {}),
+});
         let buffer = '';
         let finishReason = null;
         let inThink = false;

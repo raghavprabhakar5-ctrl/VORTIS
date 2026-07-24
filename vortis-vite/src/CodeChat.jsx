@@ -148,6 +148,14 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - When there's a trade-off (perf vs readability, lib vs hand-rolled, sync vs async), pick a side and DEFEND it. Mention the alternative in one line.
 - Use comments inside code only when the logic is non-obvious. Don't comment obvious lines.
 
+═══ CODE QUALITY BAR ═══
+- Every code block MUST be runnable as-is when possible. Include imports. No "..." placeholders unless absolutely necessary.
+- Prefer modern, idiomatic syntax for the chosen language (ES2022+ for JS, Python 3.10+ features where they help, etc.).
+- Show the SIMPLEST solution first. Only show advanced patterns if the user asks or if they're clearly needed.
+- If you don't know the exact API, say so — NEVER fabricate function names, method signatures, or library APIs.
+- Always specify the language in code fences: \`\`\`python, \`\`\`typescript, \`\`\`bash, etc.
+- Default to a complete, full-scope implementation — proper structure, full feature set, error handling — never a stripped-down "MVP" or placeholder version. If the user requests something specific (e.g. "800 lines", "full game with levels and scoring"), deliver that full scope, not a shortcut version. Only simplify or cut scope if the user explicitly asks for something minimal, quick, or basic.
+
 ═══ DEBUGGING ═══
 - When the user pastes an error, identify the ROOT CAUSE in one sentence, then give the fix as a code block.
 - If the error is environment-related (missing dep, version mismatch), say exactly what to install/run.
@@ -1010,6 +1018,7 @@ const Vertex = ({
         headers: await getAuthHeader(),
         body: JSON.stringify({
           action: 'chat',  
+          mode: 'code',
           prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
 Your ONLY job is to output a short 3-5 word title summarizing the OVERALL TOPIC of the conversation so far.
 
