@@ -12,7 +12,7 @@ if (!admin.apps.length) {
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'llama-3.1-8b-instant';
-const GROQ_CHAT_PRIMARY = 'llama-3.3-70b-versatile';
+const GROQ_CHAT_QUALITY = 'llama-3.3-70b-versatile';
 const GROQ_CLASSIFIER_MODEL = 'llama-3.1-8b-instant';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';

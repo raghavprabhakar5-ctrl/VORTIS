@@ -702,15 +702,25 @@ const Vertex = ({
      panel's "Open in new tab" button and its inline preview header. Nothing is uploaded
      anywhere; it's a local Blob URL, so the user never leaves Vertex to see it rendered. */
   const openHtmlInNewTab = useCallback((code) => {
-    try {
-      const blob = new Blob([code], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (e) {
-      console.error('Vertex: failed to open preview in new tab —', e);
+  try {
+    const blob = new Blob([code], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!win) {
+      // window.open was blocked — anchor click fallback usually still works
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
-  }, []);
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    console.error('Vertex: failed to open preview in new tab —', e);
+  }
+}, []);
 
   const runPanelCode = useCallback(async () => {
     if (!panelCode || panelRunning || !safeExecuteCodeLocally) return;
