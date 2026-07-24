@@ -26,7 +26,7 @@ const GROQ_CLASSIFIER_MODEL = "llama-3.1-8b-instant";
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';   // Very fast, lower latency
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-ultra-550b-a55b'; // Massive 550B flagship for heavy agent logic
-const NVIDIA_CHAT_CODE    = 'qwen/qwen3-coder-480b-a35b-instruct'; // context length up to 256K,with agent logic
+const NVIDIA_CHAT_CODE    = 'z-ai/glm-5.2';                   //Parameters 753B, best for agentic coding 
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';          // image_url/video_url in messages
 const NVIDIA_IMAGE_MODEL  = 'qwen/qwen-image-2512';          // /v1/images/generations
 
@@ -809,7 +809,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
           'Content-Type':  'application/json',
         },
         body: JSON.stringify({
-          model:           NVIDIA_CHAT_CODE,   // 'deepseek-ai/deepseek-v4-flash'
+          model:           NVIDIA_CHAT_CODE,   
           messages,
           max_tokens:      maxTokens,
           temperature:     0.5,                // slightly lower — coding benefits from determinism
