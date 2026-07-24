@@ -18,7 +18,7 @@ import {
   Download, Layers, Upload, ExternalLink, RotateCcw
 } from 'lucide-react';
 
-const API = 'https://vortis-backend.vercel.app/api/bytez';
+const API = 'https://vortis.onrender.com/api/handler';
 
 /* ────────────────────────────────────────────────────────────────────────
  *  Auth header helper (self-contained — mirrors App.js getAuthHeader)
