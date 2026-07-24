@@ -1,1 +1,3 @@
 vortis-vite/public/models/whisper-small/onnx/*.onnx
+.vercel
+.env*
