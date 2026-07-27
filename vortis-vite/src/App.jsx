@@ -2616,7 +2616,6 @@ useEffect(() => {
   const clearSel = () => setSelectionReply(null);
 
   const handleMouseUp = (e) => {
-    // don't clear if they just clicked the Reply button itself
     if (e.target.closest('[data-reply-btn]')) return;
 
     const sel = window.getSelection();
@@ -2624,18 +2623,28 @@ useEffect(() => {
     if (!text || text.length < 2) { clearSel(); return; }
 
     const anchorEl = sel.anchorNode?.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-    const bubble = anchorEl?.closest?.('.bubble-ai, .bubble-user');
+    // ── only allow replying to AI messages, not your own ──
+    const bubble = anchorEl?.closest?.('.bubble-ai');
     if (!bubble) { clearSel(); return; }
 
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    const range = sel.getRangeAt(0);
+    const rects = range.getClientRects();
+    // ── use the LAST line's rect, not the merged bounding box of the whole selection ──
+    const rect = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
     if (!rect || (rect.width === 0 && rect.height === 0)) { clearSel(); return; }
 
-    setSelectionReply({
-      text: text.slice(0, 300),
-      x: rect.left + rect.width / 2,
-      y: rect.top,
-    });
-  };
+    const BTN_HALF_WIDTH = 55; // approx half the button's width, keep it on-screen
+    const x = Math.min(
+      Math.max(rect.left + rect.width / 2, BTN_HALF_WIDTH + 8),
+      window.innerWidth - BTN_HALF_WIDTH - 8
+    );
+
+  setSelectionReply({
+  text: text.replace(/\s+/g, ' ').trim().slice(0, 300),
+  x,
+  y: Math.max(8, rect.top),
+  });
+ };
 
   document.addEventListener('mouseup', handleMouseUp);
   document.addEventListener('scroll', clearSel, true);
@@ -5792,13 +5801,17 @@ return (
               )}
                {input.startsWith('> ') && (
   <div style={{ padding: '8px 14px 0' }}>
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 12px', background: 'rgba(99,102,241,.08)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 10, borderLeft: '3px solid var(--indigo)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
   <span style={{ fontSize: 10, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', fontWeight: 700, letterSpacing: '.06em', flexShrink: 0 }}>REPLYING TO: </span>
- <span style={{ fontSize: 12, color: 'var(--text2)', fontFamily: 'JetBrains Mono', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{input.match(/^> (.+?)\n\n/s)?.[1]?.trim() || ''}</span>
+  <span style={{
+    fontSize: 12, color: 'var(--text2)', fontFamily: 'JetBrains Mono',
+    overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+    flex: 1, minWidth: 0   // ← these two were missing, so ellipsis had no width to truncate against
+  }}>
+    {input.match(/^> (.+?)\n\n/s)?.[1]?.trim() || ''}
+  </span>
+  <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
 </div>
-      <button onClick={() => setInput('')} style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 0, display: 'flex', flexShrink: 0 }}><X size={12}/></button>
-    </div>
   </div>
 )}
               {pendingImage && (
