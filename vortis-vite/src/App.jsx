@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import VisualDemo, { VISUAL_DEMO_PROMPT, VISUAL_DEMO_MARKER, parseVisualDemoTrigger } from './VisualDemo';
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
@@ -1441,6 +1442,10 @@ const MsgContent = ({ text, onRetryImage }) => {
 
   if (!text) return null;
   const t = text.trim();
+
+  if (t.startsWith(VISUAL_DEMO_MARKER)) {
+  return <VisualDemo spec={t.slice(VISUAL_DEMO_MARKER.length)} />;
+}
 
   const AnimatedDots = () => {
   const [n, setN] = React.useState(1);
@@ -4581,6 +4586,7 @@ HONESTY ABOUT YOURSELF:
 - If the user corrects you with a real fact, accept it ONCE and move on — do not over-apologise or repeatedly agree.
 
 PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+sys += VISUAL_DEMO_PROMPT;
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
       
@@ -4625,6 +4631,13 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
       if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
+
+  const visualSpec = parseVisualDemoTrigger(cleaned);
+  if (visualSpec) {
+  addMsg('vortis', `${VISUAL_DEMO_MARKER}${visualSpec}`, false);
+  setIsProcessing(false);
+  return;
+}
    
  const displayText = cleaned
   // Image commands
