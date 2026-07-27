@@ -4608,6 +4608,8 @@ if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
 if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
+console.log("FINAL SYS LENGTH:", sys.length)
+
 const trimmedHistory = convHistory.current.slice(-12);
 setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
 const res = await fetch(API, {
