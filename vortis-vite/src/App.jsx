@@ -4600,11 +4600,13 @@ HONESTY ABOUT YOURSELF:
 - Do NOT claim you are "the fastest" or "the best" — you don't have data to back that up.
 - If the user corrects you with a real fact, accept it ONCE and move on — do not over-apologise or repeatedly agree.
 
-PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;
+
 sys += VISUAL_DEMO_PROMPT;
+
+if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
-      if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
-      
+if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
 
 const trimmedHistory = convHistory.current.slice(-12);
 setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
