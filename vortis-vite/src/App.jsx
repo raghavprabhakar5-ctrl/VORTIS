@@ -1436,7 +1436,7 @@ const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
   };
 };
 
-const MsgContent = ({ text, onRetryImage }) => {
+const MsgContent = ({ text, onRetryImage, onUpgradeClick }) => {
   const contentRef = React.useRef(null);
 
   if (!text) return null;
@@ -1552,6 +1552,51 @@ const DeepResearchProgress = ({ data }) => {
       {onRetryImage && <button onClick={onRetryImage} style={{ marginLeft: 'auto', background: 'var(--indigo)', border: 'none', color: 'white', borderRadius: 7, padding: '5px 11px', cursor: 'pointer', fontSize: 12, fontFamily: 'JetBrains Mono' }}>Regen</button>}
     </div>
   );
+
+  if (t.startsWith('__LIMIT_REACHED__')) {
+  let data = {};
+  try { data = JSON.parse(t.slice('__LIMIT_REACHED__'.length)); } catch(_) {}
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(245,158,11,.08), rgba(139,92,246,.06))',
+      border: '1px solid rgba(245,158,11,.25)',
+      borderRadius: 14, padding: '16px 18px',
+      display: 'flex', gap: 14, alignItems: 'flex-start',
+      maxWidth: 420,
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 10,
+        background: 'rgba(245,158,11,.15)', border: '1px solid rgba(245,158,11,.3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+      }}>
+        <Crown size={18} color="#f59e0b"/>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text1)', marginBottom: 4 }}>
+          Daily limit reached
+        </p>
+        <p style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 12 }}>
+          {data.message || 'You have reached your daily usage limit for this plan.'}
+        </p>
+        {onUpgradeClick && (
+          <button
+            onClick={onUpgradeClick}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 9,
+              background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+              border: 'none', color: 'white', fontSize: 12.5, fontWeight: 700,
+              cursor: 'pointer', fontFamily: 'var(--font-main)',
+              boxShadow: '0 4px 14px rgba(99,102,241,.3)',
+            }}
+          >
+            <Sparkles size={12}/> Upgrade Plan
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
   if (t.startsWith('__IMG_B64__')) return <AIImageCard src={t.slice(11)} onRetry={onRetryImage}/>;
 
@@ -4598,12 +4643,27 @@ const res = await fetch(API, {
 });
 
       if (!res.ok) {
-        const code = res.status; let msg = 'Something went wrong — please try again.';
-        if (code === 429) msg = "You're sending messages too quickly — please slow down.";
-        else if (code === 401 || code === 403) msg = 'Authentication error — try refreshing the page.';
-        else if (code === 503) msg = 'The AI is temporarily unavailable — please try again shortly.';
-        setIsStreaming(false); setStreamText(''); setProcessingStatus(''); convHistory.current = convHistory.current.slice(0, -1); addMsg('vortis', msg, false); clearTimeout(aiTimeoutRef.current); return;
-      }
+  let serverMsg = null;
+  try { const data = await res.json(); serverMsg = data?.error || null; } catch(_) {}
+
+  setIsStreaming(false); setStreamText(''); setProcessingStatus('');
+  convHistory.current = convHistory.current.slice(0, -1);
+  clearTimeout(aiTimeoutRef.current);
+
+  if (res.status === 429 && serverMsg && /limit reached/i.test(serverMsg)) {
+    addMsg('vortis', `__LIMIT_REACHED__${JSON.stringify({ message: serverMsg })}`, false);
+    return;
+  }
+
+  let msg = serverMsg || 'Something went wrong — please try again.';
+  if (!serverMsg) {
+    if (res.status === 429) msg = "You're sending messages too quickly — please slow down.";
+    else if (res.status === 401 || res.status === 403) msg = 'Authentication error — try refreshing the page.';
+    else if (res.status === 503) msg = 'The AI is temporarily unavailable — please try again shortly.';
+  }
+  addMsg('vortis', msg, false);
+  return;
+}
 
       const reader = res.body.getReader(); const dec = new TextDecoder(); let full = '';
       try { while (true) { const { done, value } = await reader.read(); if (done) break; for (const line of dec.decode(value, { stream: true }).split('\n')) { if (!line.startsWith('data: ')) continue; const raw = line.slice(6).trim(); if (raw === '[DONE]' || !raw) continue; try { const p = JSON.parse(raw); if (p.content) { full += p.content; setStreamText(t => t + p.content); } } catch(_) {} } } } catch(e) { console.error('SSE error:', e.message); }
@@ -5566,7 +5626,13 @@ return (
             <div data-msgid={msg.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ width: 34, flexShrink: 0 }}/>
             <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                      <div className="bubble-ai"><MsgContent text={msg.text} onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}/></div>
+            <div className="bubble-ai">
+  <MsgContent
+  text={msg.text}
+  onRetryImage={lastImagePrompt ? () => runImageGeneration(lastImagePrompt, imgGenStyle, true) : null}
+  onUpgradeClick={() => setShowUpgrade(true)}
+/>
+</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
                         {[
                           { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
