@@ -1359,9 +1359,9 @@ If declining, briefly say why and offer an alternative.\n\n`;
 IMAGE RULE: Before GENERATE_IMAGE:<desc>, confirm a real subject exists (this msg or earlier in chat). Words like "generate/gen/image/make it" alone are NOT a subject. No subject anywhere → ask one short question instead, don't generate blind.\n\n` : '';
 
         const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
-        // Trimmed from 10000 → 7000 chars: cuts token cost per request without losing
+        // Trimmed from 10000 → 6000 chars: cuts token cost per request without losing
         // meaningful system-prompt content, which directly reduces how fast we hit the Groq TPM cap.
-        const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 7000) + locationNote + searchContext;
+        const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 6000) + locationNote + searchContext;
 
         const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
