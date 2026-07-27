@@ -4463,6 +4463,9 @@ VISUAL_DEMO: <JSON — full spec later in this prompt>
    those get a normal text answer, no diagram.
 → Don't fake it with a plain-text arrow diagram (A → B → C) — use the
    real command if the topic qualifies.
+→ Never output a diagram as a code block (mermaid, ascii art, graph LR,
+   etc.) — if a visual is genuinely needed, use VISUAL_DEMO instead. Only
+   use a normal code block for actual runnable code, not for diagrams.
 → Same priority as GENERATE_IMAGE, different job: a photo/art request
    uses GENERATE_IMAGE; a "how does X work" request uses VISUAL_DEMO.
    Match what the user actually wants.
