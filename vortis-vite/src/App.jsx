@@ -2623,28 +2623,43 @@ useEffect(() => {
     if (!text || text.length < 2) { clearSel(); return; }
 
     const anchorEl = sel.anchorNode?.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-    // ── only allow replying to AI messages, not your own ──
     const bubble = anchorEl?.closest?.('.bubble-ai');
     if (!bubble) { clearSel(); return; }
 
     const range = sel.getRangeAt(0);
     const rects = range.getClientRects();
-    // ── use the LAST line's rect, not the merged bounding box of the whole selection ──
-    const rect = rects.length ? rects[rects.length - 1] : range.getBoundingClientRect();
-    if (!rect || (rect.width === 0 && rect.height === 0)) { clearSel(); return; }
+    if (!rects.length) { clearSel(); return; }
 
-    const BTN_HALF_WIDTH = 55; // approx half the button's width, keep it on-screen
+    // ── anchor to the FIRST line of the selection, not the last ──
+    // this keeps the button near where the user started selecting,
+    // instead of drifting down for long multi-line selections
+    const firstRect = rects[0];
+    const lastRect = rects[rects.length - 1];
+    if ((firstRect.width === 0 && firstRect.height === 0)) { clearSel(); return; }
+
+    const BTN_HALF_WIDTH = 55;
+    const BTN_HEIGHT = 42;
+    const SAFE_BOTTOM_MARGIN = 130; // keep clear of the input box area
+
     const x = Math.min(
-      Math.max(rect.left + rect.width / 2, BTN_HALF_WIDTH + 8),
+      Math.max(firstRect.left + firstRect.width / 2, BTN_HALF_WIDTH + 8),
       window.innerWidth - BTN_HALF_WIDTH - 8
     );
 
-  setSelectionReply({
-  text: text.replace(/\s+/g, ' ').trim().slice(0, 300),
-  x,
-  y: Math.max(8, rect.top),
-  });
- };
+    // prefer sitting just above the first line; if that's too close to the
+    // top, fall back to just below the last line instead — but never let
+    // it land past the safe bottom margin
+    let y = firstRect.top - BTN_HEIGHT;
+    if (y < 8) y = lastRect.bottom + 8;
+    y = Math.min(y, window.innerHeight - SAFE_BOTTOM_MARGIN);
+    y = Math.max(y, 8);
+
+    setSelectionReply({
+      text: text.replace(/\s+/g, ' ').trim().slice(0, 300),
+      x,
+      y,
+    });
+  };
 
   document.addEventListener('mouseup', handleMouseUp);
   document.addEventListener('scroll', clearSel, true);
@@ -6196,7 +6211,7 @@ onChange={e => {
     style={{
       position: 'fixed',
       left: selectionReply.x,
-      top: Math.max(8, selectionReply.y - 42),
+      top: selectionReply.y,
       zIndex: 9999,
       background: 'var(--bg2)',
       border: '1px solid var(--border2)',
