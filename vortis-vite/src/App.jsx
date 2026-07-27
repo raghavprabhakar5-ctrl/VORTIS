@@ -4648,6 +4648,9 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
   .replace(/\[Image generating[\s\S]*?\]/gi, '')
   .replace(/\[Generating:[\s\S]*?\]/gi, '')
 
+  // ── ADD: strip a leftover VISUAL_DEMO block if it wasn't parsed above ──
+  .replace(/^VISUAL_DEMO:\s*.+?\n<svg[\s\S]*?<\/svg>/im, '')
+
   // Search commands
   .replace(/^WEB_SEARCH:.*$/gim, '')
   .replace(/\[Web search:.*?\]/gi, '')
