@@ -249,6 +249,7 @@ const makeStyles = (isDark, fontFamily = "'Inter', sans-serif") =>  `
   --radius:10px;--radius-sm:7px;--sidebar-w:230px;--header-h:50px;
 }
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes replyPopIn{from{opacity:0;transform:translate(-50%,6px)}to{opacity:1;transform:translate(-50%,0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -6183,7 +6184,6 @@ onChange={e => {
       position: 'fixed',
       left: selectionReply.x,
       top: Math.max(8, selectionReply.y - 42),
-      transform: 'translateX(-50%)',
       zIndex: 9999,
       background: 'var(--bg2)',
       border: '1px solid var(--border2)',
@@ -6198,7 +6198,7 @@ onChange={e => {
       display: 'flex',
       alignItems: 'center',
       gap: 7,
-      animation: 'fadeUp .12s ease',
+      animation: 'replyPopIn .15s ease',
       whiteSpace: 'nowrap',
     }}
     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.5)'; e.currentTarget.style.color = 'var(--indigo)'; }}
