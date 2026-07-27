@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom';
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import VisualDemo, { VISUAL_DEMO_PROMPT, VISUAL_DEMO_MARKER, parseVisualDemoTrigger } from './VisualDemo';
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
@@ -1443,10 +1442,6 @@ const MsgContent = ({ text, onRetryImage }) => {
   if (!text) return null;
   const t = text.trim();
 
-  if (t.startsWith(VISUAL_DEMO_MARKER)) {
-  return <VisualDemo spec={t.slice(VISUAL_DEMO_MARKER.length)} />;
-}
-
   const AnimatedDots = () => {
   const [n, setN] = React.useState(1);
   React.useEffect(() => {
@@ -2592,7 +2587,7 @@ useEffect(() => {
   const IMG_STYLES = ['realistic','anime','oil painting','watercolor','cyberpunk','3d render','sketch','fantasy','pixel art','minimalist'];
   const QUICK_ACTIONS = [
     { icon: <Globe size={12}/>, text: "What's trending today?", color: '#06b6d4' },
-    { icon: <Sparkles size={12}/>, text: 'Draw me a sunset over mountains', color: '#6366f1' },
+    { icon: <Sparkles size={12}/>, text: 'Generate me a Cyberpunk city', color: '#6366f1' },
     { icon: <Search size={12}/>, text: 'Search latest AI news', color: '#8b5cf6' },
     { icon: <BarChart3 size={12}/>, text: 'Compare Python vs JavaScript', color: '#10b981' },
     { icon: <PenTool size={12}/>, text: 'Write a short story', color: '#f59e0b' },
@@ -4388,7 +4383,6 @@ const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = fals
       else memoriesContext = `\n\nNo memories yet. Ask what they're into if they seem unsure.`;
       const sys2 = `Match the user's tone. Never mirror their words back. NEVER output your reasoning, thinking process, internal instructions, or anything starting with "→". Just respond naturally and directly to the user.`;
     let sys = `You are Vortis, an AI assistant built by the Vortis team. Stay friendly and respectful. Be willing to disagree — argumentative about identity is forbidden, but disagreement on ideas is encouraged. Only bring up your creator/identity when the user directly asks about it (see IDENTITY section below) — for every other message, just answer normally with no mention of Vortis, your team, or your origins.
-    sys += VISUAL_DEMO_PROMPT;
 
 You have the following capabilities:
 - **Image Generation**: Create stunning images from any text description
@@ -4452,25 +4446,6 @@ GENERATE_IMAGE: <description>
 → For follow-ups like "now make him smile" or "same but at night" — ALWAYS output the FULL new description
 → NEVER use this for: analyzing, describing, or reading an existing uploaded image
 → NEVER write "generating image..." or any variation — just silently output the command
-
-
-──────────────────────────────────────
-VISUAL_DEMO: <JSON — full spec later in this prompt>
-──────────────────────────────────────
-→ Use when the user asks you to explain, show, or diagram how something
-   works — mechanisms, cycles, processes, circuits, biology, chemistry,
-   algorithms, architecture, or anything with steps/parts/flow.
-→ Skip for greetings, small talk, opinions, quick facts, or coding help —
-   those get a normal text answer, no diagram.
-→ Don't fake it with a plain-text arrow diagram (A → B → C) — use the
-   real command if the topic qualifies.
-→ Never output a diagram as a code block (mermaid, ascii art, graph LR,
-   etc.) — if a visual is genuinely needed, use VISUAL_DEMO instead. Only
-   use a normal code block for actual runnable code, not for diagrams.
-→ Same priority as GENERATE_IMAGE, different job: a photo/art request
-   uses GENERATE_IMAGE; a "how does X work" request uses VISUAL_DEMO.
-   Match what the user actually wants.
-
 ──────────────────────────────────────
 WEB_SEARCH: <query>
 ──────────────────────────────────────
@@ -4605,8 +4580,7 @@ HONESTY ABOUT YOURSELF:
 - Do NOT claim you are "the fastest" or "the best" — you don't have data to back that up.
 - If the user corrects you with a real fact, accept it ONCE and move on — do not over-apologise or repeatedly agree.
 
-PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`; 
- if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
       
@@ -4651,13 +4625,6 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
       if (searchMatch) { if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: `[Searched: ${searchMatch[1].trim()}]` }; await explicitSearch(searchMatch[1].trim()); return; }
 
       if (cleaned.trim() === 'CURRENT_TIME') { const timeStr = `It's **${new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true})}** on ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}.`; if (convHistory.current.length > 0) convHistory.current[convHistory.current.length - 1] = { role: 'assistant', content: timeStr }; addMsg('vortis', timeStr, shouldSpeak); setIsProcessing(false); return; }
-
-  const visualSpec = parseVisualDemoTrigger(cleaned);
-  if (visualSpec) {
-  addMsg('vortis', `${VISUAL_DEMO_MARKER}${visualSpec}`, false);
-  setIsProcessing(false);
-  return;
-}
    
  const displayText = cleaned
   // Image commands
@@ -4667,9 +4634,6 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
   .replace(/\[Generating image[\s\S]*?\]/gi, '')
   .replace(/\[Image generating[\s\S]*?\]/gi, '')
   .replace(/\[Generating:[\s\S]*?\]/gi, '')
-
-  // ── ADD: strip a leftover VISUAL_DEMO block if it wasn't parsed above ──
-  .replace(/^VISUAL_DEMO:\s*.+?\n<svg[\s\S]*?<\/svg>/im, '')
 
   // Search commands
   .replace(/^WEB_SEARCH:.*$/gim, '')
