@@ -4585,8 +4585,8 @@ HONESTY ABOUT YOURSELF:
 - Do NOT claim you are "the fastest" or "the best" — you don't have data to back that up.
 - If the user corrects you with a real fact, accept it ONCE and move on — do not over-apologise or repeatedly agree.
 
-PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += VISUAL_DEMO_PROMPT;
-sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
+sys += VISUAL_DEMO_PROMPT;
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
       
@@ -4647,6 +4647,9 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
   .replace(/\[Generating image[\s\S]*?\]/gi, '')
   .replace(/\[Image generating[\s\S]*?\]/gi, '')
   .replace(/\[Generating:[\s\S]*?\]/gi, '')
+
+  // ── ADD: strip a leftover VISUAL_DEMO block if it wasn't parsed above ──
+  .replace(/^VISUAL_DEMO:\s*.+?\n<svg[\s\S]*?<\/svg>/im, '')
 
   // Search commands
   .replace(/^WEB_SEARCH:.*$/gim, '')
