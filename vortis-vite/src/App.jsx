@@ -4451,6 +4451,22 @@ GENERATE_IMAGE: <description>
 → For follow-ups like "now make him smile" or "same but at night" — ALWAYS output the FULL new description
 → NEVER use this for: analyzing, describing, or reading an existing uploaded image
 → NEVER write "generating image..." or any variation — just silently output the command
+
+
+──────────────────────────────────────
+VISUAL_DEMO
+──────────────────────────────────────
+→ Use when the user asks you to explain, show, or diagram how something
+   works — mechanisms, cycles, processes, circuits, biology, chemistry,
+   algorithms, architecture, or anything with steps/parts/flow.
+→ Skip for greetings, small talk, opinions, quick facts, or coding help —
+   those get a normal text answer, no diagram.
+→ Don't fake it with a plain-text arrow diagram (A → B → C) — use the
+   real command if the topic qualifies.
+→ Same priority as GENERATE_IMAGE, different job: a photo/art request
+   uses GENERATE_IMAGE; a "how does X work" request uses VISUAL_DEMO.
+   Match what the user actually wants.
+
 ──────────────────────────────────────
 WEB_SEARCH: <query>
 ──────────────────────────────────────
