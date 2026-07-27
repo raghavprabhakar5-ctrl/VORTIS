@@ -1,4 +1,4 @@
-const API = 'https://vortis-backend.vercel.app/api/bytez';
+const API = 'https://vortis.onrender.com/api/handler';
 
 const floatTo16BitPCM = (float32Array) => {
   const buffer = new ArrayBuffer(float32Array.length * 2);
