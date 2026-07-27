@@ -30,7 +30,7 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem, PhoneOff, Play, Pause, Code2 
+  Gem, PhoneOff, Play, Pause, Code2, CornerUpLeft
 } from 'lucide-react';
 
 
@@ -2477,6 +2477,7 @@ export default function VortisAI() {
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [upgradeOk, setUpgradeOk] = useState(false);
   const [savedChats, setSavedChats] = useState([]);
+  const [selectionReply, setSelectionReply] = useState(null);
   const [chatId, setChatId] = useState(null);
   const [uiFont, setUiFont] = useState(() => {
   try { return localStorage.getItem('vortis_font') || 'inter'; } catch(_) { return 'inter'; }
@@ -2609,6 +2610,39 @@ useEffect(() => {
   if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
   styleEl.current.textContent = makeStyles(isDark, fontDef.css);
 }, [isDark, uiFont]);
+
+useEffect(() => {
+  const clearSel = () => setSelectionReply(null);
+
+  const handleMouseUp = (e) => {
+    // don't clear if they just clicked the Reply button itself
+    if (e.target.closest('[data-reply-btn]')) return;
+
+    const sel = window.getSelection();
+    const text = sel?.toString().trim();
+    if (!text || text.length < 2) { clearSel(); return; }
+
+    const anchorEl = sel.anchorNode?.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+    const bubble = anchorEl?.closest?.('.bubble-ai, .bubble-user');
+    if (!bubble) { clearSel(); return; }
+
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) { clearSel(); return; }
+
+    setSelectionReply({
+      text: text.slice(0, 300),
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+    });
+  };
+
+  document.addEventListener('mouseup', handleMouseUp);
+  document.addEventListener('scroll', clearSel, true);
+  return () => {
+    document.removeEventListener('mouseup', handleMouseUp);
+    document.removeEventListener('scroll', clearSel, true);
+  };
+}, []);
 
   useEffect(() => {
   const handleResize = () => { if (window.innerWidth <= 768) setShowSidebar(false); else setShowSidebar(true); };
@@ -6129,6 +6163,50 @@ onChange={e => {
           </div>
         </div>
       )}
+
+      {selectionReply && (
+  <button
+    data-reply-btn
+    onClick={() => {
+      setInput(`> ${selectionReply.text}\n\n`);
+      setSelectionReply(null);
+      window.getSelection()?.removeAllRanges();
+      setTimeout(() => {
+        textareaRef.current?.focus();
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto';
+          textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px';
+        }
+      }, 50);
+    }}
+    style={{
+      position: 'fixed',
+      left: selectionReply.x,
+      top: Math.max(8, selectionReply.y - 42),
+      transform: 'translateX(-50%)',
+      zIndex: 9999,
+      background: 'var(--bg2)',
+      border: '1px solid var(--border2)',
+      color: 'var(--text1)',
+      fontSize: 13,
+      fontWeight: 600,
+      fontFamily: 'var(--font-main)',
+      padding: '8px 14px',
+      borderRadius: 10,
+      cursor: 'pointer',
+      boxShadow: '0 8px 24px rgba(0,0,0,.35)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 7,
+      animation: 'fadeUp .12s ease',
+      whiteSpace: 'nowrap',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.5)'; e.currentTarget.style.color = 'var(--indigo)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.color = 'var(--text1)'; }}
+  >
+    Reply <CornerUpLeft size={13}/>
+  </button>
+)}
        <Analytics />
     </div>
   );
