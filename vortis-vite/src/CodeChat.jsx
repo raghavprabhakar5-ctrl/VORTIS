@@ -15,7 +15,8 @@ import {
   Terminal, Cog, EraserIcon,
   ChevronDown, HelpCircle,
   Image as ImageIcon, FileText, Scan,
-  Download, Layers, Upload, ExternalLink, RotateCcw
+  Download, Layers, Upload, ExternalLink, RotateCcw,
+  Reply, Edit3, Wand2, FlaskConical, ArrowDownToLine, Play
 } from 'lucide-react';
 
 const API = 'https://vortis.onrender.com/api/handler';
@@ -54,6 +55,17 @@ const STARTER_PROMPTS = [
 ];
 
 const ICONS = { bug: Bug, zap: Zap, book: BookOpen, file: FileCode, refresh: RefreshCw, sparkles: Sparkles };
+
+/* Quick-action chips above the input bar — clicking one drops a templated prompt
+   straight into the textarea so the user can paste their code in and hit Send. */
+const QUICK_ACTIONS = [
+  { icon: 'bug',   label: 'Find bugs',  prompt: 'Find and fix bugs in this code:\n\n' },
+  { icon: 'wand',  label: 'Refactor',   prompt: 'Refactor this code for clarity and readability:\n\n' },
+  { icon: 'zap',   label: 'Optimize',   prompt: 'Optimize this code for performance and explain the wins:\n\n' },
+  { icon: 'book',  label: 'Explain',    prompt: 'Explain what this code does, step by step:\n\n' },
+  { icon: 'flask', label: 'Add tests',  prompt: 'Write unit tests for this code:\n\n' },
+];
+const QUICK_ICONS = { bug: Bug, wand: Wand2, zap: Zap, book: BookOpen, flask: FlaskConical };
 
 /* ────────────────────────────────────────────────────────────────────────
  *  File type helpers — used by the attach menu to route images vs text
@@ -223,10 +235,19 @@ Humor is welcome occasionally, but never at the user's expense.
 const CAP_AFTER_LINES = 14;
 const CAPPED_HEIGHT = 320;
 
-const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
+const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) => {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [feedback, setFeedback] = useState('');
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
+  const submitEdit = () => {
+    if (!feedback.trim() || !onSmartEdit) return;
+    onSmartEdit({ code: codeText, lang, feedback: feedback.trim(), blockId });
+    setEditing(false);
+    setFeedback('');
+  };
 
   const lines = codeText.split('\n');
   const isLong = lines.length > CAP_AFTER_LINES;
@@ -257,6 +278,20 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
         </div>
 
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {onSmartEdit && (
+            <button
+              onClick={() => setEditing(v => !v)}
+              title="Tell Vertex what's wrong — it returns only the fix"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, background: editing ? '#2a2a2a' : 'transparent',
+                border: '1px solid ' + (editing ? '#4a4a4a' : '#333333'),
+                borderRadius: 6, padding: '4px 10px', color: editing ? '#e6e6e6' : '#9a9a9a', fontSize: 11, cursor: 'pointer',
+                fontFamily: 'JetBrains Mono, monospace', transition: 'all .15s',
+              }}
+            >
+              <Edit3 size={11} /> Edit
+            </button>
+          )}
           <button
             onClick={() => downloadTextAsFile(codeText, `snippet.${extForLang(lang)}`)}
             title="Save this file"
@@ -300,7 +335,57 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
         }}
       >{codeText}</pre>
 
-      {isLong && (
+      {editing && (
+        <div style={{
+          padding: '10px 14px', borderTop: '1px solid #1a1a1a', background: '#0c0c0c',
+          animation: 'vertexFadeIn .15s ease',
+        }}>
+          <div style={{
+            fontSize: 10.5, color: '#7a7a7a', marginBottom: 7, fontFamily: 'JetBrains Mono, monospace',
+            letterSpacing: '.04em',
+          }}>
+            WHAT'S WRONG?  ·  Vertex will return only the corrected code + a one-line summary.
+          </div>
+          <textarea
+            value={feedback}
+            onChange={e => setFeedback(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); submitEdit(); } }}
+            placeholder="e.g. 'the loop should start at 1, not 0'  ·  'handle the empty-array case'  ·  'use Promise.all instead of awaiting in a loop'"
+            rows={3}
+            autoFocus
+            style={{
+              width: '100%', boxSizing: 'border-box', background: '#0a0a0a', border: '1px solid #2a2a2a',
+              borderRadius: 6, padding: '8px 10px', color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 12, lineHeight: 1.55, resize: 'vertical', outline: 'none',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 7 }}>
+            <button
+              onClick={() => { setEditing(false); setFeedback(''); }}
+              style={{
+                padding: '5px 11px', borderRadius: 6, border: '1px solid #333', background: 'transparent',
+                color: '#9a9a9a', fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace',
+              }}
+            >Cancel</button>
+            <button
+              onClick={submitEdit}
+              disabled={!feedback.trim()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6,
+                border: '1px solid ' + (feedback.trim() ? '#e6e6e6' : '#333'),
+                background: feedback.trim() ? '#e6e6e6' : 'transparent',
+                color: feedback.trim() ? '#0a0a0a' : '#5a5a5a',
+                fontSize: 11, fontWeight: 600, cursor: feedback.trim() ? 'pointer' : 'not-allowed',
+                fontFamily: 'JetBrains Mono, monospace',
+              }}
+            >
+              <Edit3 size={11}/> Send edit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLong && !editing && (
         <button
           onClick={() => setExpanded(v => !v)}
           style={{
@@ -316,6 +401,94 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel }) => {
           {expanded ? 'Show less' : `Show all ${lines.length} lines`}
         </button>
       )}
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  SelectionReplyButton — floats a "Reply" chip above whatever text the
+ *  user has highlighted inside the chat scroll area. Clicking it drops the
+ *  quoted text straight into the input box, Discord/iMessage-style.
+ * ──────────────────────────────────────────────────────────────────────── */
+const SelectionReplyButton = ({ scrollRef, onReply }) => {
+  const [pos, setPos] = useState(null);
+  const [selectedText, setSelectedText] = useState('');
+
+  useEffect(() => {
+    const handler = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) {
+        setPos(null);
+        setSelectedText('');
+        return;
+      }
+      const text = sel.toString().trim();
+      if (!text || text.length < 2) {
+        setPos(null);
+        setSelectedText('');
+        return;
+      }
+      const scrollEl = scrollRef.current;
+      if (!scrollEl) return;
+      const range = sel.getRangeAt(0);
+      if (!scrollEl.contains(range.commonAncestorContainer)) {
+        setPos(null);
+        setSelectedText('');
+        return;
+      }
+      const rect = range.getBoundingClientRect();
+      const scrollRect = scrollEl.getBoundingClientRect();
+      setSelectedText(text);
+      setPos({
+        top: rect.top - scrollRect.top + scrollEl.scrollTop - 38,
+        left: rect.left - scrollRect.left + scrollEl.scrollLeft + rect.width / 2,
+      });
+    };
+    document.addEventListener('selectionchange', handler);
+    return () => document.removeEventListener('selectionchange', handler);
+  }, [scrollRef]);
+
+  // Hide the chip the moment the user scrolls — otherwise it floats over
+  // the wrong spot once the selection scrolls out of view.
+  useEffect(() => {
+    if (!pos) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => setPos(null);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [pos, scrollRef]);
+
+  if (!pos) return null;
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: pos.top,
+        left: pos.left,
+        transform: 'translateX(-50%)',
+        zIndex: 50,
+      }}
+    >
+      <button
+        onClick={() => {
+          onReply(selectedText);
+          setPos(null);
+          window.getSelection()?.removeAllRanges();
+        }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '5px 11px', borderRadius: 7,
+          background: '#1c1c1c', border: '1px solid #3a3a3a', color: '#dcdcdc',
+          fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+          fontFamily: 'JetBrains Mono, monospace',
+          boxShadow: '0 6px 18px rgba(0,0,0,.55)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        <Reply size={12}/> Reply
+      </button>
     </div>
   );
 };
@@ -674,7 +847,7 @@ const Vertex = ({
   const showHelp = useCallback(() => {
     setInfoDialog({
       title: 'Vertex Help',
-      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat\n• Esc closes the current panel',
+      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nReply:        highlight any text in chat → click the Reply chip to quote it\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     on the last Vertex reply, click Continue to finish a cut-off response\nRegenerate:   on the last Vertex reply, click Regenerate for a fresh take\nEdit:         on your own message, click the pencil to tweak & resend\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom',
     });
   }, []);
 
@@ -1077,10 +1250,50 @@ Title:`,
   const inputRef = useRef(null);
   const abortRef = useRef(false);
 
+  /* Smart auto-scroll: only stick to the bottom if the user is already there.
+     This is what stops the chat from yanking the user back down while they're
+     trying to scroll up and read earlier code as Vertex is still streaming. */
+  const isAtBottomRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = dist < 80;
+    isAtBottomRef.current = atBottom;
+    setShowScrollToBottom(!atBottom && (messages.length > 0 || streaming));
+  }, [messages.length, streaming]);
+
   useEffect(() => {
+    if (!isAtBottomRef.current) return;
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, streamText, thinking]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    isAtBottomRef.current = true;
+    setShowScrollToBottom(false);
+  }, []);
+
+  /* Reply-on-select: drops the highlighted text into the input as a Markdown
+     quote, ready for the user to type their reply underneath. */
+  const handleReplyQuote = useCallback((quote) => {
+    const quoted = quote.split('\n').map(l => '> ' + l).join('\n');
+    setInput(prev => {
+      const prefix = prev && !prev.endsWith('\n') ? prev + '\n\n' : (prev || '');
+      return prefix + quoted + '\n\n';
+    });
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }, 30);
+  }, []);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -1367,9 +1580,9 @@ Title:`,
 
   /* ── Send message + stream response ── */
   const lastSendRef = useRef('');
-  const send = useCallback(async (overrideText) => {
+  const send = useCallback(async (overrideText, overrideMessages = null) => {
     const rawText = (overrideText ?? input).trim();
-    const pendingAttachments = [...attachments];
+    const pendingAttachments = overrideMessages ? [] : [...attachments];
 
     let text = rawText;
     if (pendingAttachments.length > 0) {
@@ -1396,11 +1609,12 @@ Title:`,
     }
 
     if (!text || streaming) return;
-    setAttachments([]);
+    if (!overrideMessages) setAttachments([]);
     lastSendRef.current = text; // kept so the Retry button on a failed/empty reply can resend exactly this
 
+    const baseMessages = overrideMessages ?? messages;
     const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
-    const nextMsgs = [...messages, userMsg];
+    const nextMsgs = [...baseMessages, userMsg];
     setMessages(nextMsgs);
     setInput('');
     setStreaming(true);
@@ -1483,7 +1697,57 @@ Title:`,
     setStreaming(false);
     setThinking(false);
     setStreamText('');
-  }, [input, messages, streaming, style, persistChat, attachments, ocrMode]);
+  }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply]);
+
+  /* Smart Edit on a code block — sends a focused request that asks Vertex to
+     return ONLY the corrected code (with a one-line summary) instead of
+     regenerating the whole explanation. Saves tokens, saves scroll position,
+     saves the user from having to scroll past the old version to find the fix. */
+  const handleSmartEdit = useCallback(({ code, lang, feedback, blockId }) => {
+    if (streaming) return;
+    const fence = '```' + (lang || '');
+    const tripleBacktick = '```';
+    const editPrompt =
+      `The following code has an issue. Return ONLY the corrected code inside a single ${fence} fence, followed by ONE one-line summary of what changed. Do NOT re-explain the whole thing — output the full corrected version so it can be copy-pasted directly.\n\n` +
+      `CODE:\n${fence}\n${code}\n${tripleBacktick}\n\n` +
+      `ISSUE FROM USER:\n${feedback}`;
+    send(editPrompt);
+  }, [send, streaming]);
+
+  /* Continue — asks Vertex to pick up where it left off, for when a response
+     got cut off mid-code-block. */
+  const handleContinue = useCallback(() => {
+    if (streaming) return;
+    send('Continue from where you left off — complete the response, picking up mid-code-block if needed.');
+  }, [send, streaming]);
+
+  /* Regenerate — drops the last assistant reply and re-asks the same question.
+     Useful when the answer was off-track and you want a fresh take without
+     retyping the prompt. */
+  const handleRegenerate = useCallback(() => {
+    if (streaming) return;
+    const lastUserIdx = messages.map(m => m.role).lastIndexOf('user');
+    if (lastUserIdx === -1) return;
+    const lastUserText = messages[lastUserIdx].text;
+    const trimmed = messages.slice(0, lastUserIdx);
+    send(lastUserText, trimmed);
+  }, [messages, streaming, send]);
+
+  /* Edit-and-resend — loads a previous user message back into the input box
+     and trims everything from that message onward, so the user can tweak the
+     prompt and fire it off again as a fresh question. */
+  const handleEditUserMessage = useCallback((msgId) => {
+    if (streaming) return;
+    const idx = messages.findIndex(m => m.id === msgId);
+    if (idx === -1) return;
+    const msg = messages[idx];
+    const trimmed = messages.slice(0, idx);
+    setMessages(trimmed);
+    setInput(msg.text);
+    setAttachments([]);
+    isAtBottomRef.current = true;
+    setTimeout(() => inputRef.current?.focus(), 30);
+  }, [messages, streaming]);
 
   /* Retries the last request after a failed or empty reply — pops the failed
      assistant bubble off and resends the exact text that was last sent, so the
@@ -1528,7 +1792,12 @@ Title:`,
     codeBlocks.forEach((b, i) => setTimeout(() => downloadCodeBlock(b, i), i * 120));
   }, [codeBlocks, downloadCodeBlock]);
 
-  const mdComponents = useMemo(() => ({
+  /* Markdown component factory — built once per (messageId, onSmartEdit)
+     tuple so each message bubble gets its own code-block instances that
+     know which message they belong to (for Smart Edit). The streaming
+     preview calls this with onSmartEdit=null since you can't edit code
+     that's still being streamed. */
+  const makeMdComponents = useCallback(({ onSmartEdit, messageId }) => ({
     h1: ({children}) => <h1 style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
     h2: ({children}) => <h2 style={{ fontSize: 16.5, fontWeight: 700, color: '#f0f0f0', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
     h3: ({children}) => <h3 style={{ fontSize: 14.5, fontWeight: 600, color: '#dcdcdc', margin: '10px 0 4px', lineHeight: 1.3 }}>{children}</h3>,
@@ -1553,9 +1822,14 @@ Title:`,
       const match = /language-(\w+)/.exec(className || '');
       const codeLang = match ? match[1] : '';
       const codeText = String(children).replace(/\n$/, '');
-      return <VertexCodeBlock lang={codeLang} codeText={codeText} onOpenPanel={openCodePanel} />;
+      const bid = `${messageId || 'msg'}-${codeLang || 'x'}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
+      return <VertexCodeBlock lang={codeLang} codeText={codeText} onOpenPanel={openCodePanel} onSmartEdit={onSmartEdit} blockId={bid} />;
     },
   }), [openCodePanel]);
+
+  /* Streaming preview uses a no-smart-edit variant — you can't fix code
+     that's still being typed out. */
+  const mdComponentsForStreaming = useMemo(() => makeMdComponents({ onSmartEdit: null, messageId: 'streaming' }), [makeMdComponents]);
 
   if (typeof document === 'undefined') return null;
   return createPortal(
@@ -1992,7 +2266,8 @@ Title:`,
 
         {/* ── Main chat area ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0a0a0a' }}>
-          <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto' }} className="scr">
+          <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+          <div ref={scrollRef} onScroll={handleScroll} style={{ position: 'absolute', inset: 0, overflowY: 'auto' }} className="scr">
             {messages.length === 0 && !streaming ? (
               <div style={{
                 minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -2067,9 +2342,13 @@ Title:`,
               </div>
             ) : (
               <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
-                {messages.map(m => (
+                {messages.map((m, i) => (
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
-                    mdComponents={mdComponents} canRetry={m.canRetry} onRetry={() => retryLastMessage(m.id)} />
+                    makeMdComponents={makeMdComponents} onSmartEdit={handleSmartEdit} messageId={m.id}
+                    canRetry={m.canRetry} onRetry={() => retryLastMessage(m.id)}
+                    onContinue={handleContinue} onRegenerate={handleRegenerate}
+                    onEditUserMessage={handleEditUserMessage}
+                    isLast={i === messages.length - 1} streaming={streaming} />
                 ))}
 
                 {(streaming || thinking) && (
@@ -2098,7 +2377,7 @@ Title:`,
                           background: '#111111', border: '1px solid #232323', borderRadius: '0 10px 10px 10px',
                           padding: '12px 14px'
                         }}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
+                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponentsForStreaming}>
                             {streamText}
                           </ReactMarkdown>
                           <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vertexBlink 1s steps(2) infinite' }}/>
@@ -2111,12 +2390,68 @@ Title:`,
             )}
           </div>
 
+          {/* Scroll-to-bottom button — only shows when the user has scrolled
+              up (so the auto-scroll won't yank them back down during stream). */}
+          {showScrollToBottom && (
+            <button
+              onClick={scrollToBottom}
+              title="Scroll to latest"
+              style={{
+                position: 'absolute', bottom: 16, right: 24, zIndex: 25,
+                width: 36, height: 36, borderRadius: '50%',
+                background: '#1c1c1c', border: '1px solid #3a3a3a', color: '#dcdcdc',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 6px 20px rgba(0,0,0,.55)',
+                animation: 'vertexScaleIn .15s ease',
+              }}
+            >
+              <ArrowDownToLine size={14}/>
+            </button>
+          )}
+
+          {/* Floating Reply chip — renders above whatever the user has
+              highlighted inside the chat scroll area. */}
+          <SelectionReplyButton scrollRef={scrollRef} onReply={handleReplyQuote} />
+          </div>
+
           {/* ── Input area ── */}
           <div style={{
             flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
             padding: '12px 22px 16px'
           }}>
             <div style={{ maxWidth: 820, margin: '0 auto' }}>
+
+              {/* Quick-action chips — only show when the user has either typed
+                  something or attached something, since they prepend a templated
+                  prompt to whatever's in the input. Empty state already has its
+                  own starter prompts. */}
+              {(input.trim() || attachments.length > 0) && !streaming && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {QUICK_ACTIONS.map(a => {
+                    const Icon = QUICK_ICONS[a.icon] || Zap;
+                    return (
+                      <button key={a.label}
+                        onClick={() => {
+                          setInput(prev => prev + (prev && !prev.endsWith('\n') ? '\n\n' : '') + a.prompt);
+                          setTimeout(() => inputRef.current?.focus(), 30);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 5,
+                          padding: '5px 10px', borderRadius: 999,
+                          background: '#141414', border: '1px solid #2a2a2a',
+                          color: '#9a9a9a', fontSize: 11, fontWeight: 600,
+                          fontFamily: 'JetBrains Mono, monospace',
+                          cursor: 'pointer', transition: 'all .14s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.color = '#dcdcdc'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#9a9a9a'; }}
+                      >
+                        <Icon size={11}/> {a.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {attachments.length > 0 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
@@ -2356,10 +2691,17 @@ Title:`,
   );
 };
 
-const MessageBubble = React.memo(({ role, text, ts, mdComponents, canRetry, onRetry }) => {
+const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdit, messageId, canRetry, onRetry, onContinue, onRegenerate, onEditUserMessage, isLast, streaming }) => {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+
+  // Each message bubble gets its own mdComponents so code blocks inside it
+  // know which message they belong to (for Smart Edit).
+  const mdComponents = useMemo(
+    () => makeMdComponents({ onSmartEdit, messageId }),
+    [makeMdComponents, onSmartEdit, messageId]
+  );
 
   if (isUser) {
     // Rendered through the same markdown pipeline as Vertex's own replies so that
@@ -2375,6 +2717,16 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents, canRetry, onRe
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
             {text}
           </ReactMarkdown>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'flex-start', marginTop: 2, flexShrink: 0 }}>
+          <button onClick={() => onEditUserMessage?.(messageId)} title="Edit & resend"
+            style={{
+              background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 6,
+              color: '#6a6a6a', cursor: 'pointer', padding: 5, display: 'flex',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+            <Edit3 size={11}/>
+          </button>
         </div>
       </div>
     );
@@ -2395,10 +2747,24 @@ const MessageBubble = React.memo(({ role, text, ts, mdComponents, canRetry, onRe
         }}>
           VERTEX
           {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
-          <button onClick={copy} title="Copy response"
-            style={{ marginLeft: 'auto', background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-            {copied ? <Check size={11} color="#e6e6e6"/> : <Copy size={11}/>} {copied ? 'Copied' : ''}
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center' }}>
+            <button onClick={copy} title="Copy response"
+              style={{ background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+              {copied ? <Check size={11} color="#e6e6e6"/> : <Copy size={11}/>} {copied ? 'Copied' : ''}
+            </button>
+            {!streaming && (
+              <button onClick={onContinue} title="Continue — pick up where Vertex left off"
+                style={{ background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <Play size={11}/> Continue
+              </button>
+            )}
+            {!streaming && isLast && (
+              <button onClick={onRegenerate} title="Regenerate — re-ask the same question"
+                style={{ background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
+                <RefreshCw size={11}/> Regenerate
+              </button>
+            )}
+          </div>
         </div>
         <div style={{ color: '#dcdcdc' }}>
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
