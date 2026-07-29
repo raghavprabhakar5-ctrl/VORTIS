@@ -67,6 +67,24 @@ const QUICK_ACTIONS = [
 ];
 const QUICK_ICONS = { bug: Bug, wand: Wand2, zap: Zap, book: BookOpen, flask: FlaskConical };
 
+/* Detects when an assistant reply probably got cut off mid-stream — most
+   commonly an unclosed code fence (odd number of ``` markers), but also
+   catches the rarer case of a reply that just ends mid-sentence with no
+   terminal punctuation. Used to decide whether to show the Continue button. */
+const looksCutOff = (text) => {
+  if (!text) return false;
+  const fenceCount = (text.match(/```/g) || []).length;
+  if (fenceCount % 2 === 1) return true; // unclosed code block
+  const trimmed = text.trimEnd();
+  if (!trimmed) return false;
+  // Ends without terminal punctuation AND the last line is short (mid-word)
+  if (!/[.!?:"')\]}>]$/.test(trimmed)) {
+    const lastLine = trimmed.split('\n').pop().trim();
+    if (lastLine.length > 0 && lastLine.length < 80) return true;
+  }
+  return false;
+};
+
 /* ────────────────────────────────────────────────────────────────────────
  *  File type helpers — used by the attach menu to route images vs text
  *  files into the right kind of attachment card, and to know when OCR
@@ -311,7 +329,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
               fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, transition: 'all .15s',
             }}
           >
-            <Terminal size={11} /> Run
+            <Terminal size={11} /> Open
           </button>
           <button
             onClick={copy}
@@ -495,13 +513,45 @@ const SelectionReplyButton = ({ scrollRef, onReply }) => {
 
 /* ────────────────────────────────────────────────────────────────────────
  *  CodePanel — right-side split view.
+ *
+ *  The split between code (top) and output (bottom) is now draggable —
+ *  grab the divider in the middle and pull it up or down to give whichever
+ *  half you care about more the room it needs.
  * ──────────────────────────────────────────────────────────────────────── */
 const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onRun, onOpenNewTab }) => {
   const [copied, setCopied] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(0.55); // top half (code) share
+  const dragRef = useRef(null);
+  const containerRef = useRef(null);
   if (!panelCode) return null;
 
   const copy = () => { navigator.clipboard.writeText(panelCode.code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const previewable = isPreviewableLang(panelCode.lang);
+
+  // Drag-to-resize: while the user holds the divider, track mouse Y and
+  // recompute the top/bottom flex-basis from it. Bound to 15%..85% so
+  // neither pane can collapse to nothing.
+  const onDividerDown = (e) => {
+    e.preventDefault();
+    const container = containerRef.current;
+    if (!container) return;
+    const onMove = (ev) => {
+      const rect = container.getBoundingClientRect();
+      const y = ev.clientY - rect.top;
+      const r = Math.min(0.85, Math.max(0.15, y / rect.height));
+      setSplitRatio(r);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
 
   return (
     <aside style={{
@@ -568,62 +618,85 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
         </div>
       </div>
 
-      <div style={{ flex: '1 1 55%', minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #1a1a1a' }} className="scr">
-        <pre style={{
-          margin: 0, padding: '16px 18px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
-          lineHeight: 1.75, color: '#dcdcdc', whiteSpace: 'pre', background: '#0a0a0a',
-        }}>{panelCode.code}</pre>
-      </div>
+      {/* Body — code on top, output/preview on bottom, draggable divider
+          between them. The whole body is position:relative so the divider
+          can be a real element (not just a border) that captures mouse
+          events cleanly. */}
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        <div style={{ flex: `${splitRatio} 1 0`, minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #1a1a1a' }} className="vrtx-scroll">
+          <pre style={{
+            margin: 0, padding: '16px 18px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
+            lineHeight: 1.75, color: '#dcdcdc', whiteSpace: 'pre', background: '#0a0a0a',
+          }}>{panelCode.code}</pre>
+        </div>
 
-      {previewable ? (
-        <div style={{ flex: '1 1 45%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
-            borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
-          }}>
-            <span>PREVIEW</span>
-            <button
-              onClick={() => onOpenNewTab(panelCode.code)}
-              style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
-            >
-              <ExternalLink size={10} /> Open full tab
-            </button>
-          </div>
-          <iframe
-            title="Live preview"
-            srcDoc={panelCode.code}
-            sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
-            style={{ flex: 1, minHeight: 0, border: 'none', width: '100%', background: '#fff' }}
-          />
+        {/* Draggable divider — hover/highlight on mouseover, row-resize cursor */}
+        <div
+          ref={dragRef}
+          onMouseDown={onDividerDown}
+          title="Drag to resize"
+          style={{
+            height: 6, flexShrink: 0, cursor: 'row-resize',
+            background: '#0c0c0c', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'background .12s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#0c0c0c'; }}
+        >
+          <div style={{ width: 36, height: 2, borderRadius: 1, background: '#3a3a3a' }} />
         </div>
-      ) : (
-        <div style={{ flex: '1 1 45%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#080808' }}>
-          <div style={{
-            padding: '8px 16px', fontSize: 10.5, color: hasError ? '#ef4444' : '#5a5a5a',
-            fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
-            borderBottom: '1px solid #1a1a1a', flexShrink: 0,
-          }}>
-            {output === null ? 'OUTPUT' : hasError ? 'ERROR' : 'OUTPUT'}
-          </div>
-          {running && bootMsg && (
+
+        {previewable ? (
+          <div style={{ flex: `${1 - splitRatio} 1 0`, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px',
-              fontSize: 10.5, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+              borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
             }}>
-              <Loader size={10} style={{ animation: 'vertexSpin 1s linear infinite' }} /> {bootMsg}
+              <span>PREVIEW</span>
+              <button
+                onClick={() => onOpenNewTab(panelCode.code)}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
+              >
+                <ExternalLink size={10} /> Open full tab
+              </button>
             </div>
-          )}
-          <pre className="scr" style={{
-            flex: 1, minHeight: 0, overflowY: 'auto', margin: 0, padding: '14px 16px',
-            fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
-            color: hasError ? '#f87171' : '#dcdcdc', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          }}>
-            {output === null ? 'Click Run to see output here…' : output}
-          </pre>
-        </div>
-      )}
+            <iframe
+              title="Live preview"
+              srcDoc={panelCode.code}
+              sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+              style={{ flex: 1, minHeight: 0, border: 'none', width: '100%', background: '#fff' }}
+            />
+          </div>
+        ) : (
+          <div style={{ flex: `${1 - splitRatio} 1 0`, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#080808' }}>
+            <div style={{
+              padding: '8px 16px', fontSize: 10.5, color: hasError ? '#ef4444' : '#5a5a5a',
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+              borderBottom: '1px solid #1a1a1a', flexShrink: 0,
+            }}>
+              {output === null ? 'OUTPUT' : hasError ? 'ERROR' : 'OUTPUT'}
+            </div>
+            {running && bootMsg && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 7, padding: '7px 16px',
+                fontSize: 10.5, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace', flexShrink: 0,
+              }}>
+                <Loader size={10} style={{ animation: 'vertexSpin 1s linear infinite' }} /> {bootMsg}
+              </div>
+            )}
+            <pre className="vrtx-scroll" style={{
+              flex: 1, minHeight: 0, overflowY: 'auto', margin: 0, padding: '14px 16px',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, lineHeight: 1.7,
+              color: hasError ? '#f87171' : '#dcdcdc', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+            }}>
+              {output === null ? 'Click Run to see output here…' : output}
+            </pre>
+          </div>
+        )}
+      </div>
     </aside>
   );
 };
@@ -825,6 +898,7 @@ const Vertex = ({
   /* ── Chat state ── */
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [replyQuote, setReplyQuote] = useState(null); // { text } — quoted snippet the user is replying to
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -847,7 +921,7 @@ const Vertex = ({
   const showHelp = useCallback(() => {
     setInfoDialog({
       title: 'Vertex Help',
-      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nReply:        highlight any text in chat → click the Reply chip to quote it\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     on the last Vertex reply, click Continue to finish a cut-off response\nRegenerate:   on the last Vertex reply, click Regenerate for a fresh take\nEdit:         on your own message, click the pencil to tweak & resend\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom',
+      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nReply:        highlight any text in chat → click the Reply chip → a "Replying to" banner shows above the input\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     shows automatically when a reply got cut off (unclosed code block)\nRegenerate:   on every Vertex reply — re-ask the same question for a fresh take\nCopy:         on every Vertex reply\nEdit:         on your own message, click the pencil to tweak & resend\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom\nSplit panel:  drag the divider between code and output to resize',
     });
   }, []);
 
@@ -1279,14 +1353,14 @@ Title:`,
     setShowScrollToBottom(false);
   }, []);
 
-  /* Reply-on-select: drops the highlighted text into the input as a Markdown
-     quote, ready for the user to type their reply underneath. */
+  /* Reply-on-select: stores the quoted snippet as state, which renders a
+     "Replying to: ..." preview card above the input. The quote is then
+     prepended to the outgoing message when the user hits Send (as a
+     Markdown blockquote so the LLM has context for the reply). */
   const handleReplyQuote = useCallback((quote) => {
-    const quoted = quote.split('\n').map(l => '> ' + l).join('\n');
-    setInput(prev => {
-      const prefix = prev && !prev.endsWith('\n') ? prev + '\n\n' : (prev || '');
-      return prefix + quoted + '\n\n';
-    });
+    const trimmed = quote.trim();
+    if (!trimmed) return;
+    setReplyQuote({ text: trimmed });
     setTimeout(() => {
       const el = inputRef.current;
       if (!el) return;
@@ -1610,6 +1684,16 @@ Title:`,
 
     if (!text || streaming) return;
     if (!overrideMessages) setAttachments([]);
+
+    // If the user picked a "Reply" quote, prepend it as a Markdown blockquote
+    // so the LLM sees the snippet they're replying to. Skip for system-driven
+    // sends (overrideText/overrideMessages) like Regenerate/Continue.
+    if (replyQuote && !overrideText && !overrideMessages) {
+      const quoted = replyQuote.text.split('\n').map(l => '> ' + l).join('\n');
+      text = quoted + '\n\n' + text;
+      setReplyQuote(null);
+    }
+
     lastSendRef.current = text; // kept so the Retry button on a failed/empty reply can resend exactly this
 
     const baseMessages = overrideMessages ?? messages;
@@ -1697,7 +1781,7 @@ Title:`,
     setStreaming(false);
     setThinking(false);
     setStreamText('');
-  }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply]);
+  }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote]);
 
   /* Smart Edit on a code block — sends a focused request that asks Vertex to
      return ONLY the corrected code (with a one-line summary) instead of
@@ -2421,12 +2505,56 @@ Title:`,
           }}>
             <div style={{ maxWidth: 820, margin: '0 auto' }}>
 
-              {/* Quick-action chips — only show when the user has either typed
-                  something or attached something, since they prepend a templated
-                  prompt to whatever's in the input. Empty state already has its
-                  own starter prompts. */}
-              {(input.trim() || attachments.length > 0) && !streaming && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+              {/* Reply preview — shows the snippet the user is replying to,
+                  truncated, with an X to dismiss. Mirrors the iMessage /
+                  Discord "replying to" banner above the composer. */}
+              {replyQuote && (
+                <div style={{
+                  display: 'flex', alignItems: 'stretch', gap: 8, marginBottom: 8,
+                  background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8,
+                  overflow: 'hidden', animation: 'vertexFadeIn .15s ease',
+                }}>
+                  <div style={{ width: 3, background: '#5a5a5a', flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0, padding: '7px 4px 7px 0' }}>
+                    <div style={{
+                      fontSize: 10, color: '#7a7a7a', fontFamily: 'JetBrains Mono, monospace',
+                      fontWeight: 700, letterSpacing: '.06em', marginBottom: 2,
+                    }}>
+                      REPLYING TO
+                    </div>
+                    <div style={{
+                      fontSize: 12, color: '#b8b8b8', lineHeight: 1.45,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      fontFamily: 'JetBrains Mono, monospace',
+                    }}>
+                      {replyQuote.text.length > 120
+                        ? replyQuote.text.slice(0, 120).replace(/\n/g, ' ') + '…'
+                        : replyQuote.text.replace(/\n/g, ' ')}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setReplyQuote(null)}
+                    title="Cancel reply"
+                    style={{
+                      background: 'transparent', border: 'none', color: '#6a6a6a',
+                      cursor: 'pointer', padding: '0 10px', flexShrink: 0,
+                      display: 'flex', alignItems: 'center',
+                    }}
+                  >
+                    <X size={13}/>
+                  </button>
+                </div>
+              )}
+
+              {/* Quick-action chips — always visible when not streaming, so
+                  users on small windows actually discover them. They prepend
+                  a templated prompt to whatever's already in the input. */}
+              {!streaming && (
+                <div style={{
+                  display: 'flex', gap: 6, marginBottom: 8,
+                  flexWrap: 'nowrap', overflowX: 'auto',
+                  paddingBottom: 2,
+                }} className="vrtx-scroll-x">
                   {QUICK_ACTIONS.map(a => {
                     const Icon = QUICK_ICONS[a.icon] || Zap;
                     return (
@@ -2442,6 +2570,7 @@ Title:`,
                           color: '#9a9a9a', fontSize: 11, fontWeight: 600,
                           fontFamily: 'JetBrains Mono, monospace',
                           cursor: 'pointer', transition: 'all .14s',
+                          whiteSpace: 'nowrap', flexShrink: 0,
                         }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.color = '#dcdcdc'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#9a9a9a'; }}
@@ -2685,6 +2814,25 @@ Title:`,
         [data-vertex] img { max-width: 100%; display: block; }
         .chat-item:hover .chat-row-actions,
         div:hover > div > .chat-row-actions { opacity: 1 !important; }
+
+        /* Thin scrollbars — the default browser scrollbars inside code blocks
+           and the side panel looked chunky and out of place. These match the
+           dark theme and stay out of the way. Applies to everything inside
+           Vertex, including pre/code blocks and the split code panel. */
+        [data-vertex] *::-webkit-scrollbar { width: 8px; height: 8px; }
+        [data-vertex] *::-webkit-scrollbar-track { background: transparent; }
+        [data-vertex] *::-webkit-scrollbar-thumb {
+          background: #2a2a2a; border-radius: 4px;
+          border: 2px solid transparent; background-clip: padding-box;
+        }
+        [data-vertex] *::-webkit-scrollbar-thumb:hover { background: #3a3a3a; background-clip: padding-box; border: 2px solid transparent; }
+        [data-vertex] *::-webkit-scrollbar-corner { background: transparent; }
+        [data-vertex] * { scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; }
+
+        /* Even thinner for code blocks specifically — they're usually narrow
+           and a fat scrollbar eats into the code width. */
+        [data-vertex] pre::-webkit-scrollbar { width: 6px; height: 6px; }
+        [data-vertex] pre::-webkit-scrollbar-thumb { background: #1f1f1f; }
       `}</style>
     </div>,
     document.body
@@ -2702,6 +2850,10 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
     () => makeMdComponents({ onSmartEdit, messageId }),
     [makeMdComponents, onSmartEdit, messageId]
   );
+
+  // Show Continue only when the reply actually looks cut off — unclosed code
+  // fence or mid-sentence ending. Stops it from cluttering every single reply.
+  const showContinue = !streaming && onContinue && looksCutOff(text);
 
   if (isUser) {
     // Rendered through the same markdown pipeline as Vertex's own replies so that
@@ -2732,6 +2884,16 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
     );
   }
 
+  // Small ghost button used for Copy / Continue / Regenerate — kept compact
+  // so they all fit on one row even on narrow chat windows.
+  const ghostBtn = (extraStyle) => ({
+    background: 'transparent', border: '1px solid transparent', color: '#6a6a6a',
+    cursor: 'pointer', padding: '3px 7px', borderRadius: 5, fontSize: 11,
+    fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+    display: 'flex', alignItems: 'center', gap: 4, transition: 'all .12s',
+    ...extraStyle,
+  });
+
   return (
     <div style={{ display: 'flex', gap: 12, marginBottom: 22 }}>
       <div style={{
@@ -2747,30 +2909,54 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
         }}>
           VERTEX
           {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, alignItems: 'center' }}>
-            <button onClick={copy} title="Copy response"
-              style={{ background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-              {copied ? <Check size={11} color="#e6e6e6"/> : <Copy size={11}/>} {copied ? 'Copied' : ''}
-            </button>
-            {!streaming && (
-              <button onClick={onContinue} title="Continue — pick up where Vertex left off"
-                style={{ background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Play size={11}/> Continue
-              </button>
-            )}
-            {!streaming && isLast && (
-              <button onClick={onRegenerate} title="Regenerate — re-ask the same question"
-                style={{ background: 'transparent', border: 'none', color: '#5a5a5a', cursor: 'pointer', padding: 2, borderRadius: 4, display: 'flex', alignItems: 'center', gap: 3 }}>
-                <RefreshCw size={11}/> Regenerate
-              </button>
-            )}
-          </div>
         </div>
         <div style={{ color: '#dcdcdc' }}>
           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
             {text}
           </ReactMarkdown>
         </div>
+        {/* Action row — sits BELOW the message body so it's always visible
+            regardless of message length. Copy + Regenerate show on every AI
+            reply; Continue only when the reply looks cut off. */}
+        {!streaming && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 4, marginTop: 8,
+            opacity: 0.85, transition: 'opacity .15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = '0.85'; }}
+          >
+            <button
+              onClick={copy}
+              title="Copy response"
+              style={ghostBtn(copied ? { color: '#e6e6e6', borderColor: '#333' } : {})}
+              onMouseEnter={e => { if (!copied) { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#dcdcdc'; } }}
+              onMouseLeave={e => { if (!copied) { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#6a6a6a'; } }}
+            >
+              {copied ? <Check size={11}/> : <Copy size={11}/>} {copied ? 'Copied' : 'Copy'}
+            </button>
+            {showContinue && (
+              <button
+                onClick={onContinue}
+                title="Continue — pick up where Vertex left off"
+                style={ghostBtn()}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#dcdcdc'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#6a6a6a'; }}
+              >
+                <Play size={11}/> Continue
+              </button>
+            )}
+            <button
+              onClick={onRegenerate}
+              title="Regenerate — re-ask the same question"
+              style={ghostBtn()}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#dcdcdc'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.color = '#6a6a6a'; }}
+            >
+              <RefreshCw size={11}/> Regenerate
+            </button>
+          </div>
+        )}
         {canRetry && (
           <button
             onClick={onRetry}
