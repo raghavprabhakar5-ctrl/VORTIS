@@ -560,11 +560,6 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
   const [splitRatio, setSplitRatio] = useState(0.55); // top half (code) share
   const dragRef = useRef(null);
   const containerRef = useRef(null);
-  if (!panelCode) return null;
-
-  const copy = () => { navigator.clipboard.writeText(panelCode.code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
-  const previewable = isPreviewableLang(panelCode.lang);
-
   // Drag-to-resize using Pointer Events — these fire reliably for mouse AND
   // touch, and setPointerCapture means we keep getting move events even when
   // the cursor leaves the divider (the old mousemove-on-document approach
@@ -573,6 +568,12 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
   // rAF so a fast drag doesn't flood React with re-renders.
   const draggingRef = useRef(false);
   const rafRef = useRef(null);
+
+  if (!panelCode) return null;
+
+  const copy = () => { navigator.clipboard.writeText(panelCode.code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+  const previewable = isPreviewableLang(panelCode.lang);
+
   const onDividerDown = (e) => {
     // Only respond to primary button / touch / pen
     if (e.button !== undefined && e.button !== 0) return;
