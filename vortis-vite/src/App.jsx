@@ -5151,7 +5151,7 @@ const enhancePrompt = async () => {
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'chat',
-        prompt: `You are a prompt engineer for an AI image generator. Rewrite the rough idea below into ONE vivid, highly-detailed image-generation prompt: describe the subject, composition, lighting, mood, and art style, plus quality boosters. Output ONLY the improved prompt — no quotes, no markdown, no explanation, single paragraph, under 60 words.
+        prompt: `You are a prompt engineer for an AI image generator. Rewrite the rough idea below into ONE vivid, highly-detailed image-generation prompt: describe the subject, composition, lighting, mood, and art style, plus quality boosters. Output ONLY the improved prompt — no quotes, no markdown, no explanation, single paragraph, under 60 words and The output must end with exactly one period (.) and no other text after it.
 
 Rough idea: "${raw}"
 
