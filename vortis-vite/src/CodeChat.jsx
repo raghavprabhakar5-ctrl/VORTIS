@@ -3067,7 +3067,8 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-          fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', fontWeight: 600, letterSpacing: '.02em'
+          fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', fontWeight: 600, letterSpacing: '.02em',
+          userSelect: 'none',    
         }}>
           VERTEX
           {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
@@ -3084,6 +3085,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
           <div style={{
             display: 'flex', alignItems: 'center', gap: 4, marginTop: 8,
             opacity: 0.85, transition: 'opacity .15s',
+            userSelect: 'none',
           }}
           onMouseEnter={e => { e.currentTarget.style.opacity = '1'; }}
           onMouseLeave={e => { e.currentTarget.style.opacity = '0.85'; }}
