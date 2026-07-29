@@ -1007,6 +1007,7 @@ const Vertex = ({
     } catch (_) {}
   }, [chatId, messages.length]);
   const convHistoryRef = useRef([]);
+  const [editingMsgId, setEditingMsgId] = useState(null);
 
   /* ── Sidebar state ── */
   const [savedChats, setSavedChats] = useState([]);
@@ -1979,7 +1980,6 @@ Title:`,
      when the user actually sends the edited version. This way, if they
      backspace the whole input and change their mind, the original message
      is still right there in the chat — no data loss. */
-  const [editingMsgId, setEditingMsgId] = useState(null);
   const handleEditUserMessage = useCallback((msgId) => {
     if (streaming) return;
     const idx = messages.findIndex(m => m.id === msgId);
@@ -1992,7 +1992,6 @@ Title:`,
     isAtBottomRef.current = true;
     setTimeout(() => inputRef.current?.focus(), 30);
   }, [messages, streaming]);
-
   /* Retries the last request after a failed or empty reply — pops the failed
      assistant bubble off and resends the exact text that was last sent, so the
      user doesn't have to retype anything. */
