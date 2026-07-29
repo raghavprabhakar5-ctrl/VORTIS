@@ -278,7 +278,9 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
       animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
       boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
     }}>
-      <div style={{
+      <div 
+        data-vrtx-no-reply=""  
+        style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 14px', background: '#111111', borderBottom: '1px solid #262626',
       }}>
@@ -494,11 +496,10 @@ const SelectionReplyButton = ({ scrollRef, onReply }) => {
       const rect = range.getBoundingClientRect();
       const scrollRect = scrollEl.getBoundingClientRect();
       setSelectedText(text);
-      setPos({
-        top: rect.top - scrollRect.top + scrollEl.scrollTop - 38,
-        left: rect.left - scrollRect.left + scrollEl.scrollLeft + rect.width / 2,
-      });
-    };
+      setPos({ top: rect.top - scrollRect.top - 38,
+               left: rect.left - scrollRect.left + rect.width / 2,
+         });
+      };
     document.addEventListener('selectionchange', handler);
     return () => document.removeEventListener('selectionchange', handler);
   }, [scrollRef]);
