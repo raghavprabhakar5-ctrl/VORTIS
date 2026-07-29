@@ -2566,6 +2566,7 @@ useEffect(() => {
   const [showRecentChats, setShowRecentChats] = useState(true);
   const [showArtifacts, setShowArtifacts] = useState(false);
   const [pendingImage, setPendingImage] = useState(null);
+  const [isEnhancing, setIsEnhancing] = useState(false);
   const [pendingCode, setPendingCode] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const [showAITimeout, setShowAITimeout] = useState(false);
@@ -5093,6 +5094,30 @@ setProcessingStatus('');
 
  const handleCmd = async (cmd) => {
     if (!cmd.trim()) return;
+
+    // ── IMAGE GEN MODE: bypass the AI's judgment entirely — ──
+    // whatever the user types IS the image prompt, no "make/draw/generate" needed
+    if (imgGenMode) {
+      if (!canDo('messages')) { hitLimit(); return; }
+      setIsStreaming(false);
+      setStreamText('');
+      setProcessingStatus('');
+      addMsg('user', cmd);
+      incrUsage('messages');
+      pushHistory(convHistory, 'user', cmd);
+      setIsProcessing(true);
+      setShowAITimeout(false);
+      setShowSettings(false);
+      try {
+        await runImageGeneration(cmd, imgGenStyle);
+      } catch (_) {
+        imgGenLock.current = false;
+      } finally {
+        setIsProcessing(false);
+      }
+      return;
+    }
+
     if (!canDo('messages')) { hitLimit(); return; }
     setIsStreaming(false);
     setStreamText('');
@@ -5115,6 +5140,53 @@ setProcessingStatus('');
   window.__vortisSend = (text) => { setInput(text); setTimeout(() => textareaRef.current?.focus(), 50); };
   return () => { delete window.__vortisSend; };
 }, []);
+
+const enhancePrompt = async () => {
+  const raw = input.trim();
+  if (!raw || isEnhancing) return;
+  setIsEnhancing(true);
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({
+        action: 'chat',
+        prompt: `You are a prompt engineer for an AI image generator. Rewrite the rough idea below into ONE vivid, highly-detailed image-generation prompt: describe the subject, composition, lighting, mood, and art style, plus quality boosters. Output ONLY the improved prompt — no quotes, no markdown, no explanation, single paragraph, under 60 words.
+
+Rough idea: "${raw}"
+
+Improved prompt:`,
+        history: []
+      })
+    });
+    if (!res.ok) return;
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let out = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const rawLine = line.slice(6).trim();
+        if (rawLine === '[DONE]' || !rawLine) continue;
+        try { const p = JSON.parse(rawLine); if (p.content) out += p.content; } catch (_) {}
+      }
+    }
+    const cleaned = out.trim().replace(/^["']|["']$/g, '');
+    if (cleaned) {
+      setInput(cleaned);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+        textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px';
+        textareaRef.current.focus();
+      }
+    }
+  } catch (_) {
+  } finally {
+    setIsEnhancing(false);
+  }
+};
 
   const submitFeedback = async () => {
     if (!feedbackRating || !feedbackText.trim()) return; setFeedbackSending(true);
@@ -5867,6 +5939,19 @@ onChange={e => {
          <button className={`ia-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)}>
              <Plus size={13}/><span>Add</span>
                 </button>
+                {imgGenMode && (
+  <button
+    className="ia-btn"
+    onClick={enhancePrompt}
+    disabled={isEnhancing || !input.trim()}
+    title="Turn this into a detailed image prompt"
+  >
+    {isEnhancing
+      ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }}/>
+      : <Sparkles size={13}/>}
+    <span>{isEnhancing ? 'Enhancing…' : 'Enhance'}</span>
+  </button>
+)}
               <div className="ia-right">
   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
@@ -6213,6 +6298,7 @@ onChange={e => {
       left: selectionReply.x,
       top: selectionReply.y,
       zIndex: 9999,
+      transform: 'translateX(-50%)', 
       background: 'var(--bg2)',
       border: '1px solid var(--border2)',
       color: 'var(--text1)',
@@ -6226,7 +6312,7 @@ onChange={e => {
       display: 'flex',
       alignItems: 'center',
       gap: 7,
-      animation: 'replyPopIn .15s ease',
+      animation: 'replyPopIn .15s ease forwards',
       whiteSpace: 'nowrap',
     }}
     onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.5)'; e.currentTarget.style.color = 'var(--indigo)'; }}
