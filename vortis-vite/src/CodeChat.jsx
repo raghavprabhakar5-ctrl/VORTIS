@@ -1443,10 +1443,17 @@ Title:`,
   }, [messages.length, streaming]);
 
   useEffect(() => {
-    if (!isAtBottomRef.current) return;
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages, streamText, thinking]);
+  const el = scrollRef.current;
+  if (!el) return;
+  const markUserScrolling = () => { isAtBottomRef.current = false; };
+  // fire on the very first bit of user input, synchronously — don't wait for 'scroll'
+  el.addEventListener('wheel', markUserScrolling, { passive: true });
+  el.addEventListener('touchstart', markUserScrolling, { passive: true });
+  return () => {
+    el.removeEventListener('wheel', markUserScrolling);
+    el.removeEventListener('touchstart', markUserScrolling);
+  };
+}, []);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -3014,7 +3021,9 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
     // small, collapsible rectangle — not a wall of raw text dumped in the bubble.
     return (
       <div style={{ display: 'flex', gap: 12, marginBottom: 18, justifyContent: 'flex-end' }}>
-        <div style={{
+        <div
+        data-vrtx-no-reply="" 
+        style={{
           maxWidth: '78%', background: '#1e1e1e', border: '1px solid #2a2a2a',
           color: '#e6e6e6', borderRadius: 10, padding: '10px 14px',
           fontSize: 14, lineHeight: 1.55, wordBreak: 'break-word'
