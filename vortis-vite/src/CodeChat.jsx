@@ -345,6 +345,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
       </div>
 
       <pre
+        data-vrtx-no-reply=""
         style={{
           margin: 0, padding: '14px 16px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
           lineHeight: 1.7, color: '#dcdcdc', whiteSpace: 'pre', wordBreak: 'normal',
@@ -427,10 +428,28 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
  *  SelectionReplyButton — floats a "Reply" chip above whatever text the
  *  user has highlighted inside the chat scroll area. Clicking it drops the
  *  quoted text straight into the input box, Discord/iMessage-style.
+ *
+ *  Code blocks are explicitly excluded — selecting inside a `<pre>` (marked
+ *  with data-vrtx-no-reply) does NOT show the chip, since users selecting
+ *  code usually want to copy it, not quote it. The chip DOES show for any
+ *  prose selection, including text that comes after a code block.
  * ──────────────────────────────────────────────────────────────────────── */
 const SelectionReplyButton = ({ scrollRef, onReply }) => {
   const [pos, setPos] = useState(null);
   const [selectedText, setSelectedText] = useState('');
+
+  // Walks up from a node and returns true if it hits an element marked
+  // data-vrtx-no-reply (i.e. a code block) before leaving the scroll area.
+  const isInsideNoReply = (node) => {
+    let cur = node;
+    while (cur && cur !== document.body) {
+      if (cur.nodeType === 1) {
+        if (cur.hasAttribute && cur.hasAttribute('data-vrtx-no-reply')) return true;
+      }
+      cur = cur.parentNode;
+    }
+    return false;
+  };
 
   useEffect(() => {
     const handler = () => {
@@ -449,11 +468,29 @@ const SelectionReplyButton = ({ scrollRef, onReply }) => {
       const scrollEl = scrollRef.current;
       if (!scrollEl) return;
       const range = sel.getRangeAt(0);
-      if (!scrollEl.contains(range.commonAncestorContainer)) {
+
+      // Make sure BOTH endpoints live inside the chat scroll area — this
+      // catches selections that span from the chat into the input or sidebar.
+      // Use the actual element nodes (startContainer/endContainer) so multi-
+      // element selections (e.g. text after a code block) are validated
+      // correctly instead of being rejected because commonAncestorContainer
+      // happens to be a higher-level wrapper.
+      const startNode = range.startContainer;
+      const endNode = range.endContainer;
+      if (!scrollEl.contains(startNode) || !scrollEl.contains(endNode)) {
         setPos(null);
         setSelectedText('');
         return;
       }
+
+      // Suppress the chip when either endpoint is inside a code block —
+      // selecting code shouldn't pop a "Reply" button.
+      if (isInsideNoReply(startNode) || isInsideNoReply(endNode)) {
+        setPos(null);
+        setSelectedText('');
+        return;
+      }
+
       const rect = range.getBoundingClientRect();
       const scrollRect = scrollEl.getBoundingClientRect();
       setSelectedText(text);
@@ -528,29 +565,56 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
   const copy = () => { navigator.clipboard.writeText(panelCode.code); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const previewable = isPreviewableLang(panelCode.lang);
 
-  // Drag-to-resize: while the user holds the divider, track mouse Y and
-  // recompute the top/bottom flex-basis from it. Bound to 15%..85% so
-  // neither pane can collapse to nothing.
+  // Drag-to-resize using Pointer Events — these fire reliably for mouse AND
+  // touch, and setPointerCapture means we keep getting move events even when
+  // the cursor leaves the divider (the old mousemove-on-document approach
+  // would stutter when the cursor moved fast). Ratio is clamped to 12%..88%
+  // so neither pane can collapse to nothing. We throttle state updates with
+  // rAF so a fast drag doesn't flood React with re-renders.
+  const draggingRef = useRef(false);
+  const rafRef = useRef(null);
   const onDividerDown = (e) => {
+    // Only respond to primary button / touch / pen
+    if (e.button !== undefined && e.button !== 0) return;
     e.preventDefault();
     const container = containerRef.current;
     if (!container) return;
-    const onMove = (ev) => {
+
+    draggingRef.current = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const applyRatio = (clientY) => {
       const rect = container.getBoundingClientRect();
-      const y = ev.clientY - rect.top;
-      const r = Math.min(0.85, Math.max(0.15, y / rect.height));
+      if (rect.height <= 0) return;
+      const y = clientY - rect.top;
+      const r = Math.min(0.88, Math.max(0.12, y / rect.height));
       setSplitRatio(r);
     };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
+
+    const onMove = (ev) => {
+      if (!draggingRef.current) return;
+      ev.preventDefault();
+      const clientY = ev.clientY;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => { applyRatio(clientY); rafRef.current = null; });
+    };
+    const onUp = (ev) => {
+      draggingRef.current = false;
+      try { ev.currentTarget?.releasePointerCapture?.(ev.pointerId); } catch (_) {}
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      // Snap to final position so there's no visual lag from the rAF throttle
+      applyRatio(ev.clientY);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
   };
 
   return (
@@ -624,27 +688,30 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
           events cleanly. */}
       <div ref={containerRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         <div style={{ flex: `${splitRatio} 1 0`, minHeight: 0, overflowY: 'auto', borderBottom: '1px solid #1a1a1a' }} className="vrtx-scroll">
-          <pre style={{
+          <pre data-vrtx-no-reply="" style={{
             margin: 0, padding: '16px 18px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
             lineHeight: 1.75, color: '#dcdcdc', whiteSpace: 'pre', background: '#0a0a0a',
           }}>{panelCode.code}</pre>
         </div>
 
-        {/* Draggable divider — hover/highlight on mouseover, row-resize cursor */}
+        {/* Draggable divider — taller grab target (10px) + visible grip.
+            Pointer Events handle mouse + touch + pen uniformly, and
+            setPointerCapture in onDividerDown keeps the drag alive even
+            if the cursor leaves the divider. */}
         <div
           ref={dragRef}
-          onMouseDown={onDividerDown}
+          onPointerDown={onDividerDown}
           title="Drag to resize"
           style={{
-            height: 6, flexShrink: 0, cursor: 'row-resize',
+            height: 10, flexShrink: 0, cursor: 'row-resize',
             background: '#0c0c0c', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background .12s',
+            transition: 'background .12s', touchAction: 'none',
           }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = '#0c0c0c'; }}
+          onMouseEnter={e => { if (!draggingRef.current) e.currentTarget.style.background = '#1a1a1a'; }}
+          onMouseLeave={e => { if (!draggingRef.current) e.currentTarget.style.background = '#0c0c0c'; }}
         >
-          <div style={{ width: 36, height: 2, borderRadius: 1, background: '#3a3a3a' }} />
+          <div style={{ width: 40, height: 2, borderRadius: 1, background: '#3a3a3a', transition: 'background .12s' }} />
         </div>
 
         {previewable ? (
@@ -884,12 +951,31 @@ const Vertex = ({
   /* ── Identity ── */
   const [user, setUser] = useState(auth.currentUser);
   const userUidRef = useRef(auth.currentUser?.uid || '');
+  // Tracks whether we've already attempted a resume this session — guards
+  // against re-triggering on every auth-state flutter once we've either
+  // resumed or started fresh.
+  const resumeAttemptedRef = useRef(false);
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       userUidRef.current = u?.uid || '';
-      if (u) loadChats(u.uid);
-      else setSavedChats([]);
+      if (u) {
+        loadChats(u.uid);
+        // Auto-resume the last-active chat on first sign-in / page load.
+        // Only fires once per session — subsequent sign-in/out flutters
+        // won't yank the user back to an old conversation.
+        if (!resumeAttemptedRef.current) {
+          resumeAttemptedRef.current = true;
+          try {
+            const savedChatId = localStorage.getItem('vrtis_vertex_active_chat');
+            if (savedChatId && savedChatId !== chatIdRef.current) {
+              loadChat(savedChatId);
+            }
+          } catch (_) {}
+        }
+      } else {
+        setSavedChats([]);
+      }
     });
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -902,9 +988,24 @@ const Vertex = ({
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [thinking, setThinking] = useState(false);
-  const [chatId, setChatId] = useState(() => Date.now().toString());
+  // On first mount, try to restore the last-active chat id from localStorage
+  // so a refresh / close-reopen lands the user back in their previous
+  // conversation (with a "Continue" prompt) instead of a blank new chat.
+  const [chatId, setChatId] = useState(() => {
+    try {
+      const saved = localStorage.getItem('vrtis_vertex_active_chat');
+      return saved || Date.now().toString();
+    } catch (_) { return Date.now().toString(); }
+  });
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
+  // Persist the active chat id whenever it changes so we can resume after refresh.
+  useEffect(() => {
+    try {
+      if (messages.length > 0) localStorage.setItem('vrtis_vertex_active_chat', chatId);
+      else localStorage.removeItem('vrtis_vertex_active_chat');
+    } catch (_) {}
+  }, [chatId, messages.length]);
   const convHistoryRef = useRef([]);
 
   /* ── Sidebar state ── */
@@ -921,7 +1022,7 @@ const Vertex = ({
   const showHelp = useCallback(() => {
     setInfoDialog({
       title: 'Vertex Help',
-      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nReply:        highlight any text in chat → click the Reply chip → a "Replying to" banner shows above the input\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     shows automatically when a reply got cut off (unclosed code block)\nRegenerate:   on every Vertex reply — re-ask the same question for a fresh take\nCopy:         on every Vertex reply\nEdit:         on your own message, click the pencil to tweak & resend\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom\nSplit panel:  drag the divider between code and output to resize',
+      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nResume:       refresh or close+reopen lands you back in your last chat automatically\nReply:        highlight any prose in chat → click the Reply chip → a "Replying to" banner shows above the input (does NOT trigger inside code blocks)\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     shows automatically when a reply got cut off (unclosed code block)\nRegenerate:   on every Vertex reply — re-ask the same question for a fresh take\nCopy:         on every Vertex reply\nEdit:         on your own message, click the pencil to tweak & resend — original stays in chat until you send, so backspacing the input never loses it\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom\nSplit panel:  drag the divider between code and output to resize — works with mouse and touch',
     });
   }, []);
 
@@ -1476,6 +1577,8 @@ Title:`,
     setMessages([]); convHistoryRef.current = [];
     setInput('');
     setAttachments([]);
+    setReplyQuote(null);
+    try { localStorage.removeItem('vrtis_vertex_active_chat'); } catch (_) {}
     closeCodePanel();
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [closeCodePanel]);
@@ -1484,9 +1587,18 @@ Title:`,
     if (!userUidRef.current) return;
     try {
       const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
-      if (!snap.exists()) return;
+      if (!snap.exists()) {
+        // Chat was deleted (maybe from another session). Clear the stale
+        // active-chat pointer and reset to a fresh id so the empty state
+        // shows correctly instead of leaving chatId pointing at a ghost.
+        try { localStorage.removeItem('vrtis_vertex_active_chat'); } catch (_) {}
+        const freshId = Date.now().toString();
+        setChatId(freshId); chatIdRef.current = freshId;
+        return;
+      }
       const c = snap.data();
       setChatId(id); chatIdRef.current = id;
+      try { localStorage.setItem('vrtis_vertex_active_chat', id); } catch (_) {}
       const restored = (c.messages || []).map((m, i) => ({
         id: `${id}-${i}`,
         role: m.role,
@@ -1616,6 +1728,30 @@ Title:`,
       let buffer = '';
       let full = '';
 
+      // Throttle stream renders with rAF — without this, every SSE chunk
+      // triggers a setStreamText → React re-render → full ReactMarkdown
+      // re-parse of the entire response so far. For a 2000-token reply
+      // that's ~2000 re-parses, which is what made messages feel sluggish
+      // and "come in late". rAF batches them into one render per frame.
+      let pendingFlush = false;
+      let lastFlushed = '';
+      const flush = () => {
+        pendingFlush = false;
+        if (lastFlushed !== full) {
+          lastFlushed = full;
+          setStreamText(full);
+        }
+      };
+      const scheduleFlush = () => {
+        if (pendingFlush) return;
+        pendingFlush = true;
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(flush);
+        } else {
+          setTimeout(flush, 16);
+        }
+      };
+
       while (true) {
         if (abortRef.current) break;
         const { done, value } = await reader.read();
@@ -1631,7 +1767,7 @@ Title:`,
           if (raw === '[DONE]' || !raw) continue;
           try {
             const p = JSON.parse(raw);
-            if (p.content) { full += p.content; setStreamText(full); }
+            if (p.content) { full += p.content; scheduleFlush(); }
           } catch (_) {}
         }
       }
@@ -1641,10 +1777,21 @@ Title:`,
         if (raw && raw !== '[DONE]') {
           try {
             const p = JSON.parse(raw);
-            if (p.content) { full += p.content; setStreamText(full); }
+            if (p.content) { full += p.content; scheduleFlush(); }
           } catch (_) {}
         }
       }
+
+      // Final flush so the very last chunk is guaranteed to be on screen
+      // before we hand off to the persisted message.
+      if (pendingFlush) {
+        if (typeof requestAnimationFrame === 'function') {
+          await new Promise(r => requestAnimationFrame(r));
+        } else {
+          await new Promise(r => setTimeout(r, 16));
+        }
+      }
+      flush();
 
       return { text: full, errorMsg: null, status: res.status, isNetwork: false };
     } catch (e) {
@@ -1696,7 +1843,17 @@ Title:`,
 
     lastSendRef.current = text; // kept so the Retry button on a failed/empty reply can resend exactly this
 
-    const baseMessages = overrideMessages ?? messages;
+    // If the user was editing a previous user message, drop everything from
+    // that message onward before appending the new (edited) one. This is the
+    // only point where the original message actually gets removed — so if the
+    // user backspaced the whole input and abandoned the edit, the original
+    // is still intact in the chat. Skip for system-driven sends.
+    let baseMessages = overrideMessages ?? messages;
+    if (editingMsgId && !overrideText && !overrideMessages) {
+      const editIdx = baseMessages.findIndex(m => m.id === editingMsgId);
+      if (editIdx !== -1) baseMessages = baseMessages.slice(0, editIdx);
+      setEditingMsgId(null);
+    }
     const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
     const nextMsgs = [...baseMessages, userMsg];
     setMessages(nextMsgs);
@@ -1781,7 +1938,7 @@ Title:`,
     setStreaming(false);
     setThinking(false);
     setStreamText('');
-  }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote]);
+  }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
 
   /* Smart Edit on a code block — sends a focused request that asks Vertex to
      return ONLY the corrected code (with a one-line summary) instead of
@@ -1818,17 +1975,20 @@ Title:`,
   }, [messages, streaming, send]);
 
   /* Edit-and-resend — loads a previous user message back into the input box
-     and trims everything from that message onward, so the user can tweak the
-     prompt and fire it off again as a fresh question. */
+     WITHOUT removing it from the chat yet. The message only gets dropped
+     when the user actually sends the edited version. This way, if they
+     backspace the whole input and change their mind, the original message
+     is still right there in the chat — no data loss. */
+  const [editingMsgId, setEditingMsgId] = useState(null);
   const handleEditUserMessage = useCallback((msgId) => {
     if (streaming) return;
     const idx = messages.findIndex(m => m.id === msgId);
     if (idx === -1) return;
     const msg = messages[idx];
-    const trimmed = messages.slice(0, idx);
-    setMessages(trimmed);
+    setEditingMsgId(msgId);
     setInput(msg.text);
     setAttachments([]);
+    setReplyQuote(null);
     isAtBottomRef.current = true;
     setTimeout(() => inputRef.current?.focus(), 30);
   }, [messages, streaming]);
@@ -2505,6 +2665,35 @@ Title:`,
           }}>
             <div style={{ maxWidth: 820, margin: '0 auto' }}>
 
+              {/* Editing banner — shows when the user is editing a previous
+                  message. Lets them cancel and keep the original intact. */}
+              {editingMsgId && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                  background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8,
+                  padding: '7px 12px',
+                  animation: 'vertexFadeIn .15s ease',
+                }}>
+                  <Edit3 size={12} color="#9a9a9a" style={{ flexShrink: 0 }}/>
+                  <span style={{
+                    fontSize: 11.5, color: '#b8b8b8', fontFamily: 'JetBrains Mono, monospace',
+                    fontWeight: 600,
+                  }}>
+                    Editing message — original stays in chat until you send.
+                  </span>
+                  <button
+                    onClick={() => { setEditingMsgId(null); setInput(''); }}
+                    style={{
+                      marginLeft: 'auto', background: 'transparent', border: '1px solid #333',
+                      borderRadius: 5, color: '#9a9a9a', fontSize: 11, cursor: 'pointer',
+                      padding: '3px 9px', fontFamily: 'JetBrains Mono, monospace',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               {/* Reply preview — shows the snippet the user is replying to,
                   truncated, with an X to dismiss. Mirrors the iMessage /
                   Discord "replying to" banner above the composer. */}
@@ -2543,42 +2732,6 @@ Title:`,
                   >
                     <X size={13}/>
                   </button>
-                </div>
-              )}
-
-              {/* Quick-action chips — always visible when not streaming, so
-                  users on small windows actually discover them. They prepend
-                  a templated prompt to whatever's already in the input. */}
-              {!streaming && (
-                <div style={{
-                  display: 'flex', gap: 6, marginBottom: 8,
-                  flexWrap: 'nowrap', overflowX: 'auto',
-                  paddingBottom: 2,
-                }} className="vrtx-scroll-x">
-                  {QUICK_ACTIONS.map(a => {
-                    const Icon = QUICK_ICONS[a.icon] || Zap;
-                    return (
-                      <button key={a.label}
-                        onClick={() => {
-                          setInput(prev => prev + (prev && !prev.endsWith('\n') ? '\n\n' : '') + a.prompt);
-                          setTimeout(() => inputRef.current?.focus(), 30);
-                        }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 5,
-                          padding: '5px 10px', borderRadius: 999,
-                          background: '#141414', border: '1px solid #2a2a2a',
-                          color: '#9a9a9a', fontSize: 11, fontWeight: 600,
-                          fontFamily: 'JetBrains Mono, monospace',
-                          cursor: 'pointer', transition: 'all .14s',
-                          whiteSpace: 'nowrap', flexShrink: 0,
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.color = '#dcdcdc'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#9a9a9a'; }}
-                      >
-                        <Icon size={11}/> {a.label}
-                      </button>
-                    );
-                  })}
                 </div>
               )}
 
