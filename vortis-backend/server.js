@@ -885,6 +885,14 @@ function needsWebSearch(text) {
   return false;
 }
 
+function needsCodeWebSearch(text) {
+  const low = text.toLowerCase();
+  if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
+  if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
+  if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
+  return false;
+}
+
 function looksLikeImageRequest(text) {
   return /\b(image|picture|photo|draw|sketch|paint|art|wallpaper|illustration|render|pic\b)\b/i.test(text);
 }
