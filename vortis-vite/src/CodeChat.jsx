@@ -198,6 +198,9 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - If the request is ambiguous in a way that changes the answer significantly (which language, which framework, what input shape), ask ONE concise question before answering.
 - If it's only mildly ambiguous, make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
 
+═══ CURRENT INFO ═══
+If live web search results are appended below this prompt, treat them as ground truth for anything version-specific, recently changed, or time-sensitive (library versions, deprecations, new APIs) — they override your training data.
+
 ═══ ABOUT VORTIS ═══
 You are Vertex, the dedicated coding assistant of the VORTIS platform.
 VORTIS is an Everyday AI Assistant designed to help users with conversations, learning, writing, research, web search, image generation, voice interactions, file understanding, productivity, and programming through specialized experiences like Vertex.
@@ -1878,10 +1881,51 @@ Title:`,
       content: m.text
     }));
 
-    const sys = buildCoderSystemPrompt(style);
-    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+   const sys = buildCoderSystemPrompt(style);
+    let searchContext = '';
+    if (needsCodeWebSearch(text)) {
+      setThinking(true); // keep the "thinking…" dots up while search runs
+      searchContext = await fetchCodeSearchContext(text);
+    }
+    const fullPrompt = sys + searchContext + '\n\n=== USER REQUEST ===\n' + text;
 
     let result = await fetchAssistantReply(fullPrompt, historyForBackend);
+
+    
+    /* Detects when a code question needs live web info — recency/version signals
+   that a static-knowledge model gets wrong (new releases, deprecations,
+   changelogs) or an explicit ask to look something up. */
+const needsCodeWebSearch = (text) => {
+  const low = text.toLowerCase();
+  if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
+  if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
+  if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
+  return false;
+};
+
+/* Calls the existing backend `action: 'search'` endpoint and formats the
+   results as a context block to prepend to the coder system prompt. Reuses
+   the same search pipeline App.jsx's regular chat already relies on —
+   Vertex just wasn't calling it before. */
+const fetchCodeSearchContext = async (query) => {
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'search', query: query.slice(0, 300) }),
+    });
+    if (!res.ok) return '';
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.results) || data.results.length === 0) return '';
+    const snippets = data.results.slice(0, 5).map((r, i) =>
+      `[${i + 1}] ${r.title}\n${(r.snippet || '').slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
+    ).join('\n\n');
+    return `\n\n---\nLIVE WEB SEARCH RESULTS (current info — trust this over training data for versions/APIs/recent changes):\n${snippets}\n---`;
+  } catch (e) {
+    console.error('Vertex: code search failed —', e);
+    return '';
+  }
+};
 
     // A 503, a dropped connection, or a stream that came back completely empty is often
     // just a transient hiccup — quietly try once more before bothering the user about it.

@@ -1056,7 +1056,28 @@ app.post('/api/handler', async (req, res) => {
       res.setHeader('Connection', 'keep-alive');
 
       try {
-        const codeSysContent = (prompt.trim().slice(0, 12000)) + '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.';
+        const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
+        let codeSearchContext = '';
+
+        if (needsCodeWebSearch(lastUserForSearch)) {
+          try {
+            const sq = buildSearchQuery(lastUserForSearch.slice(0, 300));
+            let results = await fetchWebResults(sq);
+            results = cleanResults(results, sq);
+            results = deduplicate(results);
+            results = scoreAndSort(results, sq);
+            if (results.length > 0) {
+              const snippets = results.slice(0, 5).map((r, i) =>
+                `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
+              ).join('\n\n');
+              codeSearchContext = `\n\n---\nLIVE WEB SEARCH RESULTS (current info — trust this over your training data for versions/APIs/recent changes):\n${snippets}\n---`;
+            }
+          } catch (e) {
+            console.error('Code-chat search failed:', e.message);
+          }
+        }
+
+        const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext + '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.';
         const codeMessages = [{ role: 'system', content: codeSysContent }];
         codeMessages.push(...sanitizeHistory(history, 12));
         if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
