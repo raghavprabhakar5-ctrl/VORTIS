@@ -246,6 +246,14 @@ Humor is welcome occasionally, but never at the user's expense.
   return sys;
 };
 
+function needsCodeWebSearch(text) {
+  const low = text.toLowerCase();
+  if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
+  if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
+  if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
+  return false;
+}
+
 /* ────────────────────────────────────────────────────────────────────────
  *  VertexCodeBlock — the ONLY code renderer Vertex uses internally.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -993,6 +1001,7 @@ const Vertex = ({
   const [streaming, setStreaming] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [searching, setSearching] = useState(false);
   // On first mount, try to restore the last-active chat id from localStorage
   // so a refresh / close-reopen lands the user back in their previous
   // conversation (with a "Continue" prompt) instead of a blank new chat.
@@ -1882,50 +1891,20 @@ Title:`,
     }));
 
    const sys = buildCoderSystemPrompt(style);
-    let searchContext = '';
-    if (needsCodeWebSearch(text)) {
-      setThinking(true); // keep the "thinking…" dots up while search runs
-      searchContext = await fetchCodeSearchContext(text);
+    const willSearch = needsCodeWebSearch(text);
+    if (willSearch) {
+      // The backend's code-chat handler already runs its own search internally
+      // for the same message — this flag just drives the "searching the web…"
+      // indicator in the UI so the user sees why the response is taking longer.
+      // No separate network call here to avoid double-searching and double
+      // quota usage against the same daily message limit.
+      setThinking(false);
+      setSearching(true);
     }
-    const fullPrompt = sys + searchContext + '\n\n=== USER REQUEST ===\n' + text;
+    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
 
     let result = await fetchAssistantReply(fullPrompt, historyForBackend);
-
-    
-    /* Detects when a code question needs live web info — recency/version signals
-   that a static-knowledge model gets wrong (new releases, deprecations,
-   changelogs) or an explicit ask to look something up. */
-const needsCodeWebSearch = (text) => {
-  const low = text.toLowerCase();
-  if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
-  if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
-  if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
-  return false;
-};
-
-/* Calls the existing backend `action: 'search'` endpoint and formats the
-   results as a context block to prepend to the coder system prompt. Reuses
-   the same search pipeline App.jsx's regular chat already relies on —
-   Vertex just wasn't calling it before. */
-const fetchCodeSearchContext = async (query) => {
-  try {
-    const res = await fetch(API, {
-      method: 'POST',
-      headers: await getAuthHeader(),
-      body: JSON.stringify({ action: 'search', query: query.slice(0, 300) }),
-    });
-    if (!res.ok) return '';
-    const data = await res.json();
-    if (!data.success || !Array.isArray(data.results) || data.results.length === 0) return '';
-    const snippets = data.results.slice(0, 5).map((r, i) =>
-      `[${i + 1}] ${r.title}\n${(r.snippet || '').slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
-    ).join('\n\n');
-    return `\n\n---\nLIVE WEB SEARCH RESULTS (current info — trust this over training data for versions/APIs/recent changes):\n${snippets}\n---`;
-  } catch (e) {
-    console.error('Vertex: code search failed —', e);
-    return '';
-  }
-};
+    if (willSearch) { setSearching(false); setThinking(true); }
 
     // A 503, a dropped connection, or a stream that came back completely empty is often
     // just a transient hiccup — quietly try once more before bothering the user about it.
@@ -2647,7 +2626,7 @@ const fetchCodeSearchContext = async (query) => {
                     isLast={i === messages.length - 1} streaming={streaming} />
                 ))}
 
-                {(streaming || thinking) && (
+                {(streaming || thinking || searching) && (
                   <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
                     <div style={{
                       width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2657,13 +2636,20 @@ const fetchCodeSearchContext = async (query) => {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 11, color: '#5a5a5a', fontFamily: 'JetBrains Mono', marginBottom: 5, fontWeight: 600 }}>
-                        VERTEX {thinking && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
+                        VERTEX{' '}
+                        {searching && (
+                          <span style={{ color: '#9ca3af', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            · <Search size={10} style={{ display: 'inline' }}/> searching the web…
+                          </span>
+                        )}
+                        {thinking && !searching && <span style={{ color: '#9a9a9a' }}>· thinking…</span>}
                       </div>
-                      {thinking ? (
+                      {(thinking || searching) ? (
                         <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}>
                           {[0,1,2].map(i => (
                             <div key={i} style={{
-                              width: 6, height: 6, borderRadius: '50%', background: '#8a8a8a',
+                              width: 6, height: 6, borderRadius: '50%',
+                              background: searching ? '#9ca3af' : '#8a8a8a',
                               animation: `vertexPulse 1.2s ease-in-out ${i*0.15}s infinite`
                             }}/>
                           ))}
@@ -2685,7 +2671,6 @@ const fetchCodeSearchContext = async (query) => {
               </div>
             )}
           </div>
-
           {/* Scroll-to-bottom button — only shows when the user has scrolled
               up (so the auto-scroll won't yank them back down during stream). */}
           {showScrollToBottom && (
