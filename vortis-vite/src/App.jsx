@@ -5753,8 +5753,13 @@ return (
                     </div>
                     <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
                   </div>
-                ) : (
-            <div data-msgid={msg.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+               ) : (
+            <div
+              data-msgid={msg.id}
+              style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}
+              onMouseEnter={() => setHoveredMsg(idx)}
+              onMouseLeave={() => setHoveredMsg(null)}
+            >
             <div style={{ width: 34, flexShrink: 0 }}/>
             <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
             <div className="bubble-ai">
