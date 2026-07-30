@@ -1893,7 +1893,6 @@ const SettingsModal = ({
     { id: 'billing',   label: 'Billing',   color: '#f59e0b', icon: <CreditCard size={13}/> },
     { id: 'display',   label: 'Display',   color: '#06b6d4', icon: <Sun size={13}/> },
     { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899', icon: <Settings size={13}/> },
-    { id: 'about',     label: 'About',     color: '#888780', icon: <Sparkles size={13}/> },
   ];
 
   // ── Toggle ──
@@ -2384,7 +2383,6 @@ const SettingsModal = ({
     billing:   <BillingTab/>,
     display:   <DisplayTab/>,
     shortcuts: <ShortcutsTab/>,
-    about:     <AboutTab/>,
   };
 
   return (
@@ -2753,8 +2751,14 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
   const deleteMemory = (id) => { setMemories(prev => { const updated = prev.filter(m => m.id !== id); saveMemoriesLS(updated); return updated; }); };
   const clearMemories = () => { setMemories([]); convHistory.current = []; try { localStorage.removeItem('vortis_memories'); } catch(_) {} };
 
- const extractMemories = useCallback(async (userMsg) => {
-  if (!userMsg || userMsg.trim().split(/\s+/).length < 2) return;
+ const extractMemories = useCallback(async (userMsg, aiReply) => {
+  if (!userMsg || userMsg.trim().split(/\s+/).length < 4) return; // fewer false triggers
+
+  // give the extractor real context, not a floating line
+  const recentTurns = convHistory.current.slice(-6)
+    .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+    .join('\n');
+
   try {
     const res = await fetch(API, {
       method: 'POST',
@@ -2762,7 +2766,9 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       body: JSON.stringify({
         action: 'memory',
         userMsg: userMsg.slice(0, 500),
-        existing: memories.map(m => ({ text: m.text })),
+        aiReply: (aiReply || '').slice(0, 500),
+        recentContext: recentTurns.slice(0, 1500),
+        existing: memories.map((m, i) => ({ id: m.id, index: i, text: m.text })),
       })
     });
     if (!res.ok) return;
@@ -2771,15 +2777,21 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
 
     setMemories(prev => {
       let updated = [...prev];
+
+      // resolve by id where possible; fall back to index only for ADD
       for (const o of ops) {
         if (o.op === 'ADD') {
-          updated = [{ id: Date.now().toString() + Math.random(), text: o.text, createdAt: Date.now() }, ...updated].slice(0, 50);
-        } else if (o.op === 'UPDATE' && updated[o.index]) {
-          updated[o.index] = { ...updated[o.index], text: o.text };
-        } else if (o.op === 'DELETE' && updated[o.index]) {
-          updated.splice(o.index, 1);
+          const dup = updated.some(m => m.text.toLowerCase().trim() === o.text.toLowerCase().trim());
+          if (!dup) {
+            updated = [{ id: Date.now().toString() + Math.random(), text: o.text, createdAt: Date.now() }, ...updated].slice(0, 50);
+          }
+        } else if (o.op === 'UPDATE' && o.id) {
+          updated = updated.map(m => m.id === o.id ? { ...m, text: o.text } : m);
+        } else if (o.op === 'DELETE' && o.id) {
+          updated = updated.filter(m => m.id !== o.id);
         }
       }
+
       saveMemoriesLS(updated);
       if (userUidRef.current) {
         setDoc(doc(db, 'users', userUidRef.current), { memories: updated }, { merge: true }).catch(() => {});
@@ -4744,7 +4756,7 @@ const res = await fetch(API, {
 
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       const cleaned = full.trim(); pushHistory(convHistory, 'assistant', cleaned);
-      if (userInput.trim().length > 10) extractMemories(userInput, cleaned, memories).catch(() => {});
+      if (userInput.trim().length > 10) extractMemories(userInput, cleaned).catch(() => {});
 
      console.log('[IMG DEBUG] cleaned text:', cleaned.slice(0, 300));
 
