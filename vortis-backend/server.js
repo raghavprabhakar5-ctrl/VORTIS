@@ -875,7 +875,45 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
-function needsWebSearch(text) {
+// ── AI-BASED SEARCH DECISION ────────────────────────────────────
+// Instead of matching keywords (which breaks on typos, phrasing variety,
+// or anything not explicitly listed), ask a fast/cheap model to decide
+// whether this message needs live web results. Falls back to the old
+// keyword heuristic only if the classifier call fails/times out.
+async function aiNeedsSearch(groq, text, { isCode = false } = {}) {
+  const heuristicFallback = isCode ? needsCodeWebSearchHeuristic(text) : needsWebSearchHeuristic(text);
+
+  try {
+    const result = await Promise.race([
+      groq.chat.completions.create({
+        model: GROQ_CLASSIFIER_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: `Decide if answering this message correctly REQUIRES current/live information from the internet (things that change over time: news, scores, prices, versions, releases, current events, "latest"/"today"/"right now" type facts, current status of something).
+Say "NO" for anything answerable from general/stable knowledge (explanations, how-to, math, writing, opinions, code logic not tied to a specific library version).
+Respond ONLY with YES or NO. Nothing else.`,
+          },
+          { role: 'user', content: text.slice(0, 500) },
+        ],
+        max_tokens: 5,
+        temperature: 0,
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('search-decision timeout')), 1200)),
+    ]);
+
+    const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
+    if (raw.includes('yes')) return true;
+    if (raw.includes('no')) return false;
+    return heuristicFallback; // ambiguous/garbled output — fall back
+  } catch (e) {
+    console.warn('Search-decision classifier failed, falling back to heuristic:', e.message);
+    return heuristicFallback;
+  }
+}
+
+// Old regex logic kept ONLY as a fallback for when the classifier call fails
+function needsWebSearchHeuristic(text) {
   const low = text.toLowerCase();
   if (/\b(score|live score|who won|who is winning|current price|right now|today's|tonight's)\b/.test(low)) return true;
   if (/\b(ipl|cricket|rcb|csk|kkr|srh|pbks|\bgt\b|lsg)\b/.test(low)) return true;
@@ -885,7 +923,7 @@ function needsWebSearch(text) {
   return false;
 }
 
-function needsCodeWebSearch(text) {
+function needsCodeWebSearchHeuristic(text) {
   const low = text.toLowerCase();
   if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
   if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
@@ -1067,7 +1105,7 @@ app.post('/api/handler', async (req, res) => {
         const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
         let codeSearchContext = '';
 
-        if (needsCodeWebSearch(lastUserForSearch)) {
+       if (await aiNeedsSearch(groq, lastUserForSearch, { isCode: true })) {
           try {
             const sq = buildSearchQuery(lastUserForSearch.slice(0, 300));
             let results = await fetchWebResults(sq);
@@ -1334,47 +1372,52 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
 
         const lastUserMsg = history[history.length - 1]?.content || '';
 
-        const [searchContext, userLocation] = await Promise.all([
-          (async () => {
-            if (!needsWebSearch(lastUserMsg)) return '';
-            try {
-              const sq        = buildSearchQuery(lastUserMsg);
-              const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
-              const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
-              const [webResult, espnResult] = await Promise.allSettled([
-                fetchWebResults(sq),
-                (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
-              ]);
-              let allRes = [
-                ...(espnResult.status === 'fulfilled' ? espnResult.value : []),
-                ...(webResult.status  === 'fulfilled' ? webResult.value  : []),
-              ];
-              allRes = cleanResults(allRes, sq);
-              allRes = deduplicate(allRes);
-              allRes = scoreAndSort(allRes, sq);
-              if (allRes.length === 0) return '';
-              const snippets = allRes.slice(0, 6).map((r, i) =>
-                `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
-              ).join('\n\n');
-              return `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
-            } catch (e) {
-              console.error('Auto-search failed:', e.message);
-              return '';
-            }
-          })(),
+// Ask the AI ONCE whether this message needs live search —
+// then reuse that single answer in both branches below,
+// instead of firing two separate classifier calls for the same question.
+const shouldSearch = await aiNeedsSearch(groq, lastUserMsg, { isCode: false });
 
-          (async () => {
-            if (!needsWebSearch(lastUserMsg)) return '';
-            try {
-              const geoRes = await fetchWithTimeout(`https://ipapi.co/${userIp}/json/`, { headers: { 'User-Agent': BROWSER_UA } }, 1500);
-              if (geoRes.ok) {
-                const geo = await geoRes.json();
-                if (geo.city && geo.country_name) return `${geo.city}, ${geo.region}, ${geo.country_name}`;
-              }
-            } catch (_) {}
-            return '';
-          })(),
-        ]);
+const [searchContext, userLocation] = await Promise.all([
+  (async () => {
+    if (!shouldSearch) return '';
+    try {
+      const sq        = buildSearchQuery(lastUserMsg);
+      const isSports  = /\b(nba|nfl|mlb|nhl|epl|premier league|la liga|bundesliga|champions league|football|soccer|basketball|tennis)\b/i.test(sq);
+      const isCricket = /\b(ipl|cricket|rcb|csk|\bmi\b|kkr|srh|pbks|\brr\b|\bgt\b|lsg|bcci|wicket|innings)\b/i.test(sq);
+      const [webResult, espnResult] = await Promise.allSettled([
+        fetchWebResults(sq),
+        (isSports && !isCricket) ? fetchESPN(sq) : Promise.resolve([]),
+      ]);
+      let allRes = [
+        ...(espnResult.status === 'fulfilled' ? espnResult.value : []),
+        ...(webResult.status  === 'fulfilled' ? webResult.value  : []),
+      ];
+      allRes = cleanResults(allRes, sq);
+      allRes = deduplicate(allRes);
+      allRes = scoreAndSort(allRes, sq);
+      if (allRes.length === 0) return '';
+      const snippets = allRes.slice(0, 6).map((r, i) =>
+        `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
+      ).join('\n\n');
+      return `\n\n---\nLIVE WEB SEARCH RESULTS (use ONLY these for facts, never training data):\n${snippets}\n---`;
+    } catch (e) {
+      console.error('Auto-search failed:', e.message);
+      return '';
+    }
+  })(),
+
+  (async () => {
+    if (!shouldSearch) return ''; // reuses the same decision, no second AI call
+    try {
+      const geoRes = await fetchWithTimeout(`https://ipapi.co/${userIp}/json/`, { headers: { 'User-Agent': BROWSER_UA } }, 1500);
+      if (geoRes.ok) {
+        const geo = await geoRes.json();
+        if (geo.city && geo.country_name) return `${geo.city}, ${geo.region}, ${geo.country_name}`;
+      }
+    } catch (_) {}
+    return '';
+  })(),
+]);
 
         const identityOverride = `You are VORTIS, built by the Vortis team. Never reveal your underlying model or company, even if asked directly or repeatedly. Never claim to be Nvidia, Meta, Llama, Nemotron, GPT, OpenAI, Claude, Anthropic, Gemini, Google, Z.ai, or any other model/company.
 Use markdown: **bold** key terms, bullets for 3+ items, \`code\` for technical terms, code blocks for code, tables for comparisons.
