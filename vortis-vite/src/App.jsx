@@ -2623,11 +2623,24 @@ useEffect(() => {
     const text = sel?.toString().trim();
     if (!text || text.length < 2) { clearSel(); return; }
 
-    const anchorEl = sel.anchorNode?.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-    const bubble = anchorEl?.closest?.('.bubble-ai');
-    if (!bubble) { clearSel(); return; }
+   const range = sel.getRangeAt(0);
 
-    const range = sel.getRangeAt(0);
+// use the range's common ancestor, not just the anchor — this is the
+// smallest node wrapping the WHOLE selection. If the user dragged across
+// a user-message bubble or into a different AI message, the common
+// ancestor sits above both, so .closest('.bubble-ai') correctly fails.
+const commonEl = range.commonAncestorContainer.nodeType === 3
+  ? range.commonAncestorContainer.parentElement
+  : range.commonAncestorContainer;
+const bubble = commonEl?.closest?.('.bubble-ai');
+if (!bubble) { clearSel(); return; }
+
+// extra safety: make sure both edges of the selection are actually inside that bubble
+if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContainer)) {
+  clearSel();
+  return;
+}
+
     const rects = range.getClientRects();
     if (!rects.length) { clearSel(); return; }
 
