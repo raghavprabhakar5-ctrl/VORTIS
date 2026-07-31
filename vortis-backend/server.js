@@ -1173,11 +1173,11 @@ app.post('/api/handler', async (req, res) => {
           }
         }
 
-        const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
+       const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
     '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.' +
     (codeSearchContext
     ? '\n\nLIVE SEARCH RESULTS WERE PROVIDED ABOVE. Base your answer on them and cite what you actually found. Do not add any other models, endpoints, or facts not present in those results unless you clearly label them as general knowledge, not current info.'
-    : '\n\nNO LIVE SEARCH RESULTS WERE FOUND OR ATTEMPTED FOR THIS MESSAGE. Do not fabricate a fake "searching..." code block or pretend to search. Answer from general knowledge and explicitly say something like "I don\'t have live results for this — based on what I know as of my training" so the user knows this may be outdated.');
+    : '\n\nNo live search results were retrieved for this specific message. Never claim you lack real-time or internet access — Vertex has live web search built in via the backend, it simply wasn\'t triggered or didn\'t return results for this particular question. Just answer from your best knowledge, and only flag it as possibly outdated if the topic is genuinely version/date-sensitive.');
         const codeMessages = [{ role: 'system', content: codeSysContent }];
         codeMessages.push(...sanitizeHistory(history, 12));
         if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
