@@ -517,163 +517,169 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  let written = 0;
-  let convoMessages = [...messages];
-  let continuations = 0;
-  let fullRawBuffer = '';
+  const REQUEST_TIMEOUT_MS = 45000; // shorter than before — fail faster so retry has time to run
+  const MAX_ATTEMPTS = 2;           // NVIDIA only — retry the same model, no other provider
 
-  try {
-    while (true) {
-      const nvRes = await fetchWithTimeout(
-        `${NVIDIA_BASE_URL}/chat/completions`,
-        {
-          method:  'POST',
-          headers: {
-            'Authorization': `Bearer ${key}`,
-            'Content-Type':  'application/json',
-          },
-          body: JSON.stringify({
-            model:           NVIDIA_CHAT_CODE,
-            messages:        convoMessages,
-            max_tokens:      maxTokens,
-            temperature:     0.5,
-            top_p:           0.9,
-            stream:          true,
-          }),
-        },
-       90000   // ← was 45000. Bumped to 90s — big model + search context needs more headroom before first token.
-      );
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let written = 0;
+    let convoMessages = [...messages];
+    let continuations = 0;
+    let fullRawBuffer = '';
+    let attemptFailed = false;
 
-      if (!nvRes.ok) {
-        let errBody = '';
-        try { errBody = await nvRes.text(); } catch (_) {}
-        console.error(`Code-chat stream: HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
-        return written > 0;
-      }
-
-      const reader  = nvRes.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer    = '';
-      let inThink   = false;
-      let pending   = '';
-      let turnBuffer = ''; // full text of THIS turn, for continuation context
-      let finishReason = null;
-
+    try {
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const nvRes = await fetchWithTimeout(
+          `${NVIDIA_BASE_URL}/chat/completions`,
+          {
+            method:  'POST',
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Content-Type':  'application/json',
+            },
+            body: JSON.stringify({
+              model:           NVIDIA_CHAT_CODE,
+              messages:        convoMessages,
+              max_tokens:      maxTokens,
+              temperature:     0.5,
+              top_p:           0.9,
+              stream:          true,
+            }),
+          },
+          REQUEST_TIMEOUT_MS
+        );
 
-        buffer += decoder.decode(value, { stream: true });
+        if (!nvRes.ok) {
+          let errBody = '';
+          try { errBody = await nvRes.text(); } catch (_) {}
+          console.error(`Code-chat stream: HTTP ${nvRes.status} (attempt ${attempt}) - ${errBody.slice(0, 300)}`);
+          attemptFailed = true;
+          break;
+        }
 
-        let nlIdx;
-        while ((nlIdx = buffer.indexOf('\n')) !== -1) {
-          const line = buffer.slice(0, nlIdx).trim();
-          buffer = buffer.slice(nlIdx + 1);
+        const reader  = nvRes.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer    = '';
+        let inThink   = false;
+        let pending   = '';
+        let turnBuffer = '';
+        let finishReason = null;
 
-          if (!line || !line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]') continue;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-          let payload;
-          try { payload = JSON.parse(raw); } catch (_) { continue; }
+          buffer += decoder.decode(value, { stream: true });
 
-          finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
-          const token = payload?.choices?.[0]?.delta?.content;
-          if (!token) continue;
+          let nlIdx;
+          while ((nlIdx = buffer.indexOf('\n')) !== -1) {
+            const line = buffer.slice(0, nlIdx).trim();
+            buffer = buffer.slice(nlIdx + 1);
 
-          turnBuffer += token;
-          fullRawBuffer += token; // FIX: accumulate raw (pre-think-strip) text across the whole response
-          pending += token;
-          let safe = '';
-          while (true) {
-            if (!inThink) {
-              const openIdx = pending.indexOf('<think>');
-              if (openIdx === -1) {
-                const holdBack = Math.min(pending.length, 8);
-                safe += pending.slice(0, pending.length - holdBack);
-                pending = pending.slice(pending.length - holdBack);
-                break;
+            if (!line || !line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]') continue;
+
+            let payload;
+            try { payload = JSON.parse(raw); } catch (_) { continue; }
+
+            finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
+            const token = payload?.choices?.[0]?.delta?.content;
+            if (!token) continue;
+
+            turnBuffer += token;
+            fullRawBuffer += token;
+            pending += token;
+            let safe = '';
+            while (true) {
+              if (!inThink) {
+                const openIdx = pending.indexOf('<think>');
+                if (openIdx === -1) {
+                  const holdBack = Math.min(pending.length, 8);
+                  safe += pending.slice(0, pending.length - holdBack);
+                  pending = pending.slice(pending.length - holdBack);
+                  break;
+                } else {
+                  safe += pending.slice(0, openIdx);
+                  pending = pending.slice(openIdx + '<think>'.length);
+                  inThink = true;
+                }
               } else {
-                safe += pending.slice(0, openIdx);
-                pending = pending.slice(openIdx + '<think>'.length);
-                inThink = true;
-              }
-            } else {
-              const closeIdx = pending.indexOf('</think>');
-              if (closeIdx === -1) {
-                const holdBack = Math.min(pending.length, 9);
-                pending = pending.slice(pending.length - holdBack);
-                break;
-              } else {
-                pending = pending.slice(closeIdx + '</think>'.length);
-                inThink = false;
+                const closeIdx = pending.indexOf('</think>');
+                if (closeIdx === -1) {
+                  const holdBack = Math.min(pending.length, 9);
+                  pending = pending.slice(pending.length - holdBack);
+                  break;
+                } else {
+                  pending = pending.slice(closeIdx + '</think>'.length);
+                  inThink = false;
+                }
               }
             }
-          }
 
-          if (safe) {
-            written += safe.length;
-            res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-            if (res.flush) res.flush();
+            if (safe) {
+              written += safe.length;
+              res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+              if (res.flush) res.flush();
+            }
           }
         }
-      }
 
-      if (!inThink && pending) {
-        written += pending.length;
-        res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
-        pending = '';
-      }
+        if (!inThink && pending) {
+          written += pending.length;
+          res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+          pending = '';
+        }
 
-      // ── Hit the token cap — continue the SAME response ──
-      if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
-        continuations++;
-        console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
-        convoMessages = [
-          ...convoMessages,
-          { role: 'assistant', content: turnBuffer },
-          { role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text, do not restart, do not add any preamble or explanation — just continue the code/text.' },
-        ];
-        continue; // loop again
-      }
+        if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
+          continuations++;
+          console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
+          convoMessages = [
+            ...convoMessages,
+            { role: 'assistant', content: turnBuffer },
+            { role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text, do not restart, do not add any preamble or explanation — just continue the code/text.' },
+          ];
+          continue;
+        }
 
-      break; // finished naturally, or hit continuation cap
+        break;
+      }
+    } catch (e) {
+      console.error(`Code-chat stream error (attempt ${attempt}):`, e.message);
+      attemptFailed = true;
     }
 
-    if (written === 0) {
-      // FIX: fullRawBuffer is now properly defined and accumulated above
+    if (written > 0) {
+      // We already streamed real content this attempt — finish here, don't retry.
+      res.write('data: [DONE]\n\n');
+      res.end();
+      console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, attempt ${attempt}`);
+      return true;
+    }
+
+    if (!attemptFailed) {
+      // Stream completed but returned zero tokens — try to salvage a think-trapped response.
       const salvaged = fullRawBuffer
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
-        .replace(/<think>[\s\S]*$/gi, '')  // unclosed think tag — strip everything after it
+        .replace(/<think>[\s\S]*$/gi, '')
         .trim();
       if (salvaged.length > 0) {
         res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
-        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response`);
+        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response (attempt ${attempt})`);
         return true;
       }
-      console.error('Code-chat stream: model returned 0 tokens');
-      return false;
     }
 
-    res.write('data: [DONE]\n\n');
-    res.end();
-    console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, ${continuations} continuations`);
-    return true;
-  } catch (e) {
-    console.error('Code-chat stream error:', e.message);
-    if (written > 0) {
-      try {
-        res.write(`data: ${JSON.stringify({ content: '\n\n_(response cut short — please try again)_' })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-      } catch (_) {}
-    } else if (!res.writableEnded) {
-      try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
+    if (attempt < MAX_ATTEMPTS) {
+      console.warn(`Code-chat: attempt ${attempt} produced nothing — retrying NVIDIA (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+      await new Promise(r => setTimeout(r, 600));
     }
-    return false;
   }
+
+  console.error('Code-chat stream: all NVIDIA attempts failed');
+  return false;
 }
 
 // ── TAVILY (primary search provider) ────────────────────────────
@@ -883,6 +889,10 @@ function cleanResults(results, query) {
 async function aiNeedsSearch(groq, text, { isCode = false } = {}) {
   const heuristicFallback = isCode ? needsCodeWebSearchHeuristic(text) : needsWebSearchHeuristic(text);
 
+  // Explicit intent ("search", "google", "lookup", "latest", etc.) always wins —
+  // never let the classifier override a direct request from the user.
+  if (heuristicFallback) return true;
+
   try {
     const result = await Promise.race([
       groq.chat.completions.create({
@@ -904,12 +914,10 @@ Respond ONLY with YES or NO. Nothing else.`,
     ]);
 
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
-    if (raw.includes('yes')) return true;
-    if (raw.includes('no')) return false;
-    return heuristicFallback; // ambiguous/garbled output — fall back
+    return raw.includes('yes');
   } catch (e) {
-    console.warn('Search-decision classifier failed, falling back to heuristic:', e.message);
-    return heuristicFallback;
+    console.warn('Search-decision classifier failed:', e.message);
+    return false; // heuristic already checked above and was false
   }
 }
 
