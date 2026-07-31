@@ -1746,9 +1746,23 @@ Title:`,
 
       if (!res.ok) {
   let errMsg = `Request failed (${res.status}).`;
-  if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
-  else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
-  else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
+  let backendMsg = null;
+  try {
+    const errBody = await res.json();
+    backendMsg = errBody?.error || null;
+  } catch (_) {}
+
+  if (res.status === 429) {
+    errMsg = backendMsg?.toLowerCase().includes('daily')
+      ? backendMsg + ' (resets tomorrow, or upgrade your plan for more messages.)'
+      : "You're sending messages too quickly — please slow down a few seconds and try again.";
+  } else if (res.status === 401 || res.status === 403) {
+    errMsg = 'Authentication error — try refreshing the page.';
+  } else if (res.status === 503) {
+    errMsg = 'The AI is temporarily unavailable — please try again shortly.';
+  } else if (backendMsg) {
+    errMsg = backendMsg;
+  }
   return { text: '', errorMsg: errMsg, status: res.status, isNetwork: false };
 }
 
