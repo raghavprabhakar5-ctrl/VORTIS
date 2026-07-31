@@ -516,12 +516,11 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     return false;
   }
 
-  const MAX_CONTINUATIONS = 4; // code can be long — allow a few more than chat
+  const MAX_CONTINUATIONS = 4;
   let written = 0;
   let convoMessages = [...messages];
   let continuations = 0;
-  let fullRawBuffer = ''; // FIX: this was referenced but never declared in the original —
-                          // accumulate every turn's raw text here so the salvage path below works.
+  let fullRawBuffer = '';
 
   try {
     while (true) {
@@ -542,7 +541,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
             stream:          true,
           }),
         },
-       45000
+       90000   // ← was 45000. Bumped to 90s — big model + search context needs more headroom before first token.
       );
 
       if (!nvRes.ok) {
