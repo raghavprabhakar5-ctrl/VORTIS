@@ -1579,7 +1579,7 @@ const DeepResearchProgress = ({ data }) => {
         <p style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6, marginBottom: 12 }}>
           {data.message || 'You have reached your daily usage limit for this plan.'}
         </p>
-        {onUpgradeClick && (
+        {onUpgradeClick && !data.hideUpgrade && (
           <button
             onClick={onUpgradeClick}
             style={{
@@ -3009,11 +3009,15 @@ const hitLimit = (bucket = 'messages') => {
     vision: 'vision analyses',
   }[bucket] || bucket;
 
-  const message = limit != null
-    ? `You've reached your daily limit of ${limit} ${label} on the ${tier} plan.`
-    : `You've reached your daily limit for ${label} on the ${tier} plan.`;
+  const isTopTier = tier === 'platinum';
 
-  addMsg('vortis', `__LIMIT_REACHED__${JSON.stringify({ message })}`, false);
+  const message = isTopTier
+    ? `You've used all ${limit} ${label} for today — even on Platinum. Limits reset at midnight.`
+    : (limit != null
+        ? `You've reached your daily limit of ${limit} ${label} on the ${tier} plan.`
+        : `You've reached your daily limit for ${label} on the ${tier} plan.`);
+
+  addMsg('vortis', `__LIMIT_REACHED__${JSON.stringify({ message, hideUpgrade: isTopTier })}`, false);
 };
 
   const loadChats = async (uid) => {
