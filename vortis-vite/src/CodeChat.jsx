@@ -200,6 +200,7 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 
 ═══ CURRENT INFO ═══
 If live web search results are appended below this prompt, treat them as ground truth for anything version-specific, recently changed, or time-sensitive (library versions, deprecations, new APIs) — they override your training data.
+STRICT SOURCING RULE: only state a specific fact (model name, version number, endpoint, pricing) as confirmed if it is literally present in the search snippets. If a detail isn't in the snippets, either omit it or say "not confirmed by search." Never invent a supporting source (a forum post, username, repo, article) to make an unconfirmed claim sound more credible. Never blend or guess at version numbers (e.g. don't write "5.1/5.2" unless that exact string appears in a snippet).
 Never say you lack real-time or internet access — Vertex has live web search built in via the backend. If no search results were appended below for this message, answer from your best knowledge and flag anything that may be outdated, rather than denying the capability.
 
 ═══ ABOUT VORTIS ═══
@@ -930,9 +931,13 @@ const extForLang = (lang) => LANG_TO_EXT[(lang || '').toLowerCase()] || 'txt';
 const PREVIEWABLE_LANGS = ['html', 'htm', 'svg'];
 const isPreviewableLang = (lang) => PREVIEWABLE_LANGS.includes((lang || '').toLowerCase());
 
-/* Pulls every fenced code block out of the assistant's messages so they can be
-   saved/downloaded individually from the "Artifacts" panel, instead of the
-   user having to hunt through the chat and copy-paste each one by hand. */
+// Minimum size for a code block to count as a real, reusable "artifact" —
+// small inline examples (a single curl command, a 3-line import, a short
+// config snippet) aren't worth saving as a downloadable file and just
+// clutter the Artifacts panel. Only real, substantial code blocks qualify.
+const MIN_ARTIFACT_LINES = 15;
+const MIN_ARTIFACT_CHARS = 300;
+
 const extractCodeBlocksFromMessages = (messages) => {
   const blocks = [];
   const fence = /```(\w*)\n([\s\S]*?)```/g;
@@ -943,7 +948,12 @@ const extractCodeBlocksFromMessages = (messages) => {
     while ((match = fence.exec(m.text || ''))) {
       const lang = (match[1] || '').trim();
       const code = match[2].replace(/\n$/, '');
-      if (!code.trim()) continue;
+      const trimmed = code.trim();
+      if (!trimmed) continue;
+
+      const lineCount = trimmed.split('\n').length;
+      if (lineCount < MIN_ARTIFACT_LINES && trimmed.length < MIN_ARTIFACT_CHARS) continue;
+
       blocks.push({ id: `${m.id}-${blocks.length}`, lang, code, ts: m.ts });
     }
   }
