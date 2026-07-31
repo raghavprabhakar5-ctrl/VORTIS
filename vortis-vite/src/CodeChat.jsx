@@ -247,10 +247,30 @@ Humor is welcome occasionally, but never at the user's expense.
   return sys;
 };
 
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+function fuzzyIncludesAny(text, keywords, maxDist = 1) {
+  const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return keywords.some(kw =>
+    words.some(w => Math.abs(w.length - kw.length) <= maxDist && levenshtein(w, kw) <= maxDist)
+  );
+}
+
 function needsCodeWebSearch(text) {
-  const low = text.toLowerCase();
-  if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
-  if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
+  const searchWords = ['search', 'google', 'lookup', 'latest', 'current', 'recent', 'newest', 'changelog', 'deprecated', 'version'];
+  if (fuzzyIncludesAny(text, searchWords)) return true;
   if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
   return false;
 }

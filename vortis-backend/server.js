@@ -183,7 +183,7 @@ function stripInternalReasoning(text) {
     .replace(/^\s*\n/gm, '\n')
     .trim();
   t = t.split(/\n+/)
-    .filter(line => !/\b(the user is|the user said|the user wants|i (should|need to|will) reply|detected language|i think the|so i should)\b/i.test(line))
+    .filter(line => !/\b(the user is|the user said|the user wants|i (should|need to|will) reply|detected language|i think the|so i should|i don'?t have (access to|real-?time)|as of my (last )?(training|knowledge))\b/i.test(line))
     .join(' ')
     .trim();
   return t || text;
@@ -893,6 +893,7 @@ async function aiNeedsSearch(groq, text, { isCode = false } = {}) {
             role: 'system',
             content: `Decide if answering this message correctly REQUIRES current/live information from the internet (things that change over time: news, scores, prices, versions, releases, current events, "latest"/"today"/"right now" type facts, current status of something).
 Say "NO" for anything answerable from general/stable knowledge (explanations, how-to, math, writing, opinions, code logic not tied to a specific library version).
+The user's message may contain typos or misspellings (e.g. "serch" means "search", "lattest" means "latest") — interpret their intent despite spelling errors.
 Respond ONLY with YES or NO. Nothing else.`,
           },
           { role: 'user', content: text.slice(0, 500) },
@@ -913,6 +914,30 @@ Respond ONLY with YES or NO. Nothing else.`,
   }
 }
 
+// Fuzzy keyword match — catches common typos (transpositions, missing/extra
+// letters) so "serch", "lattest" etc. still trigger correctly, instead of
+// relying on exact regex matches.
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+function fuzzyIncludesAny(text, keywords, maxDist = 1) {
+  const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return keywords.some(kw =>
+    words.some(w => Math.abs(w.length - kw.length) <= maxDist && levenshtein(w, kw) <= maxDist)
+  );
+}
+
 // Old regex logic kept ONLY as a fallback for when the classifier call fails
 function needsWebSearchHeuristic(text) {
   const low = text.toLowerCase();
@@ -926,8 +951,9 @@ function needsWebSearchHeuristic(text) {
 
 function needsCodeWebSearchHeuristic(text) {
   const low = text.toLowerCase();
-  if (/\b(search|look up|google|check online|check the docs|check the latest)\b/.test(low)) return true;
-  if (/\b(latest|newest|current|recent|up[- ]to[- ]date|as of \d{4}|changelog|release notes|deprecated|breaking change|new version|just released)\b/.test(low)) return true;
+  const searchWords = ['search', 'google', 'lookup', 'latest', 'current', 'recent', 'newest', 'changelog', 'deprecated', 'version'];
+  if (fuzzyIncludesAny(text, searchWords)) return true;
+  if (/\b(as of \d{4}|breaking change|just released)\b/.test(low)) return true;
   if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
   return false;
 }

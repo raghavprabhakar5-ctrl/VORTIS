@@ -666,14 +666,47 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
-function needsWebSearch(text) {
+// Fuzzy keyword match — catches common typos (transpositions, missing/extra
+// letters) so "serch", "lattest" etc. still trigger correctly, instead of
+// relying on exact regex matches.
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+function fuzzyIncludesAny(text, keywords, maxDist = 1) {
+  const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  return keywords.some(kw =>
+    words.some(w => Math.abs(w.length - kw.length) <= maxDist && levenshtein(w, kw) <= maxDist)
+  );
+}
+
+// Old regex logic kept ONLY as a fallback for when the classifier call fails
+function needsWebSearchHeuristic(text) {
   const low = text.toLowerCase();
-  // Only search when the user EXPLICITLY wants current/live info
   if (/\b(score|live score|who won|who is winning|current price|right now|today's|tonight's)\b/.test(low)) return true;
   if (/\b(ipl|cricket|rcb|csk|kkr|srh|pbks|\bgt\b|lsg)\b/.test(low)) return true;
   if (/\b(nba|nfl|mlb|nhl|epl|la liga|bundesliga|champions league)\b/.test(low)) return true;
   if (/\b(stock price|weather in|election result)\b/.test(low)) return true;
   if (/\b(breaking news|just announced|just happened)\b/.test(low)) return true;
+  return false;
+}
+
+function needsCodeWebSearchHeuristic(text) {
+  const low = text.toLowerCase();
+  const searchWords = ['search', 'google', 'lookup', 'latest', 'current', 'recent', 'newest', 'changelog', 'deprecated', 'version'];
+  if (fuzzyIncludesAny(text, searchWords)) return true;
+  if (/\b(as of \d{4}|breaking change|just released)\b/.test(low)) return true;
+  if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
   return false;
 }
 
