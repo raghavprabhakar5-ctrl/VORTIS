@@ -2990,13 +2990,30 @@ const canDo = (k) => {
 
 const incrUsage = (k) => {
   const today = new Date().toDateString();
-  const u = checkReset(); // always increment against the fresh value
+  const u = checkReset();
   const n = { ...u, [k]: u[k] + 1 };
   setUsage(n);
   try { localStorage.setItem('vortis_usage', JSON.stringify(n)); } catch (_) {}
   if (userUidRef.current) {
     setDoc(doc(db, 'users', userUidRef.current), { usage: n, usageDate: today }, { merge: true }).catch(() => {});
   }
+};
+
+// ── shows the "limit reached" bubble + upgrade prompt for the given bucket ──
+const hitLimit = (bucket = 'messages') => {
+  const limit = LIMITS[tier]?.[bucket];
+  const label = {
+    messages: 'messages',
+    images: 'images',
+    documents: 'documents',
+    vision: 'vision analyses',
+  }[bucket] || bucket;
+
+  const message = limit != null
+    ? `You've reached your daily limit of ${limit} ${label} on the ${tier} plan.`
+    : `You've reached your daily limit for ${label} on the ${tier} plan.`;
+
+  addMsg('vortis', `__LIMIT_REACHED__${JSON.stringify({ message })}`, false);
 };
 
   const loadChats = async (uid) => {
