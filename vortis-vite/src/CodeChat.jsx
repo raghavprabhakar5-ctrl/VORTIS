@@ -1391,8 +1391,7 @@ const Vertex = ({
         method: 'POST',
         headers: await getAuthHeader(),
         body: JSON.stringify({
-          action: 'chat',  
-          mode: 'code',
+          action: 'title',
           prompt: `You are a title-generator ONLY. Below are one or more messages a user sent in a chat, wrapped in <<<MSG>>> tags and separated by " | " if there are multiple.
 Your ONLY job is to output a short 3-5 word title summarizing the OVERALL TOPIC of the conversation so far.
 
@@ -1410,24 +1409,12 @@ ${safeInput}
 <<<END>>>
 
 Title:`,
-          history: []
         })
       });
       if (!res.ok) return null;
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let title = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const line of dec.decode(value).split('\n')) {
-          if (!line.startsWith('data: ')) continue;
-          const raw = line.slice(6).trim();
-          if (raw === '[DONE]' || !raw) continue;
-          try { const p = JSON.parse(raw); if (p.content) title += p.content; } catch(_) {}
-        }
-      }
-      const clean = title.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').replace(/^Title:\s*/i, '').slice(0, 50);
+      const data = await res.json();
+      const raw = data.title || '';
+      const clean = raw.trim().replace(/^["']|["']$/g, '').replace(/[.!?]$/, '').replace(/^Title:\s*/i, '').slice(0, 50);
       if (/GREETING_ONLY/i.test(clean)) return 'New Conversation';
       if (looksLikeBadTitle(clean)) return null;
       return clean || null;
@@ -1738,12 +1725,12 @@ Title:`,
       });
 
       if (!res.ok) {
-        let errMsg = `Request failed (${res.status}).`;
-        if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
-        else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
-        else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
-        return { text: '', errorMsg, status: res.status, isNetwork: false };
-      }
+  let errMsg = `Request failed (${res.status}).`;
+  if (res.status === 429) errMsg = "You're sending messages too quickly — please slow down.";
+  else if (res.status === 401 || res.status === 403) errMsg = 'Authentication error — try refreshing the page.';
+  else if (res.status === 503) errMsg = 'The AI is temporarily unavailable — please try again shortly.';
+  return { text: '', errorMsg: errMsg, status: res.status, isNetwork: false };
+}
 
       setThinking(false);
       const reader = res.body.getReader();
@@ -2091,16 +2078,25 @@ Title:`,
     thead: ({children}) => <thead style={{ background: '#141414' }}>{children}</thead>,
     th: ({children}) => <th style={{ padding: '6px 10px', border: '1px solid #232323', textAlign: 'left', color: '#e6e6e6', fontWeight: 600 }}>{children}</th>,
     td: ({children}) => <td style={{ padding: '6px 10px', border: '1px solid #232323', color: '#b8b8b8' }}>{children}</td>,
-    code: ({inline, className, children}) => {
-      if (inline) {
-        return <code style={{ background: '#000000', color: '#e6e6e6', padding: '1px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>{children}</code>;
-      }
-      const match = /language-(\w+)/.exec(className || '');
-      const codeLang = match ? match[1] : '';
-      const codeText = String(children).replace(/\n$/, '');
-      const bid = `${messageId || 'msg'}-${codeLang || 'x'}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
-      return <VertexCodeBlock lang={codeLang} codeText={codeText} onOpenPanel={openCodePanel} onSmartEdit={onSmartEdit} blockId={bid} />;
-    },
+    code: ({ className, children }) => {
+  const codeText = String(children).replace(/\n$/, '');
+  const match = /language-(\w+)/.exec(className || '');
+  const codeLang = match ? match[1] : '';
+
+  // No language + no newline = inline code (e.g. `nvidia/nemotron-3-ultra`)
+  const isInline = !className && !codeText.includes('\n');
+
+  if (isInline) {
+    return (
+      <code style={{ background: '#000000', color: '#e6e6e6', padding: '1px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>
+        {children}
+      </code>
+    );
+  }
+
+  const bid = `${messageId || 'msg'}-${codeLang || 'x'}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
+  return <VertexCodeBlock lang={codeLang} codeText={codeText} onOpenPanel={openCodePanel} onSmartEdit={onSmartEdit} blockId={bid} />;
+},
   }), [openCodePanel]);
 
   /* Streaming preview uses a no-smart-edit variant — you can't fix code

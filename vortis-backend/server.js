@@ -81,6 +81,7 @@ const RATE_LIMITS = {
   transcribe: { window: 60000, max: 40 },
   nvidia_global: { window: 60000, max: 35 },
   memory: { window: 60000, max: 20 },
+  title:   { window: 60000, max: 20 },
 };
 
 setInterval(() => {
@@ -1050,8 +1051,31 @@ app.post('/api/handler', async (req, res) => {
     const action = sanitizeString(body.action || '', 20);
 
     if (!action) return res.status(400).json({ error: 'Missing action' });
-    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe', 'memory'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
+    if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe', 'memory', 'title'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
+
+    // ── TITLE — cheap internal housekeeping. Not a real user message:
+    // no daily-quota hit, no NVIDIA global budget spent, no web search.
+    if (action === 'title') {
+      const titlePrompt = sanitizeString(req.body.prompt || '', 2000);
+      if (!titlePrompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+      try {
+        const result = await Promise.race([
+          groq.chat.completions.create({
+            model: GROQ_CLASSIFIER_MODEL,   // llama-3.1-8b-instant — fast/cheap
+            messages: [{ role: 'user', content: titlePrompt }],
+            max_tokens: 20,
+            temperature: 0.3,
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('title timeout')), 4000)),
+        ]);
+        const raw = result.choices?.[0]?.message?.content || '';
+        return res.status(200).json({ title: raw.trim() });
+      } catch (e) {
+        console.error('TITLE ERROR:', e.message);
+        return res.status(200).json({ title: '' });
+      }
+    }
 
     const LIMITS = {
       free:     { messages: 10,  documents: 1,  images: 2,  vision: 0 },
