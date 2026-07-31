@@ -517,8 +517,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 45000; // shorter than before — fail faster so retry has time to run
-  const MAX_ATTEMPTS = 2;           // NVIDIA only — retry the same model, no other provider
+  const REQUEST_TIMEOUT_MS = 45000; // shorter than before — fail faster so a retry has time to run
+  const MAX_ATTEMPTS = 2;           // NVIDIA only — retry same model, no other provider
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let written = 0;
@@ -650,7 +650,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     }
 
     if (written > 0) {
-      // We already streamed real content this attempt — finish here, don't retry.
       res.write('data: [DONE]\n\n');
       res.end();
       console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, attempt ${attempt}`);
@@ -658,7 +657,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     }
 
     if (!attemptFailed) {
-      // Stream completed but returned zero tokens — try to salvage a think-trapped response.
       const salvaged = fullRawBuffer
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/<think>[\s\S]*$/gi, '')
@@ -679,6 +677,9 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   console.error('Code-chat stream: all NVIDIA attempts failed');
+  if (!res.writableEnded) {
+    try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
+  }
   return false;
 }
 
@@ -881,16 +882,26 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
+// ── Lighter relevance filter for code/technical queries — the default
+// cleanResults() is tuned to kill sports/health spam and ends up nuking
+// legit docs/API results for niche technical searches. Keep spam/dedup
+// checks, drop the strict word-overlap requirement.
+function cleanCodeResults(results, query) {
+  return results
+    .filter(r => !isSpam(r))
+    .filter(r => (r.snippet || '').trim().length >= 15)
+    .filter(r => { const t = (r.title || '').trim(); return t.length >= 3 && !/^(home|index|page \d+|untitled)$/i.test(t); });
+}
+
 // ── AI-BASED SEARCH DECISION ────────────────────────────────────
 // Instead of matching keywords (which breaks on typos, phrasing variety,
 // or anything not explicitly listed), ask a fast/cheap model to decide
 // whether this message needs live web results. Falls back to the old
-// keyword heuristic only if the classifier call fails/times out.
 async function aiNeedsSearch(groq, text, { isCode = false } = {}) {
   const heuristicFallback = isCode ? needsCodeWebSearchHeuristic(text) : needsWebSearchHeuristic(text);
 
-  // Explicit intent ("search", "google", "lookup", "latest", etc.) always wins —
-  // never let the classifier override a direct request from the user.
+  // Explicit user intent ("search", "google", "lookup", "latest", etc.) always
+  // wins — never let the classifier override a direct request from the user.
   if (heuristicFallback) return true;
 
   try {
@@ -958,8 +969,14 @@ function needsWebSearchHeuristic(text) {
 
 function needsCodeWebSearchHeuristic(text) {
   const low = text.toLowerCase();
+
+  // Guaranteed catches for common typo variants — don't rely on edit-distance alone.
+  const typoAliases = ['serch', 'saerch', 'seach', 'searc', 'seatch', 'goggle', 'lattest', 'latst'];
+  if (typoAliases.some(t => low.includes(t))) return true;
+
   const searchWords = ['search', 'google', 'lookup', 'latest', 'current', 'recent', 'newest', 'changelog', 'deprecated', 'version'];
-  if (fuzzyIncludesAny(text, searchWords)) return true;
+  if (fuzzyIncludesAny(text, searchWords, 2)) return true; // maxDist bumped 1 → 2
+
   if (/\b(as of \d{4}|breaking change|just released)\b/.test(low)) return true;
   if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
   return false;
@@ -1162,21 +1179,27 @@ app.post('/api/handler', async (req, res) => {
         const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
         let codeSearchContext = '';
 
-       if (await aiNeedsSearch(groq, lastUserForSearch, { isCode: true })) {
+        if (await aiNeedsSearch(groq, lastUserForSearch, { isCode: true })) {
           try {
             const sq = buildSearchQuery(lastUserForSearch.slice(0, 300));
             let results = await fetchWebResults(sq);
-            results = cleanResults(results, sq);
+            const rawCount = results.length;
+            results = cleanCodeResults(results, sq);
             results = deduplicate(results);
             results = scoreAndSort(results, sq);
+            console.log(`Code search "${sq}": ${rawCount} raw → ${results.length} after clean`);
+
             if (results.length > 0) {
               const snippets = results.slice(0, 5).map((r, i) =>
                 `[${i + 1}] ${r.title}\n${r.snippet.slice(0, 350)}\nSource: ${r.source} | Date: ${r.date}`
               ).join('\n\n');
               codeSearchContext = `\n\n---\nLIVE WEB SEARCH RESULTS (current info — trust this over your training data for versions/APIs/recent changes):\n${snippets}\n---`;
+            } else {
+              codeSearchContext = `\n\n---\nA live web search was attempted for this query but returned no usable results. Tell the user you searched but didn't find current info on this, then answer from your best general knowledge and flag that it may be outdated.\n---`;
             }
           } catch (e) {
             console.error('Code-chat search failed:', e.message);
+            codeSearchContext = `\n\n---\nA live web search was attempted but failed due to a technical error. Tell the user the search failed, then answer from general knowledge and flag it may be outdated.\n---`;
           }
         }
 
