@@ -1574,9 +1574,9 @@ Title:`,
         const firstUser = msgs.find(m => m.role === 'user');
         if (firstUser) {
           title = firstUser.text.replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 48);
-          if (!title) title = 'New Code Chat';
+          if (!title) title = 'New Chat';
         } else {
-          title = 'New Code Chat';
+          title = 'New Chat';
         }
       }
       const cleaned = msgs.map(m => ({
@@ -1984,7 +1984,7 @@ Title:`,
         const title =
           await generateChatTitle(context) ||
           finalMsgs.find(m => m.role === "user")?.text.slice(0, 48) ||
-          "New Code Chat";
+          "New Chat";
 
         await persistChat(finalMsgs, title);
       }, 50);
@@ -2418,7 +2418,7 @@ Title:`,
                   background: '#e6e6e6',
                   border: '1px solid #e6e6e6', color: '#0a0a0a', fontSize: 13, fontWeight: 600
                 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Plus size={14}/> New Code Chat</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Plus size={14}/> New Chat</span>
                 <span style={{
                   fontSize: 10, fontFamily: 'JetBrains Mono', color: '#5a5a5a', background: 'rgba(10,10,10,.08)',
                   border: '1px solid rgba(10,10,10,.15)', borderRadius: 4, padding: '1px 5px'
