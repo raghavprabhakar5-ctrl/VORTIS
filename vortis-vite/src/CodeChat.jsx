@@ -1616,18 +1616,35 @@ Title:`,
   }, [db, style, loadChats]);
 
   const newChat = useCallback(() => {
-    abortRef.current = true;
-    setStreaming(false); setThinking(false); setStreamText('');
-    const newId = Date.now().toString();
-    setChatId(newId); chatIdRef.current = newId;
-    setMessages([]); convHistoryRef.current = [];
-    setInput('');
-    setAttachments([]);
-    setReplyQuote(null);
-    try { localStorage.removeItem('vrtis_vertex_active_chat'); } catch (_) {}
-    closeCodePanel();
-    setTimeout(() => inputRef.current?.focus(), 50);
-  }, [closeCodePanel]);
+  abortRef.current = true;
+  setStreaming(false); setThinking(false); setStreamText('');
+  const newId = Date.now().toString();
+  setChatId(newId); chatIdRef.current = newId;
+  setMessages([]); convHistoryRef.current = [];
+  setInput('');
+  setAttachments([]);
+  setReplyQuote(null);
+  try { localStorage.removeItem('vrtis_vertex_active_chat'); } catch (_) {}
+  closeCodePanel();
+
+  // Immediately register this chat in Firestore so it shows up in the
+  // sidebar right away, instead of only appearing after the first message
+  // finishes streaming — otherwise it looks like the new chat "replaces"
+  // the previous one in the list until you send something.
+  if (userUidRef.current) {
+    setDoc(doc(db, 'users', userUidRef.current, 'chats', newId), {
+      title: 'New Conversation',
+      preview: 'New Conversation',
+      isCodeChat: true,
+      messages: [],
+      style,
+      updated: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    }).then(() => loadChats(userUidRef.current)).catch(() => {});
+  }
+
+  setTimeout(() => inputRef.current?.focus(), 50);
+}, [closeCodePanel, db, style, loadChats]);
 
   const loadChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
