@@ -1620,7 +1620,7 @@ const DeepResearchProgress = ({ data }) => {
     <div ref={contentRef} className="md-content">
       <ReactMarkdown
      remarkPlugins={[remarkGfm, remarkMath]}
-     rehypePlugins={[rehypeKatex]}
+     rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
 
         components={{
 
@@ -4556,6 +4556,7 @@ MATH FORMATTING: Always use LaTeX for any math, using dollar-sign delimiters ONL
 - Never use \( \) or \[ \] — they will NOT render.
 - Use proper commands: \frac, \sqrt, \int, \sum, \cdot, \times, \begin{matrix} etc.
 - Never write equations as plain text.
+- NEVER wrap plain prose, status updates, or non-mathematical statements (e.g. "no new information", "not found", "nothing to report") in a LaTeX environment like \begin{matrix}...\end{matrix} or in $ $ delimiters. LaTeX is ONLY for genuine mathematical notation. If there's nothing new to say, just write it as a plain sentence.
 
 ═══════════════════════════════════════
 SPECIAL COMMANDS — CRITICAL RULES
