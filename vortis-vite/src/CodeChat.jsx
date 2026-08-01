@@ -1001,28 +1001,21 @@ const Vertex = ({
   /* ── Identity ── */
   const [user, setUser] = useState(auth.currentUser);
   const userUidRef = useRef(auth.currentUser?.uid || '');
-  // Tracks whether we've already attempted a resume this session — guards
-  // against re-triggering on every auth-state flutter once we've either
-  // resumed or started fresh.
-  const resumeAttemptedRef = useRef(false);
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       userUidRef.current = u?.uid || '';
       if (u) {
         loadChats(u.uid);
-        // Auto-resume the last-active chat on first sign-in / page load.
-        // Only fires once per session — subsequent sign-in/out flutters
-        // won't yank the user back to an old conversation.
-        if (!resumeAttemptedRef.current) {
-          resumeAttemptedRef.current = true;
-          try {
-            const savedChatId = localStorage.getItem('vrtis_vertex_active_chat');
-            if (savedChatId && savedChatId !== chatIdRef.current) {
-              loadChat(savedChatId);
-            }
-          } catch (_) {}
-        }
+        // NOTE: We deliberately do NOT auto-resume the last chat here.
+        // Earlier code tried to restore `chatId` from localStorage on
+        // refresh, but never actually loaded the matching messages — so
+        // the user saw what looked like a blank new chat while `chatId`
+        // still pointed at the previous conversation. The next sent
+        // message then `setDoc`-overwrote the old chat in Firestore,
+        // destroying it. Every page load now starts with a fresh chatId;
+        // users who want their old conversation back can click it in the
+        // sidebar.
       } else {
         setSavedChats([]);
       }
@@ -1039,24 +1032,15 @@ const Vertex = ({
   const [streamText, setStreamText] = useState('');
   const [thinking, setThinking] = useState(false);
   const [searching, setSearching] = useState(false);
-  // On first mount, try to restore the last-active chat id from localStorage
-  // so a refresh / close-reopen lands the user back in their previous
-  // conversation (with a "Continue" prompt) instead of a blank new chat.
-  const [chatId, setChatId] = useState(() => {
-    try {
-      const saved = localStorage.getItem('vrtis_vertex_active_chat');
-      return saved || Date.now().toString();
-    } catch (_) { return Date.now().toString(); }
-  });
+  // Always start with a brand-new chatId on mount. We deliberately do
+  // NOT restore the previous chatId from localStorage — doing so caused
+  // a destructive overwrite bug (see the comment in the auth effect
+  // above). A refresh / close-reopen now lands the user on a clean,
+  // empty chat; the previous conversation is still listed in the sidebar
+  // and can be reopened explicitly by clicking it.
+  const [chatId, setChatId] = useState(() => Date.now().toString());
   const chatIdRef = useRef(chatId);
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
-  // Persist the active chat id whenever it changes so we can resume after refresh.
-  useEffect(() => {
-    try {
-      if (messages.length > 0) localStorage.setItem('vrtis_vertex_active_chat', chatId);
-      else localStorage.removeItem('vrtis_vertex_active_chat');
-    } catch (_) {}
-  }, [chatId, messages.length]);
   const convHistoryRef = useRef([]);
   const [editingMsgId, setEditingMsgId] = useState(null);
 
@@ -1074,7 +1058,7 @@ const Vertex = ({
   const showHelp = useCallback(() => {
     setInfoDialog({
       title: 'Vertex Help',
-      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nResume:       refresh or close+reopen lands you back in your last chat automatically\nReply:        highlight any prose in chat → click the Reply chip → a "Replying to" banner shows above the input (does NOT trigger inside code blocks)\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     shows automatically when a reply got cut off (unclosed code block)\nRegenerate:   on every Vertex reply — re-ask the same question for a fresh take\nCopy:         on every Vertex reply\nEdit:         on your own message, click the pencil to tweak & resend — original stays in chat until you send, so backspacing the input never loses it\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom\nSplit panel:  drag the divider between code and output to resize — works with mouse and touch',
+      message: 'Vertex is your dedicated coding assistant.\n\n• Paste an error to debug it\n• Ask for a function or a refactor\n• Attach files, folders, images, or documents with the + button\n• ⌘K starts a new chat · Esc closes panels\n\nResume:       click any chat in the left sidebar to reopen it\nReply:        highlight any prose in chat → click the Reply chip → a "Replying to" banner shows above the input (does NOT trigger inside code blocks)\nSmart Edit:   click Edit on any code block → describe what\'s wrong → Vertex returns only the fix (saves tokens)\nContinue:     shows automatically when a reply got cut off (unclosed code block)\nRegenerate:   on every Vertex reply — re-ask the same question for a fresh take\nCopy:         on every Vertex reply\nEdit:         on your own message, click the pencil to tweak & resend — original stays in chat until you send, so backspacing the input never loses it\nScroll:       scroll up freely while Vertex streams — auto-scroll only kicks in when you\'re already at the bottom\nSplit panel:  drag the divider between code and output to resize — works with mouse and touch',
     });
   }, []);
 
@@ -1624,7 +1608,8 @@ Title:`,
     setInput('');
     setAttachments([]);
     setReplyQuote(null);
-    try { localStorage.removeItem('vrtis_vertex_active_chat'); } catch (_) {}
+    // No localStorage cleanup needed — we no longer persist the active
+    // chat id anywhere (see the auth effect comment for why).
     closeCodePanel();
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [closeCodePanel]);
@@ -1634,17 +1619,15 @@ Title:`,
     try {
       const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
       if (!snap.exists()) {
-        // Chat was deleted (maybe from another session). Clear the stale
-        // active-chat pointer and reset to a fresh id so the empty state
-        // shows correctly instead of leaving chatId pointing at a ghost.
-        try { localStorage.removeItem('vrtis_vertex_active_chat'); } catch (_) {}
+        // Chat was deleted (maybe from another session). Reset to a fresh
+        // id so the empty state shows correctly instead of leaving chatId
+        // pointing at a ghost.
         const freshId = Date.now().toString();
         setChatId(freshId); chatIdRef.current = freshId;
         return;
       }
       const c = snap.data();
       setChatId(id); chatIdRef.current = id;
-      try { localStorage.setItem('vrtis_vertex_active_chat', id); } catch (_) {}
       const restored = (c.messages || []).map((m, i) => ({
         id: `${id}-${i}`,
         role: m.role,
@@ -2177,14 +2160,14 @@ Title:`,
             style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
             {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 26, height: 26, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#e6e6e6', border: '1px solid #e6e6e6'
             }}>
-              <Terminal size={14} color="#0a0a0a"/>
+              <Terminal size={17} color="#0a0a0a"/>
             </div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: '#e6e6e6', letterSpacing: '-.01em', lineHeight: 1 }}>Vertex</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#f0f0f0', letterSpacing: '-.015em', lineHeight: 1 }}>Vertex</div>
           </div>
         </div>
 
@@ -2595,10 +2578,10 @@ Title:`,
                 minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 padding: '30px 24px', textAlign: 'center'
               }}>
-                <h1 style={{ fontSize: 26, fontWeight: 700, color: '#f0f0f0', margin: '0 0 6px', letterSpacing: '-.02em' }}>
-                  {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block' }}>👋</span>
+                <h1 style={{ fontSize: 32, fontWeight: 700, color: '#f5f5f5', margin: '0 0 8px', letterSpacing: '-.02em' }}>
+                  {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block', filter: 'brightness(0) invert(1)' }}>👋</span>
                 </h1>
-                <p style={{ fontSize: 13.5, color: '#7a7a7a', maxWidth: 440, lineHeight: 1.6, margin: '0 0 24px' }}>
+                <p style={{ fontSize: 14.5, color: '#8a8a8a', maxWidth: 460, lineHeight: 1.6, margin: '0 0 24px' }}>
                   Chat with Vertex and turn your ideas into reality with ease.
                 </p>
 
@@ -2738,8 +2721,15 @@ Title:`,
           )}
 
           {/* Floating Reply chip — renders above whatever the user has
-              highlighted inside the chat scroll area. */}
-          <SelectionReplyButton scrollRef={scrollRef} onReply={handleReplyQuote} />
+              highlighted inside the chat scroll area. Only shown when there
+              are actual messages to reply to — without this guard, selecting
+              any text on the empty-state hero (the "Good morning" greeting,
+              the starter-prompt pills, the recent-chats cards) would pop a
+              stray "Reply" button with nothing to reply to, which read as a
+              bug. */}
+          {messages.length > 0 && (
+            <SelectionReplyButton scrollRef={scrollRef} onReply={handleReplyQuote} />
+          )}
           </div>
 
           {/* ── Input area ── */}
