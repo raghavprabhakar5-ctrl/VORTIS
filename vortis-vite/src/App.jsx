@@ -2477,6 +2477,8 @@ export default function VortisAI() {
   const [upgradeOk, setUpgradeOk] = useState(false);
   const [savedChats, setSavedChats] = useState([]);
   const [selectionReply, setSelectionReply] = useState(null);
+  const [renamingChatId, setRenamingChatId] = useState(null);
+  const [renameChatVal, setRenameChatVal] = useState('');
   const [chatId, setChatId] = useState(null);
   const [uiFont, setUiFont] = useState(() => {
   try { return localStorage.getItem('vortis_font') || 'inter'; } catch(_) { return 'inter'; }
@@ -2843,36 +2845,40 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       setProfile(p);
       try { localStorage.setItem('vortis_user', JSON.stringify({ ...p, uid: u.uid })); } catch(_) {}
 
-      try {
-  const userSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
-  if (userSnap.exists()) {
-    const data = userSnap.data();
-    if (data.tier) { setTier(data.tier); try { localStorage.setItem('vortis_tier', data.tier); } catch(_) {} }
-    const today = new Date().toDateString();
-    if (data.usage && data.usageDate === today) {
-      setUsage(data.usage);
-    } else {
-      const z = { messages: 0, documents: 0, images: 0, vision: 0 };
-      setUsage(z);
-      setDoc(doc(db, 'users', firebaseUser.uid), { usage: z, usageDate: today }, { merge: true }).catch(() => {});
-    }
-  }
-} catch(_) {}
+   try {
+      const userSnap = await getDoc(doc(db, 'users', u.uid));
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        if (data.tier) { setTier(data.tier); try { localStorage.setItem('vortis_tier', data.tier); } catch(_) {} }
+        const today = new Date().toDateString();
+        if (data.usage && data.usageDate === today) {
+          setUsage(data.usage);
+        } else {
+          const z = { messages: 0, documents: 0, images: 0, vision: 0 };
+          setUsage(z);
+          setDoc(doc(db, 'users', u.uid), { usage: z, usageDate: today }, { merge: true }).catch(() => {});
+        }
+      }
+    } catch(_) {}
 
-      setShowLogin(false);
-      addMemory(`User's name is ${displayName.split(' ')[0]}`);
-      await loadChats(u.uid);
-      loadMemories();
-      startNewChat();
-    } catch (e) {
-      console.error('Firebase auth error:', e.code, e.message);
-      const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in failed.' :
-                  e.code === 'auth/account-exists-with-different-credential' ? 'An account already exists with this email.' :
-                  'Login failed. Please try again.';
-      setAuthError(msg);
-    }
+    setShowLogin(false);
+    setAuthLoading(false);   // spinner off immediately — nothing below blocks the UI
+    addMemory(`User's name is ${displayName.split(' ')[0]}`);
+
+    // fire-and-forget — these update state as they land, don't block sign-in on them
+    loadChats(u.uid);
+    loadMemories();
+    startNewChatAfterLogin(u.uid);
+
+  } catch (e) {
+    console.error('Firebase auth error:', e.code, e.message);
+    const msg = e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request' ? 'Sign-in failed.' :
+                e.code === 'auth/account-exists-with-different-credential' ? 'An account already exists with this email.' :
+                'Login failed. Please try again.';
+    setAuthError(msg);
     setAuthLoading(false);
-  };
+  }
+};
 
   const handleLogout = () => {
     setConfirmDialog({
@@ -3196,6 +3202,24 @@ const saveChat = useCallback(async (msgsToSave) => {
 }, [isIncognito]);
 
 
+const startNewChatAfterLogin = (uid) => {
+  const newId = Date.now().toString();
+  setChatId(newId); chatIdRef.current = newId;
+  setMessages([]); setUploadedDoc(null); setShowMenu(false); setImgGenMode(false);
+  setLastImagePrompt(null); convHistory.current = []; setProcessingStatus('');
+  imgGenLock.current = false; savingRef.current = false;
+  (async () => {
+    try {
+      const snap = await getDocs(collection(db, 'users', uid, 'chats'));
+      const regularChats = snap.docs.filter(d => !d.data().isCodeChat);
+      if (regularChats.length >= 10) {
+        const oldest = regularChats.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0];
+        if (oldest) await deleteDoc(oldest.ref);
+      }
+    } catch(_) {}
+  })();
+};
+
  const startNewChat = async () => {
   if (userUidRef.current) {
     try {
@@ -3221,6 +3245,18 @@ const saveChat = useCallback(async (msgsToSave) => {
       if (id === chatIdRef.current) startNewChat();
     }});
   };
+
+  const renameChat = async (id, newTitle) => {
+  if (!userUidRef.current || !newTitle.trim()) { setRenamingChatId(null); return; }
+  try {
+    await setDoc(doc(db, 'users', userUidRef.current, 'chats', id),
+      { preview: newTitle.trim().slice(0, 80) }, { merge: true });
+    await loadChats(userUidRef.current);
+  } catch (e) {
+    console.error('renameChat failed:', e);
+  }
+  setRenamingChatId(null);
+};
 
   const exportChat = () => {
     if (!messages.length) return;
@@ -5412,9 +5448,41 @@ return (
   <div className="sb-section">
     <div className="sb-section-label">Recent Chats</div>
     {savedChats.map(c => (
-      <div key={c.id} className={`chat-item ${c.id === chatIdRef.current ? 'active' : ''}`} onClick={() => loadChat(c.id)}>
-        <MessageSquare size={12} style={{ flexShrink: 0, opacity: .5 }}/><span>{c.preview}</span>
-        <button className="chat-del-btn" onClick={e => { e.stopPropagation(); delChat(c.id); }}><X size={11}/></button>
+      <div key={c.id} className={`chat-item ${c.id === chatIdRef.current ? 'active' : ''}`}
+        onClick={() => renamingChatId !== c.id && loadChat(c.id)}
+        style={{ paddingRight: renamingChatId === c.id ? 9 : 48 }}>
+        {renamingChatId === c.id ? (
+          <div style={{ display: 'flex', gap: 4, flex: 1, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
+            <input
+              autoFocus value={renameChatVal}
+              onChange={e => setRenameChatVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') renameChat(c.id, renameChatVal);
+                if (e.key === 'Escape') setRenamingChatId(null);
+              }}
+              style={{
+                flex: 1, fontSize: 12.5, padding: '3px 6px', background: 'var(--bg3)',
+                border: '1px solid var(--indigo)', borderRadius: 4, color: 'var(--text1)', outline: 'none'
+              }}
+            />
+            <button onClick={() => renameChat(c.id, renameChatVal)}
+              style={{ background: 'transparent', border: 'none', color: 'var(--indigo)', cursor: 'pointer', padding: 2, display: 'flex' }}>
+              <Check size={12}/>
+            </button>
+          </div>
+        ) : (
+          <>
+            <MessageSquare size={12} style={{ flexShrink: 0, opacity: .5 }}/>
+            <span>{c.preview}</span>
+            <button className="chat-del-btn" style={{ right: 24 }}
+              onClick={e => { e.stopPropagation(); setRenamingChatId(c.id); setRenameChatVal(c.preview || ''); }}>
+              <Edit2 size={11}/>
+            </button>
+            <button className="chat-del-btn" onClick={e => { e.stopPropagation(); delChat(c.id); }}>
+              <X size={11}/>
+            </button>
+          </>
+        )}
       </div>
     ))}
   </div>

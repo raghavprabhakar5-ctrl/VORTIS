@@ -297,6 +297,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [incognito, setIncognito] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
 
   const submitEdit = () => {
@@ -1137,6 +1138,25 @@ const Vertex = ({
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
   const [recentChatsOpen, setRecentChatsOpen] = useState(true);
 
+  <button
+  onClick={toggleIncognito}
+  title={incognito ? 'Exit incognito' : 'Incognito mode — don\'t save this chat'}
+  style={{
+    display: 'flex', alignItems: 'center', gap: 5,
+    background: incognito ? '#fff' : '#141414',
+    border: '1px solid ' + (incognito ? '#fff' : '#2a2a2a'),
+    color: incognito ? '#0a0a0a' : '#c8c8c8',
+    fontSize: 12, borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
+  }}
+>
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+    <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="currentColor"/>
+    <circle cx="9" cy="10" r="1.5" fill={incognito ? '#fff' : '#0a0a0a'}/>
+    <circle cx="15" cy="10" r="1.5" fill={incognito ? '#fff' : '#0a0a0a'}/>
+  </svg>
+  {incognito ? 'Incognito' : 'Incognito'}
+</button>
+
   /* ── Settings popover state (declared early so the Esc handler below
        can reference it without hitting a Temporal Dead Zone error) ── */
   const [showSettings, setShowSettings] = useState(false);
@@ -1553,7 +1573,7 @@ Title:`,
 
   /* ── Firestore ops ── */
   const loadChats = useCallback(async (uid) => {
-    if (!uid) { setSavedChats([]); return; }
+    if (!uid || incognito) { setSavedChats([]); return; } 
     try {
       const snap = await getDocs(collection(db, 'users', uid, 'chats'));
       const chats = snap.docs
@@ -1566,8 +1586,17 @@ Title:`,
     }
   }, [db]);
 
+  const toggleIncognito = useCallback(() => {
+  setIncognito(v => {
+    const next = !v;
+    if (next) newChat(); // entering incognito always starts fresh
+    return next;
+  });
+}, [newChat]);
+
   const persistChat = useCallback(async (msgs, overrideTitle) => {
     if (!userUidRef.current) return;
+    if (incognito) return;
     try {
       let title = overrideTitle;
       if (!title) {
@@ -2400,6 +2429,23 @@ Title:`,
           </button>
         </div>
       </div>
+
+      {incognito && (
+  <div style={{
+    background: '#000', borderBottom: '1px solid #333',
+    padding: '0 16px', height: 34, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+  }}>
+    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
+    <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: '#fff', letterSpacing: '.1em', textTransform: 'uppercase' }}>
+      Incognito
+    </span>
+    <div style={{ width: 1, height: 12, background: '#444' }} />
+    <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#888' }}>
+      This chat won't be saved
+    </span>
+  </div>
+)}
 
       {/* ═══ Body: sidebar + main + code panel ═══ */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
