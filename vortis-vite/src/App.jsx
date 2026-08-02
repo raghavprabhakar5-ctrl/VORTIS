@@ -5632,9 +5632,6 @@ return (
     This chat won't appear in your history and won't be saved anywhere.
   </p>
 
-  <p style={{ fontSize: 11.5, color: 'var(--text4)', maxWidth: 460, textAlign: 'center', lineHeight: 1.6 }}>
-    Incognito chats aren't saved to history or used to improve VORTIS.
-  </p>
 </div>
       ) : (
         <div className="welcome-wrap">
