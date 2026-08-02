@@ -297,7 +297,6 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const [incognito, setIncognito] = useState(false);
   const copy = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
 
   const submitEdit = () => {
@@ -1137,25 +1136,8 @@ const Vertex = ({
   const prefsRef = useRef(null);
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
   const [recentChatsOpen, setRecentChatsOpen] = useState(true);
+  const [incognito, setIncognito] = useState(false);   
 
-  <button
-  onClick={toggleIncognito}
-  title={incognito ? 'Exit incognito' : 'Incognito mode — don\'t save this chat'}
-  style={{
-    display: 'flex', alignItems: 'center', gap: 5,
-    background: incognito ? '#fff' : '#141414',
-    border: '1px solid ' + (incognito ? '#fff' : '#2a2a2a'),
-    color: incognito ? '#0a0a0a' : '#c8c8c8',
-    fontSize: 12, borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
-  }}
->
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-    <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="currentColor"/>
-    <circle cx="9" cy="10" r="1.5" fill={incognito ? '#fff' : '#0a0a0a'}/>
-    <circle cx="15" cy="10" r="1.5" fill={incognito ? '#fff' : '#0a0a0a'}/>
-  </svg>
-  {incognito ? 'Incognito' : 'Incognito'}
-</button>
 
   /* ── Settings popover state (declared early so the Esc handler below
        can reference it without hitting a Temporal Dead Zone error) ── */
@@ -1586,14 +1568,6 @@ Title:`,
     }
   }, [db]);
 
-  const toggleIncognito = useCallback(() => {
-  setIncognito(v => {
-    const next = !v;
-    if (next) newChat(); // entering incognito always starts fresh
-    return next;
-  });
-}, [newChat]);
-
   const persistChat = useCallback(async (msgs, overrideTitle) => {
     if (!userUidRef.current) return;
     if (incognito) return;
@@ -1642,6 +1616,14 @@ Title:`,
     closeCodePanel();
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [closeCodePanel]);
+
+  const toggleIncognito = useCallback(() => {
+  setIncognito(v => {
+    const next = !v;
+    if (next) newChat();
+    return next;
+  });
+}, [newChat]);
 
   const loadChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
@@ -2321,6 +2303,26 @@ Title:`,
             }}
           >
             <Download size={12}/> Export
+          </button>
+
+
+          <button
+            onClick={toggleIncognito}
+            title={incognito ? 'Exit incognito' : "Incognito mode — don't save this chat"}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: incognito ? '#fff' : '#141414',
+              border: '1px solid ' + (incognito ? '#fff' : '#2a2a2a'),
+              color: incognito ? '#0a0a0a' : '#c8c8c8',
+              fontSize: 12, borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="currentColor"/>
+              <circle cx="9" cy="10" r="1.5" fill={incognito ? '#fff' : '#0a0a0a'}/>
+              <circle cx="15" cy="10" r="1.5" fill={incognito ? '#fff' : '#0a0a0a'}/>
+            </svg>
+            Incognito
           </button>
 
           {/* Settings — opens a popover with code style + other options */}
