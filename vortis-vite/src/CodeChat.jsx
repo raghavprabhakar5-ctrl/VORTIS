@@ -1566,7 +1566,7 @@ Title:`,
     } catch (e) {
       console.error('Vertex: failed to load code chats —', e);
     }
-  }, [db]);
+  }, [db, incognito]);
 
   const persistChat = useCallback(async (msgs, overrideTitle) => {
     if (!userUidRef.current) return;
@@ -1600,7 +1600,7 @@ Title:`,
     } catch (e) {
       console.error('Vertex: failed to save code chat —', e);
     }
-  }, [db, style, loadChats]);
+  }, [db, style, loadChats, incognito]);  
 
   const newChat = useCallback(() => {
     abortRef.current = true;
