@@ -1147,7 +1147,9 @@ const Vertex = ({
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
   
   const [recentChatsOpen, setRecentChatsOpen] = useState(true);
-  const [incognito, setIncognito] = useState(false);   
+  const [incognito, setIncognito] = useState(
+  () => new URLSearchParams(window.location.search).get('incognito') === 'true'
+); 
 
   useEffect(() => {
   const handler = (e) => setIncognito(e.detail.incognito);
@@ -1634,10 +1636,20 @@ Title:`,
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [closeCodePanel]);
 
-  const toggleIncognito = useCallback(() => {
+ const toggleIncognito = useCallback(() => {
   setIncognito(v => {
     const next = !v;
     if (next) newChat();
+
+    const params = new URLSearchParams(window.location.search);
+    if (next) params.set('incognito', 'true');
+    else params.delete('incognito');
+    window.history.replaceState(
+      {}, '',
+      window.location.pathname + (params.toString() ? '?' + params.toString() : '')
+    );
+
+    window.dispatchEvent(new CustomEvent('vortis-incognito-toggle', { detail: { incognito: next } }));
     return next;
   });
 }, [newChat]);
@@ -2449,24 +2461,6 @@ Title:`,
         </div>
       </div>
 
-     {incognito && (
-  <div style={{
-    background: 'rgba(8,8,16,.9)', borderBottom: '1px solid #262626',
-    padding: '0 16px', height: 38, flexShrink: 0,
-    display: 'flex', alignItems: 'center',
-  }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#e6e6e6"/>
-        <circle cx="9" cy="10" r="1.5" fill="#0a0a0a"/>
-        <circle cx="15" cy="10" r="1.5" fill="#0a0a0a"/>
-      </svg>
-      <span style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8' }}>
-        Incognito chat
-      </span>
-    </div>
-  </div>
-)}
       {/* ═══ Body: sidebar + main + code panel ═══ */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* ── Sidebar ── */}

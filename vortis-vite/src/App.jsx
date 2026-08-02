@@ -5530,33 +5530,6 @@ return (
       </div>
 
      <div className="main">
- {isIncognito && (
-  <div style={{
-    background: 'rgba(8,8,16,.9)', borderBottom: '1px solid rgba(139,92,246,.15)',
-    padding: '0 20px', height: 40, flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
-        <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
-        <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
-      </svg>
-      <span style={{ fontSize: 12.5, color: '#c8c2e8', fontFamily: 'var(--font-main)' }}>Incognito chat</span>
-    </div>
-    <button
-      onClick={() => {
-        const params = new URLSearchParams(window.location.search);
-        params.delete('incognito');
-        window.history.replaceState({}, '', window.location.pathname + (params.toString() ? '?' + params.toString() : ''));
-        window.dispatchEvent(new CustomEvent('vortis-incognito-toggle', { detail: { incognito: false } }));
-      }}
-      style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 4, display: 'flex' }}
-    >
-      <X size={15}/>
-    </button>
-  </div>
-)}
   <div className="header">
           <div className="hdr-left">
             <button className="sidebar-toggle-btn" onClick={() => setShowSidebar(!showSidebar)} title="Toggle sidebar (⌘/)">
