@@ -5855,20 +5855,28 @@ return (
 />
 </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
-                        {[
-                          { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
-                        { 
-  ic: speakingMsgId === msg.id ? <VolumeX size={11} color="var(--red)"/> : <Volume2 size={11}/>,
-  fn: () => {
-    const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
-    const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
-    speakText(rawText, msg.id);
-  },
-  tip: speakingMsgId === msg.id ? 'Stop' : 'Read aloud'
-},
-                          { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
-                          { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' },
-                        ].map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>)}
+                        {(() => {
+                          const hasCodeOrImage = /```/.test(msg.text || '') || (msg.text || '').startsWith('__IMG_B64__');
+                          const actions = [
+                            { ic: copiedIdx===idx ? <Check size={11} color="var(--green)"/> : <Copy size={11}/>, fn: () => { navigator.clipboard.writeText(msg.text?.replace(/<[^>]*>/g,'')||''); setCopiedIdx(idx); setTimeout(()=>setCopiedIdx(null),2000); }, tip: 'Copy' },
+                          ];
+                          if (!hasCodeOrImage) {
+                            actions.push({
+                              ic: speakingMsgId === msg.id ? <VolumeX size={11} color="var(--red)"/> : <Volume2 size={11}/>,
+                              fn: () => {
+                                const bubble = document.querySelector(`[data-msgid="${msg.id}"] .md-content`);
+                                const rawText = bubble ? (bubble.innerText || bubble.textContent || '') : msg.text;
+                                speakText(rawText, msg.id);
+                              },
+                              tip: speakingMsgId === msg.id ? 'Stop' : 'Read aloud'
+                            });
+                          }
+                          actions.push(
+                            { ic: <Share2 size={11}/>, fn: () => navigator.share?.({ title: 'VORTIS', text: msg.text?.replace(/<[^>]*>/g,'') }), tip: 'Share' },
+                            { ic: <RefreshCw size={11}/>, fn: () => { const prev = messages.slice(0,idx).reverse().find(m=>m.type==='user'); if (prev) { setMessages(p=>p.filter((_,i)=>i!==idx)); setIsProcessing(true); getAI(prev.text, false).finally(()=>setIsProcessing(false)); } }, tip: 'Regenerate' }
+                          );
+                          return actions.map((b, bi) => <button key={bi} onClick={b.fn} title={b.tip} className="action-btn">{b.ic}</button>);
+                        })()}
                         <div style={{ width: 1, height: 14, background: 'var(--border)', margin: '0 2px' }}/>
                         <button onClick={() => setReaction(msg.id,'up')} className={`action-btn ${reactions[msg.id]==='up'?'active-up':''}`}><ThumbsUp size={11}/></button>
                         <button onClick={() => setReaction(msg.id,'down')} className={`action-btn ${reactions[msg.id]==='down'?'active-down':''}`}><ThumbsDown size={11}/></button>
@@ -5879,8 +5887,8 @@ return (
                 )}
               </div>
             ))}
-            
 
+            
             {isProcessing && !streamText && !messages.some(m => m.text === '__IMG_LOADING__') && (
   <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
     <VortisAvatar size={35} animating/>
