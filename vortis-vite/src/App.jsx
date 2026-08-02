@@ -5607,21 +5607,21 @@ return (
   <div className="chat-inner">
     {messages.length === 0 && (
       isIncognito ? (
-        <div className="welcome-wrap" style={{ paddingTop: 60 }}>
+        <div className="welcome-wrap" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', paddingTop: 0 }}>
   <div style={{
     width: 40, height: 40, borderRadius: 12,
-    background: 'rgba(139,92,246,.1)', border: '1px solid rgba(139,92,246,.25)',
+    background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.25)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
   }}>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
-      <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
-      <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+      <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="var(--indigo)"/>
+      <circle cx="9" cy="10" r="1.5" fill="var(--bg2)"/>
+      <circle cx="15" cy="10" r="1.5" fill="var(--bg2)"/>
     </svg>
   </div>
 
   <div style={{
-    fontSize: 'clamp(28px,5vw,44px)', fontWeight: 700, color: '#e8e8f8',
+    fontSize: 'clamp(28px,5vw,44px)', fontWeight: 700, color: 'var(--text1)',
     letterSpacing: '-.02em', marginBottom: 10,
     fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic',
   }}>
@@ -5632,6 +5632,9 @@ return (
     This chat won't appear in your history and won't be saved anywhere.
   </p>
 
+  <p style={{ fontSize: 11.5, color: 'var(--text4)', maxWidth: 460, textAlign: 'center', lineHeight: 1.6 }}>
+    Incognito chats aren't saved to history or used to improve VORTIS.
+  </p>
 </div>
       ) : (
         <div className="welcome-wrap">

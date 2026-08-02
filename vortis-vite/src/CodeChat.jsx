@@ -2636,14 +2636,16 @@ Title:`,
             {messages.length === 0 && !streaming ? (
   incognito ? (
     <div style={{
-      minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-      padding: '40px 24px', textAlign: 'center',
-    }}>
-      <div style={{
+  height: '100%', width: '100%', boxSizing: 'border-box',
+  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+  padding: '24px', textAlign: 'center',
+}}>
+  <div style={{
   width: 40, height: 40, borderRadius: 12,
   background: 'rgba(230,230,230,.08)', border: '1px solid #2a2a2a',
   display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
 }}>
+  
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
     <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#e6e6e6"/>
     <circle cx="9" cy="10" r="1.5" fill="#0a0a0a"/>
