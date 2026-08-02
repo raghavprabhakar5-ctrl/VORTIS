@@ -2,8 +2,6 @@ import { useEffect } from 'react';
 
 export default function useDevToolsGuard() {
   useEffect(() => {
-    const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
-
     const blockKeys = (e) => {
       const key = e.key?.toUpperCase();
       const ctrl = e.ctrlKey || e.metaKey;
@@ -18,11 +16,21 @@ export default function useDevToolsGuard() {
         e.preventDefault();
         e.stopPropagation();
 
-        if (isIncognito) {
-          window.location.href = window.location.origin + '/';
-        } else {
-          window.location.href = window.location.origin + '/?incognito=true';
-        }
+        // Toggle incognito WITHOUT a full page reload — this preserves
+        // any open overlay (like Vertex) instead of destroying its state.
+        const params = new URLSearchParams(window.location.search);
+        const wasIncognito = params.get('incognito') === 'true';
+        const nowIncognito = !wasIncognito;
+
+        if (nowIncognito) params.set('incognito', 'true');
+        else params.delete('incognito');
+
+        const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+        window.history.replaceState({}, '', newUrl);
+
+        window.dispatchEvent(new CustomEvent('vortis-incognito-toggle', {
+          detail: { incognito: nowIncognito }
+        }));
 
         return false;
       }
@@ -36,7 +44,6 @@ export default function useDevToolsGuard() {
     return () => {
       document.removeEventListener('keydown', blockKeys, true);
       document.removeEventListener('contextmenu', blockContext, true);
-    }; 
-    
+    };
   }, []);
 }

@@ -2439,7 +2439,15 @@ const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
 export default function VortisAI() {
    useDevToolsGuard();
-   const isIncognito = new URLSearchParams(window.location.search).get('incognito') === 'true';
+   const [isIncognito, setIsIncognito] = useState(
+  () => new URLSearchParams(window.location.search).get('incognito') === 'true'
+);
+
+useEffect(() => {
+  const handler = (e) => setIsIncognito(e.detail.incognito);
+  window.addEventListener('vortis-incognito-toggle', handler);
+  return () => window.removeEventListener('vortis-incognito-toggle', handler);
+}, []);
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {
@@ -2605,6 +2613,14 @@ useEffect(() => {
 
   const auth = getAuth();
   const db = getFirestore();
+
+  useEffect(() => {
+  if (document.querySelector('link[href*="Playfair+Display"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital@1&display=swap';
+  document.head.appendChild(link);
+}, []);
 
   useEffect(() => {
   const fontDef = FONT_OPTIONS.find(f => f.id === uiFont) || FONT_OPTIONS[0];
@@ -5516,57 +5532,29 @@ return (
      <div className="main">
  {isIncognito && (
   <div style={{
-    background: 'rgba(8,8,16,.95)',
-    borderBottom: '1px solid rgba(139,92,246,.2)',
-    padding: '0 24px',
-    height: 38,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    flexShrink: 0,
-    position: 'relative',
+    background: 'rgba(8,8,16,.9)', borderBottom: '1px solid rgba(139,92,246,.15)',
+    padding: '0 20px', height: 40, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   }}>
-    <style>{`
-      @keyframes incogPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.15)}}
-      @keyframes incogFade{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-    `}</style>
-
-    <div style={{ display:'flex', alignItems:'center', gap:7, animation:'incogFade .4s ease' }}>
-      {/* pulsing dot */}
-      <div style={{
-        width:6, height:6, borderRadius:'50%',
-        background:'#8b5cf6',
-        boxShadow:'0 0 10px rgba(139,92,246,.8)',
-        animation:'incogPulse 2s ease-in-out infinite',
-        flexShrink:0
-      }}/>
-
-      {/* ghost icon */}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{flexShrink:0,opacity:.85}}>
-        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#8b5cf6"/>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
         <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
         <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
       </svg>
-
-      <span style={{
-        fontSize:11,
-        fontFamily:'JetBrains Mono',
-        fontWeight:700,
-        color:'#a78bfa',
-        letterSpacing:'.12em',
-        textTransform:'uppercase'
-      }}>Incognito</span>
-
-      <div style={{width:1,height:14,background:'rgba(139,92,246,.25)',margin:'0 2px'}}/>
-
-      <span style={{
-        fontSize:11,
-        fontFamily:'JetBrains Mono',
-        color:'rgba(144,144,176,.45)',
-        letterSpacing:'.02em'
-      }}>No history · No saved chats · Nothing stored</span>
+      <span style={{ fontSize: 12.5, color: '#c8c2e8', fontFamily: 'var(--font-main)' }}>Incognito chat</span>
     </div>
+    <button
+      onClick={() => {
+        const params = new URLSearchParams(window.location.search);
+        params.delete('incognito');
+        window.history.replaceState({}, '', window.location.pathname + (params.toString() ? '?' + params.toString() : ''));
+        window.dispatchEvent(new CustomEvent('vortis-incognito-toggle', { detail: { incognito: false } }));
+      }}
+      style={{ background: 'none', border: 'none', color: 'var(--text3)', cursor: 'pointer', padding: 4, display: 'flex' }}
+    >
+      <X size={15}/>
+    </button>
   </div>
 )}
   <div className="header">
@@ -5645,57 +5633,79 @@ return (
 <div className="chat-feed scr">
   <div className="chat-inner">
     {messages.length === 0 && (
-      <div className="welcome-wrap">
-        <div className="welcome-greeting">{getGreeting(profile.name)}</div>
-        <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
-        <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
-          {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
-        </div>
+      isIncognito ? (
+        <div className="welcome-wrap" style={{ paddingTop: 60 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 12,
+            background: 'rgba(139,92,246,.1)', border: '1px solid rgba(139,92,246,.25)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+          }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
+              <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
+              <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+            </svg>
+          </div>
 
-        {!isIncognito && (
-          <>
-            <div className="recent-label" style={{ width: '100%', maxWidth: 680 }} onClick={() => setShowRecentChats(p => !p)}>
-              <MessageSquare size={13}/>Recent chats
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', transition: 'transform .2s', transform: showRecentChats ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            {showRecentChats && (
-              savedChats.length > 0 ? (
-                <div className="recent-grid" style={{ maxWidth: 680 }}>
-                  {savedChats.slice(0, 3).map(c => (
-                   <div className="recent-card" onClick={() => loadChat(c.id)}>
-                      <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
-                      <div className="rc-title">{c.preview}</div>
-                      <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ width: '100%', maxWidth: 680, padding: '20px', textAlign: 'center', border: '1px dashed rgba(99,102,241,.2)', borderRadius: 12, background: 'rgba(99,102,241,.03)' }}>
-                  <MessageSquare size={20} color="var(--text4)" style={{ margin: '0 auto 8px', opacity: .4, display: 'block' }}/>
-                  <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>No recent chats</p>
-                  <p style={{ fontSize: 12, color: 'var(--text3)' }}>Start a conversation and it'll show up here.</p>
-                </div>
-              )
-            )}
-          </>
-        )}
+          <div style={{
+            fontSize: 'clamp(28px,5vw,44px)', fontWeight: 700, color: '#e8e8f8',
+            letterSpacing: '-.02em', marginBottom: 10,
+            fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic',
+          }}>
+            You're incognito
+          </div>
 
-        {isIncognito && (
-          <div style={{ width: '100%', maxWidth: 680, marginTop: 8, padding: '16px 20px', border: '1px solid rgba(139,92,246,.2)', borderRadius: 14, background: 'rgba(139,92,246,.04)', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(139,92,246,.12)', border: '1px solid rgba(139,92,246,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="rgba(139,92,246,.8)"/>
-                <circle cx="9" cy="10" r="1.5" fill="#080810"/>
-                <circle cx="15" cy="10" r="1.5" fill="#080810"/>
-              </svg>
-            </div>
-            <div>
-              <p style={{ fontSize: 12.5, fontWeight: 700, color: '#a78bfa', fontFamily: 'JetBrains Mono', marginBottom: 2 }}>Incognito mode active</p>
-              <p style={{ fontSize: 11.5, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>No history • No saved chats • Nothing stored</p>
+          <p style={{ fontSize: 13.5, color: 'var(--text3)', maxWidth: 420, textAlign: 'center', lineHeight: 1.6, marginBottom: 30 }}>
+            This chat won't appear in your history and won't be saved anywhere.
+          </p>
+
+          <div style={{
+            width: '100%', maxWidth: 620,
+            border: '1px dashed rgba(139,92,246,.25)', borderRadius: 16,
+            padding: '18px 22px', marginBottom: 26, background: 'rgba(139,92,246,.03)',
+          }}>
+            <div style={{ fontSize: 15, color: 'var(--text3)', textAlign: 'left' }}>
+              Message Vortis…
             </div>
           </div>
-        )}
-      </div>
+
+          <p style={{ fontSize: 11.5, color: 'var(--text4)', maxWidth: 460, textAlign: 'center', lineHeight: 1.6 }}>
+            Incognito chats aren't saved to history or used to improve VORTIS.
+          </p>
+        </div>
+      ) : (
+        <div className="welcome-wrap">
+          <div className="welcome-greeting">{getGreeting(profile.name)}</div>
+          <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
+          <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
+            {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
+          </div>
+
+          <div className="recent-label" style={{ width: '100%', maxWidth: 680 }} onClick={() => setShowRecentChats(p => !p)}>
+            <MessageSquare size={13}/>Recent chats
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ marginLeft: 'auto', transition: 'transform .2s', transform: showRecentChats ? 'rotate(180deg)' : 'rotate(0deg)' }}><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          {showRecentChats && (
+            savedChats.length > 0 ? (
+              <div className="recent-grid" style={{ maxWidth: 680 }}>
+                {savedChats.slice(0, 3).map(c => (
+                 <div className="recent-card" onClick={() => loadChat(c.id)}>
+                    <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
+                    <div className="rc-title">{c.preview}</div>
+                    <div className="rc-time">{c.updated ? new Date(c.updated).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ width: '100%', maxWidth: 680, padding: '20px', textAlign: 'center', border: '1px dashed rgba(99,102,241,.2)', borderRadius: 12, background: 'rgba(99,102,241,.03)' }}>
+                <MessageSquare size={20} color="var(--text4)" style={{ margin: '0 auto 8px', opacity: .4, display: 'block' }}/>
+                <p style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4 }}>No recent chats</p>
+                <p style={{ fontSize: 12, color: 'var(--text3)' }}>Start a conversation and it'll show up here.</p>
+              </div>
+            )
+          )}
+        </div>
+      )
     )}
 
    {showVoiceCall && (

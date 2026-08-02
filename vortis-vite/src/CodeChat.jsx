@@ -500,6 +500,15 @@ const SelectionReplyButton = ({ scrollRef, onReply }) => {
         setSelectedText('');
         return;
       }
+
+      useEffect(() => {
+  if (document.querySelector('link[href*="Playfair+Display"]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital@1&display=swap';
+  document.head.appendChild(link);
+}, []);
+
       const text = sel.toString().trim();
       if (!text || text.length < 2) {
         setPos(null);
@@ -1134,9 +1143,17 @@ const Vertex = ({
   });
   const [showPrefs, setShowPrefs] = useState(false);
   const prefsRef = useRef(null);
+
   useEffect(() => { try { localStorage.setItem('vortis_code_style', style); } catch (_) {} }, [style]);
+  
   const [recentChatsOpen, setRecentChatsOpen] = useState(true);
   const [incognito, setIncognito] = useState(false);   
+
+  useEffect(() => {
+  const handler = (e) => setIncognito(e.detail.incognito);
+  window.addEventListener('vortis-incognito-toggle', handler);
+  return () => window.removeEventListener('vortis-incognito-toggle', handler);
+}, []);
 
 
   /* ── Settings popover state (declared early so the Esc handler below
@@ -2434,21 +2451,28 @@ Title:`,
 
       {incognito && (
   <div style={{
-    background: '#000', borderBottom: '1px solid #333',
-    padding: '0 16px', height: 34, flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+    background: 'rgba(8,8,16,.9)', borderBottom: '1px solid rgba(139,92,246,.15)',
+    padding: '0 16px', height: 38, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   }}>
-    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
-    <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, color: '#fff', letterSpacing: '.1em', textTransform: 'uppercase' }}>
-      Incognito
-    </span>
-    <div style={{ width: 1, height: 12, background: '#444' }} />
-    <span style={{ fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#888' }}>
-      This chat won't be saved
-    </span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
+        <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
+        <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+      </svg>
+      <span style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#c8c2e8' }}>
+        Incognito chat
+      </span>
+    </div>
+    <button
+      onClick={toggleIncognito}
+      style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 3, display: 'flex' }}
+    >
+      <X size={14}/>
+    </button>
   </div>
 )}
-
       {/* ═══ Body: sidebar + main + code panel ═══ */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* ── Sidebar ── */}
@@ -2622,79 +2646,124 @@ Title:`,
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
           <div ref={scrollRef} onScroll={handleScroll} style={{ position: 'absolute', inset: 0, overflowY: 'auto' }} className="scr">
             {messages.length === 0 && !streaming ? (
-              <div style={{
-                minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                padding: '30px 24px', textAlign: 'center'
-              }}>
-                <h1 style={{ fontSize: 32, fontWeight: 700, color: '#f5f5f5', margin: '0 0 8px', letterSpacing: '-.02em' }}>
-                  {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block', filter: 'brightness(0) invert(1)' }}>👋</span>
-                </h1>
-                <p style={{ fontSize: 14.5, color: '#8a8a8a', maxWidth: 460, lineHeight: 1.6, margin: '0 0 24px' }}>
-                  Chat with Vertex and turn your ideas into reality with ease.
-                </p>
+  incognito ? (
+    <div style={{
+      minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '40px 24px', textAlign: 'center',
+    }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: 12,
+        background: 'rgba(139,92,246,.1)', border: '1px solid rgba(139,92,246,.25)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+      }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
+          <circle cx="9" cy="10" r="1.5" fill="#0a0a0a"/>
+          <circle cx="15" cy="10" r="1.5" fill="#0a0a0a"/>
+        </svg>
+      </div>
 
-                <div style={{
-                  display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
-                  gap: 8, maxWidth: 640, marginTop: 12, marginBottom: savedChats.length ? 30 : 0
-                }}>
-                  {STARTER_PROMPTS.map(s => {
-                    const Icon = ICONS[s.icon] || FileCode;
-                    return (
-                      <button key={s.label}
-                        onClick={() => { setInput(s.prompt); setTimeout(() => inputRef.current?.focus(), 30); }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999,
-                          cursor: 'pointer', background: '#111111', border: '1px solid #232323',
-                          color: '#dcdcdc', fontSize: 12.5, fontWeight: 600, transition: 'all .14s', whiteSpace: 'nowrap'
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
-                      >
-                        <Icon size={13} color="#9a9a9a"/> {s.label}
-                      </button>
-                    );
-                  })}
-                </div>
+      <div style={{
+        fontSize: 'clamp(26px,4.5vw,40px)', fontWeight: 700, color: '#f0f0f0',
+        letterSpacing: '-.02em', marginBottom: 10,
+        fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic',
+      }}>
+        You're incognito
+      </div>
 
-                {savedChats.length > 0 && (
-                  <div style={{ width: '100%', maxWidth: 760, textAlign: 'left' }}>
-                    <button onClick={() => setRecentChatsOpen(v => !v)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700,
-                        color: '#9a9a9a', marginBottom: 10, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0
-                      }}>
-                      Your Recent chats
-                      <ChevronDown size={13} color="#6a6a6a" style={{ transform: recentChatsOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .15s' }}/>
-                    </button>
-                    {recentChatsOpen && (
-                    <div style={{
-                      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10
-                    }}>
-                      {savedChats.slice(0, 3).map(c => (
-                        <button key={c.id} onClick={() => loadChat(c.id)}
-                          style={{
-                            textAlign: 'left', padding: '12px 14px', borderRadius: 9, cursor: 'pointer',
-                            background: '#111111', border: '1px solid #232323', color: '#dcdcdc',
-                            display: 'flex', flexDirection: 'column', gap: 6, transition: 'all .14s'
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
-                          onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
-                        >
-                          <MessageSquare size={13} color="#6a6a6a"/>
-                          <span style={{
-                            fontSize: 12.5, fontWeight: 600, lineHeight: 1.4,
-                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
-                          }}>{c.title || c.preview || 'Untitled'}</span>
-                          <span style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono' }}>{relTime(c.updated)}</span>
-                        </button>
-                      ))}
-                    </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
+      <p style={{ fontSize: 13.5, color: '#8a8a8a', maxWidth: 420, lineHeight: 1.6, marginBottom: 30 }}>
+        This chat won't be saved to your history or added to Vertex's saved chats.
+      </p>
+
+      <div style={{
+        width: '100%', maxWidth: 560,
+        border: '1px dashed rgba(139,92,246,.25)', borderRadius: 14,
+        padding: '18px 22px', marginBottom: 24, background: 'rgba(139,92,246,.03)',
+      }}>
+        <div style={{ fontSize: 14.5, color: '#5a5a5a', textAlign: 'left' }}>
+          Ask anything about code — paste an error, request a function, refactor something…
+        </div>
+      </div>
+
+      <p style={{ fontSize: 11, color: '#5a5a5a', maxWidth: 440, lineHeight: 1.6 }}>
+        Incognito chats aren't saved or used to improve Vertex.
+      </p>
+    </div>
+  ) : (
+    <div style={{
+      minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      padding: '30px 24px', textAlign: 'center'
+    }}>
+      <h1 style={{ fontSize: 32, fontWeight: 700, color: '#f5f5f5', margin: '0 0 8px', letterSpacing: '-.02em' }}>
+        {getGreeting()}{user?.displayName ? `, ${user.displayName.split(' ')[0]}` : ''} <span style={{ display: 'inline-block', filter: 'brightness(0) invert(1)' }}>👋</span>
+      </h1>
+      <p style={{ fontSize: 14.5, color: '#8a8a8a', maxWidth: 460, lineHeight: 1.6, margin: '0 0 24px' }}>
+        Chat with Vertex and turn your ideas into reality with ease.
+      </p>
+
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
+        gap: 8, maxWidth: 640, marginTop: 12, marginBottom: savedChats.length ? 30 : 0
+      }}>
+        {STARTER_PROMPTS.map(s => {
+          const Icon = ICONS[s.icon] || FileCode;
+          return (
+            <button key={s.label}
+              onClick={() => { setInput(s.prompt); setTimeout(() => inputRef.current?.focus(), 30); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999,
+                cursor: 'pointer', background: '#111111', border: '1px solid #232323',
+                color: '#dcdcdc', fontSize: 12.5, fontWeight: 600, transition: 'all .14s', whiteSpace: 'nowrap'
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
+            >
+              <Icon size={13} color="#9a9a9a"/> {s.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {savedChats.length > 0 && (
+        <div style={{ width: '100%', maxWidth: 760, textAlign: 'left' }}>
+          <button onClick={() => setRecentChatsOpen(v => !v)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700,
+              color: '#9a9a9a', marginBottom: 10, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0
+            }}>
+            Your Recent chats
+            <ChevronDown size={13} color="#6a6a6a" style={{ transform: recentChatsOpen ? 'none' : 'rotate(-90deg)', transition: 'transform .15s' }}/>
+          </button>
+          {recentChatsOpen && (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10
+          }}>
+            {savedChats.slice(0, 3).map(c => (
+              <button key={c.id} onClick={() => loadChat(c.id)}
+                style={{
+                  textAlign: 'left', padding: '12px 14px', borderRadius: 9, cursor: 'pointer',
+                  background: '#111111', border: '1px solid #232323', color: '#dcdcdc',
+                  display: 'flex', flexDirection: 'column', gap: 6, transition: 'all .14s'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#4a4a4a'; e.currentTarget.style.background = '#161616'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#232323'; e.currentTarget.style.background = '#111111'; }}
+              >
+                <MessageSquare size={13} color="#6a6a6a"/>
+                <span style={{
+                  fontSize: 12.5, fontWeight: 600, lineHeight: 1.4,
+                  display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+                }}>{c.title || c.preview || 'Untitled'}</span>
+                <span style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono' }}>{relTime(c.updated)}</span>
+              </button>
+            ))}
+          </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+) : (
+  <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
                 {messages.map((m, i) => (
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
                     makeMdComponents={makeMdComponents} onSmartEdit={handleSmartEdit} messageId={m.id}
