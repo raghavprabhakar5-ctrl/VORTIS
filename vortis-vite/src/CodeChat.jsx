@@ -2449,28 +2449,22 @@ Title:`,
         </div>
       </div>
 
-      {incognito && (
+     {incognito && (
   <div style={{
-    background: 'rgba(8,8,16,.9)', borderBottom: '1px solid rgba(139,92,246,.15)',
+    background: 'rgba(8,8,16,.9)', borderBottom: '1px solid #262626',
     padding: '0 16px', height: 38, flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    display: 'flex', alignItems: 'center',
   }}>
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
-        <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
-        <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+        <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#e6e6e6"/>
+        <circle cx="9" cy="10" r="1.5" fill="#0a0a0a"/>
+        <circle cx="15" cy="10" r="1.5" fill="#0a0a0a"/>
       </svg>
-      <span style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#c8c2e8' }}>
+      <span style={{ fontSize: 12, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8' }}>
         Incognito chat
       </span>
     </div>
-    <button
-      onClick={toggleIncognito}
-      style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 3, display: 'flex' }}
-    >
-      <X size={14}/>
-    </button>
   </div>
 )}
       {/* ═══ Body: sidebar + main + code panel ═══ */}
@@ -2652,16 +2646,16 @@ Title:`,
       padding: '40px 24px', textAlign: 'center',
     }}>
       <div style={{
-        width: 40, height: 40, borderRadius: 12,
-        background: 'rgba(139,92,246,.1)', border: '1px solid rgba(139,92,246,.25)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-      }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
-          <circle cx="9" cy="10" r="1.5" fill="#0a0a0a"/>
-          <circle cx="15" cy="10" r="1.5" fill="#0a0a0a"/>
-        </svg>
-      </div>
+  width: 40, height: 40, borderRadius: 12,
+  background: 'rgba(230,230,230,.08)', border: '1px solid #2a2a2a',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+}}>
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+    <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#e6e6e6"/>
+    <circle cx="9" cy="10" r="1.5" fill="#0a0a0a"/>
+    <circle cx="15" cy="10" r="1.5" fill="#0a0a0a"/>
+  </svg>
+</div>
 
       <div style={{
         fontSize: 'clamp(26px,4.5vw,40px)', fontWeight: 700, color: '#f0f0f0',
@@ -2675,19 +2669,6 @@ Title:`,
         This chat won't be saved to your history or added to Vertex's saved chats.
       </p>
 
-      <div style={{
-        width: '100%', maxWidth: 560,
-        border: '1px dashed rgba(139,92,246,.25)', borderRadius: 14,
-        padding: '18px 22px', marginBottom: 24, background: 'rgba(139,92,246,.03)',
-      }}>
-        <div style={{ fontSize: 14.5, color: '#5a5a5a', textAlign: 'left' }}>
-          Ask anything about code — paste an error, request a function, refactor something…
-        </div>
-      </div>
-
-      <p style={{ fontSize: 11, color: '#5a5a5a', maxWidth: 440, lineHeight: 1.6 }}>
-        Incognito chats aren't saved or used to improve Vertex.
-      </p>
     </div>
   ) : (
     <div style={{

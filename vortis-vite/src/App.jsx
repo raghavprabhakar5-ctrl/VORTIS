@@ -5635,44 +5635,31 @@ return (
     {messages.length === 0 && (
       isIncognito ? (
         <div className="welcome-wrap" style={{ paddingTop: 60 }}>
-          <div style={{
-            width: 40, height: 40, borderRadius: 12,
-            background: 'rgba(139,92,246,.1)', border: '1px solid rgba(139,92,246,.25)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-          }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
-              <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
-              <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
-            </svg>
-          </div>
+  <div style={{
+    width: 40, height: 40, borderRadius: 12,
+    background: 'rgba(139,92,246,.1)', border: '1px solid rgba(139,92,246,.25)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
+  }}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2C8.13 2 5 5.13 5 9v8l-2 2v1h18v-1l-2-2V9c0-3.87-3.13-7-7-7z" fill="#a78bfa"/>
+      <circle cx="9" cy="10" r="1.5" fill="#08080f"/>
+      <circle cx="15" cy="10" r="1.5" fill="#08080f"/>
+    </svg>
+  </div>
 
-          <div style={{
-            fontSize: 'clamp(28px,5vw,44px)', fontWeight: 700, color: '#e8e8f8',
-            letterSpacing: '-.02em', marginBottom: 10,
-            fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic',
-          }}>
-            You're incognito
-          </div>
+  <div style={{
+    fontSize: 'clamp(28px,5vw,44px)', fontWeight: 700, color: '#e8e8f8',
+    letterSpacing: '-.02em', marginBottom: 10,
+    fontFamily: "'Playfair Display', Georgia, serif", fontStyle: 'italic',
+  }}>
+    You're incognito
+  </div>
 
-          <p style={{ fontSize: 13.5, color: 'var(--text3)', maxWidth: 420, textAlign: 'center', lineHeight: 1.6, marginBottom: 30 }}>
-            This chat won't appear in your history and won't be saved anywhere.
-          </p>
+  <p style={{ fontSize: 13.5, color: 'var(--text3)', maxWidth: 420, textAlign: 'center', lineHeight: 1.6, marginBottom: 30 }}>
+    This chat won't appear in your history and won't be saved anywhere.
+  </p>
 
-          <div style={{
-            width: '100%', maxWidth: 620,
-            border: '1px dashed rgba(139,92,246,.25)', borderRadius: 16,
-            padding: '18px 22px', marginBottom: 26, background: 'rgba(139,92,246,.03)',
-          }}>
-            <div style={{ fontSize: 15, color: 'var(--text3)', textAlign: 'left' }}>
-              Message Vortis…
-            </div>
-          </div>
-
-          <p style={{ fontSize: 11.5, color: 'var(--text4)', maxWidth: 460, textAlign: 'center', lineHeight: 1.6 }}>
-            Incognito chats aren't saved to history or used to improve VORTIS.
-          </p>
-        </div>
+</div>
       ) : (
         <div className="welcome-wrap">
           <div className="welcome-greeting">{getGreeting(profile.name)}</div>
