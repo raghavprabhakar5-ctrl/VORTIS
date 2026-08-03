@@ -1,11 +1,12 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { initializeApp } from 'firebase/app';
-import App from "./App.jsx";
 import Privacy from "./Privacy.jsx";
 import Terms from "./Terms.jsx";
 import NotFound from "./NotFound.jsx";
 import "./index.css";
+
+const App = lazy(() => import("./App.jsx"));
 
 // Firebase configuration - MUST BE BEFORE ReactDOM.render
 const firebaseConfig = {
@@ -24,7 +25,13 @@ initializeApp(firebaseConfig);
 function Root() {
   const path = window.location.pathname;
 
-  if (path === "/" ) return <App />;
+  if (path === "/") {
+    return (
+      <Suspense fallback={<div style={{ background: '#03030a', height: '100vh' }} />}>
+        <App />
+      </Suspense>
+    );
+  }
   if (path === "/privacy") return <Privacy />;
   if (path === "/terms") return <Terms />;
 
