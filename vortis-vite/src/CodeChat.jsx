@@ -1151,10 +1151,24 @@ const Vertex = ({
   () => new URLSearchParams(window.location.search).get('incognito') === 'true'
 ); 
 
-  useEffect(() => {
+ const newChat = useCallback(() => {
+  abortRef.current = true;
+  setStreaming(false); setThinking(false); setStreamText('');
+  const newId = Date.now().toString();
+  setChatId(newId); chatIdRef.current = newId;
+  setMessages([]); convHistoryRef.current = [];
+  setInput('');
+  setAttachments([]);
+  setReplyQuote(null);
+  closeCodePanel();
+  setTimeout(() => inputRef.current?.focus(), 50);
+}, [closeCodePanel]);
+
+// ── moved here: now newChat exists before this effect references it ──
+useEffect(() => {
   const handler = (e) => {
     setIncognito(e.detail.incognito);
-    newChat(); // clears messages immediately so the empty-state screen renders right away
+    newChat();
   };
   window.addEventListener('vortis-incognito-toggle', handler);
   return () => window.removeEventListener('vortis-incognito-toggle', handler);
