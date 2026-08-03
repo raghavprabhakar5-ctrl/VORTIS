@@ -286,9 +286,8 @@ const NAV_LINKS = [
   { label: "FAQ", href: "#faq" },
 ];
 
-function Nav({ onLogin }) {
+function Nav({ onLogin, onOpenAuth }) {
   const [scrolled, setScrolled] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
   useEffect(() => {
     const h = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", h);
@@ -323,17 +322,10 @@ function Nav({ onLogin }) {
         ))}
       </div>
 
-      <GlowPillButton onClick={() => setShowPicker(true)} size="sm">
-  Sign In <ArrowRight size={14} />
-</GlowPillButton>
+      <GlowPillButton onClick={onOpenAuth} size="sm">
+         Sign In <ArrowRight size={14} />
+      </GlowPillButton>
 
-      {showPicker && (
-        <AuthPicker
-          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-          authLoading={false}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
     </nav>
   );
 }
@@ -635,7 +627,6 @@ function HeroVisual() {
 
 export function Hero({ onLogin, authLoading, authError }) {
   const [wordIdx, setWordIdx] = useState(0);
-  const [showPicker, setShowPicker] = useState(false);
 
 function AuthPicker({ onLogin, authLoading, onClose }) {
   const providers = [
@@ -830,7 +821,7 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
 
        {/* CTA */}
 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-  <GlowPillButton onClick={() => setShowPicker(true)} style={{ opacity: authLoading ? 0.85 : 1 }}>
+  <GlowPillButton onClick={onOpenAuth} style={{ opacity: authLoading ? 0.85 : 1 }}>
   {authLoading ? (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
@@ -853,13 +844,6 @@ function AuthPicker({ onLogin, authLoading, onClose }) {
   >Watch Demo</a>
 </div>
 
-{showPicker && (
-  <AuthPicker
-    onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-    authLoading={authLoading}
-    onClose={() => setShowPicker(false)}
-  />
-)}
         {/* Stats */}
         <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.7s 0.8s ease both" }}>
           {[["50K+", "Users"], ["99.9%", "Uptime"], ["4.9★", "Rating"]].map(([n, l]) => (
@@ -2980,7 +2964,6 @@ function FAQ() {
 
 function CTA({ onLogin }) {
   const [ref, inView] = useInView(0.15);
-  const [showPicker, setShowPicker] = useState(false);
   const [ripples, setRipples] = useState([]);
   const [count, setCount] = useState(0);
 
@@ -3008,7 +2991,7 @@ function CTA({ onLogin }) {
     const id = Date.now() + Math.random();
     setRipples(rs => [...rs, { id, x, y }]);
     setTimeout(() => setRipples(rs => rs.filter(r => r.id !== id)), 700);
-    setTimeout(() => setShowPicker(true), 220);
+    setTimeout(() => onOpenAuth(), 220);
   };
 
   return (
@@ -3253,15 +3236,18 @@ function Footer() {
 //  LANDING PAGE
 // ══════════════════════════════════════════════════════════════════
 export default function LandingPage({ onLogin, authLoading = false, authError = "" }) {
+  const [showAuthPicker, setShowAuthPicker] = useState(false);
+  const openAuth = () => setShowAuthPicker(true);
+
   return (
     <div style={{ background: "#03030a", color: "#ffffff", minHeight: "100vh", fontFamily: "'Inter',sans-serif", overflowX: "hidden", position: "relative" }}>
       <StyleInjector />
       <CosmicBg />
       <FloatingParticles />
-      <Nav onLogin={onLogin} />
+      <Nav onLogin={onLogin} onOpenAuth={openAuth} />
       <main style={{ position: "relative", zIndex: 1 }}>
         <div style={{ maxWidth: 1440, margin: "0 auto" }}>
-          <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
+          <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} onOpenAuth={openAuth} />
         </div>
         <Logos />
         <BentoGrid />
@@ -3272,9 +3258,17 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         <Pricing />
         <About />
         <FAQ />
-        <CTA onLogin={onLogin} />
+        <CTA onLogin={onLogin} onOpenAuth={openAuth} />
         <Footer />
       </main>
+
+      {showAuthPicker && (
+        <AuthPicker
+          onLogin={(provider) => { setShowAuthPicker(false); onLogin(provider); }}
+          authLoading={authLoading}
+          onClose={() => setShowAuthPicker(false)}
+        />
+      )}
     </div>
   );
 }

@@ -299,41 +299,28 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
 // ── STREAMING callAI ───────────────────────────────────────────
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const systemPrompt = messages.find(m => m.role === 'system');
-
-  const recentConversations = messages
-    .filter(m => m.role !== 'system')
-    .slice(-12);
-
-  const optimizedMessages = systemPrompt
-    ? [systemPrompt, ...recentConversations]
-    : [...recentConversations];
-
+  const recentConversations = messages.filter(m => m.role !== 'system').slice(-12);
+  const optimizedMessages = systemPrompt ? [systemPrompt, ...recentConversations] : [...recentConversations];
   const lastMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
 
   const hasCodeFence = /```/.test(lastMsg);
   const looksLikeCodeRequest = isObviouslyHard(lastMsg);
   const isHard = hasCodeFence || looksLikeCodeRequest;
 
+  // NEW: buffer mode for table-like requests — repair before sending, don't stream raw
+  const bufferMode = looksLikeTableRequest(lastMsg);
+
   const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
   const maxTokens = isHard ? 8192 : 2048;
 
-  console.log(`Routing: hard=${isHard} (fence=${hasCodeFence}, heuristic=${looksLikeCodeRequest}) → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} → model: ${model} → maxTokens: ${maxTokens}`);
 
   const MAX_CONTINUATIONS = 3;
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
-
-    // ── Skip this model entirely if it's cooling down or would blow the TPM budget ──
-    // This is the key fix: we check BEFORE calling Groq, not after a 429 comes back.
     const estTokens = estimateTokens(JSON.stringify(optimizedMessages)) + maxTokens;
-    if (isGroqCoolingDown(modelToTry)) {
-      console.log(`Skipping ${modelToTry} — still cooling down from a recent 429`);
-      continue;
-    }
-    if (!groqTpmAvailable(modelToTry, estTokens)) {
-      console.log(`Skipping ${modelToTry} — would exceed local TPM budget (est. ${estTokens} tokens)`);
-      continue;
-    }
+    if (isGroqCoolingDown(modelToTry)) { console.log(`Skipping ${modelToTry} — cooling down`); continue; }
+    if (!groqTpmAvailable(modelToTry, estTokens)) { console.log(`Skipping ${modelToTry} — TPM budget`); continue; }
 
     try {
       let convoMessages = [...optimizedMessages];
@@ -343,14 +330,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
       while (true) {
         const stream = await groq.chat.completions.create({
-          model:       modelToTry,
-          messages:    convoMessages,
-          max_tokens:  maxTokens,
-          temperature: 0.7,
-          stream:      true,
+          model: modelToTry, messages: convoMessages, max_tokens: maxTokens, temperature: 0.7, stream: true,
         });
-
-        // Record usage as soon as the call is accepted (Groq commits the tokens then)
         recordGroqTpm(modelToTry, estTokens);
 
         let buffer = '';
@@ -395,25 +376,28 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
           if (safe) {
             streamedAnything = true;
-            res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-            if (res.flush) res.flush();
+            if (!bufferMode) {
+              // normal path: stream immediately, unchanged
+              res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
+              if (res.flush) res.flush();
+            }
+            // in bufferMode we don't write yet — it accumulates in `buffer`/`fullBuffer` below
           }
         }
 
         if (!inThink && pending) {
           streamedAnything = true;
-          res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+          if (!bufferMode) {
+            res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+          }
           pending = '';
         }
 
         fullBuffer += buffer;
-
         const gotRealContent = stripInternalReasoning(buffer).trim().length > 0;
 
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
-          console.warn(`Truncated by max_tokens (${maxTokens}) on ${modelToTry} — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
-
           convoMessages = [
             ...convoMessages,
             { role: 'assistant', content: buffer },
@@ -423,8 +407,10 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         }
 
         if (gotRealContent || streamedAnything) {
-          if (finishReason === 'length') {
-            console.warn(`Still truncated after ${continuations} continuations — ending stream (model: ${modelToTry})`);
+          if (bufferMode) {
+            // repair once, then send the whole clean thing in one shot
+            const repaired = repairGluedTableRows(stripInternalReasoning(fullBuffer));
+            res.write(`data: ${JSON.stringify({ content: repaired })}\n\n`);
           }
           res.write('data: [DONE]\n\n');
           res.end();
@@ -439,10 +425,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       if (e.status === 429 || e.message?.includes('rate_limit_exceeded')) {
         const waitSec = parseRetryAfterSec(e.message);
         setGroqCooldown(modelToTry, waitSec);
-        console.log(`Rate limit hit on ${modelToTry}, cooling down ${waitSec}s, trying next model...`);
         continue;
       }
-      console.log('Non-rate-limit error, trying next model anyway...');
     }
   }
 
@@ -501,6 +485,36 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   }
 
   return false;
+}
+
+// ── TABLE REPAIR — fixes markdown tables where the model glued
+// rows together with no real newlines ("| Header | | Header | ...")
+function repairGluedTableRows(text) {
+  if (!text || !text.includes('|')) return text;
+  let fixed = text;
+
+  // Force a line break before a table that starts mid-sentence
+  fixed = fixed.replace(
+    /([^\n])[ \t]*(\|[^\n|]+\|[^\n]*\|)/,
+    (m, before, tableStart) => `${before}\n\n${tableStart}`
+  );
+
+  // Split rows joined by "| |" back onto separate lines
+  fixed = fixed.replace(/\|\s*\|\s*(?=[A-Za-z0-9*_])/g, '|\n|');
+
+  // Make sure the --- separator row sits on its own line
+  fixed = fixed.replace(
+    /(\|[\s:-]*---[\s:-]*\|[\s:-]*(?:---[\s:-]*\|)*)\s*(\|)/g,
+    '$1\n$2'
+  );
+
+  return fixed;
+}
+
+// Detects whether a user's message is asking for tabular/structured output
+function looksLikeTableRequest(text) {
+  const low = (text || '').toLowerCase();
+  return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
 // ── Code-chat streaming (NVIDIA GLM only) ──────────────────────
@@ -1517,7 +1531,10 @@ IMAGE RULE: Before GENERATE_IMAGE:<desc>, confirm a real subject exists (this ms
         const locationNote = userLocation ? `\nUser's location: ${userLocation}` : '';
         // Trimmed from 10000 → 6000 chars: cuts token cost per request without losing
         // meaningful system-prompt content, which directly reduces how fast we hit the Groq TPM cap.
-        const sysContent   = identityOverride + imageGuard + prompt.trim().slice(0, 6000) + locationNote + searchContext;
+        const tableGuard = looksLikeTableRequest(lastUserMsg) ? `
+TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank line before the table starts, put each row on its own separate line (never join rows with "| |"), and put the header separator row (|---|---|) on its own line too. Never compress a table into one paragraph.\n\n` : '';
+
+        const sysContent = identityOverride + imageGuard + tableGuard + prompt.trim().slice(0, 6000) + locationNote + searchContext;
 
         const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
