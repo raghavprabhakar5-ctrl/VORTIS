@@ -1581,6 +1581,14 @@ Title:`,
     }
   }, [db, incognito]);
 
+  useEffect(() => {
+  if (incognito) {
+    setSavedChats([]);
+  } else if (userUidRef.current) {
+    loadChats(userUidRef.current);
+  }
+}, [incognito, loadChats]);
+
   const persistChat = useCallback(async (msgs, overrideTitle) => {
     if (!userUidRef.current) return;
     if (incognito) return;
@@ -1677,14 +1685,6 @@ Title:`,
         setChatId(freshId); chatIdRef.current = freshId;
         return;
       }
-      
-      useEffect(() => {
-  if (incognito) {
-    setSavedChats([]);
-  } else if (userUidRef.current) {
-    loadChats(userUidRef.current);
-  }
-}, [incognito, loadChats]);
 
       const c = snap.data();
       setChatId(id); chatIdRef.current = id;
@@ -2531,11 +2531,17 @@ Title:`,
 
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 6px' }} className="scr">
               {filteredChats.length === 0 ? (
-                <div style={{ padding: 20, textAlign: 'center', color: '#5a5a5a', fontSize: 11.5, lineHeight: 1.6 }}>
-                  <MessageSquare size={22} style={{ opacity: .4, marginBottom: 8 }}/>
-                  <div>{search ? 'No matches found.' : 'No saved code chats yet.'}</div>
-                  <div style={{ marginTop: 4, fontSize: 10.5 }}>Start a conversation to see it here.</div>
-                </div>
+              <div style={{ padding: 20, textAlign: 'center', color: '#5a5a5a', fontSize: 11.5, lineHeight: 1.6 }}>
+               <MessageSquare size={22} style={{ opacity: .4, marginBottom: 8 }}/>
+                  {incognito ? (
+                 <div>No history in incognito mode.</div>
+               ) : (
+                <>
+                <div>{search ? 'No matches found.' : 'No saved code chats yet.'}</div>
+             <div style={{ marginTop: 4, fontSize: 10.5 }}>Start a conversation to see it here.</div>
+               </>
+           )}
+         </div>
               ) : (
                 filteredChats.map(c => (
                   <div key={c.id}
