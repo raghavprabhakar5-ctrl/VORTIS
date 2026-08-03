@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import AICore from "./AICore";
-import InkReveal from "./ink-reveal.jsx";
 import {
   MessageSquare, Code2, Eye, Globe, Brain, FileText,
   Image as ImageIcon, Microscope, Check, Plus, Zap,
@@ -1075,173 +1074,6 @@ function Logos() {
       <div style={{ display: "flex", flexDirection: "column", gap: 12, opacity: inView ? 1 : 0, transition: "opacity 1s 0.2s ease" }}>
         <MarqueeRow items={ROW1} reverse={false} />
         <MarqueeRow items={ROW2} reverse={true} />
-      </div>
-    </section>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════
-//  VORTIS ANIMATION -- animated brand mark for the ink-reveal slide
-// ═════════════════════════════════════════════════════════════════
-const BRAND = "#8b5cf6"; // fixed logo color everywhere — only glow varies
-
-const PETALS = [
-  // background scattered logos — same brand color, glow varies violet/cyan
-  { x: 20, y: 22, size: 170, blur: 0,  opacity: 0.9,  rotate: -12, glow: "#a855f7" },
-  { x: 13, y: 42, size: 70,  blur: 3,  opacity: 0.6,  rotate: 20,  glow: "#7C3AED" },
-  { x: 83, y: 14, size: 130, blur: 1,  opacity: 0.85, rotate: -6,  glow: "#06b6d4" },
-  { x: 95, y: 20, size: 55,  blur: 4,  opacity: 0.5,  rotate: 30,  glow: "#a855f7" },
-  { x: 90, y: 40, size: 60,  blur: 3,  opacity: 0.55, rotate: -18, glow: "#0891b2" },
-  { x: 96, y: 48, size: 45,  blur: 4,  opacity: 0.45, rotate: 12,  glow: "#7C3AED" },
-  { x: 89, y: 63, size: 70,  blur: 2,  opacity: 0.65, rotate: -8,  glow: "#06b6d4" },
-  { x: 15, y: 78, size: 90,  blur: 2,  opacity: 0.7,  rotate: 15,  glow: "#a855f7" },
-  { x: 10, y: 90, size: 60,  blur: 3,  opacity: 0.55, rotate: -20, glow: "#7C3AED" },
-  { x: 24, y: 93, size: 50,  blur: 4,  opacity: 0.45, rotate: 25,  glow: "#06b6d4" },
-  { x: 84, y: 82, size: 100, blur: 1,  opacity: 0.75, rotate: -10, glow: "#a855f7" },
-  { x: 93, y: 92, size: 55,  blur: 3,  opacity: 0.5,  rotate: 18,  glow: "#0891b2" },
-  { x: 6,  y: 60, size: 40,  blur: 4,  opacity: 0.4,  rotate: 40,  glow: "#a855f7" },
-  { x: 40, y: 8,  size: 55,  blur: 3,  opacity: 0.45, rotate: -25, glow: "#06b6d4" },
-  { x: 62, y: 92, size: 65,  blur: 2,  opacity: 0.6,  rotate: 10,  glow: "#7C3AED" },
-];
-
-// front-layer logos — sharper, larger, more visible motion, drift over the background ones
-const FRONT_PETALS = [
-  { x: 48, y: 50, size: 300, opacity: 1,    rotate: 6,   glow: "#a855f7", speed: 6.5 },
-  { x: 32, y: 34, size: 110, opacity: 0.9,  rotate: -16, glow: "#7C3AED", speed: 5.2 },
-  { x: 67, y: 62, size: 130, opacity: 0.85, rotate: 14,  glow: "#06b6d4", speed: 7.1 },
-  { x: 58, y: 30, size: 80,  opacity: 0.8,  rotate: -22, glow: "#a855f7", speed: 4.6 },
-  { x: 36, y: 66, size: 90,  opacity: 0.8,  rotate: 20,  glow: "#06b6d4", speed: 6.0 },
-];
-
-function VortisPetalsBackground() {
-  return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
-      <style>{`
-        @keyframes petalDrift {
-          0%,100% { transform: translate(-50%,-50%) translateY(0) rotate(var(--r)); }
-          50%     { transform: translate(-50%,-50%) translateY(-16px) rotate(calc(var(--r) + 4deg)); }
-        }
-        @keyframes petalDriftFront {
-          0%,100% { transform: translate(-50%,-50%) translateY(0) scale(1) rotate(var(--r)); }
-          50%     { transform: translate(-50%,-50%) translateY(-22px) scale(1.05) rotate(calc(var(--r) + 6deg)); }
-        }
-        @keyframes vHintPulse {
-          0%,100% { transform: translateX(-50%) translateY(0);    opacity: 0.75; }
-          50%     { transform: translateX(-50%) translateY(-4px); opacity: 1;    }
-        }
-      `}</style>
-
-      {/* base gradient, deep violet -> deep cyan, matches Vortis palette */}
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(120deg, #2a1550 0%, #150c30 30%, #0a1424 60%, #06201f 100%)",
-      }} />
-      <div style={{
-        position: "absolute", inset: 0,
-        backgroundImage: "repeating-linear-gradient(0deg, rgba(0,0,0,0.3) 0px, rgba(0,0,0,0.3) 4px, transparent 4px, transparent 26px)",
-        mixBlendMode: "multiply",
-      }} />
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "linear-gradient(90deg, rgba(124,58,237,0.4), transparent 45%, transparent 55%, rgba(6,182,212,0.35))",
-      }} />
-      <div style={{
-        position: "absolute", width: 500, height: 500, left: "10%", top: "20%",
-        background: "radial-gradient(circle, rgba(168,85,247,0.25), transparent 70%)",
-        filter: "blur(60px)",
-      }} />
-      <div style={{
-        position: "absolute", width: 460, height: 460, right: "8%", bottom: "10%",
-        background: "radial-gradient(circle, rgba(6,182,212,0.2), transparent 70%)",
-        filter: "blur(60px)",
-      }} />
-
-      {/* background scattered logos — fixed brand color, glow color varies */}
-      {PETALS.map((p, i) => (
-        <div key={i} style={{
-          position: "absolute",
-          left: `${p.x}%`, top: `${p.y}%`,
-          filter: `blur(${p.blur}px) drop-shadow(0 0 ${18 + p.blur * 4}px ${p.glow}66)`,
-          opacity: p.opacity,
-          animation: `petalDrift ${6 + i * 0.35}s ease-in-out ${i * 0.25}s infinite`,
-          "--r": `${p.rotate}deg`,
-        }}>
-          <VortisLogo size={p.size} color={BRAND} />
-        </div>
-      ))}
-
-      {/* front-layer logos — fixed brand color, brighter glow, more motion */}
-      {FRONT_PETALS.map((p, i) => (
-        <div key={`f-${i}`} style={{
-          position: "absolute",
-          left: `${p.x}%`, top: `${p.y}%`,
-          zIndex: 2,
-          filter: `drop-shadow(0 0 32px ${p.glow}88) drop-shadow(0 0 60px ${p.glow}44)`,
-          opacity: p.opacity,
-          animation: `petalDriftFront ${p.speed}s ease-in-out ${i * 0.4}s infinite`,
-          "--r": `${p.rotate}deg`,
-        }}>
-          <VortisLogo size={p.size} color={BRAND} />
-        </div>
-      ))}
-
-      <div style={{
-        position: "absolute", inset: 0,
-        background: "radial-gradient(circle at 50% 50%, transparent 45%, rgba(3,3,10,0.45) 100%)",
-        zIndex: 1, pointerEvents: "none",
-      }} />
-    </div>
-  );
-}
-
-function VortisAnimation() {
-  return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden", zIndex: 0 }}>
-      <VortisPetalsBackground />
-    </div>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════
-//  INK REVEAL SLIDE -- full-width paint-to-reveal image section
-// ═════════════════════════════════════════════════════════════════
-
-function InkRevealSection() {
-  const [ref, inView] = useInView(0.1);
-  return (
-    <section ref={ref} style={{
-      position: "relative", width: "100%",
-      borderTop: "1px solid rgba(255,255,255,0.04)",
-      borderBottom: "1px solid rgba(255,255,255,0.04)",
-      zIndex: 1, opacity: inView ? 1 : 0, transition: "opacity 1.1s ease",
-      padding: "90px 40px 60px",
-    }}>
-      {/* single shared container — title, pill, and canvas all align to this same center */}
-      <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div className="eyebrow" style={{ marginBottom: 16 }}>
-            <span className="dot" /> THE VORTIS FIELD
-          </div>
-          <h2 className="h-section">
-            Everywhere you look.{" "}
-            <span style={{
-              background: "linear-gradient(90deg,#7C3AED,#a855f7,#06B6D4)",
-              WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-            }}>Nowhere it isn't.</span>
-          </h2>
-        </div>
-
-        <div style={{
-          position: "relative", width: "100%",
-          height: 720,
-          overflow: "hidden", borderRadius: 20,
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}>
-          <VortisAnimation />
-          <InkReveal />
-        </div>
-
       </div>
     </section>
   );
@@ -3432,7 +3264,6 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
           <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} />
         </div>
         <Logos />
-        <InkRevealSection />
         <BentoGrid />
         <Showcase />
         <HowItWorks />

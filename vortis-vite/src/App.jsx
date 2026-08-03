@@ -118,6 +118,20 @@ const getAuthHeader = async () => {
   return { 'Content-Type': 'application/json', 'X-App-Key': 'vortis-2026' };
 };
 
+const fetchWithTimeout = async (url, options, timeoutMs = 20000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (e) {
+    clearTimeout(timer);
+    if (e.name === 'AbortError') throw new Error('TIMEOUT');
+    throw e;
+  }
+};
+
 const pushHistory = (historyRef, role, content) => {
   const clean = (content || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 4000);
   if (!clean) return;
@@ -1437,6 +1451,22 @@ const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
   };
 };
 
+
+const sanitizeLatex = (text) => {
+  if (!text) return text;
+  // Strip any $...$ or $$...$$ block where \begin{X} has no matching \end{X}
+  return text.replace(/\${1,2}[\s\S]*?\${1,2}/g, (block) => {
+    const beginMatches = [...block.matchAll(/\\begin\{(\w+)\}/g)];
+    const endMatches = [...block.matchAll(/\\end\{(\w+)\}/g)];
+    const beginEnvs = beginMatches.map(m => m[1]).sort();
+    const endEnvs = endMatches.map(m => m[1]).sort();
+    if (JSON.stringify(beginEnvs) !== JSON.stringify(endEnvs)) {
+      return ''; // drop the whole broken math block rather than showing red garbage
+    }
+    return block;
+  });
+};
+
 const MsgContent = ({ text, onRetryImage, onUpgradeClick }) => {
   const contentRef = React.useRef(null);
 
@@ -1464,6 +1494,7 @@ const useElapsed = (startTime) => {
   }, [startTime]);
   return elapsed;
 };
+
  
 const DeepResearchProgress = ({ data }) => {
   const { topic, queries, doneIdx, foundCounts, stage, startTime, estSeconds } = data;
@@ -1540,6 +1571,8 @@ const DeepResearchProgress = ({ data }) => {
     .replace(/^CURRENT_TIME\s*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+ const clean = sanitizeLatex(rawClean);
 
   if (clean === '__IMG_LOADING__') return <ImageGeneratingPlaceholder />;
 
@@ -2628,6 +2661,13 @@ useEffect(() => {
   if (!styleEl.current) { styleEl.current = document.createElement('style'); document.head.appendChild(styleEl.current); }
   styleEl.current.textContent = makeStyles(isDark, fontDef.css);
 }, [isDark, uiFont]);
+
+useEffect(() => {
+  const ping = () => fetch(API.replace('/api/handler', '/api/health') || API, { method: 'GET' }).catch(() => {});
+  ping();
+  const interval = setInterval(ping, 4 * 60 * 1000); // every 4 min, well under Render's 15-min sleep window
+  return () => clearInterval(interval);
+}, []);
 
 useEffect(() => {
   const clearSel = () => setSelectionReply(null);
@@ -4791,15 +4831,32 @@ sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Defa
 
 const trimmedHistory = convHistory.current.slice(-12);
 setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
-const res = await fetch(API, {
-  method: 'POST',
-  headers: await getAuthHeader(),
-  body: JSON.stringify({
-    action: 'chat',
-    prompt: sys + '\n\n' + sys2,
-    history: trimmedHistory
-  })
+
+const requestBody = JSON.stringify({
+  action: 'chat',
+  prompt: sys + '\n\n' + sys2,
+  history: trimmedHistory
 });
+
+let res;
+try {
+  res = await fetchWithTimeout(API, {
+    method: 'POST',
+    headers: await getAuthHeader(),
+    body: requestBody
+  }, 20000); // first attempt: 20s
+} catch (e) {
+  if (e.message === 'TIMEOUT') {
+    setProcessingStatus('thinking'); // stays visible during retry
+    res = await fetchWithTimeout(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: requestBody
+    }, 35000); // retry: give it longer, likely a cold start
+  } else {
+    throw e;
+  }
+}
 
       if (!res.ok) {
   let serverMsg = null;
@@ -4896,10 +4953,15 @@ const finalDisplay = displayText.length > 1
     : "Something went wrong — please try again.";
 
 addMsg('vortis', finalDisplay, shouldSpeak);
-    } catch(e) {
+   } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
-      addMsg('vortis', !navigator.onLine ? "You appear to be offline — check your connection and try again." : "Something went wrong — please try again.", false);
+      const msg = e.message === 'TIMEOUT'
+        ? "The server didn't respond in time — please try again."
+        : !navigator.onLine
+          ? "You appear to be offline — check your connection and try again."
+          : "Something went wrong — please try again.";
+      addMsg('vortis', msg, false);
     }
   };
 
