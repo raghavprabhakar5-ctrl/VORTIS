@@ -625,7 +625,7 @@ function HeroVisual() {
   );
 }
 
-export function Hero({ onLogin, authLoading, authError }) {
+export function Hero({ onLogin, authLoading, authError, onOpenAuth }) {
   const [wordIdx, setWordIdx] = useState(0);
 
 function AuthPicker({ onLogin, authLoading, onClose }) {
@@ -2962,7 +2962,7 @@ function FAQ() {
   );
 }
 
-function CTA({ onLogin }) {
+function CTA({ onLogin, onOpenAuth }) {
   const [ref, inView] = useInView(0.15);
   const [ripples, setRipples] = useState([]);
   const [count, setCount] = useState(0);
@@ -3168,13 +3168,6 @@ function CTA({ onLogin }) {
         </div>
       </div>
 
-      {showPicker && (
-        <AuthPicker
-          onLogin={(provider) => { setShowPicker(false); onLogin(provider); }}
-          authLoading={false}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
     </section>
   );
 }
