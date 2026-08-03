@@ -5571,7 +5571,7 @@ return (
   <div style={{ padding: '24px 12px', textAlign: 'center' }}>
     <MessageSquare size={18} color="var(--text4)" style={{ margin: '0 auto 8px' }}/>
     <p style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'JetBrains Mono' }}>
-      {isIncognito ? 'No history in incognito' : 'No chats yet'}
+      {isIncognito ? 'No history in incognito mode.' : 'No chats yet'}
     </p>
   </div>
 )}
