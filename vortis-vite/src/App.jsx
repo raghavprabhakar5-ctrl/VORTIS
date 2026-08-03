@@ -6,8 +6,7 @@ import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc,
 import "@fontsource/geist-sans"; // Defaults to weight 400
 import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
 import "@fontsource/geist-mono"; // Optional: Monospace font
-import { Streamdown } from 'streamdown';
-import "streamdown/styles.css";  
+import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -1649,143 +1648,123 @@ const DeepResearchProgress = ({ data }) => {
 
   if (!clean) return null;
 
-  const repairGluedTableRows = (text) => {
-  if (!text || !text.includes('|')) return text;
-  let fixed = text;
+  // ── Proper ReactMarkdown rendering ──
+  return (
+    <div ref={contentRef} className="md-content">
+      <ReactMarkdown
+     remarkPlugins={[remarkGfm, remarkMath]}
+     rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
 
-  // Force a line break before a table that starts mid-sentence
-  fixed = fixed.replace(
-    /([^\n])[ \t]*(\|[^\n|]+\|[^\n]*\|)/,
-    (m, before, tableStart) => `${before}\n\n${tableStart}`
-  );
+        components={{
 
-  // Split rows joined by "| |" back onto separate lines
-  fixed = fixed.replace(/\|\s*\|\s*(?=[A-Za-z0-9*_])/g, '|\n|');
+          // Headings
+          h1: ({children}) => <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text1)', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
+          h2: ({children}) => <h2 style={{ fontSize: 19, fontWeight: 700, color: 'var(--text1)', margin: '10px 0 4px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
+          h3: ({children}) => <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text2)', margin: '8px 0 3px', lineHeight: 1.3 }}>{children}</h3>,
+          h4: ({children}) => <h4 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>{children}</h4>,
 
-  // Make sure the --- separator row sits on its own line
-  fixed = fixed.replace(
-    /(\|[\s:-]*---[\s:-]*\|[\s:-]*(?:---[\s:-]*\|)*)\s*(\|)/g,
-    '$1\n$2'
-  );
+          // Paragraph — tight spacing, no giant gaps
+         p: ({children}) => <p style={{ margin: '0 0 8px', color: 'var(--text1)', lineHeight: 1.8, fontSize: 16 }}>{children}</p>,
 
-  return fixed;
-};
+          // Bold — sharp vibrant indigo
+          strong: ({children}) => (
+            <strong style={{ color: '#818cf8', fontWeight: 700, textShadow: '0 0 10px rgba(129,140,248,0.2)' }}>
+              {children}
+            </strong>
+          ),
 
-// ── Proper Streamdown rendering ──
-return (
-  <div ref={contentRef} className="md-content">
-    <Streamdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
-      parseIncompleteMarkdown
-      components={{
+          // Italic
+          em: ({children}) => <em style={{ color: 'var(--text2)', fontStyle: 'italic' }}>{children}</em>,
 
-        // Headings
-        h1: ({children}) => <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text1)', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
-        h2: ({children}) => <h2 style={{ fontSize: 19, fontWeight: 700, color: 'var(--text1)', margin: '10px 0 4px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
-        h3: ({children}) => <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text2)', margin: '8px 0 3px', lineHeight: 1.3 }}>{children}</h3>,
-        h4: ({children}) => <h4 style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--text2)', margin: '6px 0 2px' }}>{children}</h4>,
-
-        // Paragraph
-        p: ({children}) => <p style={{ margin: '0 0 8px', color: 'var(--text1)', lineHeight: 1.8, fontSize: 16 }}>{children}</p>,
-
-        // Bold
-        strong: ({children}) => (
-          <strong style={{ color: '#818cf8', fontWeight: 700, textShadow: '0 0 10px rgba(129,140,248,0.2)' }}>
-            {children}
-          </strong>
-        ),
-
-        // Italic
-        em: ({children}) => <em style={{ color: 'var(--text2)', fontStyle: 'italic' }}>{children}</em>,
-
-        // Unordered list
-        ul: ({children}) => (
-          <div style={{ margin: '6px 0 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>list</span>
+          // Unordered list
+          ul: ({children}) => (
+            <div style={{ margin: '6px 0 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>list</span>
+              </div>
+              <ul style={{ margin: 0, padding: '2px 16px 4px 32px', background: 'var(--bg2)', listStyle: 'disc' }}>{children}</ul>
             </div>
-            <ul style={{ margin: 0, padding: '2px 16px 4px 32px', background: 'var(--bg2)', listStyle: 'disc' }}>{children}</ul>
-          </div>
-        ),
+          ),
 
-        // Ordered list
-        ol: ({children}) => (
-          <div style={{ margin: '6px 0 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
-              <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>steps</span>
+          // Ordered list
+          ol: ({children}) => (
+            <div style={{ margin: '6px 0 8px', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', padding: '5px 12px', background: 'rgba(99,102,241,.08)', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 11, color: 'var(--indigo)', fontFamily: 'JetBrains Mono', letterSpacing: '.08em' }}>steps</span>
+              </div>
+              <ol style={{ margin: 0, padding: '2px 16px 4px 32px', background: 'var(--bg2)' }}>{children}</ol>
             </div>
-            <ol style={{ margin: 0, padding: '2px 16px 4px 32px', background: 'var(--bg2)' }}>{children}</ol>
-          </div>
-        ),
+          ),
 
-        // List item
-        li: ({children}) => (
-          <li style={{ padding: '5px 0', borderBottom: '1px solid var(--border)', color: 'var(--text1)', lineHeight: 1.65, fontSize: 14 }}>
-            {children}
-          </li>
-        ),
+          // List item
+          li: ({children}) => (
+            <li style={{ padding: '5px 0', borderBottom: '1px solid var(--border)', color: 'var(--text1)', lineHeight: 1.65, fontSize: 14 }}>
+              {children}
+            </li>
+          ),
 
-        // Blockquote
-        blockquote: ({children}) => (
-          <blockquote style={{ borderLeft: '3px solid var(--indigo)', padding: '8px 13px', margin: '8px 0', background: 'rgba(99,102,241,.05)', borderRadius: '0 9px 9px 0', color: 'var(--text2)' }}>
-            {children}
-          </blockquote>
-        ),
+          // Blockquote
+          blockquote: ({children}) => (
+            <blockquote style={{ borderLeft: '3px solid var(--indigo)', padding: '8px 13px', margin: '8px 0', background: 'rgba(99,102,241,.05)', borderRadius: '0 9px 9px 0', color: 'var(--text2)' }}>
+              {children}
+            </blockquote>
+          ),
+
 
         code: ({node, inline, className, children, ...props}) => {
-          const match = /language-(\w+)/.exec(className || '');
-          const lang = match ? match[1] : '';
-          const codeText = String(children).replace(/\n$/, '');
-          const isInline = !String(children).includes('\n') && !match;
+  const match = /language-(\w+)/.exec(className || '');
+  const lang = match ? match[1] : '';
+  const codeText = String(children).replace(/\n$/, '');
 
-          if (isInline) {
-            return (
-              <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
-                {children}
-              </code>
-            );
-          }
-          return <CodeBlock lang={lang} codeText={codeText} />;
-        },
+  // Detect inline vs block — works with all react-markdown versions
+  const isInline = !String(children).includes('\n') && !match;
 
-        // Table
-        table: ({children}) => (
-          <div style={{ overflowX: 'auto', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table>
-          </div>
-        ),
-        thead: ({children}) => <thead>{children}</thead>,
-        tbody: ({children}) => <tbody>{children}</tbody>,
-        tr: ({children}) => <tr>{children}</tr>,
-        th: ({children}) => (
-          <th style={{ background: 'rgba(99,102,241,.12)', padding: '8px 12px', textAlign: 'left', color: 'var(--text1)', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
-            {children}
-          </th>
-        ),
-        td: ({children}) => (
-          <td style={{ padding: '7px 12px', color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
-            {children}
-          </td>
-        ),
+  if (isInline) {
+    return (
+      <code style={{ background: 'rgba(99,102,241,.12)', padding: '1px 5px', borderRadius: 4, fontFamily: 'JetBrains Mono', fontSize: 12, color: 'var(--indigo)' }}>
+        {children}
+      </code>
+    );
+  }
 
-        // Link
-        a: ({href, children}) => (
-          <a href={href} target="_blank" rel="noopener" style={{ color: 'var(--indigo)', textUnderlineOffset: 2 }}>
-            {children}
-          </a>
-        ),
+  return <CodeBlock lang={lang} codeText={codeText} />;
+},
+          // Table
+          table: ({children}) => (
+            <div style={{ overflowX: 'auto', margin: '8px 0', borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>{children}</table>
+            </div>
+          ),
+          thead: ({children}) => <thead>{children}</thead>,
+          tbody: ({children}) => <tbody>{children}</tbody>,
+          tr: ({children}) => <tr>{children}</tr>,
+          th: ({children}) => (
+            <th style={{ background: 'rgba(99,102,241,.12)', padding: '8px 12px', textAlign: 'left', color: 'var(--text1)', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
+              {children}
+            </th>
+          ),
+          td: ({children}) => (
+            <td style={{ padding: '7px 12px', color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
+              {children}
+            </td>
+          ),
 
-        // Horizontal rule
-        hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '10px 0' }}/>,
-      }}
-    >
-      {repairGluedTableRows(clean)}
-    </Streamdown>
-  </div>
-);
+          // Link
+          a: ({href, children}) => (
+            <a href={href} target="_blank" rel="noopener" style={{ color: 'var(--indigo)', textUnderlineOffset: 2 }}>
+              {children}
+            </a>
+          ),
+
+          // Horizontal rule
+          hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '10px 0' }}/>,
+        }}
+      >
+        {clean}
+      </ReactMarkdown>
+    </div>
+  );
 };
-
 const getGreeting = (name) => {
   const h = new Date().getHours();
   const t = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
@@ -6097,7 +6076,29 @@ onChange={e => {
   setInput(quote + e.target.value);
   autoResize(e);
 }}
-  onPaste={e => {
+ onPaste={e => {
+  // ── Check for a pasted image first (screenshot, copied photo, etc.) ──
+  const items = e.clipboardData?.items;
+  if (items) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        if (!canDo('vision')) { hitLimit('vision'); return; }
+        const file = item.getAsFile();
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setPendingImage({ base64: ev.target.result, name: `pasted-image-${Date.now()}.png` });
+          setTimeout(() => textareaRef.current?.focus(), 50);
+        };
+        reader.readAsDataURL(file);
+        return; // don't also run the code-paste check below
+      }
+    }
+  }
+
+  // ── Otherwise fall back to the existing code-paste detection ──
   const text = e.clipboardData.getData('text');
   if (looksLikeCode(text)) {
     e.preventDefault();
