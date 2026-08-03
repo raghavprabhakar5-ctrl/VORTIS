@@ -2477,10 +2477,13 @@ export default function VortisAI() {
 );
 
 useEffect(() => {
-  const handler = (e) => setIsIncognito(e.detail.incognito);
+  const handler = (e) => {
+    setIncognito(e.detail.incognito);
+    newChat(); // clears messages immediately so the empty-state screen renders right away
+  };
   window.addEventListener('vortis-incognito-toggle', handler);
   return () => window.removeEventListener('vortis-incognito-toggle', handler);
-}, []);
+}, [newChat]);
   
   const [messages, setMessages] = useState([]);
   useEffect(() => {

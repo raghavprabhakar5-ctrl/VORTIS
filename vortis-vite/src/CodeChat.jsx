@@ -1152,10 +1152,13 @@ const Vertex = ({
 ); 
 
   useEffect(() => {
-  const handler = (e) => setIncognito(e.detail.incognito);
+  const handler = (e) => {
+    setIncognito(e.detail.incognito);
+    newChat(); // clears messages immediately so the empty-state screen renders right away
+  };
   window.addEventListener('vortis-incognito-toggle', handler);
   return () => window.removeEventListener('vortis-incognito-toggle', handler);
-}, []);
+}, [newChat]);
 
 
   /* ── Settings popover state (declared early so the Esc handler below
