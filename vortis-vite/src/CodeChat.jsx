@@ -1677,6 +1677,15 @@ Title:`,
         setChatId(freshId); chatIdRef.current = freshId;
         return;
       }
+      
+      useEffect(() => {
+  if (incognito) {
+    setSavedChats([]);
+  } else if (userUidRef.current) {
+    loadChats(userUidRef.current);
+  }
+}, [incognito, loadChats]);
+
       const c = snap.data();
       setChatId(id); chatIdRef.current = id;
       const restored = (c.messages || []).map((m, i) => ({
