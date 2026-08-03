@@ -1564,15 +1564,15 @@ const DeepResearchProgress = ({ data }) => {
 };
  
   // ── Special states ──
-  const clean = t
+  const clean = sanitizeLatex(
+  t
     .replace(/^GENERATE_IMAGE:.*$/gm, '')
     .replace(/\[Generating image[\s\S]*?\]/gi, '')
     .replace(/^WEB_SEARCH:.*$/gm, '')
     .replace(/^CURRENT_TIME\s*$/gm, '')
     .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
- const clean = sanitizeLatex(rawClean);
+    .trim()
+);
 
   if (clean === '__IMG_LOADING__') return <ImageGeneratingPlaceholder />;
 
