@@ -1151,29 +1151,6 @@ const Vertex = ({
   () => new URLSearchParams(window.location.search).get('incognito') === 'true'
 ); 
 
- const newChat = useCallback(() => {
-  abortRef.current = true;
-  setStreaming(false); setThinking(false); setStreamText('');
-  const newId = Date.now().toString();
-  setChatId(newId); chatIdRef.current = newId;
-  setMessages([]); convHistoryRef.current = [];
-  setInput('');
-  setAttachments([]);
-  setReplyQuote(null);
-  closeCodePanel();
-  setTimeout(() => inputRef.current?.focus(), 50);
-}, [closeCodePanel]);
-
-// ── moved here: now newChat exists before this effect references it ──
-useEffect(() => {
-  const handler = (e) => {
-    setIncognito(e.detail.incognito);
-    newChat();
-  };
-  window.addEventListener('vortis-incognito-toggle', handler);
-  return () => window.removeEventListener('vortis-incognito-toggle', handler);
-}, [newChat]);
-
 
   /* ── Settings popover state (declared early so the Esc handler below
        can reference it without hitting a Temporal Dead Zone error) ── */
@@ -1652,6 +1629,15 @@ Title:`,
     closeCodePanel();
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [closeCodePanel]);
+
+  useEffect(() => {
+  const handler = (e) => {
+    setIncognito(e.detail.incognito);
+    newChat();
+  };
+  window.addEventListener('vortis-incognito-toggle', handler);
+  return () => window.removeEventListener('vortis-incognito-toggle', handler);
+}, [newChat]);
 
  const toggleIncognito = useCallback(() => {
   setIncognito(v => {

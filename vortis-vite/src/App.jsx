@@ -2476,29 +2476,6 @@ export default function VortisAI() {
   () => new URLSearchParams(window.location.search).get('incognito') === 'true'
 );
 
-const newChat = useCallback(() => {
-  abortRef.current = true;
-  setStreaming(false); setThinking(false); setStreamText('');
-  const newId = Date.now().toString();
-  setChatId(newId); chatIdRef.current = newId;
-  setMessages([]); convHistoryRef.current = [];
-  setInput('');
-  setAttachments([]);
-  setReplyQuote(null);
-  closeCodePanel();
-  setTimeout(() => inputRef.current?.focus(), 50);
-}, [closeCodePanel]);
-
-// ── moved here: now newChat exists before this effect references it ──
-useEffect(() => {
-  const handler = (e) => {
-    setIncognito(e.detail.incognito);
-    newChat();
-  };
-  window.addEventListener('vortis-incognito-toggle', handler);
-  return () => window.removeEventListener('vortis-incognito-toggle', handler);
-}, [newChat]);
-
   const [messages, setMessages] = useState([]);
   useEffect(() => {
   const handleBeforeUnload = () => {
@@ -3310,6 +3287,15 @@ const startNewChatAfterLogin = (uid) => {
     imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
   };
+
+  useEffect(() => {
+    const handler = (e) => {
+      setIsIncognito(e.detail.incognito);
+      startNewChat();
+    };
+    window.addEventListener('vortis-incognito-toggle', handler);
+    return () => window.removeEventListener('vortis-incognito-toggle', handler);
+  }, [startNewChat]);
 
   const delChat = (id) => {
     setConfirmDialog({ message: 'Delete this chat? This cannot be undone.', onConfirm: async () => {
