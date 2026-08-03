@@ -1632,17 +1632,25 @@ Title:`,
 
   useEffect(() => {
   const handler = (e) => {
-    setIncognito(e.detail.incognito);
+    const next = e.detail.incognito;
+    setIncognito(next);
     newChat();
+    if (next) setSavedChats([]);
+    else if (userUidRef.current) loadChats(userUidRef.current);
   };
   window.addEventListener('vortis-incognito-toggle', handler);
   return () => window.removeEventListener('vortis-incognito-toggle', handler);
-}, [newChat]);
+}, [newChat, loadChats]);
 
  const toggleIncognito = useCallback(() => {
   setIncognito(v => {
     const next = !v;
-    if (next) newChat();
+    if (next) {
+      newChat();
+      setSavedChats([]);              // ← hide history immediately on entering incognito
+    } else if (userUidRef.current) {
+      loadChats(userUidRef.current);  // ← restore real history on exiting incognito
+    }
 
     const params = new URLSearchParams(window.location.search);
     if (next) params.set('incognito', 'true');
@@ -1655,7 +1663,7 @@ Title:`,
     window.dispatchEvent(new CustomEvent('vortis-incognito-toggle', { detail: { incognito: next } }));
     return next;
   });
-}, [newChat]);
+}, [newChat, loadChats]);
 
   const loadChat = useCallback(async (id) => {
     if (!userUidRef.current) return;
