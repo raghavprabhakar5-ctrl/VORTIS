@@ -3074,7 +3074,7 @@ Title:`,
 
   /* ── Send message + stream response ── */
   const lastSendRef = useRef('');
-  const send = useCallback(async (overrideText, overrideMessages = null, skipSearch = false) => {
+  const send = useCallback(async (overrideText, overrideMessages = null, skipSearch = false, compact = false) => {
     const rawText = (overrideText ?? input).trim();
     const pendingAttachments = overrideMessages ? [] : [...attachments];
 
@@ -3125,7 +3125,7 @@ Title:`,
       if (editIdx !== -1) baseMessages = baseMessages.slice(0, editIdx);
       setEditingMsgId(null);
     }
-    const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now() };
+    const userMsg = { id: `u-${Date.now()}`, role: 'user', text, ts: Date.now(), _compact: compact || false };
     const nextMsgs = [...baseMessages, userMsg];
     setMessages(nextMsgs);
     setInput('');
@@ -3229,7 +3229,12 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
     next.add(messageId);
     return next;
   });
-  setTimeout(() => send(answer), 30);
+  // Send with skipSearch=true to avoid "searching the web…" trigger from
+  // words like "search" or "latest" inside the preference string.
+  // The answer text is also sent as a minimal user message so the chat
+  // history has context, but we mark it so it renders as a tiny chip
+  // instead of a full text dump in the user bubble.
+  setTimeout(() => send(answer, null, true, true), 30);
 }, [send]);
 
   /* Smart Edit on a code block — sends a focused request that asks Vertex to
@@ -3244,7 +3249,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
       `The following code has an issue. Return ONLY the corrected code inside a single ${fence} fence, followed by ONE one-line summary of what changed. Do NOT re-explain the whole thing — output the full corrected version so it can be copy-pasted directly.\n\n` +
       `CODE:\n${fence}\n${code}\n${tripleBacktick}\n\n` +
       `ISSUE FROM USER:\n${feedback}`;
-    send(editPrompt, null, true);
+    send(editPrompt, null, true, true);
   }, [send, streaming]);
 
   /* Continue — asks Vertex to pick up where it left off, for when a response
@@ -4005,7 +4010,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                     isLast={i === messages.length - 1} streaming={streaming}
                     onOpenPanel={openCodePanel}
                     onAnswerClarify={(answer) => handleClarifyAnswer(m.id, answer)}
-                    frozenClarify={frozenClarifyIds.has(m.id)} />
+                    frozenClarify={frozenClarifyIds.has(m.id)} compact={m._compact} />
                 ))}
 
                 {(streaming || thinking || searching) && (
@@ -4506,7 +4511,7 @@ const MessageContent = React.memo(({
   );
 });
 
-const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdit, messageId, canRetry, onRetry, onContinue, onRegenerate, onEditUserMessage, isLast, streaming, onOpenPanel, onAnswerClarify, frozenClarify }) => {
+const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdit, messageId, canRetry, onRetry, onContinue, onRegenerate, onEditUserMessage, isLast, streaming, onOpenPanel, onAnswerClarify, frozenClarify, compact }) => {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
@@ -4525,6 +4530,25 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
   const showContinue = !streaming && onContinue && looksCutOff(text);
 
   if (isUser) {
+    // Compact messages (ClarifyCard answers, Smart Edit prompts) show as a
+    // tiny chip instead of the full text dump — the text is still in the chat
+    // history for the LLM's context, just not visually expanded.
+    if (compact) {
+      return (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 18, justifyContent: 'flex-end' }}>
+          <div
+            data-vrtx-no-reply=""
+            style={{
+              background: '#141414', border: '1px solid #2a2a2a',
+              color: '#5a5a5a', borderRadius: 0, padding: '5px 12px',
+              fontSize: 11, fontFamily: 'JetBrains Mono, monospace',
+              fontWeight: 600, letterSpacing: '.04em',
+            }}>
+            preferences sent
+          </div>
+        </div>
+      );
+    }
     // Rendered through the same markdown pipeline as Vertex's own replies so that
     // large pasted text/code (sent wrapped in ``` fences) shows up as the same
     // small, collapsible rectangle — not a wall of raw text dumped in the bubble.
