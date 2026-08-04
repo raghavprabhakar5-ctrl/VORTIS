@@ -2565,6 +2565,8 @@ export default function VortisAI() {
 useEffect(() => { ttsVolumeRef.current = ttsVolume; }, [ttsVolume]);
 useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
 
+useEffect(() => { streamTextRef.current = streamText; }, [streamText]);
+
 // live-adjust volume of whatever is currently playing
 useEffect(() => {
   if (msgActiveSourceRef.current?.gain) {
@@ -2629,6 +2631,7 @@ useEffect(() => {
   const textareaRef = useRef(null);
   const imgGenLock = useRef(false);
   const abortGenRef = useRef(false);
+  const streamTextRef = useRef('');
   const savingRef = useRef(false);
   const handleCmdRef = useRef(null);
   const saveTimerRef = useRef(null);
@@ -4618,6 +4621,18 @@ const runImageGeneration = async (imagePrompt, detectedStyle, forceGemini = fals
   }
 };
 
+const stopGeneration = useCallback(() => {
+  abortGenRef.current = true;
+  clearTimeout(aiTimeoutRef.current);
+  setShowAITimeout(false);
+  const partial = cleanStream(streamTextRef.current).trim();
+  if (partial) addMsg('vortis', partial + '\n\n_(stopped)_', false);
+  setIsStreaming(false);
+  setStreamText('');
+  setIsProcessing(false);
+  setProcessingStatus('');
+}, []);
+
   const getAI = async (userInput, shouldSpeak) => {
     clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
     aiTimeoutRef.current = setTimeout(() => setShowAITimeout(true), 30000);
@@ -4841,21 +4856,6 @@ const requestBody = JSON.stringify({
   prompt: sys + '\n\n' + sys2,
   history: trimmedHistory
 });
-
-
-const stopGeneration = useCallback(() => {
-  abortGenRef.current = true;
-  clearTimeout(aiTimeoutRef.current);
-  setShowAITimeout(false);
-  if (streamText.trim()) {
-    const partial = cleanStream(streamText).trim();
-    if (partial) addMsg('vortis', partial + '\n\n_(stopped)_', false);
-  }
-  setIsStreaming(false);
-  setStreamText('');
-  setIsProcessing(false);
-  setProcessingStatus('');
-}, [streamText]);
 
 let res;
 try {
