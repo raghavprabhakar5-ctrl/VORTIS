@@ -195,22 +195,37 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - Show before→after only when the diff is small. For large refactors, show only the new version with a one-line summary of what changed.
 - Never silently rewrite working code. If you're refactoring, label it: "Refactored version:".
 
-═══ CLARIFYING — ALWAYS USE FOR AMBIGUOUS REQUESTS ═══
-When the user's request is ambiguous on 1-3 axes that genuinely change the answer (which language, which framework, which layout, what input shape, which style), you MUST output a structured question block — NOT prose, NOT plain text, NOT a markdown list. The exact format is:
+═══ CLARIFYING — PROACTIVE FOR ANY PROJECT / FEATURE REQUEST ═══
+You MUST emit a clarifying-question block BEFORE writing any code whenever the user's request involves building, creating, making, or implementing something non-trivial — even if you think you can guess. This includes:
+- "Build a chat app" / "Make a counter" / "Create a form" / "Implement a dashboard"
+- "Write me a [thing]" where [thing] has multiple valid shapes (web app, CLI, library, mobile)
+- Any request that doesn't pin down framework, language, styling, or scope
+- The user says "ask me my preferences" or "ask before you start" — always ask
+
+DO NOT just start coding on assumptions. The user explicitly wants to be asked first.
+
+The clarifying block uses this exact raw-text format (NO code fence, NO prose before it, NO markdown):
 
 <<<ASK>>>
-[{"question":"Which layout do you want?","options":["Floating orb","Chat-first","Split view"]}]
+[{"question":"Which framework?","options":["Next.js","Vite + React","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]},{"question":"Language?","options":["TypeScript","JavaScript"]}]
 <<<END>>>
 
-RULES (STRICT):
-- The opening marker is the literal characters <<<ASK>>> on its own line. The closing marker is the literal characters <<<END>>> on its own line. Both are MANDATORY — omitting <<<END>>> breaks the parser.
-- The content between them is a valid JSON array of objects, each with question (string) and options (array of 2-4 short strings).
-- Do NOT wrap the ASK block in a markdown code fence. It must be raw text.
-- Do NOT put any prose before the <<<ASK>>> marker. After <<<END>>>, you can add a one-line "I'll proceed once you pick." if you want.
-- The UI renders this as tappable pill-button cards. The user's picks arrive as the next message and you then proceed to answer.
-- Use this ONLY for genuine ambiguity that materially changes the answer. If the request is mildly ambiguous, just make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
+STRICT RULES:
+- The FIRST thing in your reply must be the literal characters <<<ASK>>> on its own line. NO intro prose. NO "Sure, let me ask…". NO "I'll need a few details first.". Just the marker.
+- The closing literal <<<END>>> on its own line is MANDATORY. Omitting it breaks the parser and the user sees raw JSON.
+- Between them is a valid JSON array. Each object has question (string) and options (array of 2-4 short strings).
+- 1-3 questions, never more. Each question = one axis of genuine ambiguity (framework, styling, language, layout, scope).
+- DO NOT wrap in a markdown code fence. Raw text only.
+- DO NOT include an "Other" option — the UI automatically adds an "Other" pill with a free-text input to every question, so the user can always type a custom answer that isn't in your option list.
+- After <<<END>>>, you may add ONE short line like "I'll start once you pick." — nothing more. Then stop. The user's picks arrive as the next message; THEN you write the code.
 
-Example of a CORRECT clarify block (raw text, no fence, with both markers):
+When NOT to ask (rare):
+- Quick syntax questions ("how do I use useEffect?")
+- Bug fixes where the user pasted the broken code
+- Casual conversation
+- The user already specified everything (framework, language, scope) in their request
+
+Example of a CORRECT proactive clarify reply (the WHOLE reply is just this):
 <<<ASK>>>
 [{"question":"Which framework?","options":["Next.js","Vite","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]}]
 <<<END>>>
@@ -385,7 +400,7 @@ function needsCodeWebSearch(text) {
  *  VertexCodeBlocks. The first-line path comment is recognized in any
  *  language's comment syntax (//, #, --, ;;, ;, <!--).
  * ──────────────────────────────────────────────────────────────────────── */
-const FILE_PATH_LINE = /^(?:\/\/|#|--|;;|;|<!--)\s*(?:file|path|filename)\s*[:=]\s*([^\n\r]+?)\s*(?:-->)?\s*$/i;
+const FILE_PATH_LINE = /^(?:\/\/|#|--|;;|;|<!--|\/\*)\s*\*?\s*(?:file|path|filename)\s*[:=]\s*([^\n\r]+?)\s*(?:-->\s*?)?(?:\*\/\s*?)?$/i;
 
 const extractFilePath = (code, lang) => {
   if (!code) return null;
@@ -408,15 +423,23 @@ const extractFilePath = (code, lang) => {
    time. Even a single tagged file goes through the FileTreePanel so the
    user gets the IDE layout + Download .zip button. Untagged fences (rare
    since the system prompt mandates tagging) fall through to plain
-   VertexCodeBlock rendering. */
+   VertexCodeBlock rendering.
+
+   During streaming, a fence may be unclosed (the model hasn't emitted the
+   closing ``` yet). We accept that case too — match an open fence ending
+   at end-of-text — so the FileTreePanel renders progressively instead of
+   flashing flat code blocks mid-stream. */
 const extractProjectFromMessage = (text) => {
   if (!text || !text.includes('```')) return { project: null, text: text || '' };
-  const fenceRe = /```(\w*)\n([\s\S]*?)```/g;
+  // Closed fences: ```lang\n...```
+  const closedFence = /```(\w*)\n([\s\S]*?)```/g;
+  // Open fence (streaming): ```lang\n... until end of text (no closing ```)
+  // Only matched if not preceded by another closing fence.
   const files = [];
   let out = '';
   let lastIdx = 0;
   let m;
-  while ((m = fenceRe.exec(text))) {
+  while ((m = closedFence.exec(text))) {
     const lang = m[1] || '';
     const code = m[2] || '';
     const extracted = extractFilePath(code, lang);
@@ -424,6 +447,22 @@ const extractProjectFromMessage = (text) => {
       out += text.slice(lastIdx, m.index);
       lastIdx = m.index + m[0].length;
       files.push({ path: extracted.path, lang, code: extracted.code });
+    }
+  }
+  // After processing all closed fences, check if there's an OPEN fence
+  // (streaming mid-file) between lastIdx and end of text.
+  const tail = text.slice(lastIdx);
+  const openMatch = tail.match(/```(\w*)\n([\s\S]*)$/);
+  if (openMatch) {
+    const lang = openMatch[1] || '';
+    const code = openMatch[2] || '';
+    const extracted = extractFilePath(code, lang);
+    if (extracted) {
+      // Strip the open fence from `out` by advancing lastIdx past it.
+      // The tail before the open fence is preserved.
+      out += tail.slice(0, openMatch.index);
+      lastIdx += openMatch.index + openMatch[0].length;
+      files.push({ path: extracted.path, lang, code: extracted.code, streaming: true });
     }
   }
   out += text.slice(lastIdx);
@@ -581,6 +620,12 @@ const extractClarify = (text) => {
  *  GFM task-list lines (- [x] ... / - [ ] ...), strip them and render
  *  them as a collapsible TodosPanel above the markdown body. Stray
  *  checkbox lines elsewhere still render as plain GFM.
+ *
+ *  AUTO-TICK: the model rarely flips - [ ] to - [x] after delivering
+ *  each step. To make the progress bar actually move, we count how
+ *  many `// file:`-tagged blocks (or substantial code blocks) appear
+ *  in the body and auto-tick the first N todos. The model's own - [x]
+ *  markings are always respected.
  * ──────────────────────────────────────────────────────────────────────── */
 const TODO_LINE = /^\s*[-*]\s+\[(?:x|X|\s|[-])\]\s+.+$/;
 const extractLeadingTodos = (text) => {
@@ -596,11 +641,26 @@ const extractLeadingTodos = (text) => {
   if (todoLines.length < 2) return { todos: null, text };
   // skip one blank line after the todos so the body doesn't start with an awkward gap
   if (i < lines.length && lines[i].trim() === '') i++;
-  const todos = todoLines.map(l => {
+  const body = lines.slice(i).join('\n');
+
+  // Count "delivered" steps in the body: each `// file:`-tagged fence = 1 step,
+  // plus any other substantial fenced block (>= ~200 chars) = 1 step. Cap at
+  // the number of todos so we never over-tick. The marker regex matches all
+  // comment syntaxes: // # -- ; ;; <!-- /*
+  const fileMarkers = (body.match(/```[\w]*\n(?:\/\/|#|--|;;|;|<!--|\/\*)\s*\*?\s*(?:file|path|filename)\s*[:=]/g) || []).length;
+  const bigFences = (body.match(/```[\w]*\n[\s\S]{200,}?```/g) || []).length;
+  const deliveredSteps = Math.min(todoLines.length, fileMarkers + bigFences);
+
+  const todos = todoLines.map((l, idx) => {
     const m = l.match(/^\s*[-*]\s+\[([xX\s-])\]\s+(.+)$/);
-    return { done: !!(m && (m[1] === 'x' || m[1] === 'X')), text: m ? m[2] : l };
+    const modelSaysDone = !!(m && (m[1] === 'x' || m[1] === 'X'));
+    const autoDone = !modelSaysDone && idx < deliveredSteps;
+    return {
+      done: modelSaysDone || autoDone,
+      text: m ? m[2] : l,
+    };
   });
-  return { todos, text: lines.slice(i).join('\n') };
+  return { todos, text: body };
 };
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -678,28 +738,58 @@ const TodosPanel = ({ todos }) => {
  *  answers" button calls onAnswer(composedString), which sends the
  *  answers as the next user message. Once sent, the parent freezes the
  *  card (grayed out, non-interactive) so it can't be re-clicked.
+ *
+ *  Each question automatically gets an "Other" pill at the end — clicking
+ *  it reveals a free-text input so the user can type an answer that
+ *  wasn't in the model's option list. The composed answer then uses the
+ *  custom text instead of one of the canned options.
  * ──────────────────────────────────────────────────────────────────────── */
 const ClarifyCard = ({ questions, onAnswer, frozen }) => {
+  // selected[qi] = { type: 'option', idx } | { type: 'other', text: '...' }
   const [selected, setSelected] = useState({});
+  const otherInputRef = useRef(null);
 
   const toggle = (qIdx, optIdx) => {
     if (frozen) return;
     setSelected(prev => {
       const next = { ...prev };
-      if (next[qIdx] === optIdx) delete next[qIdx];
-      else next[qIdx] = optIdx;
+      const cur = next[qIdx];
+      if (cur && cur.type === 'option' && cur.idx === optIdx) delete next[qIdx];
+      else next[qIdx] = { type: 'option', idx: optIdx };
       return next;
     });
   };
 
-  const allAnswered = questions.every((_, i) => selected[i] !== undefined);
+  const selectOther = (qIdx) => {
+    if (frozen) return;
+    setSelected(prev => ({
+      ...prev,
+      [qIdx]: { type: 'other', text: prev[qIdx]?.type === 'other' ? prev[qIdx].text : '' },
+    }));
+    setTimeout(() => otherInputRef.current?.focus(), 30);
+  };
+
+  const setOtherText = (qIdx, text) => {
+    if (frozen) return;
+    setSelected(prev => ({ ...prev, [qIdx]: { type: 'other', text } }));
+  };
+
+  const isAnswered = (qi) => {
+    const s = selected[qi];
+    if (!s) return false;
+    if (s.type === 'option') return true;
+    if (s.type === 'other') return s.text.trim().length > 0;
+    return false;
+  };
+  const allAnswered = questions.every((_, i) => isAnswered(i));
 
   const submit = () => {
     if (!allAnswered || frozen || !onAnswer) return;
     const parts = questions.map((q, i) => {
-      const opt = q.options[selected[i]];
+      const s = selected[i];
+      const val = s.type === 'option' ? q.options[s.idx] : s.text.trim();
       const qLabel = q.question.replace(/\?+\s*$/, '').trim();
-      return `${qLabel}: ${opt}`;
+      return `${qLabel}: ${val}`;
     });
     onAnswer(parts.join('  ·  '));
   };
@@ -727,7 +817,10 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
         </span>
       </div>
       <div style={{ padding: '6px 14px 12px' }}>
-        {questions.map((q, qi) => (
+        {questions.map((q, qi) => {
+          const sel = selected[qi];
+          const otherActive = sel?.type === 'other';
+          return (
           <div key={qi} style={{ marginTop: 10 }}>
             <div style={{
               fontSize: 13.5, color: '#e6e6e6', marginBottom: 8,
@@ -737,7 +830,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {q.options.map((opt, oi) => {
-                const isSel = selected[qi] === oi;
+                const isSel = sel?.type === 'option' && sel.idx === oi;
                 return (
                   <button key={oi}
                     onClick={() => toggle(qi, oi)}
@@ -758,9 +851,44 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                   </button>
                 );
               })}
+              {/* "Other" pill — opens a free-text input */}
+              <button
+                onClick={() => selectOther(qi)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '6px 13px', borderRadius: 0,
+                  background: otherActive ? '#2a2a2a' : '#1a1a1a',
+                  border: '1px solid ' + (otherActive ? '#5a5a5a' : '#333333'),
+                  borderStyle: otherActive ? 'solid' : 'dashed',
+                  color: otherActive ? '#e6e6e6' : '#9a9a9a',
+                  fontSize: 12.5, fontFamily: 'inherit', fontWeight: 600,
+                  cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s',
+                }}
+              >
+                <Plus size={11}/> Other
+              </button>
             </div>
+            {otherActive && (
+              <input
+                ref={otherInputRef}
+                type="text"
+                value={sel.text || ''}
+                onChange={e => setOtherText(qi, e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter' && allAnswered) { e.preventDefault(); submit(); } }}
+                placeholder="Type your own answer…"
+                style={{
+                  marginTop: 8, width: '100%', boxSizing: 'border-box',
+                  background: '#0a0a0a', border: '1px solid #333333',
+                  borderRadius: 0, padding: '7px 10px',
+                  color: '#e6e6e6', fontSize: 12.5,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  outline: 'none',
+                }}
+              />
+            )}
           </div>
-        ))}
+          );
+        })}
         {!frozen && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
             <button onClick={submit} disabled={!allAnswered}
@@ -2544,17 +2672,35 @@ Title:`,
       let buffer = '';
       let full = '';
 
-      // Throttle stream renders with rAF — without this, every SSE chunk
-      // triggers a setStreamText → React re-render → full ReactMarkdown
-      // re-parse of the entire response so far. For a 2000-token reply
-      // that's ~2000 re-parses, which is what made messages feel sluggish
-      // and "come in late". rAF batches them into one render per frame.
+      // Throttle stream renders — without this, every SSE chunk triggers a
+      // setStreamText → React re-render → full ReactMarkdown re-parse of the
+      // entire response so far. For a 2000-token reply that's ~2000 re-parses.
+      //
+      // Two-stage throttle:
+      //   1. Coalesce with rAF (one render per frame max).
+      //   2. Plus a 90ms minimum gap between renders — even if rAF fires
+      //      every 16ms, we skip frames that are too close to the last
+      //      flush. This is what stops the "slow then fast then slow"
+      //      flicker on long code blocks: ReactMarkdown's parse cost grows
+      //      quadratically with text length, so re-parsing 60x/sec on a
+      //      1500-token reply janks the main thread.
+      // Final flush after stream end is unconditional so the last chunk
+      // always lands.
       let pendingFlush = false;
-      let lastFlushed = '';
-      const flush = () => {
+      let lastFlushedAt = 0;
+      let lastFlushedText = '';
+      const FLUSH_MS = 90;
+      const flush = (force = false) => {
         pendingFlush = false;
-        if (lastFlushed !== full) {
-          lastFlushed = full;
+        const now = Date.now();
+        if (!force && now - lastFlushedAt < FLUSH_MS) {
+          // Too soon — re-schedule for the remaining gap.
+          scheduleFlush();
+          return;
+        }
+        if (lastFlushedText !== full) {
+          lastFlushedAt = now;
+          lastFlushedText = full;
           setStreamText(full);
         }
       };
@@ -2562,9 +2708,9 @@ Title:`,
         if (pendingFlush) return;
         pendingFlush = true;
         if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(flush);
+          requestAnimationFrame(() => flush(false));
         } else {
-          setTimeout(flush, 16);
+          setTimeout(() => flush(false), FLUSH_MS);
         }
       };
 
@@ -2599,7 +2745,8 @@ Title:`,
       }
 
       // Final flush so the very last chunk is guaranteed to be on screen
-      // before we hand off to the persisted message.
+      // before we hand off to the persisted message. Force=true bypasses
+      // the 90ms throttle so we don't wait an extra frame at the end.
       if (pendingFlush) {
         if (typeof requestAnimationFrame === 'function') {
           await new Promise(r => requestAnimationFrame(r));
@@ -2607,7 +2754,7 @@ Title:`,
           await new Promise(r => setTimeout(r, 16));
         }
       }
-      flush();
+      flush(true);
 
       return { text: full, errorMsg: null, status: res.status, isNetwork: false };
     } catch (e) {
@@ -2767,7 +2914,7 @@ Title:`,
     setStreamText('');
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
 
-  const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
+const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
 const handleClarifyAnswer = useCallback((messageId, answer) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
