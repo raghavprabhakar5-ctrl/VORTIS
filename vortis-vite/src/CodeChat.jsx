@@ -10,13 +10,14 @@ import mammoth from 'mammoth';
 import {
   X, Code2, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp,
   Loader, MessageSquare, Sparkles,
-  Zap, Bug, BookOpen, RefreshCw, FileCode, Folder,
+  Zap, Bug, BookOpen, RefreshCw, FileCode, Folder, FolderOpen, FolderTree,
   PanelLeftClose, PanelLeftOpen,
   Terminal, Cog, EraserIcon,
-  ChevronDown, HelpCircle,
+  ChevronDown, ChevronRight, HelpCircle,
   Image as ImageIcon, FileText, Scan,
   Download, Layers, Upload, ExternalLink, RotateCcw,
-  Reply, Edit3, Wand2, FlaskConical, ArrowDownToLine, Play
+  Reply, Edit3, Wand2, FlaskConical, ArrowDownToLine, Play,
+  ListChecks, Circle, CheckCircle2, Send, FileArchive
 } from 'lucide-react';
 
 const API = 'https://vortis.onrender.com/api/handler';
@@ -195,8 +196,30 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - Never silently rewrite working code. If you're refactoring, label it: "Refactored version:".
 
 ═══ CLARIFYING ═══
-- If the request is ambiguous in a way that changes the answer significantly (which language, which framework, what input shape), ask ONE concise question before answering.
+- If the request is ambiguous on 1-3 axes that genuinely change the answer (which language, which framework, which layout, what input shape), output ONLY a structured question block — no prose before or after:
+  <<<ASK>>>
+  [{"question":"Which layout?","options":["Floating orb","Chat-first","Split view"]}]
+  <<<END>>>
+  The UI renders tappable option cards; the user's picks arrive as the next message and you then proceed to answer. Use this only for genuine ambiguity, not for every reply.
 - If it's only mildly ambiguous, make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
+
+═══ MULTI-FILE OUTPUT ═══
+- When a reply produces multiple files, give EACH file its OWN fenced code block. The FIRST line inside the fence MUST be a path comment marking the file's path:
+  \`\`\`jsx
+  // file: src/components/Navbar.jsx
+  ...
+  \`\`\`
+  \`\`\`python
+  # file: app/main.py
+  ...
+  \`\`\`
+- Path comment syntax: \`// file:\` for JS/TS/C/C++/Java/Rust/Go, \`# file:\` for Python/Ruby/Shell/YAML/TOML, \`<!-- file: -->\` for HTML/XML/Markdown, \`-- file:\` for SQL, \`; file:\` for Lisp/INI.
+- Use this even for a single file when the path is meaningful (e.g. \`src/App.tsx\`). NEVER merge multiple files into one fence.
+
+═══ TODOS / PROGRESS TRACKING ═══
+- For multi-step replies, START the message with 2+ GFM task-list lines (\`- [ ] step\` or \`- [x] done step\`). The UI extracts these leading task lines and renders them as a collapsible checklist above the reply body.
+- Only leading task lines (at the very top of the reply) become checklist entries. Stray task lines elsewhere still render as normal markdown.
+- Mark items \`- [x]\` only after you've actually delivered that step in the body below.
 
 ═══ CURRENT INFO ═══
 If live web search results are appended below this prompt, treat them as ground truth for anything version-specific, recently changed, or time-sensitive (library versions, deprecations, new APIs) — they override your training data.
@@ -283,6 +306,502 @@ function needsCodeWebSearch(text) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────
+ *  Multi-file project detection — when the model emits 2+ fenced blocks
+ *  tagged with a "// file: path/to/x" first line, strip them out of the
+ *  markdown and render them as a single FileTreePanel instead of N flat
+ *  VertexCodeBlocks. The first-line path comment is recognized in any
+ *  language's comment syntax (//, #, --, ;;, ;, <!--).
+ * ──────────────────────────────────────────────────────────────────────── */
+const FILE_PATH_LINE = /^(?:\/\/|#|--|;;|;|<!--)\s*(?:file|path|filename)\s*[:=]\s*([^\n\r]+?)\s*(?:-->)?\s*$/i;
+
+const extractFilePath = (code, lang) => {
+  if (!code) return null;
+  const nl = code.indexOf('\n');
+  const firstLine = (nl === -1 ? code : code.slice(0, nl)).trim();
+  const m = firstLine.match(FILE_PATH_LINE);
+  if (!m) return null;
+  let path = m[1].trim().replace(/^['"`]|['"`]$/g, '');
+  // reject obvious false positives — paths with spaces/commas or suspiciously long
+  if (!path || /[\s,]/.test(path) || path.length > 200) return null;
+  // strip leading ./
+  path = path.replace(/^\.\//, '');
+  const rest = nl === -1 ? '' : code.slice(nl + 1).replace(/^\n+/, '');
+  return { path, code: rest };
+};
+
+/* Scans a message for ALL fenced code blocks with a `// file:` first line.
+   If 2+ are found, they're returned as a single project; the matching
+   fences are stripped from the markdown so ReactMarkdown doesn't render
+   them a second time. Single-file or zero-file cases return project=null. */
+const extractProjectFromMessage = (text) => {
+  if (!text || !text.includes('```')) return { project: null, text: text || '' };
+  const fenceRe = /```(\w*)\n([\s\S]*?)```/g;
+  const files = [];
+  let out = '';
+  let lastIdx = 0;
+  let m;
+  while ((m = fenceRe.exec(text))) {
+    const lang = m[1] || '';
+    const code = m[2] || '';
+    const extracted = extractFilePath(code, lang);
+    if (extracted) {
+      out += text.slice(lastIdx, m.index);
+      lastIdx = m.index + m[0].length;
+      files.push({ path: extracted.path, lang, code: extracted.code });
+    }
+  }
+  out += text.slice(lastIdx);
+  if (files.length < 2) return { project: null, text };
+  // collapse the gap left by stripping (avoid triple blank lines)
+  const cleanedText = out.replace(/\n{3,}/g, '\n\n');
+  return { project: files, text: cleanedText };
+};
+
+/* Build a nested tree from a flat list of {path, lang, code}.
+   Folders sort first, then files; both alphabetical. */
+const buildFileTree = (files) => {
+  const root = { name: '', path: '', children: {}, files: [] };
+  for (const f of files) {
+    const parts = f.path.split('/').filter(Boolean);
+    if (parts.length === 0) continue;
+    const fileName = parts.pop();
+    let node = root;
+    for (const p of parts) {
+      if (!node.children[p]) {
+        node.children[p] = { name: p, path: (node.path ? node.path + '/' : '') + p, children: {}, files: [] };
+      }
+      node = node.children[p];
+    }
+    node.files.push({ ...f, name: fileName });
+  }
+  const finalize = (node) => {
+    const folders = Object.values(node.children).map(finalize);
+    folders.sort((a, b) => a.name.localeCompare(b.name));
+    node.files.sort((a, b) => a.name.localeCompare(b.name));
+    node.folders = folders;
+    return node;
+  };
+  return finalize(root);
+};
+
+/* Dynamic JSZip loader — only fetched the first time the user clicks
+   "Download .zip". If the CDN is unreachable, callers fall back to
+   staggered per-file downloads so the feature never dead-ends. */
+let _jsZipPromise = null;
+const loadJsZip = () => {
+  if (_jsZipPromise) return _jsZipPromise;
+  try {
+    _jsZipPromise = import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://esm.sh/jszip@3.10.1')
+      .then(mod => (mod && (mod.default || mod)) || null)
+      .catch(() => null);
+  } catch (e) {
+    _jsZipPromise = Promise.resolve(null);
+  }
+  return _jsZipPromise;
+};
+
+const downloadProjectAsZip = async (files, zipName = 'vertex-project.zip') => {
+  const JSZip = await loadJsZip();
+  if (!JSZip || typeof JSZip !== 'function') {
+    files.forEach((f, i) => setTimeout(
+      () => downloadTextAsFile(f.code, f.path.split('/').pop() || `file-${i + 1}.txt`),
+      i * 140
+    ));
+    return;
+  }
+  try {
+    const zip = new JSZip();
+    for (const f of files) zip.file(f.path, f.code);
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = zipName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch (e) {
+    files.forEach((f, i) => setTimeout(
+      () => downloadTextAsFile(f.code, f.path.split('/').pop() || `file-${i + 1}.txt`),
+      i * 140
+    ));
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  Tappable clarifying-question extraction — when the model emits a
+ *  <<<ASK>>>[{"question":...,"options":[...]}]<<<END>>> block, strip it
+ *  out of the markdown and render it as a ClarifyCard with pill buttons.
+ * ──────────────────────────────────────────────────────────────────────── */
+const ASK_BLOCK = /<<<ASK>>>([\s\S]*?)<<<END>>>/;
+const extractClarify = (text) => {
+  if (!text || !text.includes('<<<ASK>>>')) return { clarify: null, text: text || '' };
+  const m = text.match(ASK_BLOCK);
+  if (!m) return { clarify: null, text };
+  let parsed = null;
+  try { parsed = JSON.parse(m[1].trim()); } catch (e) { return { clarify: null, text }; }
+  if (!Array.isArray(parsed)) return { clarify: null, text };
+  const valid = parsed.filter(q =>
+    q && typeof q.question === 'string' && q.question.trim() &&
+    Array.isArray(q.options) && q.options.length >= 2 &&
+    q.options.every(o => typeof o === 'string')
+  );
+  if (valid.length === 0) return { clarify: null, text };
+  const cleaned = text.replace(m[0], '').replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n');
+  return { clarify: valid, text: cleaned };
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  Leading Todos extraction — when the model starts its reply with 2+
+ *  GFM task-list lines (- [x] ... / - [ ] ...), strip them and render
+ *  them as a collapsible TodosPanel above the markdown body. Stray
+ *  checkbox lines elsewhere still render as plain GFM.
+ * ──────────────────────────────────────────────────────────────────────── */
+const TODO_LINE = /^\s*[-*]\s+\[(?:x|X|\s|[-])\]\s+.+$/;
+const extractLeadingTodos = (text) => {
+  if (!text) return { todos: null, text: '' };
+  const lines = text.split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].trim() === '') i++;
+  const todoLines = [];
+  while (i < lines.length && TODO_LINE.test(lines[i])) {
+    todoLines.push(lines[i]);
+    i++;
+  }
+  if (todoLines.length < 2) return { todos: null, text };
+  // skip one blank line after the todos so the body doesn't start with an awkward gap
+  if (i < lines.length && lines[i].trim() === '') i++;
+  const todos = todoLines.map(l => {
+    const m = l.match(/^\s*[-*]\s+\[([xX\s-])\]\s+(.+)$/);
+    return { done: !!(m && (m[1] === 'x' || m[1] === 'X')), text: m ? m[2] : l };
+  });
+  return { todos, text: lines.slice(i).join('\n') };
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  TodosPanel — collapsible checklist with a done/total badge and a
+ *  thin progress bar. Rendered above the markdown body when the message
+ *  starts with 2+ GFM task lines.
+ * ──────────────────────────────────────────────────────────────────────── */
+const TodosPanel = ({ todos }) => {
+  const [collapsed, setCollapsed] = useState(false);
+  const done = todos.filter(t => t.done).length;
+  const total = todos.length;
+  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+
+  return (
+    <div style={{
+      margin: '10px 0 12px', borderRadius: 10, overflow: 'hidden',
+      border: '1px solid #232323', background: '#101010',
+      animation: 'vertexCodeIn .25s ease',
+    }} data-vrtx-no-reply="">
+      <button onClick={() => setCollapsed(c => !c)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '9px 14px', background: '#141414', cursor: 'pointer',
+          borderBottom: collapsed ? 'none' : '1px solid #1f1f1f',
+        }}>
+        <ListChecks size={13} color="#c8c8c8" style={{ flexShrink: 0 }}/>
+        <span style={{
+          fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: '#dcdcdc',
+          fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+        }}>Todos</span>
+        <span style={{
+          fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#8a8a8a',
+          marginLeft: 2,
+        }}>{done} / {total}</span>
+        <div style={{
+          flex: 1, height: 4, background: '#1f1f1f', borderRadius: 2,
+          marginLeft: 6, marginRight: 6, overflow: 'hidden',
+        }}>
+          <div style={{
+            width: pct + '%', height: '100%', background: '#e6e6e6',
+            transition: 'width .25s ease',
+          }}/>
+        </div>
+        <ChevronDown size={13} color="#7a7a7a" style={{
+          transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform .15s',
+          flexShrink: 0,
+        }}/>
+      </button>
+      {!collapsed && (
+        <div style={{ padding: '6px 6px 8px' }}>
+          {todos.map((t, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 9,
+              padding: '5px 10px', fontSize: 13, lineHeight: 1.55,
+              color: t.done ? '#6a6a6a' : '#dcdcdc',
+              textDecoration: t.done ? 'line-through' : 'none',
+            }}>
+              {t.done ? (
+                <CheckCircle2 size={14} style={{ marginTop: 2, flexShrink: 0, color: '#8a8a8a' }}/>
+              ) : (
+                <Circle size={14} style={{ marginTop: 2, flexShrink: 0, color: '#5a5a5a' }}/>
+              )}
+              <span style={{ flex: 1 }}>{t.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  ClarifyCard — tappable question card with pill buttons. Each option
+ *  is a toggle; when the user has answered every question, the "Send
+ *  answers" button calls onAnswer(composedString), which sends the
+ *  answers as the next user message. Once sent, the parent freezes the
+ *  card (grayed out, non-interactive) so it can't be re-clicked.
+ * ──────────────────────────────────────────────────────────────────────── */
+const ClarifyCard = ({ questions, onAnswer, frozen }) => {
+  const [selected, setSelected] = useState({});
+
+  const toggle = (qIdx, optIdx) => {
+    if (frozen) return;
+    setSelected(prev => {
+      const next = { ...prev };
+      if (next[qIdx] === optIdx) delete next[qIdx];
+      else next[qIdx] = optIdx;
+      return next;
+    });
+  };
+
+  const allAnswered = questions.every((_, i) => selected[i] !== undefined);
+
+  const submit = () => {
+    if (!allAnswered || frozen || !onAnswer) return;
+    const parts = questions.map((q, i) => {
+      const opt = q.options[selected[i]];
+      const qLabel = q.question.replace(/\?+\s*$/, '').trim();
+      return `${qLabel}: ${opt}`;
+    });
+    onAnswer(parts.join('  ·  '));
+  };
+
+  return (
+    <div style={{
+      margin: '12px 0', borderRadius: 12, overflow: 'hidden',
+      border: '1px solid #2a2a2a', background: '#101010',
+      animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
+      boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
+      opacity: frozen ? 0.55 : 1,
+      pointerEvents: frozen ? 'none' : 'auto',
+      transition: 'opacity .2s',
+    }} data-vrtx-no-reply="">
+      <div style={{
+        padding: '10px 14px', background: '#141414', borderBottom: '1px solid #262626',
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <HelpCircle size={13} color="#9a9a9a"/>
+        <span style={{
+          fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8',
+          fontWeight: 700, letterSpacing: '.04em',
+        }}>
+          {frozen ? 'CLARIFYING · ANSWERED' : 'CLARIFYING · PICK AN OPTION'}
+        </span>
+      </div>
+      <div style={{ padding: '6px 14px 12px' }}>
+        {questions.map((q, qi) => (
+          <div key={qi} style={{ marginTop: 10 }}>
+            <div style={{
+              fontSize: 13.5, color: '#e6e6e6', marginBottom: 8,
+              fontWeight: 600, lineHeight: 1.4,
+            }}>
+              {q.question}
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {q.options.map((opt, oi) => {
+                const isSel = selected[qi] === oi;
+                return (
+                  <button key={oi}
+                    onClick={() => toggle(qi, oi)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '6px 13px', borderRadius: 999,
+                      background: isSel ? '#e6e6e6' : '#1a1a1a',
+                      border: '1px solid ' + (isSel ? '#e6e6e6' : '#333333'),
+                      color: isSel ? '#0a0a0a' : '#dcdcdc',
+                      fontSize: 12.5, fontFamily: 'inherit', fontWeight: 600,
+                      cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s',
+                    }}
+                    onMouseEnter={e => { if (!isSel && !frozen) { e.currentTarget.style.borderColor = '#5a5a5a'; e.currentTarget.style.background = '#232323'; } }}
+                    onMouseLeave={e => { if (!isSel && !frozen) { e.currentTarget.style.borderColor = '#333333'; e.currentTarget.style.background = '#1a1a1a'; } }}
+                  >
+                    {isSel && <Check size={11}/>}
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+        {!frozen && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+            <button onClick={submit} disabled={!allAnswered}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '7px 16px', borderRadius: 8,
+                background: allAnswered ? '#e6e6e6' : 'transparent',
+                border: '1px solid ' + (allAnswered ? '#e6e6e6' : '#333'),
+                color: allAnswered ? '#0a0a0a' : '#5a5a5a',
+                fontSize: 12.5, fontWeight: 700,
+                cursor: allAnswered ? 'pointer' : 'not-allowed',
+                fontFamily: 'inherit',
+                transition: 'background .12s, color .12s',
+              }}>
+              <Send size={12}/> Send answer{questions.length > 1 ? 's' : ''}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────────────────────
+ *  FileTreePanel — left: folder/file tree, right: selected file's
+ *  VertexCodeBlock. Used when a single message produces 2+ files with
+ *  `// file:` markers. The "Download .zip" button uses a dynamic JSZip
+ *  import (lazy-loaded on first click) and falls back to per-file
+ *  downloads if the CDN is unreachable.
+ * ──────────────────────────────────────────────────────────────────────── */
+const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }) => {
+  const tree = useMemo(() => buildFileTree(files), [files]);
+  const [activePath, setActivePath] = useState(() => files[0]?.path || '');
+  const [collapsed, setCollapsed] = useState({});
+  const [zipping, setZipping] = useState(false);
+
+  // if active file disappears (e.g. during streaming), fall back to first
+  useEffect(() => {
+    if (!files.find(f => f.path === activePath) && files[0]) setActivePath(files[0].path);
+  }, [files, activePath]);
+
+  const activeFile = files.find(f => f.path === activePath) || files[0];
+
+  const handleZip = async () => {
+    if (zipping || streaming) return;
+    setZipping(true);
+    try { await downloadProjectAsZip(files); }
+    finally { setZipping(false); }
+  };
+
+  const renderNode = (node, depth = 0) => {
+    const items = [];
+    for (const folder of (node.folders || [])) {
+      const key = folder.path;
+      const isCollapsed = collapsed[key];
+      items.push(
+        <button key={`f-${key}`}
+          onClick={() => setCollapsed(p => ({ ...p, [key]: !p[key] }))}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            padding: '5px 8px 5px ' + (8 + depth * 14) + 'px',
+            background: 'transparent', border: 'none', color: '#c8c8c8',
+            fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
+            cursor: 'pointer', textAlign: 'left', borderRadius: 5,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <ChevronRight size={11} style={{
+            transform: isCollapsed ? 'none' : 'rotate(90deg)',
+            transition: 'transform .12s', color: '#5a5a5a', flexShrink: 0,
+          }}/>
+          {isCollapsed
+            ? <Folder size={12} color="#8a8a8a" style={{ flexShrink: 0 }}/>
+            : <FolderOpen size={12} color="#8a8a8a" style={{ flexShrink: 0 }}/>}
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{folder.name}</span>
+        </button>
+      );
+      if (!isCollapsed) items.push(...renderNode(folder, depth + 1));
+    }
+    for (const file of node.files) {
+      const isActive = activeFile && file.path === activeFile.path;
+      items.push(
+        <button key={`file-${file.path}`}
+          onClick={() => setActivePath(file.path)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+            padding: '5px 8px 5px ' + (8 + depth * 14 + 18) + 'px',
+            background: isActive ? '#232323' : 'transparent',
+            border: 'none', color: isActive ? '#f0f0f0' : '#b8b8b8',
+            fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
+            cursor: 'pointer', textAlign: 'left', borderRadius: 5,
+          }}
+          onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#1a1a1a'; }}
+          onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
+        >
+          <FileCode size={12} color={isActive ? '#e6e6e6' : '#7a7a7a'} style={{ flexShrink: 0 }}/>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+        </button>
+      );
+    }
+    return items;
+  };
+
+  return (
+    <div style={{
+      margin: '12px 0', borderRadius: 10, overflow: 'hidden',
+      border: '1px solid #262626', background: '#0a0a0a',
+      animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
+      boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
+    }} data-vrtx-no-reply="">
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 14px', background: '#111111', borderBottom: '1px solid #262626',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <FolderTree size={13} color="#8a8a8a" style={{ flexShrink: 0 }}/>
+          <span style={{
+            fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8',
+            letterSpacing: '.06em', fontWeight: 700, textTransform: 'uppercase',
+          }}>
+            Project · {files.length} {files.length === 1 ? 'file' : 'files'}
+          </span>
+        </div>
+        {!streaming && (
+          <button onClick={handleZip} disabled={zipping}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              background: 'transparent', border: '1px solid #333333',
+              borderRadius: 6, padding: '4px 10px',
+              color: '#dcdcdc', fontSize: 11, cursor: zipping ? 'wait' : 'pointer',
+              fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+              opacity: zipping ? 0.7 : 1,
+            }}>
+            {zipping
+              ? <Loader size={11} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
+              : <FileArchive size={11}/>}
+            {zipping ? 'Zipping…' : 'Download .zip'}
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', minHeight: 240, maxHeight: 520 }}>
+        <div style={{
+          width: 220, flexShrink: 0, borderRight: '1px solid #1a1a1a',
+          background: '#0c0c0c', overflowY: 'auto', padding: '6px 0',
+        }}>
+          {renderNode(tree)}
+        </div>
+        <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+          {activeFile && (
+            <VertexCodeBlock
+              lang={activeFile.lang}
+              codeText={activeFile.code}
+              filePath={activeFile.path}
+              onOpenPanel={onOpenPanel}
+              onSmartEdit={onSmartEdit}
+              blockId={`${messageId || 'msg'}-tree-${activeFile.path.replace(/[^a-z0-9]/gi, '-')}`}
+              embedded
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ────────────────────────────────────────────────────────────────────────
  *  VertexCodeBlock — the ONLY code renderer Vertex uses internally.
  * ──────────────────────────────────────────────────────────────────────── */
 // Code blocks always render in full in the chat itself — nothing is hidden away in
@@ -292,7 +811,7 @@ function needsCodeWebSearch(text) {
 const CAP_AFTER_LINES = 14;
 const CAPPED_HEIGHT = 320;
 
-const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) => {
+const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, filePath, embedded }) => {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -309,13 +828,14 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
   const lines = codeText.split('\n');
   const isLong = lines.length > CAP_AFTER_LINES;
   const capped = isLong && !expanded;
+  const downloadName = filePath ? filePath.split('/').pop() : `snippet.${extForLang(lang)}`;
 
   return (
     <div style={{
-      margin: '12px 0', borderRadius: 10, overflow: 'hidden',
-      border: '1px solid #262626', background: '#0a0a0a',
-      animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
-      boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
+      margin: embedded ? 0 : '12px 0', borderRadius: embedded ? 0 : 10, overflow: 'hidden',
+      border: embedded ? 'none' : '1px solid #262626', background: '#0a0a0a',
+      animation: embedded ? 'none' : 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
+      boxShadow: embedded ? 'none' : '0 10px 28px -14px rgba(0,0,0,.7)',
     }}>
       <div 
         data-vrtx-no-reply=""  
@@ -331,6 +851,18 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
           }}>
             {lang || 'plaintext'}
           </span>
+          {filePath ? (
+            <>
+              <span style={{ color: '#3a3a3a', flexShrink: 0 }}>·</span>
+              <span title={filePath} style={{
+                fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: '#9a9a9a',
+                fontWeight: 500, textTransform: 'none', letterSpacing: 0,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 360,
+              }}>
+                {filePath}
+              </span>
+            </>
+          ) : null}
           <span style={{ fontSize: 10, color: '#5a5a5a', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             · {lines.length} {lines.length === 1 ? 'line' : 'lines'}
           </span>
@@ -352,7 +884,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId }) 
             </button>
           )}
           <button
-            onClick={() => downloadTextAsFile(codeText, `snippet.${extForLang(lang)}`)}
+            onClick={() => downloadTextAsFile(codeText, downloadName)}
             title="Save this file"
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
@@ -954,25 +1486,67 @@ const MIN_ARTIFACT_LINES = 15;
 const MIN_ARTIFACT_CHARS = 300;
 
 const extractCodeBlocksFromMessages = (messages) => {
-  const blocks = [];
+  const out = [];
   const fence = /```(\w*)\n([\s\S]*?)```/g;
   for (const m of messages) {
     if (m.role !== 'assistant' && m.role !== 'model') continue;
+    // Collect every fenced block in this message, splitting out the ones
+    // that carry a "// file:" path marker (project files) from plain
+    // snippets. 2+ file-bearing blocks collapse into a single "project"
+    // entry so the artifacts panel doesn't show 5 separate snippet-N
+    // rows for one multi-file reply.
+    const allBlocks = [];
     let match;
     fence.lastIndex = 0;
     while ((match = fence.exec(m.text || ''))) {
       const lang = (match[1] || '').trim();
-      const code = match[2].replace(/\n$/, '');
-      const trimmed = code.trim();
+      const rawCode = match[2].replace(/\n$/, '');
+      const trimmed = rawCode.trim();
       if (!trimmed) continue;
+      const extracted = extractFilePath(rawCode, lang);
+      allBlocks.push({
+        lang,
+        code: extracted ? extracted.code : rawCode,
+        filePath: extracted ? extracted.path : null,
+      });
+    }
+    if (allBlocks.length === 0) continue;
 
-      const lineCount = trimmed.split('\n').length;
-      if (lineCount < MIN_ARTIFACT_LINES && trimmed.length < MIN_ARTIFACT_CHARS) continue;
+    const fileBlocks = allBlocks.filter(b => b.filePath);
+    const plainBlocks = allBlocks.filter(b => !b.filePath);
 
-      blocks.push({ id: `${m.id}-${blocks.length}`, lang, code, ts: m.ts });
+    if (fileBlocks.length >= 2) {
+      // Multi-file project: one expandable entry for the whole project
+      out.push({
+        type: 'project',
+        id: `${m.id}-proj`,
+        ts: m.ts,
+        files: fileBlocks.map(b => ({ path: b.filePath, lang: b.lang, code: b.code })),
+      });
+      // Any non-file snippets in the same message still get their own rows
+      for (const b of plainBlocks) {
+        const lineCount = b.code.trim().split('\n').length;
+        if (lineCount < MIN_ARTIFACT_LINES && b.code.trim().length < MIN_ARTIFACT_CHARS) continue;
+        out.push({ type: 'file', id: `${m.id}-${out.length}`, lang: b.lang, code: b.code, ts: m.ts });
+      }
+    } else {
+      // No project (or just one tagged file) — flat list, same as before
+      for (const b of allBlocks) {
+        const trimmed = b.code.trim();
+        const lineCount = trimmed.split('\n').length;
+        if (lineCount < MIN_ARTIFACT_LINES && trimmed.length < MIN_ARTIFACT_CHARS) continue;
+        out.push({
+          type: 'file',
+          id: `${m.id}-${out.length}`,
+          lang: b.lang,
+          code: b.code,
+          ts: m.ts,
+          filePath: b.filePath,
+        });
+      }
     }
   }
-  return blocks;
+  return out;
 };
 
 const downloadTextAsFile = (content, filename) => {
@@ -1514,6 +2088,23 @@ Title:`,
       el.setSelectionRange(el.value.length, el.value.length);
     }, 30);
   }, []);
+
+  /* ── Clarify-card answers ──
+     When the user picks options on a <<<ASK>>> card and clicks "Send
+     answer", we (a) freeze that card so it can't be re-answered, and
+     (b) send the composed answer as the next user message — same flow
+     as if they'd typed it. The frozen state is tracked per-message-id
+     in a Set so re-renders don't un-freeze. */
+  const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
+  const handleClarifyAnswer = useCallback((messageId, answer) => {
+    setFrozenClarifyIds(prev => {
+      const next = new Set(prev);
+      next.add(messageId);
+      return next;
+    });
+    // Slight delay so the freeze visually applies before the new message pushes the view down.
+    setTimeout(() => send(answer), 30);
+  }, [send]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -2141,7 +2732,10 @@ Title:`,
   const codeBlocks = useMemo(() => extractCodeBlocksFromMessages(messages), [messages]);
 
   const downloadCodeBlock = useCallback((block, index) => {
-    downloadTextAsFile(block.code, `vertex-snippet-${index + 1}.${extForLang(block.lang)}`);
+    const name = block.filePath
+      ? block.filePath.split('/').pop()
+      : `vertex-snippet-${index + 1}.${extForLang(block.lang)}`;
+    downloadTextAsFile(block.code, name);
   }, []);
 
   const downloadAllCodeBlocks = useCallback(() => {
@@ -2172,12 +2766,12 @@ Title:`,
     th: ({children}) => <th style={{ padding: '6px 10px', border: '1px solid #232323', textAlign: 'left', color: '#e6e6e6', fontWeight: 600 }}>{children}</th>,
     td: ({children}) => <td style={{ padding: '6px 10px', border: '1px solid #232323', color: '#b8b8b8' }}>{children}</td>,
     code: ({ className, children }) => {
-  const codeText = String(children).replace(/\n$/, '');
+  const rawCodeText = String(children).replace(/\n$/, '');
   const match = /language-(\w+)/.exec(className || '');
   const codeLang = match ? match[1] : '';
 
   // No language + no newline = inline code (e.g. `nvidia/nemotron-3-ultra`)
-  const isInline = !className && !codeText.includes('\n');
+  const isInline = !className && !rawCodeText.includes('\n');
 
   if (isInline) {
     return (
@@ -2187,8 +2781,15 @@ Title:`,
     );
   }
 
-  const bid = `${messageId || 'msg'}-${codeLang || 'x'}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
-  return <VertexCodeBlock lang={codeLang} codeText={codeText} onOpenPanel={openCodePanel} onSmartEdit={onSmartEdit} blockId={bid} />;
+  // Single-file case: pull a `// file: path/to/x` first-line marker out so
+  // the VertexCodeBlock header can show the path. Multi-file groups are
+  // handled at the MessageContent level (stripped before reaching here).
+  const extracted = extractFilePath(rawCodeText, codeLang);
+  const codeText = extracted ? extracted.code : rawCodeText;
+  const filePath = extracted ? extracted.path : null;
+
+  const bid = `${messageId || 'msg'}-${filePath || (codeLang || 'x')}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
+  return <VertexCodeBlock lang={codeLang} codeText={codeText} filePath={filePath} onOpenPanel={openCodePanel} onSmartEdit={onSmartEdit} blockId={bid} />;
 },
   }), [openCodePanel]);
 
@@ -2309,7 +2910,15 @@ Title:`,
                         </button>
                       </div>
                     ))}
-                    {codeBlocks.map((b, i) => (
+                    {codeBlocks.map((b, i) => {
+                      const isProject = b.type === 'project';
+                      const label = isProject
+                        ? `project · ${b.files.length} files`
+                        : (b.filePath ? b.filePath.split('/').pop() : `snippet-${i + 1}.${extForLang(b.lang)}`);
+                      const sub = isProject
+                        ? `${b.files.reduce((n, f) => n + f.code.split('\n').length, 0)} lines · ${b.files.length} files`
+                        : `${b.code.split('\n').length} lines · AI-written`;
+                      return (
                       <div key={b.id}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
@@ -2319,20 +2928,25 @@ Title:`,
                           width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           background: '#000', border: '1px solid #2a2a2a',
                         }}>
-                          <FileCode size={12} color="#9a9a9a"/>
+                          {isProject
+                            ? <FolderTree size={12} color="#9a9a9a"/>
+                            : <FileCode size={12} color="#9a9a9a"/>}
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace' }}>
-                            snippet-{i + 1}.{extForLang(b.lang)}
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {label}
                           </div>
-                          <div style={{ fontSize: 10, color: '#6a6a6a' }}>{b.code.split('\n').length} lines · AI-written</div>
+                          <div style={{ fontSize: 10, color: '#6a6a6a' }}>{sub}</div>
                         </div>
-                        <button onClick={() => downloadCodeBlock(b, i)} title="Save this file"
+                        <button
+                          onClick={() => isProject ? downloadProjectAsZip(b.files) : downloadCodeBlock(b, i)}
+                          title={isProject ? 'Save project as .zip' : 'Save this file'}
                           style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
-                          <Download size={12}/>
+                          {isProject ? <FileArchive size={12}/> : <Download size={12}/>}
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -2773,7 +3387,10 @@ Title:`,
                     canRetry={m.canRetry} onRetry={() => retryLastMessage(m.id)}
                     onContinue={handleContinue} onRegenerate={handleRegenerate}
                     onEditUserMessage={handleEditUserMessage}
-                    isLast={i === messages.length - 1} streaming={streaming} />
+                    isLast={i === messages.length - 1} streaming={streaming}
+                    onOpenPanel={openCodePanel}
+                    onAnswerClarify={(answer) => handleClarifyAnswer(m.id, answer)}
+                    frozenClarify={frozenClarifyIds.has(m.id)} />
                 ))}
 
                 {(streaming || thinking || searching) && (
@@ -2809,9 +3426,15 @@ Title:`,
                           background: '#111111', border: '1px solid #232323', borderRadius: '0 10px 10px 10px',
                           padding: '12px 14px'
                         }}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponentsForStreaming}>
-                            {streamText}
-                          </ReactMarkdown>
+                          <MessageContent
+                            text={streamText}
+                            mdComponents={mdComponentsForStreaming}
+                            onOpenPanel={openCodePanel}
+                            onSmartEdit={null}
+                            messageId="streaming"
+                            streaming
+                            skipClarify
+                          />
                           <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vertexBlink 1s steps(2) infinite' }}/>
                         </div>
                       ) : null}
@@ -3186,7 +3809,72 @@ Title:`,
   );
 };
 
-const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdit, messageId, canRetry, onRetry, onContinue, onRegenerate, onEditUserMessage, isLast, streaming }) => {
+/* ────────────────────────────────────────────────────────────────────────
+ *  MessageContent — the unified pipeline that wraps every ReactMarkdown
+ *  call site. It strips three structured blocks out of the raw text:
+ *    1. <<<ASK>>>...<<<END>>>   → ClarifyCard (tappable option pills)
+ *    2. leading GFM task list   → TodosPanel (collapsible checklist)
+ *    3. 2+ `// file:`-tagged fences → FileTreePanel (folder/file tree)
+ *  Then renders the cleaned markdown with whatever's left. Parsing is
+ *  memoized so the wrapper adds negligible overhead during streaming.
+ * ──────────────────────────────────────────────────────────────────────── */
+const MessageContent = React.memo(({
+  text,
+  mdComponents,
+  onOpenPanel,
+  onSmartEdit,
+  messageId,
+  onAnswerClarify,
+  frozenClarify,
+  streaming,
+  // When true, only todos + project extraction run (no ClarifyCard).
+  // Used for the user-message bubble so a pasted <<<ASK>>> block doesn't
+  // render as an interactive card on the user's own message.
+  skipClarify = false,
+}) => {
+  const parsed = useMemo(() => {
+    let t = text || '';
+    const todosRes = extractLeadingTodos(t);
+    t = todosRes.text;
+    const clarifyRes = skipClarify ? { clarify: null, text: t } : extractClarify(t);
+    t = clarifyRes.text;
+    const projectRes = extractProjectFromMessage(t);
+    t = projectRes.text;
+    return {
+      todos: todosRes.todos,
+      clarify: clarifyRes.clarify,
+      project: projectRes.project,
+      cleanedText: t,
+    };
+  }, [text, skipClarify]);
+
+  return (
+    <>
+      {parsed.clarify && (
+        <ClarifyCard
+          questions={parsed.clarify}
+          onAnswer={onAnswerClarify}
+          frozen={frozenClarify}
+        />
+      )}
+      {parsed.todos && <TodosPanel todos={parsed.todos} />}
+      {parsed.project && (
+        <FileTreePanel
+          files={parsed.project}
+          onOpenPanel={onOpenPanel}
+          onSmartEdit={onSmartEdit}
+          messageId={messageId}
+          streaming={streaming}
+        />
+      )}
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
+        {parsed.cleanedText}
+      </ReactMarkdown>
+    </>
+  );
+});
+
+const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdit, messageId, canRetry, onRetry, onContinue, onRegenerate, onEditUserMessage, isLast, streaming, onOpenPanel, onAnswerClarify, frozenClarify }) => {
   const isUser = role === 'user';
   const [copied, setCopied] = useState(false);
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
@@ -3215,9 +3903,15 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
           color: '#e6e6e6', borderRadius: 10, padding: '10px 14px',
           fontSize: 14, lineHeight: 1.55, wordBreak: 'break-word'
         }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
-            {text}
-          </ReactMarkdown>
+          <MessageContent
+            text={text}
+            mdComponents={mdComponents}
+            onOpenPanel={onOpenPanel}
+            onSmartEdit={onSmartEdit}
+            messageId={messageId}
+            streaming={streaming}
+            skipClarify
+          />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'flex-start', marginTop: 2, flexShrink: 0 }}>
           <button onClick={() => onEditUserMessage?.(messageId)} title="Edit & resend"
@@ -3261,9 +3955,16 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
           {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
         </div>
         <div style={{ color: '#dcdcdc' }}>
-          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
-            {text}
-          </ReactMarkdown>
+          <MessageContent
+            text={text}
+            mdComponents={mdComponents}
+            onOpenPanel={onOpenPanel}
+            onSmartEdit={onSmartEdit}
+            messageId={messageId}
+            onAnswerClarify={onAnswerClarify}
+            frozenClarify={frozenClarify}
+            streaming={streaming}
+          />
         </div>
         {/* Action row — sits BELOW the message body so it's always visible
             regardless of message length. Copy + Regenerate show on every AI
