@@ -346,7 +346,7 @@ input,textarea,select{font-size:16px}
 .mic-btn{width:32px;height:32px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all .15s;-webkit-tap-highlight-color:transparent}
 .mic-btn:hover{background:rgba(99,102,241,.1);color:var(--indigo)}
 .mic-btn.listening{color:var(--red);background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3);animation:pulse 1s ease-in-out infinite}
-.send-btn{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--indigo),var(--violet));border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 4px 12px rgba(99,102,241,.35);-webkit-tap-highlight-color:transparent}
+.send-btn{width:36px;height:36px;border-radius:10px; background:linear-gradient(135deg,var(--indigo),var(--violet));  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center; transition:transform .2s ease, box-shadow .2s ease; box-shadow:0 4px 12px rgba(99,102,241,.35);-webkit-tap-highlight-color:transparent;}
 .send-btn:hover{transform:scale(1.06) translateY(-1px);box-shadow:0 6px 20px rgba(99,102,241,.5)}
 .send-btn:active{transform:scale(.97)}
 .send-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:0 2px 8px rgba(99,102,241,.2)}
@@ -4635,6 +4635,7 @@ const stopGeneration = useCallback(() => {
 
   const getAI = async (userInput, shouldSpeak) => {
     clearTimeout(aiTimeoutRef.current); setShowAITimeout(false);
+     abortGenRef.current = false;
     aiTimeoutRef.current = setTimeout(() => setShowAITimeout(true), 30000);
     try {
      const cleanInput = userInput.replace(/^>.*?\n\n/s, '').trim();
@@ -6202,7 +6203,7 @@ onChange={e => {
   onClick={(isProcessing || isStreaming) ? stopGeneration : handleSend}
 >
   {(isProcessing || isStreaming)
-    ? <Square size={13} fill="currentColor"/>
+    ? <Square size={14} fill="currentColor"/>
     : <ArrowUp size={14}/>}
 </button>
                </div>
