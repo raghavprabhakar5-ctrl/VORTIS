@@ -195,13 +195,25 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
 - Show before→after only when the diff is small. For large refactors, show only the new version with a one-line summary of what changed.
 - Never silently rewrite working code. If you're refactoring, label it: "Refactored version:".
 
-═══ CLARIFYING ═══
-- If the request is ambiguous on 1-3 axes that genuinely change the answer (which language, which framework, which layout, what input shape), output ONLY a structured question block — no prose before or after:
-  <<<ASK>>>
-  [{"question":"Which layout?","options":["Floating orb","Chat-first","Split view"]}]
-  <<<END>>>
-  The UI renders tappable option cards; the user's picks arrive as the next message and you then proceed to answer. Use this only for genuine ambiguity, not for every reply.
-- If it's only mildly ambiguous, make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
+═══ CLARIFYING — ALWAYS USE FOR AMBIGUOUS REQUESTS ═══
+When the user's request is ambiguous on 1-3 axes that genuinely change the answer (which language, which framework, which layout, what input shape, which style), you MUST output a structured question block — NOT prose, NOT plain text, NOT a markdown list. The exact format is:
+
+<<<ASK>>>
+[{"question":"Which layout do you want?","options":["Floating orb","Chat-first","Split view"]}]
+<<<END>>>
+
+RULES (STRICT):
+- The opening marker is the literal characters <<<ASK>>> on its own line. The closing marker is the literal characters <<<END>>> on its own line. Both are MANDATORY — omitting <<<END>>> breaks the parser.
+- The content between them is a valid JSON array of objects, each with question (string) and options (array of 2-4 short strings).
+- Do NOT wrap the ASK block in a markdown code fence. It must be raw text.
+- Do NOT put any prose before the <<<ASK>>> marker. After <<<END>>>, you can add a one-line "I'll proceed once you pick." if you want.
+- The UI renders this as tappable pill-button cards. The user's picks arrive as the next message and you then proceed to answer.
+- Use this ONLY for genuine ambiguity that materially changes the answer. If the request is mildly ambiguous, just make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
+
+Example of a CORRECT clarify block (raw text, no fence, with both markers):
+<<<ASK>>>
+[{"question":"Which framework?","options":["Next.js","Vite","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]}]
+<<<END>>>
 
 ═══ MULTI-FILE OUTPUT (STRICT — ALWAYS TAG EVERY FILE) ═══
 EVERY fenced code block you emit — no exceptions — MUST start with a path comment marking the file's relative path. This is what makes the UI render the IDE-style file tree with a "Download .zip" button instead of a flat code wall.
@@ -236,40 +248,51 @@ RULES:
 - Use real, runnable relative paths: \`src/App.tsx\`, \`app/api/route.ts\`, \`components/Chat.tsx\`, \`package.json\`. For files where comments would be invalid JSON/YAML/etc., still emit the path comment as the first line — the UI parser strips it before display so the resulting file is valid.
 - Folder structure should match what the user would actually create: \`src/\` for source, \`app/\` for routes, \`public/\` for static assets, \`tests/\` or \`__tests__/\` for tests, \`scripts/\` for build/run scripts.
 
-═══ TODOS / PROGRESS TRACKING (STRICT — USE FOR EVERY MULTI-STEP REPLY) ═══
-When your reply has 2+ logical steps (refactor in N steps, "do X then Y then Z", building a feature with multiple files, fixing multiple bugs), you MUST start the message with one GFM task-list block at the very top, BEFORE any prose. Format:
+═══ TODOS / PROGRESS TRACKING (MANDATORY FOR ANY NON-TRIVIAL TASK) ═══
+You MUST start your reply with a GFM task-list block whenever ANY of the following are true:
+- The task involves 2+ files
+- The task involves refactoring, restructuring, or rewriting existing code
+- The task involves multiple logical steps (build X, then Y, then Z)
+- The task is described as "complex", "hard", "big", "full", "complete", "from scratch"
+- The user asks you to "do X then Y", "first A, then B", "step by step"
+- The user explicitly says "in N steps" (e.g. "refactor this in 4 steps")
+- The reply will take more than ~30 seconds for a user to read and apply
+- You're fixing multiple bugs, building a feature, or implementing a UI
 
-  - [ ] Step 1 short description
-  - [ ] Step 2 short description
-  - [ ] Step 3 short description
-  - [ ] Step 4 short description
+Format (literal characters, leading dashes, square brackets):
 
-  Then your intro prose, then the code blocks.
+- [ ] Step 1 short description
+- [ ] Step 2 short description
+- [ ] Step 3 short description
+- [ ] Step 4 short description
 
-Example of a CORRECT reply:
-  - [ ] Extract the ChatHeader component
-  - [ ] Move hooks into a custom useChat hook
-  - [ ] Add shared type definitions
-  - [ ] Wrap with a ChatProvider context
+Then your intro prose (1-2 lines), then the code blocks.
 
-  Refactoring in 4 steps. Here's each file:
+Example of a CORRECT reply start:
+- [ ] Extract the ChatHeader component
+- [ ] Move hooks into a custom useChat hook
+- [ ] Add shared type definitions
+- [ ] Wrap with a ChatProvider context
 
-  \`\`\`tsx
-  // file: src/components/ChatHeader.tsx
-  ...
-  \`\`\`
+Refactoring in 4 steps. Here's each file:
 
-  \`\`\`ts
-  // file: src/hooks/useChat.ts
-  ...
-  \`\`\`
+(fenced code block with language tsx)
+// file: src/components/ChatHeader.tsx
+...
 
-RULES:
-- Use literal \`- [ ]\` (lowercase x for done: \`- [x]\`) — NOT bold text, NOT "Step 1:", NOT a numbered list. The leading dash-space-bracket is what the UI detects.
-- Minimum 2 task lines for the checklist to render. If you only have 1 step, skip the checklist and just answer.
-- Mark \`- [x]\` ONLY after that step's code has actually been delivered below.
-- Keep each task line short (≤ 8 words). The body of the reply explains each step.
+STRICT RULES:
+- Use the LITERAL characters - [ ] (open) or - [x] (done). NOT bold text. NOT "Step 1:". NOT a numbered list. NOT "1. ". The leading - [ ] is what the UI parser detects.
+- Minimum 2 task lines (the checklist won't render for just 1).
+- Each task line ≤ 8 words. The body of the reply explains each step.
+- Mark - [x] ONLY after that step's code has actually been delivered below.
+- Task lines MUST be at the very top of the reply — no prose before them.
 - These leading task lines are stripped from the rendered markdown and shown as a collapsible checklist with a progress bar above the reply body.
+
+When NOT to use todos (rare):
+- Quick one-line answers ("what's the syntax for X?")
+- Single-file single-function fixes that take 1-2 lines
+- Casual conversation / greetings
+- Pure explanations with no code changes
 
 ═══ CURRENT INFO ═══
 If live web search results are appended below this prompt, treat them as ground truth for anything version-specific, recently changed, or time-sensitive (library versions, deprecations, new APIs) — they override your training data.
@@ -484,23 +507,73 @@ const downloadProjectAsZip = async (files, zipName = 'vertex-project.zip') => {
  *  Tappable clarifying-question extraction — when the model emits a
  *  <<<ASK>>>[{"question":...,"options":[...]}]<<<END>>> block, strip it
  *  out of the markdown and render it as a ClarifyCard with pill buttons.
+ *
+ *  Lenient: also accepts a missing <<<END>>> (treats end-of-message as
+ *  the close), optional whitespace inside the markers (<<< ASK >>>),
+ *  and ASK blocks wrapped in a code fence (```…```) — the model
+ *  occasionally does all three.
  * ──────────────────────────────────────────────────────────────────────── */
-const ASK_BLOCK = /<<<ASK>>>([\s\S]*?)<<<END>>>/;
-const extractClarify = (text) => {
-  if (!text || !text.includes('<<<ASK>>>')) return { clarify: null, text: text || '' };
-  const m = text.match(ASK_BLOCK);
-  if (!m) return { clarify: null, text };
+const ASK_BLOCK_STRICT = /<<<\s*ASK\s*>>>\s*([\s\S]*?)(?:<<<\s*END\s*>>>|$)/;
+const ASK_BLOCK_FENCE = /```[a-z]*\s*\n([\s\S]*?<<<\s*ASK\s*>>>\s*[\s\S]*?(?:<<<\s*END\s*>>>|```))[\s\S]*?```/i;
+
+const parseAskJson = (raw) => {
+  if (!raw) return null;
   let parsed = null;
-  try { parsed = JSON.parse(m[1].trim()); } catch (e) { return { clarify: null, text }; }
-  if (!Array.isArray(parsed)) return { clarify: null, text };
+  try { parsed = JSON.parse(raw.trim()); } catch (e) {
+    // Try to extract the first JSON array inside the raw text — sometimes
+    // the model wraps it in extra prose or stray backticks.
+    const arrMatch = raw.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      try { parsed = JSON.parse(arrMatch[0]); } catch (e2) { return null; }
+    } else {
+      return null;
+    }
+  }
+  if (!Array.isArray(parsed)) return null;
   const valid = parsed.filter(q =>
     q && typeof q.question === 'string' && q.question.trim() &&
     Array.isArray(q.options) && q.options.length >= 2 &&
     q.options.every(o => typeof o === 'string')
   );
-  if (valid.length === 0) return { clarify: null, text };
-  const cleaned = text.replace(m[0], '').replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n');
-  return { clarify: valid, text: cleaned };
+  return valid.length > 0 ? valid : null;
+};
+
+const extractClarify = (text) => {
+  if (!text) return { clarify: null, text: '' };
+  // Fast-path: no marker anywhere → nothing to do.
+  if (!/<<<\s*ASK\s*>>>/.test(text)) return { clarify: null, text };
+
+  // Try the fenced-wrapped version FIRST — if the ASK block is inside a
+  // code fence, we want to strip the whole fence (including the ``` lines),
+  // not just the inner ASK...END block (which would leave orphan fences).
+  let m = text.match(ASK_BLOCK_FENCE);
+  let matchedBlock = null;
+  let parsed = null;
+  if (m) {
+    const innerM = m[1].match(ASK_BLOCK_STRICT);
+    if (innerM) {
+      parsed = parseAskJson(innerM[1]);
+      if (parsed) matchedBlock = m[0];
+    }
+  }
+
+  // Fall back to the plain inline match (no fence wrapper).
+  if (!parsed) {
+    const im = text.match(ASK_BLOCK_STRICT);
+    if (im) {
+      parsed = parseAskJson(im[1]);
+      if (parsed) matchedBlock = im[0];
+    }
+  }
+
+  if (!parsed) return { clarify: null, text };
+
+  // Strip the matched block (and any trailing blank line) from the text.
+  let cleaned = text.replace(matchedBlock, '');
+  // If the only thing left after stripping is whitespace, return empty text
+  // so the ClarifyCard stands alone without an empty markdown body.
+  cleaned = cleaned.replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n');
+  return { clarify: parsed, text: cleaned };
 };
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -543,7 +616,7 @@ const TodosPanel = ({ todos }) => {
 
   return (
     <div style={{
-      margin: '10px 0 12px', borderRadius: 10, overflow: 'hidden',
+      margin: '10px 0 12px', borderRadius: 0, overflow: 'hidden',
       border: '1px solid #232323', background: '#101010',
       animation: 'vertexCodeIn .25s ease',
     }} data-vrtx-no-reply="">
@@ -563,7 +636,7 @@ const TodosPanel = ({ todos }) => {
           marginLeft: 2,
         }}>{done} / {total}</span>
         <div style={{
-          flex: 1, height: 4, background: '#1f1f1f', borderRadius: 2,
+          flex: 1, height: 4, background: '#1f1f1f', borderRadius: 0,
           marginLeft: 6, marginRight: 6, overflow: 'hidden',
         }}>
           <div style={{
@@ -633,7 +706,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
 
   return (
     <div style={{
-      margin: '12px 0', borderRadius: 12, overflow: 'hidden',
+      margin: '12px 0', borderRadius: 0, overflow: 'hidden',
       border: '1px solid #2a2a2a', background: '#101010',
       animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
       boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
@@ -670,7 +743,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                     onClick={() => toggle(qi, oi)}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '6px 13px', borderRadius: 999,
+                      padding: '6px 13px', borderRadius: 0,
                       background: isSel ? '#e6e6e6' : '#1a1a1a',
                       border: '1px solid ' + (isSel ? '#e6e6e6' : '#333333'),
                       color: isSel ? '#0a0a0a' : '#dcdcdc',
@@ -693,7 +766,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
             <button onClick={submit} disabled={!allAnswered}
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '7px 16px', borderRadius: 8,
+                padding: '7px 16px', borderRadius: 0,
                 background: allAnswered ? '#e6e6e6' : 'transparent',
                 border: '1px solid ' + (allAnswered ? '#e6e6e6' : '#333'),
                 color: allAnswered ? '#0a0a0a' : '#5a5a5a',
@@ -751,7 +824,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
             padding: '5px 8px 5px ' + (8 + depth * 14) + 'px',
             background: 'transparent', border: 'none', color: '#c8c8c8',
             fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
-            cursor: 'pointer', textAlign: 'left', borderRadius: 5,
+            cursor: 'pointer', textAlign: 'left', borderRadius: 0,
           }}
           onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
@@ -779,7 +852,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
             background: isActive ? '#232323' : 'transparent',
             border: 'none', color: isActive ? '#f0f0f0' : '#b8b8b8',
             fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace',
-            cursor: 'pointer', textAlign: 'left', borderRadius: 5,
+            cursor: 'pointer', textAlign: 'left', borderRadius: 0,
           }}
           onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#1a1a1a'; }}
           onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
@@ -794,7 +867,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
 
   return (
     <div style={{
-      margin: '12px 0', borderRadius: 10, overflow: 'hidden',
+      margin: '12px 0', borderRadius: 0, overflow: 'hidden',
       border: '1px solid #262626', background: '#0a0a0a',
       animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
       boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
@@ -817,7 +890,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
               background: 'transparent', border: '1px solid #333333',
-              borderRadius: 6, padding: '4px 10px',
+              borderRadius: 0, padding: '4px 10px',
               color: '#dcdcdc', fontSize: 11, cursor: zipping ? 'wait' : 'pointer',
               fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
               opacity: zipping ? 0.7 : 1,
@@ -884,16 +957,23 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
   const isLong = lines.length > CAP_AFTER_LINES;
   const capped = isLong && !expanded;
   const downloadName = filePath ? filePath.split('/').pop() : `snippet.${extForLang(lang)}`;
+  // "Open" panel button only makes sense for substantial code the user can run
+  // or edit meaningfully — NOT for 1-3 line shell commands like `npm run dev`,
+  // `pip install x`, `mkdir foo`, etc. Skip it for short blocks and for shell/
+  // bash languages regardless of length (those are almost always commands).
+  const langLower = (lang || '').toLowerCase();
+  const isShellLang = ['sh', 'bash', 'shell', 'zsh', 'powershell', 'ps1', 'cmd', 'bat'].includes(langLower);
+  const canOpenInPanel = !isShellLang && lines.length >= 6 && !embedded;
 
   return (
     <div style={{
-      margin: embedded ? 0 : '12px 0', borderRadius: embedded ? 0 : 10, overflow: 'hidden',
+      margin: embedded ? 0 : '12px 0', borderRadius: 0, overflow: 'hidden',
       border: embedded ? 'none' : '1px solid #262626', background: '#0a0a0a',
       animation: embedded ? 'none' : 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
       boxShadow: embedded ? 'none' : '0 10px 28px -14px rgba(0,0,0,.7)',
     }}>
-      <div 
-        data-vrtx-no-reply=""  
+      <div
+        data-vrtx-no-reply=""
         style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '8px 14px', background: '#111111', borderBottom: '1px solid #262626',
@@ -931,7 +1011,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
               style={{
                 display: 'flex', alignItems: 'center', gap: 5, background: editing ? '#2a2a2a' : 'transparent',
                 border: '1px solid ' + (editing ? '#4a4a4a' : '#333333'),
-                borderRadius: 6, padding: '4px 10px', color: editing ? '#e6e6e6' : '#9a9a9a', fontSize: 11, cursor: 'pointer',
+                borderRadius: 0, padding: '4px 10px', color: editing ? '#e6e6e6' : '#9a9a9a', fontSize: 11, cursor: 'pointer',
                 fontFamily: 'JetBrains Mono, monospace', transition: 'all .15s',
               }}
             >
@@ -943,27 +1023,29 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
             title="Save this file"
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
-              borderRadius: 6, padding: '4px 10px', color: '#9a9a9a', fontSize: 11, cursor: 'pointer',
+              borderRadius: 0, padding: '4px 10px', color: '#9a9a9a', fontSize: 11, cursor: 'pointer',
               fontFamily: 'JetBrains Mono, monospace', transition: 'all .15s',
             }}
           >
             <Download size={11} /> Save
           </button>
-          <button
-            onClick={() => onOpenPanel({ lang, code: codeText })}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 5, background: '#1c1c1c', border: '1px solid #333333',
-              borderRadius: 6, padding: '4px 10px', color: '#dcdcdc', fontSize: 11, cursor: 'pointer',
-              fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, transition: 'all .15s',
-            }}
-          >
-            <Terminal size={11} /> Open
-          </button>
+          {canOpenInPanel && (
+            <button
+              onClick={() => onOpenPanel({ lang, code: codeText })}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5, background: '#1c1c1c', border: '1px solid #333333',
+                borderRadius: 0, padding: '4px 10px', color: '#dcdcdc', fontSize: 11, cursor: 'pointer',
+                fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, transition: 'all .15s',
+              }}
+            >
+              <Terminal size={11} /> Open
+            </button>
+          )}
           <button
             onClick={copy}
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: 'transparent', border: '1px solid #333333',
-              borderRadius: 6, padding: '4px 10px', color: copied ? '#e6e6e6' : '#9a9a9a', fontSize: 11,
+              borderRadius: 0, padding: '4px 10px', color: copied ? '#e6e6e6' : '#9a9a9a', fontSize: 11,
               cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', transition: 'all .15s',
             }}
           >
@@ -1002,7 +1084,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
             autoFocus
             style={{
               width: '100%', boxSizing: 'border-box', background: '#0a0a0a', border: '1px solid #2a2a2a',
-              borderRadius: 6, padding: '8px 10px', color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace',
+              borderRadius: 0, padding: '8px 10px', color: '#dcdcdc', fontFamily: 'JetBrains Mono, monospace',
               fontSize: 12, lineHeight: 1.55, resize: 'vertical', outline: 'none',
             }}
           />
@@ -1010,7 +1092,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
             <button
               onClick={() => { setEditing(false); setFeedback(''); }}
               style={{
-                padding: '5px 11px', borderRadius: 6, border: '1px solid #333', background: 'transparent',
+                padding: '5px 11px', borderRadius: 0, border: '1px solid #333', background: 'transparent',
                 color: '#9a9a9a', fontSize: 11, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace',
               }}
             >Cancel</button>
@@ -1018,7 +1100,7 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
               onClick={submitEdit}
               disabled={!feedback.trim()}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 6,
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 0,
                 border: '1px solid ' + (feedback.trim() ? '#e6e6e6' : '#333'),
                 background: feedback.trim() ? '#e6e6e6' : 'transparent',
                 color: feedback.trim() ? '#0a0a0a' : '#5a5a5a',
@@ -1170,7 +1252,7 @@ const SelectionReplyButton = ({ scrollRef, onReply }) => {
         }}
         style={{
           display: 'flex', alignItems: 'center', gap: 5,
-          padding: '5px 11px', borderRadius: 7,
+          padding: '5px 11px', borderRadius: 0,
           background: '#1c1c1c', border: '1px solid #3a3a3a', color: '#dcdcdc',
           fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
           fontFamily: 'JetBrains Mono, monospace',
@@ -1278,7 +1360,7 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
             <button
               onClick={() => onOpenNewTab(panelCode.code)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 0,
                 border: '1px solid rgba(16,185,129,.3)', background: 'rgba(16,185,129,.08)',
                 color: '#10b981', fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
                 fontWeight: 700, cursor: 'pointer', transition: 'all .15s',
@@ -1291,7 +1373,7 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
               onClick={onRun}
               disabled={running}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7,
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 0,
                 border: '1px solid rgba(16,185,129,.3)', background: running ? '#1c1c1c' : 'rgba(16,185,129,.08)',
                 color: running ? '#8a8a8a' : '#10b981', fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
                 fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', transition: 'all .15s',
@@ -1306,7 +1388,7 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
           <button
             onClick={copy}
             style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 7,
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 0,
               border: '1px solid #333333', background: 'transparent', color: copied ? '#e6e6e6' : '#9a9a9a',
               fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5, cursor: 'pointer', transition: 'all .15s',
             }}
@@ -1348,7 +1430,7 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
           onMouseEnter={e => { if (!draggingRef.current) e.currentTarget.style.background = '#1a1a1a'; }}
           onMouseLeave={e => { if (!draggingRef.current) e.currentTarget.style.background = '#0c0c0c'; }}
         >
-          <div style={{ width: 40, height: 2, borderRadius: 1, background: '#3a3a3a', transition: 'background .12s' }} />
+          <div style={{ width: 40, height: 2, borderRadius: 0, background: '#3a3a3a', transition: 'background .12s' }} />
         </div>
 
         {previewable ? (
@@ -1426,7 +1508,7 @@ const ConfirmDialog = ({ dialog, onClose }) => {
         onClick={e => e.stopPropagation()}
         style={{
           width: 'min(360px, 90vw)', background: '#141414', border: '1px solid #2a2a2a',
-          borderRadius: 12, padding: 20, boxShadow: '0 20px 60px rgba(0,0,0,.6)',
+          borderRadius: 0, padding: 20, boxShadow: '0 20px 60px rgba(0,0,0,.6)',
           animation: 'vertexScaleIn .15s ease',
         }}
       >
@@ -1435,14 +1517,14 @@ const ConfirmDialog = ({ dialog, onClose }) => {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button
             onClick={onClose}
-            style={{ padding: '8px 16px', borderRadius: 7, background: '#1e1e1e', border: '1px solid #2a2a2a', color: '#dcdcdc', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+            style={{ padding: '8px 16px', borderRadius: 0, background: '#1e1e1e', border: '1px solid #2a2a2a', color: '#dcdcdc', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
           >
             {dialog.cancelLabel || 'Cancel'}
           </button>
           <button
             onClick={() => { const fn = dialog.onConfirm; onClose(); fn?.(); }}
             style={{
-              padding: '8px 16px', borderRadius: 7, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              padding: '8px 16px', borderRadius: 0, border: 'none', fontSize: 13, fontWeight: 700, cursor: 'pointer',
               background: dialog.danger ? '#ef4444' : '#e6e6e6',
               color: dialog.danger ? '#fff' : '#0a0a0a',
             }}
@@ -1470,7 +1552,7 @@ const InfoDialog = ({ dialog, onClose }) => {
         onClick={e => e.stopPropagation()}
         style={{
           width: 'min(400px, 90vw)', background: '#141414', border: '1px solid #2a2a2a',
-          borderRadius: 12, padding: 20, boxShadow: '0 20px 60px rgba(0,0,0,.6)',
+          borderRadius: 0, padding: 20, boxShadow: '0 20px 60px rgba(0,0,0,.6)',
           animation: 'vertexScaleIn .15s ease',
         }}
       >
@@ -2686,7 +2768,7 @@ Title:`,
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
 
   const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-  const handleClarifyAnswer = useCallback((messageId, answer) => {
+const handleClarifyAnswer = useCallback((messageId, answer) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
     next.add(messageId);
@@ -2809,7 +2891,7 @@ Title:`,
     ol: ({children}) => <ol style={{ margin: '6px 0 10px', paddingLeft: 20 }}>{children}</ol>,
     li: ({children}) => <li style={{ margin: '3px 0', color: '#dcdcdc', lineHeight: 1.65, fontSize: 14 }}>{children}</li>,
     a: ({href, children}) => <a href={href} target="_blank" rel="noreferrer" style={{ color: '#e6e6e6', textDecoration: 'none', borderBottom: '1px solid #4a4a4a' }}>{children}</a>,
-    blockquote: ({children}) => <blockquote style={{ borderLeft: '3px solid #3a3a3a', margin: '8px 0', padding: '4px 12px', color: '#9a9a9a', background: '#141414', borderRadius: '0 6px 6px 0' }}>{children}</blockquote>,
+    blockquote: ({children}) => <blockquote style={{ borderLeft: '3px solid #3a3a3a', margin: '8px 0', padding: '4px 12px', color: '#9a9a9a', background: '#141414', borderRadius: 0 }}>{children}</blockquote>,
     hr: () => <hr style={{ border: 'none', borderTop: '1px solid #232323', margin: '12px 0' }} />,
     table: ({children}) => <div style={{ overflowX: 'auto', margin: '8px 0' }}><table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>{children}</table></div>,
     thead: ({children}) => <thead style={{ background: '#141414' }}>{children}</thead>,
@@ -2825,7 +2907,7 @@ Title:`,
 
   if (isInline) {
     return (
-      <code style={{ background: '#000000', color: '#e6e6e6', padding: '1px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>
+      <code style={{ background: '#000000', color: '#e6e6e6', padding: '1px 6px', borderRadius: 0, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a' }}>
         {children}
       </code>
     );
@@ -2868,12 +2950,12 @@ Title:`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar"
-            style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex' }}>
+            style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 0, display: 'flex' }}>
             {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 32, height: 32, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#e6e6e6', border: '1px solid #e6e6e6'
             }}>
               <Terminal size={17} color="#0a0a0a"/>
@@ -2893,7 +2975,7 @@ Title:`,
               style={{
                 display: 'flex', alignItems: 'center', gap: 5, background: showArtifacts ? '#1c1c1c' : '#141414',
                 border: '1px solid ' + (showArtifacts ? '#3a3a3a' : '#2a2a2a'),
-                color: showArtifacts ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 6,
+                color: showArtifacts ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 0,
                 padding: '5px 10px', cursor: 'pointer'
               }}
             >
@@ -2903,7 +2985,7 @@ Title:`,
             {showArtifacts && (
               <div style={{
                 position: 'absolute', top: 42, right: 0, zIndex: 100, width: 310,
-                background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
+                background: '#141414', border: '1px solid #2a2a2a', borderRadius: 0,
                 boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 10,
                 animation: 'vertexScaleIn .15s ease'
               }}>
@@ -2935,11 +3017,11 @@ Title:`,
                     {userArtifacts.map((a) => (
                       <div key={a.id}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 0,
                           background: '#1a1a1a', border: '1px solid #262626',
                         }}>
                         <div style={{
-                          width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 26, height: 26, borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           background: '#000', border: '1px solid #2a2a2a',
                         }}>
                           <FileText size={12} color="#9a9a9a"/>
@@ -2951,11 +3033,11 @@ Title:`,
                           <div style={{ fontSize: 10, color: '#6a6a6a' }}>{formatBytes(a.size)} · yours</div>
                         </div>
                         <button onClick={() => downloadUserArtifact(a)} title="Save this file"
-                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
+                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 0, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
                           <Download size={12}/>
                         </button>
                         <button onClick={() => removeUserArtifact(a.id)} title="Remove"
-                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#6a6a6a', cursor: 'pointer', padding: 5, display: 'flex' }}>
+                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 0, color: '#6a6a6a', cursor: 'pointer', padding: 5, display: 'flex' }}>
                           <X size={12}/>
                         </button>
                       </div>
@@ -2971,11 +3053,11 @@ Title:`,
                       return (
                       <div key={b.id}
                         style={{
-                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 7,
+                          display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', borderRadius: 0,
                           background: '#1a1a1a', border: '1px solid #262626',
                         }}>
                         <div style={{
-                          width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: 26, height: 26, borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           background: '#000', border: '1px solid #2a2a2a',
                         }}>
                           {isProject
@@ -2991,7 +3073,7 @@ Title:`,
                         <button
                           onClick={() => isProject ? downloadProjectAsZip(b.files) : downloadCodeBlock(b, i)}
                           title={isProject ? 'Save project as .zip' : 'Save this file'}
-                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 6, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
+                          style={{ background: 'transparent', border: '1px solid #333', borderRadius: 0, color: '#c8c8c8', cursor: 'pointer', padding: 5, display: 'flex' }}>
                           {isProject ? <FileArchive size={12}/> : <Download size={12}/>}
                         </button>
                       </div>
@@ -3011,7 +3093,7 @@ Title:`,
             style={{
               display: 'flex', alignItems: 'center', gap: 5, background: '#141414',
               border: '1px solid #2a2a2a', color: messages.length === 0 ? '#4a4a4a' : '#c8c8c8',
-              fontSize: 12, borderRadius: 6, padding: '5px 10px',
+              fontSize: 12, borderRadius: 0, padding: '5px 10px',
               cursor: messages.length === 0 ? 'not-allowed' : 'pointer'
             }}
           >
@@ -3027,7 +3109,7 @@ Title:`,
               background: incognito ? '#fff' : '#141414',
               border: '1px solid ' + (incognito ? '#fff' : '#2a2a2a'),
               color: incognito ? '#0a0a0a' : '#c8c8c8',
-              fontSize: 12, borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
+              fontSize: 12, borderRadius: 0, padding: '5px 10px', cursor: 'pointer',
             }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
@@ -3046,7 +3128,7 @@ Title:`,
               style={{
                 display: 'flex', alignItems: 'center', gap: 5, background: showSettings ? '#1c1c1c' : '#141414',
                 border: '1px solid ' + (showSettings ? '#3a3a3a' : '#2a2a2a'),
-                color: showSettings ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 6,
+                color: showSettings ? '#e6e6e6' : '#c8c8c8', fontSize: 12, borderRadius: 0,
                 padding: '5px 10px', cursor: 'pointer'
               }}
             >
@@ -3056,7 +3138,7 @@ Title:`,
             {showSettings && (
               <div style={{
                 position: 'absolute', top: 42, right: 0, zIndex: 100, width: 288,
-                background: '#131313', border: '1px solid #262626', borderRadius: 12,
+                background: '#131313', border: '1px solid #262626', borderRadius: 0,
                 boxShadow: '0 16px 44px rgba(0,0,0,.55)', padding: 14,
                 animation: 'vertexScaleIn .15s ease'
               }}>
@@ -3071,7 +3153,7 @@ Title:`,
                     return (
                       <button key={s.id} onClick={() => { setStyle(s.id); }}
                         style={{
-                          width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                          width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 0, cursor: 'pointer',
                           background: active ? 'rgba(230,230,230,.08)' : 'transparent',
                           border: '1px solid ' + (active ? '#3a3a3a' : '#1e1e1e'),
                           display: 'flex', alignItems: 'flex-start', gap: 9, transition: 'all .12s'
@@ -3080,7 +3162,7 @@ Title:`,
                         onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                       >
                         <div style={{
-                          width: 24, height: 24, borderRadius: 6, flexShrink: 0, marginTop: 1, display: 'flex',
+                          width: 24, height: 24, borderRadius: 0, flexShrink: 0, marginTop: 1, display: 'flex',
                           alignItems: 'center', justifyContent: 'center',
                           background: active ? '#e6e6e6' : '#1e1e1e', border: '1px solid ' + (active ? '#e6e6e6' : '#2a2a2a'),
                         }}>
@@ -3106,14 +3188,14 @@ Title:`,
                   onClick={() => setOcrMode(v => !v)}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '9px 10px', borderRadius: 8, cursor: 'pointer',
+                    padding: '9px 10px', borderRadius: 0, cursor: 'pointer',
                     background: 'transparent', border: '1px solid #1e1e1e', marginBottom: 5,
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = '#191919'; }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
                 >
                   <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                    <div style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#1e1e1e', border: '1px solid #2a2a2a' }}>
                       <Scan size={12} color="#8a8a8a"/>
                     </div>
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
@@ -3122,7 +3204,7 @@ Title:`,
                     </span>
                   </span>
                   <span style={{
-                    position: 'relative', width: 32, height: 18, borderRadius: 9, flexShrink: 0,
+                    position: 'relative', width: 32, height: 18, borderRadius: 0, flexShrink: 0,
                     background: ocrMode ? '#e6e6e6' : '#2a2a2a', transition: 'background .15s',
                   }}>
                     <span style={{
@@ -3139,7 +3221,7 @@ Title:`,
           <div style={{ width: 1, height: 18, background: '#2a2a2a', margin: '0 4px' }} />
 
           <button onClick={onClose} title="Close"
-            style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#141414', border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 6, padding: '6px 11px', cursor: 'pointer' }}>
+            style={{ display: 'flex', alignItems: 'center', gap: 5, background: '#141414', border: '1px solid #2a2a2a', color: '#c8c8c8', fontSize: 12, borderRadius: 0, padding: '6px 11px', cursor: 'pointer' }}>
             <X size={13}/> Exit
           </button>
         </div>
@@ -3158,14 +3240,14 @@ Title:`,
               <button onClick={newChat}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 7,
-                  padding: '9px 12px', borderRadius: 7, cursor: 'pointer',
+                  padding: '9px 12px', borderRadius: 0, cursor: 'pointer',
                   background: '#e6e6e6',
                   border: '1px solid #e6e6e6', color: '#0a0a0a', fontSize: 13, fontWeight: 600
                 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}><Plus size={14}/> New Chat</span>
                 <span style={{
                   fontSize: 10, fontFamily: 'JetBrains Mono', color: '#5a5a5a', background: 'rgba(10,10,10,.08)',
-                  border: '1px solid rgba(10,10,10,.15)', borderRadius: 4, padding: '1px 5px'
+                  border: '1px solid rgba(10,10,10,.15)', borderRadius: 0, padding: '1px 5px'
                 }}>⌘K</span>
               </button>
             </div>
@@ -3179,7 +3261,7 @@ Title:`,
                   placeholder="Search chats..."
                   style={{
                     width: '100%', padding: '7px 10px 7px 28px', fontSize: 12,
-                    background: '#141414', border: '1px solid #262626', borderRadius: 6,
+                    background: '#141414', border: '1px solid #262626', borderRadius: 0,
                     color: '#e6e6e6', outline: 'none', fontFamily: 'inherit'
                   }}
                 />
@@ -3211,7 +3293,7 @@ Title:`,
                   <div key={c.id}
                     onClick={() => loadChat(c.id)}
                     style={{
-                      padding: '8px 10px', borderRadius: 6, cursor: 'pointer', marginBottom: 2,
+                      padding: '8px 10px', borderRadius: 0, cursor: 'pointer', marginBottom: 2,
                       background: c.id === chatId ? '#1c1c1c' : 'transparent',
                       border: '1px solid ' + (c.id === chatId ? '#2e2e2e' : 'transparent'),
                       transition: 'background .12s'
@@ -3230,7 +3312,7 @@ Title:`,
                           }}
                           style={{
                             flex: 1, fontSize: 12, padding: '3px 6px', background: '#0a0a0a',
-                            border: '1px solid #4a4a4a', borderRadius: 4, color: '#e6e6e6', outline: 'none'
+                            border: '1px solid #4a4a4a', borderRadius: 0, color: '#e6e6e6', outline: 'none'
                           }}
                         />
                         <button onClick={() => renameChat(c.id, renameVal)} style={{ background: 'transparent', border: 'none', color: '#e6e6e6', cursor: 'pointer', padding: 2 }}><Check size={12}/></button>
@@ -3255,13 +3337,13 @@ Title:`,
                           <button
                             onClick={() => { setRenamingId(c.id); setRenameVal(c.title || ''); }}
                             title="Rename"
-                            style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 2, borderRadius: 3 }}>
+                            style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 2, borderRadius: 0 }}>
                             <Edit2 size={11}/>
                           </button>
                           <button
                             onClick={() => requestDeleteChat(c)}
                             title="Delete"
-                            style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 2, borderRadius: 3 }}>
+                            style={{ background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer', padding: 2, borderRadius: 0 }}>
                             <Trash2 size={11}/>
                           </button>
                         </div>
@@ -3279,7 +3361,7 @@ Title:`,
                 <button key={item.label} onClick={item.onClick} disabled={item.disabled}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px',
-                    borderRadius: 6, background: 'transparent', border: 'none',
+                    borderRadius: 0, background: 'transparent', border: 'none',
                     color: item.disabled ? '#4a4a4a' : '#9a9a9a', fontSize: 12.5,
                     cursor: item.disabled ? 'not-allowed' : 'pointer', marginBottom: 1, transition: 'background .12s'
                   }}
@@ -3331,7 +3413,7 @@ Title:`,
   padding: '24px', textAlign: 'center',
 }}>
   <div style={{
-  width: 40, height: 40, borderRadius: 12,
+  width: 40, height: 40, borderRadius: 0,
   background: 'rgba(230,230,230,.08)', border: '1px solid #2a2a2a',
   display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20,
 }}>
@@ -3378,7 +3460,7 @@ Title:`,
             <button key={s.label}
               onClick={() => { setInput(s.prompt); setTimeout(() => inputRef.current?.focus(), 30); }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 999,
+                display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 0,
                 cursor: 'pointer', background: '#111111', border: '1px solid #232323',
                 color: '#dcdcdc', fontSize: 12.5, fontWeight: 600, transition: 'all .14s', whiteSpace: 'nowrap'
               }}
@@ -3408,7 +3490,7 @@ Title:`,
             {savedChats.slice(0, 3).map(c => (
               <button key={c.id} onClick={() => loadChat(c.id)}
                 style={{
-                  textAlign: 'left', padding: '12px 14px', borderRadius: 9, cursor: 'pointer',
+                  textAlign: 'left', padding: '12px 14px', borderRadius: 0, cursor: 'pointer',
                   background: '#111111', border: '1px solid #232323', color: '#dcdcdc',
                   display: 'flex', flexDirection: 'column', gap: 6, transition: 'all .14s'
                 }}
@@ -3446,7 +3528,7 @@ Title:`,
                 {(streaming || thinking || searching) && (
                   <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
                     <div style={{
-                      width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 28, height: 28, borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                       background: '#141414', border: '1px solid #2a2a2a'
                     }}>
                       <Terminal size={14} color="#c8c8c8"/>
@@ -3473,7 +3555,7 @@ Title:`,
                         </div>
                       ) : streamText ? (
                         <div style={{
-                          background: '#111111', border: '1px solid #232323', borderRadius: '0 10px 10px 10px',
+                          background: '#111111', border: '1px solid #232323', borderRadius: 0,
                           padding: '12px 14px'
                         }}>
                           <MessageContent
@@ -3537,7 +3619,7 @@ Title:`,
               {editingMsgId && (
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
-                  background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8,
+                  background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 0,
                   padding: '7px 12px',
                   animation: 'vertexFadeIn .15s ease',
                 }}>
@@ -3552,7 +3634,7 @@ Title:`,
                     onClick={() => { setEditingMsgId(null); setInput(''); }}
                     style={{
                       marginLeft: 'auto', background: 'transparent', border: '1px solid #333',
-                      borderRadius: 5, color: '#9a9a9a', fontSize: 11, cursor: 'pointer',
+                      borderRadius: 0, color: '#9a9a9a', fontSize: 11, cursor: 'pointer',
                       padding: '3px 9px', fontFamily: 'JetBrains Mono, monospace',
                     }}
                   >
@@ -3567,7 +3649,7 @@ Title:`,
               {replyQuote && (
                 <div style={{
                   display: 'flex', alignItems: 'stretch', gap: 8, marginBottom: 8,
-                  background: '#161616', border: '1px solid #2a2a2a', borderRadius: 8,
+                  background: '#161616', border: '1px solid #2a2a2a', borderRadius: 0,
                   overflow: 'hidden', animation: 'vertexFadeIn .15s ease',
                 }}>
                   <div style={{ width: 3, background: '#5a5a5a', flexShrink: 0 }} />
@@ -3606,16 +3688,16 @@ Title:`,
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
                   {attachments.map(att => (
                     <div key={att.id} style={{
-                      background: '#171717', border: '1px solid #2a2a2a', borderRadius: 12,
+                      background: '#171717', border: '1px solid #2a2a2a', borderRadius: 0,
                       padding: '12px 14px', maxWidth: 340,
                     }}>
                       {att.type === 'image' ? (
                         <img src={att.content} alt={att.name}
-                          style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 8, display: 'block', marginBottom: 10, objectFit: 'contain' }} />
+                          style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 0, display: 'block', marginBottom: 10, objectFit: 'contain' }} />
                       ) : att.type === 'document' ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                           <div style={{
-                            width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: 'flex',
+                            width: 34, height: 34, borderRadius: 0, flexShrink: 0, display: 'flex',
                             alignItems: 'center', justifyContent: 'center', background: '#000000', border: '1px solid #2a2a2a',
                           }}>
                             <FileText size={16} color="#9a9a9a" />
@@ -3641,7 +3723,7 @@ Title:`,
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', gap: 5,
-                          padding: '4px 12px', borderRadius: 999,
+                          padding: '4px 12px', borderRadius: 0,
                           background: '#232323', border: '1px solid #333333',
                           color: '#dcdcdc', fontSize: 12, fontWeight: 600,
                           fontFamily: 'JetBrains Mono, monospace',
@@ -3665,12 +3747,12 @@ Title:`,
               <div style={{
                 display: 'flex', alignItems: 'flex-end', gap: 8,
                 background: '#141414', border: '1px solid #2a2a2a',
-                borderRadius: 10, padding: 6
+                borderRadius: 0, padding: 6
               }}>
                 <div ref={attachMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
                   <button onClick={() => setShowAttachMenu(v => !v)} title="Add file, image, or document"
                     style={{
-                      width: 36, height: 36, borderRadius: 7, border: '1px solid ' + (showAttachMenu ? '#3a3a3a' : '#2a2a2a'),
+                      width: 36, height: 36, borderRadius: 0, border: '1px solid ' + (showAttachMenu ? '#3a3a3a' : '#2a2a2a'),
                       background: showAttachMenu ? '#232323' : 'transparent', color: showAttachMenu ? '#dcdcdc' : '#9a9a9a',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all .15s'
                     }}>
@@ -3679,30 +3761,30 @@ Title:`,
                   {showAttachMenu && (
                     <div style={{
                       position: 'absolute', bottom: 44, left: 0, zIndex: 60,
-                      background: '#141414', border: '1px solid #2a2a2a', borderRadius: 10,
+                      background: '#141414', border: '1px solid #2a2a2a', borderRadius: 0,
                       boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 240,
                       animation: 'vertexScaleIn .15s ease'
                     }}>
                       <button onClick={() => fileInputRef.current?.click()}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 0, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <FileCode size={14} color="#9a9a9a"/> Add file
                       </button>
                       <button onClick={() => folderInputRef.current?.click()}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 0, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <Folder size={14} color="#9a9a9a"/> Add project folder
                       </button>
                       <button onClick={() => imageFileInputRef.current?.click()}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 9, padding: '8px 10px', borderRadius: 0, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <ImageIcon size={14} color="#9a9a9a"/> Add image
                       </button>
                       <button onClick={() => docFileInputRef.current?.click()}
-                        style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '8px 10px', borderRadius: 7, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
+                        style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '8px 10px', borderRadius: 0, background: 'transparent', border: 'none', color: '#dcdcdc', fontSize: 13, cursor: 'pointer' }}
                         onMouseEnter={e => { e.currentTarget.style.background = '#1e1e1e'; }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -3712,14 +3794,14 @@ Title:`,
 
                       <div style={{ borderTop: '1px solid #1c1c1c', marginTop: 4, paddingTop: 4 }}>
                         <button onClick={() => setOcrMode(v => !v)}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 6, background: 'transparent', border: 'none', color: '#9a9a9a', fontSize: 11.5, cursor: 'pointer' }}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 0, background: 'transparent', border: 'none', color: '#9a9a9a', fontSize: 11.5, cursor: 'pointer' }}
                           onMouseEnter={e => { e.currentTarget.style.background = '#1a1a1a'; }}
                           onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <Scan size={12}/> OCR mode
                           </span>
                           <span style={{
-                            position: 'relative', width: 28, height: 16, borderRadius: 8,
+                            position: 'relative', width: 28, height: 16, borderRadius: 0,
                             background: ocrMode ? '#fff' : '#2a2a2a', transition: 'background .15s',
                           }}>
                             <span style={{
@@ -3759,7 +3841,7 @@ Title:`,
                 {streaming ? (
                   <button onClick={stopStreaming} title="Stop"
                     style={{
-                      width: 36, height: 36, borderRadius: 7, border: '1px solid #3a3a3a', cursor: 'pointer',
+                      width: 36, height: 36, borderRadius: 0, border: '1px solid #3a3a3a', cursor: 'pointer',
                       background: '#1c1c1c', color: '#e6e6e6', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       flexShrink: 0, lineHeight: 0
                     }}>
@@ -3769,7 +3851,7 @@ Title:`,
                   <button onClick={() => send()} disabled={!input.trim() && attachments.length === 0}
                     title="Send"
                     style={{
-                      width: 36, height: 36, borderRadius: 7, border: '1px solid ' + ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a'), cursor: (input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed',
+                      width: 36, height: 36, borderRadius: 0, border: '1px solid ' + ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a'), cursor: (input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed',
                       background: (input.trim() || attachments.length > 0) ? '#e6e6e6' : '#1a1a1a',
                       color: (input.trim() || attachments.length > 0) ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all .15s', flexShrink: 0, lineHeight: 0
@@ -3950,7 +4032,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
         data-vrtx-no-reply="" 
         style={{
           maxWidth: '78%', background: '#1e1e1e', border: '1px solid #2a2a2a',
-          color: '#e6e6e6', borderRadius: 10, padding: '10px 14px',
+          color: '#e6e6e6', borderRadius: 0, padding: '10px 14px',
           fontSize: 14, lineHeight: 1.55, wordBreak: 'break-word'
         }}>
           <MessageContent
@@ -3966,7 +4048,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'flex-start', marginTop: 2, flexShrink: 0 }}>
           <button onClick={() => onEditUserMessage?.(messageId)} title="Edit & resend"
             style={{
-              background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 6,
+              background: 'transparent', border: '1px solid #2a2a2a', borderRadius: 0,
               color: '#6a6a6a', cursor: 'pointer', padding: 5, display: 'flex',
               alignItems: 'center', justifyContent: 'center',
             }}>
@@ -3981,7 +4063,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
   // so they all fit on one row even on narrow chat windows.
   const ghostBtn = (extraStyle) => ({
     background: 'transparent', border: '1px solid transparent', color: '#6a6a6a',
-    cursor: 'pointer', padding: '3px 7px', borderRadius: 5, fontSize: 11,
+    cursor: 'pointer', padding: '3px 7px', borderRadius: 0, fontSize: 11,
     fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
     display: 'flex', alignItems: 'center', gap: 4, transition: 'all .12s',
     ...extraStyle,
@@ -3990,7 +4072,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
   return (
     <div style={{ display: 'flex', gap: 12, marginBottom: 22 }}>
       <div style={{
-        width: 26, height: 26, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 26, height: 26, borderRadius: 0, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: '#141414', border: '1px solid #2a2a2a', marginTop: 1
       }}>
         <Terminal size={13} color="#c8c8c8"/>
@@ -4064,7 +4146,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
             onClick={onRetry}
             style={{
               display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, padding: '6px 12px',
-              borderRadius: 7, border: '1px solid #333333', background: '#141414', color: '#dcdcdc',
+              borderRadius: 0, border: '1px solid #333333', background: '#141414', color: '#dcdcdc',
               fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
             }}
           >
