@@ -4,6 +4,7 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import JSZip from 'jszip';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import mammoth from 'mammoth';
@@ -2089,22 +2090,6 @@ Title:`,
     }, 30);
   }, []);
 
-  /* ── Clarify-card answers ──
-     When the user picks options on a <<<ASK>>> card and clicks "Send
-     answer", we (a) freeze that card so it can't be re-answered, and
-     (b) send the composed answer as the next user message — same flow
-     as if they'd typed it. The frozen state is tracked per-message-id
-     in a Set so re-renders don't un-freeze. */
-  const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-  const handleClarifyAnswer = useCallback((messageId, answer) => {
-    setFrozenClarifyIds(prev => {
-      const next = new Set(prev);
-      next.add(messageId);
-      return next;
-    });
-    // Slight delay so the freeze visually applies before the new message pushes the view down.
-    setTimeout(() => send(answer), 30);
-  }, [send]);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -2644,6 +2629,16 @@ Title:`,
     setThinking(false);
     setStreamText('');
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
+
+  const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
+const handleClarifyAnswer = useCallback((messageId, answer) => {
+  setFrozenClarifyIds(prev => {
+    const next = new Set(prev);
+    next.add(messageId);
+    return next;
+  });
+  setTimeout(() => send(answer), 30);
+}, [send]);
 
   /* Smart Edit on a code block — sends a focused request that asks Vertex to
      return ONLY the corrected code (with a one-line summary) instead of
