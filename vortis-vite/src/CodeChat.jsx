@@ -208,14 +208,14 @@ DO NOT just start coding on assumptions. The user explicitly wants to be asked f
 The clarifying block uses this exact raw-text format (NO code fence, NO prose before it, NO markdown):
 
 <<<ASK>>>
-[{"question":"Which framework?","options":["Next.js","Vite + React","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]},{"question":"Language?","options":["TypeScript","JavaScript"]}]
+[{"question":"Which framework?","options":["Next.js","Vite + React","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]},{"question":"Language?","options":["TypeScript","JavaScript"]},{"question":"Scope?","options":["Full clone","Core UI only","Minimal MVP"]},{"question":"Auth?","options":["None","Firebase Auth","NextAuth","Custom JWT"]}]
 <<<END>>>
 
 STRICT RULES:
 - The FIRST thing in your reply must be the literal characters <<<ASK>>> on its own line. NO intro prose. NO "Sure, let me ask…". NO "I'll need a few details first.". Just the marker.
 - The closing literal <<<END>>> on its own line is MANDATORY. Omitting it breaks the parser and the user sees raw JSON.
 - Between them is a valid JSON array. Each object has question (string) and options (array of 2-4 short strings).
-- 1-3 questions, never more. Each question = one axis of genuine ambiguity (framework, styling, language, layout, scope).
+- 1-7 questions depending on complexity. Each question = one axis of genuine ambiguity (framework, styling, language, layout, scope, deployment, auth, database, etc.).
 - DO NOT wrap in a markdown code fence. Raw text only.
 - DO NOT include an "Other" option — the UI automatically adds an "Other" pill with a free-text input to every question, so the user can always type a custom answer that isn't in your option list.
 - After <<<END>>>, you may add ONE short line like "I'll start once you pick." — nothing more. Then stop. The user's picks arrive as the next message; THEN you write the code.
@@ -228,7 +228,7 @@ When NOT to ask (rare):
 
 Example of a CORRECT proactive clarify reply (the WHOLE reply is just this):
 <<<ASK>>>
-[{"question":"Which framework?","options":["Next.js","Vite","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]}]
+[{"question":"Which framework?","options":["Next.js","Vite","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]},{"question":"Language?","options":["TypeScript","JavaScript"]}]
 <<<END>>>
 
 ═══ MULTI-FILE OUTPUT (STRICT — ALWAYS TAG EVERY FILE, USE REAL FOLDERS) ═══
@@ -449,7 +449,12 @@ const extractFilePath = (code, lang) => {
    closing ``` yet). We accept that case too — match an open fence ending
    at end-of-text — so the FileTreePanel renders progressively instead of
    flashing flat code blocks mid-stream. */
-const extractProjectFromMessage = (text) => {
+/* `isActiveStream` controls whether an unclosed (open) trailing code fence
+   tags the extracted file with `streaming: true`. Only the actively-streaming
+   message should pass true — for committed/aborted messages, an unclosed
+   fence just means the model was interrupted mid-file; it is NOT still being
+   written, so we must NOT show the pulsing green dot forever on that file. */
+const extractProjectFromMessage = (text, isActiveStream = false) => {
   if (!text || !text.includes('```')) return { project: null, text: text || '' };
   // Closed fences: ```lang\n...```
   const closedFence = /```(\w*)\n([\s\S]*?)```/g;
@@ -482,7 +487,7 @@ const extractProjectFromMessage = (text) => {
       // The tail before the open fence is preserved.
       out += tail.slice(0, openMatch.index);
       lastIdx += openMatch.index + openMatch[0].length;
-      files.push({ path: extracted.path, lang, code: extracted.code, streaming: true });
+      files.push({ path: extracted.path, lang, code: extracted.code, streaming: isActiveStream });
     }
   }
   out += text.slice(lastIdx);
@@ -853,11 +858,18 @@ const TodosPanel = ({ todos }) => {
 const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   // selected[qi] = { type: 'option', idx } | { type: 'other', text: '...' }
   const [selected, setSelected] = useState({});
+  const [skipped, setSkipped] = useState({});
   const [extraNotes, setExtraNotes] = useState('');
   const otherInputRef = useRef(null);
 
   const toggle = (qIdx, optIdx) => {
     if (frozen) return;
+    // Un-skip if the user picks an answer for a previously skipped question
+    setSkipped(prev => {
+      const next = { ...prev };
+      delete next[qIdx];
+      return next;
+    });
     setSelected(prev => {
       const next = { ...prev };
       const cur = next[qIdx];
@@ -869,6 +881,11 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
 
   const selectOther = (qIdx) => {
     if (frozen) return;
+    setSkipped(prev => {
+      const next = { ...prev };
+      delete next[qIdx];
+      return next;
+    });
     setSelected(prev => ({
       ...prev,
       [qIdx]: { type: 'other', text: prev[qIdx]?.type === 'other' ? prev[qIdx].text : '' },
@@ -881,24 +898,47 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
     setSelected(prev => ({ ...prev, [qIdx]: { type: 'other', text } }));
   };
 
+  const skipQuestion = (qIdx) => {
+    if (frozen) return;
+    setSkipped(prev => ({ ...prev, [qIdx]: true }));
+    setSelected(prev => {
+      const next = { ...prev };
+      delete next[qIdx];
+      return next;
+    });
+  };
+
+  const unskipQuestion = (qIdx) => {
+    if (frozen) return;
+    setSkipped(prev => {
+      const next = { ...prev };
+      delete next[qIdx];
+      return next;
+    });
+  };
+
   const isAnswered = (qi) => {
+    if (skipped[qi]) return true; // skipped counts as "answered" for progress
     const s = selected[qi];
     if (!s) return false;
     if (s.type === 'option') return true;
     if (s.type === 'other') return s.text.trim().length > 0;
     return false;
   };
-  const allAnswered = questions.every((_, i) => isAnswered(i));
+
+  const answeredCount = questions.filter((_, i) => isAnswered(i)).length;
+  const hasAtLeastOne = Object.keys(selected).length > 0;
 
   const submit = () => {
-    if (!allAnswered || frozen || !onAnswer) return;
+    if (!hasAtLeastOne || frozen || !onAnswer) return;
     const parts = questions.map((q, i) => {
+      if (skipped[i]) return null; // skip this question
       const s = selected[i];
+      if (!s) return null;
       const val = s.type === 'option' ? q.options[s.idx] : s.text.trim();
       const qLabel = q.question.replace(/\?+\s*$/, '').trim();
       return `${qLabel}: ${val}`;
-    });
-    // Append any free-form notes the user typed in the "Anything else?" box.
+    }).filter(Boolean);
     const notes = extraNotes.trim();
     if (notes) parts.push(`Additional notes: ${notes}`);
     onAnswer(parts.join('  ·  '));
@@ -932,12 +972,12 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
             {questions.map((_, i) => (
               <div key={i} style={{
                 width: 7, height: 7, borderRadius: '50%',
-                background: isAnswered(i) ? '#6366f1' : '#333',
+                background: skipped[i] ? '#92400e' : isAnswered(i) ? '#6366f1' : '#333',
                 transition: 'background .2s',
               }}/>
             ))}
             <span style={{ fontSize: 10, color: '#666', marginLeft: 4, fontFamily: 'JetBrains Mono, monospace' }}>
-              {questions.filter((_, i) => isAnswered(i)).length}/{questions.length}
+              {answeredCount}/{questions.length}
             </span>
           </div>
         )}
@@ -946,14 +986,40 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
         {questions.map((q, qi) => {
           const sel = selected[qi];
           const otherActive = sel?.type === 'other';
+          const isSkipped = !!skipped[qi];
           return (
           <div key={qi} style={{ marginTop: 10 }}>
             <div style={{
-              fontSize: 13.5, color: '#e6e6e6', marginBottom: 8,
-              fontWeight: 600, lineHeight: 1.4,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8,
             }}>
-              {q.question}
+              <div style={{
+                fontSize: 13.5, color: isSkipped ? '#5a5a5a' : '#e6e6e6',
+                fontWeight: 600, lineHeight: 1.4,
+                textDecoration: isSkipped ? 'line-through' : 'none',
+              }}>
+                {q.question}
+              </div>
+              {!frozen && (
+                <button
+                  onClick={() => isSkipped ? unskipQuestion(qi) : skipQuestion(qi)}
+                  title={isSkipped ? 'Undo skip' : 'Skip this question'}
+                  style={{
+                    background: 'transparent', border: '1px solid ' + (isSkipped ? '#5a5a5a' : '#2a2a2a'),
+                    borderRadius: 0, color: isSkipped ? '#9a9a9a' : '#555',
+                    cursor: 'pointer', padding: '3px 9px', fontSize: 10.5,
+                    fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+                    letterSpacing: '.03em', transition: 'all .15s',
+                    flexShrink: 0, marginLeft: 10,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#5a5a5a'; e.currentTarget.style.color = '#c8c8c8'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = isSkipped ? '#5a5a5a' : '#2a2a2a'; e.currentTarget.style.color = isSkipped ? '#9a9a9a' : '#555'; }}
+                >
+                  {isSkipped ? 'Undo' : 'Skip'}
+                </button>
+              )}
             </div>
+            {!isSkipped && (
+              <>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {q.options.map((opt, oi) => {
                 const isSel = sel?.type === 'option' && sel.idx === oi;
@@ -1000,7 +1066,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                 type="text"
                 value={sel.text || ''}
                 onChange={e => setOtherText(qi, e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && allAnswered) { e.preventDefault(); submit(); } }}
+                onKeyDown={e => { if (e.key === 'Enter' && hasAtLeastOne) { e.preventDefault(); submit(); } }}
                 placeholder="Type your own answer…"
                 style={{
                   marginTop: 8, width: '100%', boxSizing: 'border-box',
@@ -1012,6 +1078,8 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                 }}
               />
             )}
+            </>
+           )}
           </div>
           );
         })}
@@ -1047,30 +1115,30 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
           </div>
           {/* ── PROMINENT CTA: impossible to miss ── */}
           <div style={{ marginTop: 16 }}>
-            <button onClick={submit} disabled={!allAnswered}
+            <button onClick={submit} disabled={!hasAtLeastOne}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 width: '100%', padding: '12px 20px', borderRadius: 6,
-                background: allAnswered ? '#e6e6e6' : '#1a1a1a',
-                border: '1px solid ' + (allAnswered ? '#e6e6e6' : '#333'),
-                color: allAnswered ? '#0a0a0a' : '#555',
+                background: hasAtLeastOne ? '#e6e6e6' : '#1a1a1a',
+                border: '1px solid ' + (hasAtLeastOne ? '#e6e6e6' : '#333'),
+                color: hasAtLeastOne ? '#0a0a0a' : '#555',
                 fontSize: 14, fontWeight: 700,
-                cursor: allAnswered ? 'pointer' : 'not-allowed',
+                cursor: hasAtLeastOne ? 'pointer' : 'not-allowed',
                 fontFamily: 'inherit',
                 letterSpacing: '.02em',
                 transition: 'background .15s, color .15s, border-color .15s',
               }}>
               <Sparkles size={16}/>
-              {allAnswered ? 'Start Building' : `Answer all ${questions.length} question${questions.length > 1 ? 's' : ''} to continue`}
+              {hasAtLeastOne ? 'Start Building' : 'Pick at least one option to continue'}
             </button>
-            {!allAnswered && (
+            {!hasAtLeastOne && (
               <div style={{
                 display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10,
               }}>
                 {questions.map((_, i) => (
                   <div key={i} style={{
                     flex: 1, maxWidth: 80, height: 3, borderRadius: 2,
-                    background: isAnswered(i) ? '#6366f1' : '#222',
+                    background: skipped[i] ? '#92400e' : isAnswered(i) ? '#6366f1' : '#222',
                     transition: 'background .25s',
                   }}/>
                 ))}
@@ -1097,21 +1165,39 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
   const [collapsed, setCollapsed] = useState({});
   const [zipping, setZipping] = useState(false);
 
-  // if active file disappears (e.g. during streaming), fall back to first
+  // If the active file disappears from the list (e.g. during streaming
+  // when the model rewrites the project), fall back to the first file.
   useEffect(() => {
-    if (!files.find(f => f.path === activePath) && files[0]) setActivePath(files[0].path);
+    if (!files.find(f => f.path === activePath) && files[0]) {
+      setActivePath(files[0].path);
+      userPinnedRef.current = false; // list changed — allow auto-follow again
+    }
   }, [files, activePath]);
 
-  // During streaming, auto-follow the file currently being written so the
-  // user sees the code appear in real time. When not streaming, stay on
-  // whatever the user manually selected.
+  /* During streaming, auto-follow the file currently being written so the
+     user sees the code appear in real time — BUT respect a manual click:
+     once the user picks a file in this panel, we stop yanking them back to
+     the streaming file. The pin resets when streaming stops, so the next
+     stream starts fresh. This fixes the bug where clicking `index.html`
+     while Vertex was writing `watch.html` immediately snapped back. */
+  const userPinnedRef = useRef(false);
   useEffect(() => {
-    if (!streaming) return;
+    if (!streaming) {
+      // Stream ended — clear the pin so the next stream can auto-follow.
+      userPinnedRef.current = false;
+      return;
+    }
+    if (userPinnedRef.current) return; // user picked a file; don't override
     const streamingFile = files.find(f => f.streaming);
     if (streamingFile && streamingFile.path !== activePath) {
       setActivePath(streamingFile.path);
     }
   }, [files, streaming, activePath]);
+
+  const handleFileClick = (path) => {
+    userPinnedRef.current = true; // mark as manually selected
+    setActivePath(path);
+  };
 
   const activeFile = files.find(f => f.path === activePath) || files[0];
 
@@ -1157,7 +1243,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
       const isStreaming = file.streaming === true;
       items.push(
         <button key={`file-${file.path}`}
-          onClick={() => setActivePath(file.path)}
+          onClick={() => handleFileClick(file.path)}
           style={{
             display: 'flex', alignItems: 'center', gap: 6, width: '100%',
             padding: '5px 8px 5px ' + (8 + depth * 14 + 18) + 'px',
@@ -4007,7 +4093,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                     canRetry={m.canRetry} onRetry={() => retryLastMessage(m.id)}
                     onContinue={handleContinue} onRegenerate={handleRegenerate}
                     onEditUserMessage={handleEditUserMessage}
-                    isLast={i === messages.length - 1} streaming={streaming}
+                    isLast={i === messages.length - 1} streaming={false}
                     onOpenPanel={openCodePanel}
                     onAnswerClarify={(answer) => handleClarifyAnswer(m.id, answer)}
                     frozenClarify={frozenClarifyIds.has(m.id)} compact={m._compact} />
@@ -4475,7 +4561,7 @@ const MessageContent = React.memo(({
     t = todosRes.text;
     const clarifyRes = skipClarify ? { clarify: null, text: t } : extractClarify(t);
     t = clarifyRes.text;
-    const projectRes = extractProjectFromMessage(t);
+    const projectRes = extractProjectFromMessage(t, streaming);
     t = projectRes.text;
     return {
       todos: todosRes.todos,
