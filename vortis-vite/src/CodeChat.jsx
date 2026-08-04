@@ -230,38 +230,47 @@ Example of a CORRECT proactive clarify reply (the WHOLE reply is just this):
 [{"question":"Which framework?","options":["Next.js","Vite","Plain HTML"]},{"question":"Styling?","options":["Tailwind","CSS Modules","Plain CSS"]}]
 <<<END>>>
 
-═══ MULTI-FILE OUTPUT (STRICT — ALWAYS TAG EVERY FILE) ═══
-EVERY fenced code block you emit — no exceptions — MUST start with a path comment marking the file's relative path. This is what makes the UI render the IDE-style file tree with a "Download .zip" button instead of a flat code wall.
+═══ MULTI-FILE OUTPUT (STRICT — ALWAYS TAG EVERY FILE, USE REAL FOLDERS) ═══
+EVERY fenced code block you emit — no exceptions — MUST start with a path comment marking the file's relative path. This is what makes the UI render the IDE-style file tree (with a Download .zip button for 2+ files) instead of a flat code wall.
 
-  \`\`\`jsx
-  // file: src/components/Navbar.jsx
-  import React from 'react';
-  export default function Navbar() { ... }
-  \`\`\`
+When a request produces 2+ files, ALWAYS organize them into a real folder structure — NOT flat in the root. Use the conventional layout for the framework:
+- Next.js: app/ (routes), components/, lib/ or utils/, public/, styles/
+- Vite + React: src/components/, src/hooks/, src/lib/, src/App.tsx, src/main.tsx, public/
+- Plain React: src/components/, src/hooks/, src/utils/, src/index.js
+- Python: app/ or src/, tests/, scripts/, requirements.txt
+- General web: index.html, css/, js/, assets/
 
-  \`\`\`python
-  # file: app/main.py
-  print('hello')
-  \`\`\`
+Example of a CORRECT multi-file reply (real folders, every file tagged):
+(fenced block, language tsx)
+// file: src/components/ChatHeader.tsx
+import React from 'react';
+export default function ChatHeader() { ... }
 
-  \`\`\`html
-  <!-- file: public/index.html -->
-  <!doctype html>...
-  \`\`\`
+(fenced block, language ts)
+// file: src/hooks/useChat.ts
+import { useState } from 'react';
+export function useChat() { ... }
 
-Path-comment syntax by language:
-  - \`// file:\` for JS, TS, JSX, TSX, C, C++, Java, Rust, Go, Swift, Kotlin, Dart
-  - \`# file:\` for Python, Ruby, Shell, Bash, YAML, TOML, Makefile, Dockerfile, .gitignore
-  - \`<!-- file: -->\` for HTML, XML, SVG, Markdown
-  - \`-- file:\` for SQL, Haskell, Ada
-  - \`; file:\` for Lisp, Clojure, INI, .env
+(fenced block, language json)
+# file: package.json
+{ "name": "chat-app", "dependencies": { ... } }
+
+Path-comment syntax by language (the parser strips this line before display, so the file itself stays valid even for JSON/YAML):
+- // file: for JS, TS, JSX, TSX, C, C++, Java, Rust, Go, Swift, Kotlin, Dart
+- # file: for Python, Ruby, Shell, Bash, YAML, TOML, Makefile, Dockerfile, JSON, .gitignore
+- <!-- file: --> for HTML, XML, SVG, Markdown
+- /* file: */ for CSS, SCSS, LESS, C (block comment variant)
+- -- file: for SQL, Haskell, Ada
+- ; file: for Lisp, Clojure, INI, .env
 
 RULES:
-- Tag EVERY file, even when there's only one. A single tagged file still gets the IDE panel + zip download.
+- Tag EVERY file, even when there's only one. A single tagged file still gets the IDE panel.
 - NEVER merge multiple files into one fence. One file = one fence.
-- NEVER skip the path comment on a code block, even for inline examples — use a meaningful path like \`examples/demo.js\` or \`snippet.py\`.
-- Use real, runnable relative paths: \`src/App.tsx\`, \`app/api/route.ts\`, \`components/Chat.tsx\`, \`package.json\`. For files where comments would be invalid JSON/YAML/etc., still emit the path comment as the first line — the UI parser strips it before display so the resulting file is valid.
-- Folder structure should match what the user would actually create: \`src/\` for source, \`app/\` for routes, \`public/\` for static assets, \`tests/\` or \`__tests__/\` for tests, \`scripts/\` for build/run scripts.
+- NEVER skip the path comment on a code block.
+- Use real, runnable relative paths with folders: src/App.tsx, app/api/route.ts, components/Chat.tsx, package.json.
+- For substantial code blocks (6+ lines, not shell), the UI shows an "Open" button so the user can run/edit the code in a side panel. Keep this in mind: emit RUNNABLE code, not just snippets.
+
+Download .zip note: the zip button only appears when 2+ files are tagged. For a single file, the user uses the "Save" button on the code block itself.
 
 ═══ TODOS / PROGRESS TRACKING (MANDATORY FOR ANY NON-TRIVIAL TASK) ═══
 You MUST start your reply with a GFM task-list block whenever ANY of the following are true:
@@ -747,6 +756,7 @@ const TodosPanel = ({ todos }) => {
 const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   // selected[qi] = { type: 'option', idx } | { type: 'other', text: '...' }
   const [selected, setSelected] = useState({});
+  const [extraNotes, setExtraNotes] = useState('');
   const otherInputRef = useRef(null);
 
   const toggle = (qIdx, optIdx) => {
@@ -791,6 +801,9 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
       const qLabel = q.question.replace(/\?+\s*$/, '').trim();
       return `${qLabel}: ${val}`;
     });
+    // Append any free-form notes the user typed in the "Anything else?" box.
+    const notes = extraNotes.trim();
+    if (notes) parts.push(`Additional notes: ${notes}`);
     onAnswer(parts.join('  ·  '));
   };
 
@@ -890,6 +903,35 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
           );
         })}
         {!frozen && (
+          <>
+          {/* Card-level "Anything else?" textarea — lets the user add any
+              extra context, constraints, or preferences that weren't covered
+              by the per-question options. Appended to the composed answer as
+              "Additional notes: ...". Always visible (not behind a toggle)
+              so users immediately see they can type free-form context. */}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #1f1f1f' }}>
+            <div style={{
+              fontSize: 11, color: '#8a8a8a', fontFamily: 'JetBrains Mono, monospace',
+              fontWeight: 700, letterSpacing: '.04em', marginBottom: 6,
+            }}>
+              ANYTHING ELSE?
+            </div>
+            <textarea
+              value={extraNotes}
+              onChange={e => setExtraNotes(e.target.value)}
+              placeholder="Type any extra details, constraints, or preferences not covered above (optional)…"
+              rows={2}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: '#0a0a0a', border: '1px solid #333333',
+                borderRadius: 0, padding: '8px 10px',
+                color: '#e6e6e6', fontSize: 12.5,
+                fontFamily: 'inherit', lineHeight: 1.5,
+                resize: 'vertical', outline: 'none',
+                minHeight: 44,
+              }}
+            />
+          </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
             <button onClick={submit} disabled={!allAnswered}
               style={{
@@ -906,6 +948,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
               <Send size={12}/> Send answer{questions.length > 1 ? 's' : ''}
             </button>
           </div>
+          </>
         )}
       </div>
     </div>
@@ -1013,7 +1056,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
             Project · {files.length} {files.length === 1 ? 'file' : 'files'}
           </span>
         </div>
-        {!streaming && (
+        {!streaming && files.length > 1 && (
           <button onClick={handleZip} disabled={zipping}
             style={{
               display: 'flex', alignItems: 'center', gap: 5,
@@ -1085,13 +1128,16 @@ const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, fi
   const isLong = lines.length > CAP_AFTER_LINES;
   const capped = isLong && !expanded;
   const downloadName = filePath ? filePath.split('/').pop() : `snippet.${extForLang(lang)}`;
-  // "Open" panel button only makes sense for substantial code the user can run
-  // or edit meaningfully — NOT for 1-3 line shell commands like `npm run dev`,
-  // `pip install x`, `mkdir foo`, etc. Skip it for short blocks and for shell/
-  // bash languages regardless of length (those are almost always commands).
+  // "Open" panel button only makes sense for substantial code the user can
+  // run or edit meaningfully — NOT for 1-3 line shell commands like `npm run
+  // dev`, `pip install x`, `mkdir foo`, etc. Skip it for short blocks and
+  // for shell/bash languages regardless of length (those are almost always
+  // commands). It DOES show on big code blocks inside FileTreePanel
+  // (embedded) — the user needs to run/edit those just as much as standalone
+  // blocks.
   const langLower = (lang || '').toLowerCase();
   const isShellLang = ['sh', 'bash', 'shell', 'zsh', 'powershell', 'ps1', 'cmd', 'bat'].includes(langLower);
-  const canOpenInPanel = !isShellLang && lines.length >= 6 && !embedded;
+  const canOpenInPanel = !isShellLang && lines.length >= 6;
 
   return (
     <div style={{
@@ -2355,7 +2401,7 @@ Title:`,
     }, 30);
   }, []);
 
-
+ 
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
@@ -2672,46 +2718,49 @@ Title:`,
       let buffer = '';
       let full = '';
 
-      // Throttle stream renders — without this, every SSE chunk triggers a
-      // setStreamText → React re-render → full ReactMarkdown re-parse of the
-      // entire response so far. For a 2000-token reply that's ~2000 re-parses.
+      // SMOOTH DRIP RENDERER — solves the "sometimes fast, sometimes slow"
+      // streaming problem. SSE tokens arrive in bursts (10 tokens in 5ms,
+      // then nothing for 200ms). The old throttle rendered whatever had
+      // accumulated every 90ms, so a burst produced a big jump (fast),
+      // then a pause (slow). This felt janky on long code blocks.
       //
-      // Two-stage throttle:
-      //   1. Coalesce with rAF (one render per frame max).
-      //   2. Plus a 90ms minimum gap between renders — even if rAF fires
-      //      every 16ms, we skip frames that are too close to the last
-      //      flush. This is what stops the "slow then fast then slow"
-      //      flicker on long code blocks: ReactMarkdown's parse cost grows
-      //      quadratically with text length, so re-parsing 60x/sec on a
-      //      1500-token reply janks the main thread.
-      // Final flush after stream end is unconditional so the last chunk
-      // always lands.
-      let pendingFlush = false;
-      let lastFlushedAt = 0;
-      let lastFlushedText = '';
-      const FLUSH_MS = 90;
-      const flush = (force = false) => {
-        pendingFlush = false;
-        const now = Date.now();
-        if (!force && now - lastFlushedAt < FLUSH_MS) {
-          // Too soon — re-schedule for the remaining gap.
-          scheduleFlush();
+      // The drip renderer decouples DISPLAY SPEED from ARRIVAL SPEED:
+      //   - `full` accumulates everything the server has sent.
+      //   - `shown` is what's actually rendered to the DOM.
+      //   - Every ~33ms (30fps), we move up to DRIP_CHARS characters
+      //     from `full` into `shown`.
+      //   - Result: text appears at a steady ~60 chars/frame ≈ 1800
+      //     chars/sec regardless of how fast or slow tokens arrive.
+      //   - If the stream is faster than the drip, `full` grows ahead
+      //     of `shown` — the buffer absorbs the burst. When the stream
+      //     is slower, `shown` catches up to `full` and we stop dripping.
+      //   - On stream end, we force-flush everything remaining.
+      let shown = '';
+      let dripTimer = null;
+      const DRIP_MS = 33;
+      const DRIP_CHARS = 60;
+      const dripStep = () => {
+        if (shown.length >= full.length) {
+          dripTimer = null;
           return;
         }
-        if (lastFlushedText !== full) {
-          lastFlushedAt = now;
-          lastFlushedText = full;
-          setStreamText(full);
-        }
+        // Move a slice from `full` to `shown`. Take a bigger slice if
+        // we're falling far behind (e.g. a huge code block just landed)
+        // so the user doesn't wait forever for the display to catch up.
+        const behind = full.length - shown.length;
+        const take = Math.min(behind, Math.max(DRIP_CHARS, Math.ceil(behind / 8)));
+        shown = full.slice(0, shown.length + take);
+        setStreamText(shown);
+        dripTimer = setTimeout(dripStep, DRIP_MS);
       };
-      const scheduleFlush = () => {
-        if (pendingFlush) return;
-        pendingFlush = true;
-        if (typeof requestAnimationFrame === 'function') {
-          requestAnimationFrame(() => flush(false));
-        } else {
-          setTimeout(() => flush(false), FLUSH_MS);
-        }
+      const scheduleDrip = () => {
+        if (dripTimer !== null) return; // already scheduled
+        dripTimer = setTimeout(dripStep, DRIP_MS);
+      };
+      const forceFlush = () => {
+        if (dripTimer !== null) { clearTimeout(dripTimer); dripTimer = null; }
+        shown = full;
+        setStreamText(shown);
       };
 
       while (true) {
@@ -2729,7 +2778,7 @@ Title:`,
           if (raw === '[DONE]' || !raw) continue;
           try {
             const p = JSON.parse(raw);
-            if (p.content) { full += p.content; scheduleFlush(); }
+            if (p.content) { full += p.content; scheduleDrip(); }
           } catch (_) {}
         }
       }
@@ -2739,22 +2788,14 @@ Title:`,
         if (raw && raw !== '[DONE]') {
           try {
             const p = JSON.parse(raw);
-            if (p.content) { full += p.content; scheduleFlush(); }
+            if (p.content) { full += p.content; scheduleDrip(); }
           } catch (_) {}
         }
       }
 
-      // Final flush so the very last chunk is guaranteed to be on screen
-      // before we hand off to the persisted message. Force=true bypasses
-      // the 90ms throttle so we don't wait an extra frame at the end.
-      if (pendingFlush) {
-        if (typeof requestAnimationFrame === 'function') {
-          await new Promise(r => requestAnimationFrame(r));
-        } else {
-          await new Promise(r => setTimeout(r, 16));
-        }
-      }
-      flush(true);
+      // Force-flush any remaining buffered text so the full reply is on
+      // screen before we hand off to the persisted message.
+      forceFlush();
 
       return { text: full, errorMsg: null, status: res.status, isNetwork: false };
     } catch (e) {
@@ -2913,9 +2954,9 @@ Title:`,
     setThinking(false);
     setStreamText('');
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
-
-const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-const handleClarifyAnswer = useCallback((messageId, answer) => {
+  
+  const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
+  const handleClarifyAnswer = useCallback((messageId, answer) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
     next.add(messageId);
@@ -3102,7 +3143,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
           </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
-              width: 32, height: 32, borderRadius: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 32, height: 32, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: '#e6e6e6', border: '1px solid #e6e6e6'
             }}>
               <Terminal size={17} color="#0a0a0a"/>
@@ -3712,7 +3753,6 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                             onSmartEdit={null}
                             messageId="streaming"
                             streaming
-                            skipClarify
                           />
                           <span style={{ display: 'inline-block', width: 7, height: 14, background: '#c8c8c8', marginLeft: 2, verticalAlign: 'text-bottom', animation: 'vertexBlink 1s steps(2) infinite' }}/>
                         </div>
