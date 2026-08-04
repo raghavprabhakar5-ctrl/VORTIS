@@ -2962,9 +2962,12 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
       convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
       try { localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
-      if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); for (const d of snap.docs) await deleteDoc(d.ref); } catch(_) {} }
-      const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
-      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
+      if (userUidRef.current) 
+   { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats'));
+     const regularChats = snap.docs.filter(d => !d.data().isCodeChat);
+     for (const d of regularChats) await deleteDoc(d.ref); } catch(_) {} }
+     const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
+     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
     }
   });
 };
