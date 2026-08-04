@@ -306,7 +306,7 @@ Refactoring in 4 steps. Here's each file:
 
 STRICT RULES:
 - Use the LITERAL characters - [ ] (open) or - [x] (done). NOT bold text. NOT "Step 1:". NOT a numbered list. NOT "1. ". The leading - [ ] is what the UI parser detects.
-- Minimum 2 task lines (the checklist won't render for just 1).
+- Minimum 3 task lines for the checklist to render. If you have fewer than 3 steps, skip the checklist and just answer directly.
 - Each task line ≤ 8 words. The body of the reply explains each step.
 - Mark - [x] ONLY after that step's code has actually been delivered below.
 - Task lines MUST be at the very top of the reply — no prose before them.
@@ -363,6 +363,16 @@ Humor is welcome occasionally, but never at the user's expense.
 - NEVER pad. NEVER write "Certainly! Here's..." or "I'd be happy to help" or "Sure!" — just answer.
 - For multi-step tasks, use a numbered list with code blocks under each step.
 - Never truncate — always complete your full answer.
+
+═══ YOUR ABILITIES (PROFESSIONAL CAPABILITIES) ═══
+You are a professional coding assistant with these built-in capabilities — use them confidently:
+1. CLARIFYING PREFERENCES: Before any non-trivial build/create request, you proactively ask the user's preferences (framework, language, styling) via the <<<ASK>>> card. You don't just guess — you ask first.
+2. MULTI-FILE PROJECTS: When a request needs multiple files, you emit each file with a // file: path/to/x marker on the first line and a real folder structure (src/components/, app/api/, etc.). The UI renders an IDE-style file tree with a Download .zip button.
+3. RUNNABLE CODE: For substantial code (6+ lines, not shell), the UI shows an Open button that opens a side panel where the user can run the code. For multi-file projects, the UI bundles all files together (HTML gets CSS+JS inlined; JS/Python get concatenated) so clicking Run on ANY file runs the WHOLE project. KEEP THIS IN MIND: emit code that works when bundled. For multi-file JS/Python, avoid cross-file imports that can't be resolved by concatenation — use plain function declarations, not ES modules with import/export between files in the same project. For HTML projects, put the main logic in the HTML file and use simple script tags or inline the JS directly.
+4. PROGRESS TRACKING: For 3+ step tasks, you start your reply with a GFM task list (- [ ] step) that the UI renders as a collapsible checklist with a progress bar.
+5. CLARIFYING CARDS: For ambiguous requests, you emit a <<<ASK>>> block with tappable option pills. The user can also type custom answers via an Other pill and an Anything else? textarea.
+
+When you build a project, always make the code RUNNABLE in the browser. For web projects, prefer a single HTML file with inline CSS+JS, OR a multi-file structure where the HTML entry file references the other files via standard link/script tags (the UI inlines them at run time). For Python, emit self-contained scripts or simple multi-file layouts where the entry file can concatenate with the others without import errors.
 
 ═══ NON-CODING REQUESTS ═══
 - You are NOT a general assistant. If the user asks a non-coding question, briefly redirect in your own words each time — vary the phrasing, don't repeat a fixed sentence. The gist: you're a coding assistant, and for general chat they should switch to the main Vortis chat.`;
@@ -711,20 +721,33 @@ const extractLeadingTodos = (text) => {
     todoLines.push(lines[i]);
     i++;
   }
-  if (todoLines.length < 2) return { todos: null, text };
+  if (todoLines.length < 3) return { todos: null, text };
   // skip one blank line after the todos so the body doesn't start with an awkward gap
   if (i < lines.length && lines[i].trim() === '') i++;
   const body = lines.slice(i).join('\n');
 
-  // Count "delivered" steps in the body: each CLOSED `// file:`-tagged fence
-  // = 1 delivered step. We only count CLOSED fences (with closing ```) — an
-  // open/streaming fence means the file isn't done yet, so its todo stays
-  // unticked. This stops the "5/7 in 10 seconds" problem where all todos
-  // ticked at once the moment files started appearing.
-  // Also count substantial closed code blocks (>= ~200 chars).
-  const closedFileMarkers = (body.match(/```[\w]*\n(?:\/\/|#|--|;;|;|<!--|\/\*)\s*\*?\s*(?:file|path|filename)\s*[:=][\s\S]*?```/g) || []).length;
-  const bigClosedFences = (body.match(/```[\w]*\n[\s\S]{200,}?```/g) || []).length;
-  const deliveredSteps = Math.min(todoLines.length, closedFileMarkers + bigClosedFences);
+  // Count "delivered" steps in the body. ONLY count CLOSED fences (with
+  // closing ```), not open/streaming ones — so a todo only ticks when its
+  // file is fully emitted, not when it starts appearing.
+  //
+  // To avoid double-counting, we count file-tagged closed fences separately
+  // from substantial non-file closed fences. A fence is "file-tagged" if its
+  // first line matches the path-comment regex; otherwise it counts as a
+  // "big fence" only if it's >= 200 chars of code.
+  const closedFenceRe = /```(\w*)\n([\s\S]*?)```/g;
+  let deliveredSteps = 0;
+  let m2;
+  while ((m2 = closedFenceRe.exec(body))) {
+    const inner = m2[2] || '';
+    const firstLineNl = inner.indexOf('\n');
+    const firstLine = (firstLineNl === -1 ? inner : inner.slice(0, firstLineNl)).trim();
+    if (FILE_PATH_LINE.test(firstLine)) {
+      deliveredSteps++;
+    } else if (inner.length >= 200) {
+      deliveredSteps++;
+    }
+  }
+  deliveredSteps = Math.min(todoLines.length, deliveredSteps);
 
   const todos = todoLines.map((l, idx) => {
     const m = l.match(/^\s*[-*]\s+\[([xX\s-])\]\s+(.+)$/);
@@ -2286,25 +2309,25 @@ const Vertex = ({
        their text extracted via the vision API before being sent. ── */
   const [ocrMode, setOcrMode] = useState(false);
 
-  const ocrImage = async (dataUrl, name) => {
-    try {
-      const res = await fetch(API, {
-        method: 'POST',
-        headers: await getAuthHeader(),
-        body: JSON.stringify({
-          action: 'vision',
-          image: dataUrl,
-          prompt: `Extract ALL text from this image (${name}). Return only the extracted text, preserving structure. If there's no text, return "[No text detected]".`,
-        }),
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.description || data.text || null;
-    } catch (e) {
-      console.error('OCR failed:', e);
-      return null;
-    }
-  };
+ const describeImage = async (dataUrl, name, mode = 'describe') => {
+  const prompt = mode === 'ocr'
+    ? `Extract ALL text from this image (${name}). Return only the extracted text, preserving structure. If there's no text, return "[No text detected]".`
+    : `You're looking at an image attached to a coding chat (${name}). Describe it precisely — if it's a code screenshot, transcribe the code exactly; if it's an error message, transcribe the error text exactly; if it's a UI/design mockup, describe layout, colors and elements; if it's a diagram, describe its structure. This description is the ONLY way the assistant can "see" the image, so be thorough.`;
+
+  try {
+    const res = await fetch(API, {
+      method: 'POST',
+      headers: await getAuthHeader(),
+      body: JSON.stringify({ action: 'vision', image: dataUrl, prompt }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.description || data.text || null;
+  } catch (e) {
+    console.error('Vision request failed:', e);
+    return null;
+  }
+};
 
   /* ── Paste attachments ("PASTED" cards above the input) ── */
   const [attachments, setAttachments] = useState([]);
@@ -2898,45 +2921,57 @@ Title:`,
 
       // SMOOTH DRIP RENDERER — solves the "sometimes fast, sometimes slow"
       // streaming problem. SSE tokens arrive in bursts (10 tokens in 5ms,
-      // then nothing for 200ms). The old throttle rendered whatever had
-      // accumulated every 90ms, so a burst produced a big jump (fast),
-      // then a pause (slow). This felt janky on long code blocks.
-      //
-      // The drip renderer decouples DISPLAY SPEED from ARRIVAL SPEED:
+      // then nothing for 200ms). The drip renderer decouples DISPLAY SPEED
+      // from ARRIVAL SPEED:
       //   - `full` accumulates everything the server has sent.
       //   - `shown` is what's actually rendered to the DOM.
-      //   - Every ~33ms (30fps), we move up to DRIP_CHARS characters
-      //     from `full` into `shown`.
-      //   - Result: text appears at a steady ~60 chars/frame ≈ 1800
-      //     chars/sec regardless of how fast or slow tokens arrive.
-      //   - If the stream is faster than the drip, `full` grows ahead
-      //     of `shown` — the buffer absorbs the burst. When the stream
-      //     is slower, `shown` catches up to `full` and we stop dripping.
-      //   - On stream end, we force-flush everything remaining.
+      //   - Every ~33ms (30fps), we move a slice from `full` to `shown`.
+      //   - If we're falling far behind (big code block just landed), we
+      //     take a much bigger slice so the display catches up fast.
+      //   - On stream end, forceFlush() renders everything remaining.
+      //   - A watchdog re-schedules the drip every 500ms if it somehow
+      //     stalls (defensive — shouldn't happen but cheap insurance).
       let shown = '';
       let dripTimer = null;
+      let watchdogTimer = null;
       const DRIP_MS = 33;
       const DRIP_CHARS = 60;
       const dripStep = () => {
-        if (shown.length >= full.length) {
-          dripTimer = null;
-          return;
-        }
+        dripTimer = null;
+        if (shown.length >= full.length) return;
         // Move a slice from `full` to `shown`. Take a bigger slice if
         // we're falling far behind (e.g. a huge code block just landed)
         // so the user doesn't wait forever for the display to catch up.
         const behind = full.length - shown.length;
+        // Acceleration: if behind by 200 chars, take 25; if behind by 2000,
+        // take 250; if behind by 10000, take 1250. Capped at behind.
         const take = Math.min(behind, Math.max(DRIP_CHARS, Math.ceil(behind / 8)));
         shown = full.slice(0, shown.length + take);
         setStreamText(shown);
-        dripTimer = setTimeout(dripStep, DRIP_MS);
+        if (shown.length < full.length) {
+          dripTimer = setTimeout(dripStep, DRIP_MS);
+        }
       };
       const scheduleDrip = () => {
         if (dripTimer !== null) return; // already scheduled
         dripTimer = setTimeout(dripStep, DRIP_MS);
       };
+      // Watchdog: every 500ms, if there's unflushed text and no drip
+      // scheduled, kick one off. This handles edge cases where a token
+      // arrived but scheduleDrip's no-op guard prevented a re-schedule.
+      const watchdog = () => {
+        watchdogTimer = null;
+        if (shown.length < full.length && dripTimer === null) {
+          dripTimer = setTimeout(dripStep, 0);
+        }
+        if (shown.length < full.length) {
+          watchdogTimer = setTimeout(watchdog, 500);
+        }
+      };
+      watchdogTimer = setTimeout(watchdog, 500);
       const forceFlush = () => {
         if (dripTimer !== null) { clearTimeout(dripTimer); dripTimer = null; }
+        if (watchdogTimer !== null) { clearTimeout(watchdogTimer); watchdogTimer = null; }
         shown = full;
         setStreamText(shown);
       };
@@ -2992,15 +3027,13 @@ Title:`,
       const blocks = [];
       for (const att of pendingAttachments) {
         if (att.type === 'image') {
-          if (ocrMode) {
-            const ocrText = await ocrImage(att.content, att.name);
-            if (ocrText && ocrText !== '[No text detected]') {
-              blocks.push(`[Image: ${att.name} — OCR extracted text:]\n\`\`\`\n${ocrText}\n\`\`\``);
-            } else {
-              blocks.push(`[Attached image: ${att.name}]`);
-            }
+          const mode = ocrMode ? 'ocr' : 'describe';
+          const visionText = await describeImage(att.content, att.name, mode);
+          if (visionText && visionText !== '[No text detected]') {
+            const label = ocrMode ? 'OCR extracted text' : 'Image description';
+            blocks.push(`[Image: ${att.name} — ${label}:]\n\`\`\`\n${visionText}\n\`\`\``);
           } else {
-            blocks.push(`[Attached image: ${att.name}]`);
+            blocks.push(`[Attached image: ${att.name} — could not be analyzed]`);
           }
         } else if (att.type === 'document') {
           blocks.push(`[Attached document: ${att.name}${att.size ? ` (${formatBytes(att.size)})` : ''} — this file type can't be read directly, ask about it by name if you want me to guess at its contents or just describe what's in it.]`);
@@ -3142,7 +3175,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
   });
   setTimeout(() => send(answer), 30);
 }, [send]);
- 
+
   /* Smart Edit on a code block — sends a focused request that asks Vertex to
      return ONLY the corrected code (with a one-line summary) instead of
      regenerating the whole explanation. Saves tokens, saves scroll position,
@@ -3245,7 +3278,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
      know which message they belong to (for Smart Edit). The streaming
      preview calls this with onSmartEdit=null since you can't edit code
      that's still being streamed. */
-  const makeMdComponents = useCallback(({ onSmartEdit, messageId }) => ({
+  const makeMdComponents = useCallback(({ onSmartEdit, messageId, isUserMessage }) => ({
     h1: ({children}) => <h1 style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', margin: '14px 0 6px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h1>,
     h2: ({children}) => <h2 style={{ fontSize: 16.5, fontWeight: 700, color: '#f0f0f0', margin: '12px 0 5px', letterSpacing: '-.02em', lineHeight: 1.3 }}>{children}</h2>,
     h3: ({children}) => <h3 style={{ fontSize: 14.5, fontWeight: 600, color: '#dcdcdc', margin: '10px 0 4px', lineHeight: 1.3 }}>{children}</h3>,
@@ -3286,8 +3319,14 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
   const codeText = extracted ? extracted.code : rawCodeText;
   const filePath = extracted ? extracted.path : null;
 
+  // User-message code blocks don't get Open/Run/Smart-Edit — those are
+  // for code Vertex GENERATES, not code the user pasted in. The user
+  // just wants Copy + Save on their own pasted snippet.
+  const panel = isUserMessage ? null : openCodePanel;
+  const smartEdit = isUserMessage ? null : onSmartEdit;
+
   const bid = `${messageId || 'msg'}-${filePath || (codeLang || 'x')}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
-  return <VertexCodeBlock lang={codeLang} codeText={codeText} filePath={filePath} onOpenPanel={openCodePanel} onSmartEdit={onSmartEdit} blockId={bid} />;
+  return <VertexCodeBlock lang={codeLang} codeText={codeText} filePath={filePath} onOpenPanel={panel} onSmartEdit={smartEdit} blockId={bid} />;
 },
   }), [openCodePanel]);
 
@@ -4377,10 +4416,12 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
   const copy = () => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); };
 
   // Each message bubble gets its own mdComponents so code blocks inside it
-  // know which message they belong to (for Smart Edit).
+  // know which message they belong to (for Smart Edit). User messages pass
+  // isUserMessage=true so code blocks inside don't get Open/Run/Smart-Edit
+  // buttons — those are only for code Vertex generates.
   const mdComponents = useMemo(
-    () => makeMdComponents({ onSmartEdit, messageId }),
-    [makeMdComponents, onSmartEdit, messageId]
+    () => makeMdComponents({ onSmartEdit, messageId, isUserMessage: isUser }),
+    [makeMdComponents, onSmartEdit, messageId, isUser]
   );
 
   // Show Continue only when the reply actually looks cut off — unclosed code

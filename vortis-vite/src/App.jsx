@@ -30,7 +30,7 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem, PhoneOff, Play, Pause, Code2, CornerUpLeft
+  Gem, PhoneOff, Play, Pause, Code2, CornerUpLeft, Square
 } from 'lucide-react';
 
 
@@ -2628,6 +2628,7 @@ useEffect(() => {
   const styleEl = useRef(null);
   const textareaRef = useRef(null);
   const imgGenLock = useRef(false);
+  const abortGenRef = useRef(false);
   const savingRef = useRef(false);
   const handleCmdRef = useRef(null);
   const saveTimerRef = useRef(null);
@@ -4841,6 +4842,21 @@ const requestBody = JSON.stringify({
   history: trimmedHistory
 });
 
+
+const stopGeneration = useCallback(() => {
+  abortGenRef.current = true;
+  clearTimeout(aiTimeoutRef.current);
+  setShowAITimeout(false);
+  if (streamText.trim()) {
+    const partial = cleanStream(streamText).trim();
+    if (partial) addMsg('vortis', partial + '\n\n_(stopped)_', false);
+  }
+  setIsStreaming(false);
+  setStreamText('');
+  setIsProcessing(false);
+  setProcessingStatus('');
+}, [streamText]);
+
 let res;
 try {
   res = await fetchWithTimeout(API, {
@@ -4884,9 +4900,25 @@ try {
   return;
 }
 
-      const reader = res.body.getReader(); const dec = new TextDecoder(); let full = '';
-      try { while (true) { const { done, value } = await reader.read(); if (done) break; for (const line of dec.decode(value, { stream: true }).split('\n')) { if (!line.startsWith('data: ')) continue; const raw = line.slice(6).trim(); if (raw === '[DONE]' || !raw) continue; try { const p = JSON.parse(raw); if (p.content) { full += p.content; setStreamText(t => t + p.content); } } catch(_) {} } } } catch(e) { console.error('SSE error:', e.message); }
+     const reader = res.body.getReader(); const dec = new TextDecoder(); let full = '';
+      try {
+        while (true) {
+          if (abortGenRef.current) { try { await reader.cancel(); } catch(_) {} break; }
+          const { done, value } = await reader.read();
+          if (done) break;
+          for (const line of dec.decode(value, { stream: true }).split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            const raw = line.slice(6).trim();
+            if (raw === '[DONE]' || !raw) continue;
+            try { const p = JSON.parse(raw); if (p.content) { full += p.content; setStreamText(t => t + p.content); } } catch(_) {}
+          }
+        }
+      } catch(e) { console.error('SSE error:', e.message); }
 
+      if (abortGenRef.current) {
+        setIsStreaming(false); setStreamText(''); setProcessingStatus('');
+        return; // stopGeneration() already added the partial message
+      }
 
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       const cleaned = full.trim(); pushHistory(convHistory, 'assistant', cleaned);
@@ -6165,9 +6197,14 @@ onChange={e => {
   >
     {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
   </button>
-  <button className="send-btn" onClick={handleSend} disabled={isProcessing}>
-    {isProcessing ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }}/> : <ArrowUp size={14}/>}
-  </button>
+  <button
+  className="send-btn"
+  onClick={(isProcessing || isStreaming) ? stopGeneration : handleSend}
+>
+  {(isProcessing || isStreaming)
+    ? <Square size={13} fill="currentColor"/>
+    : <ArrowUp size={14}/>}
+</button>
                </div>
               </div>
             </div>
