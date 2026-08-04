@@ -508,42 +508,106 @@ const buildFileTree = (files) => {
   return finalize(root);
 };
 
-/* Dynamic JSZip loader — only fetched the first time the user clicks
-   "Download .zip". If the CDN is unreachable, callers fall back to
-   staggered per-file downloads so the feature never dead-ends. */
-let _jsZipPromise = null;
-const loadJsZip = () => {
-  if (_jsZipPromise) return _jsZipPromise;
-  try {
-    _jsZipPromise = import(/* webpackIgnore: true */ /* @vite-ignore */ 'https://esm.sh/jszip@3.10.1')
-      .then(mod => (mod && (mod.default || mod)) || null)
-      .catch(() => null);
-  } catch (e) {
-    _jsZipPromise = Promise.resolve(null);
+/* Inline store-only ZIP writer — no external dependency. Creates a valid
+   .zip file with all files stored (no compression). Works in every browser
+   with Uint8Array. CRC32 is computed per-file for integrity. */
+const _zipCRC32Table = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c;
   }
-  return _jsZipPromise;
+  return t;
+})();
+const _zipCRC32 = (bytes) => {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) crc = _zipCRC32Table[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
 };
+const _zipStrToBytes = (str) => new TextEncoder().encode(str);
 
-const downloadProjectAsZip = async (files, zipName = 'vertex-project.zip') => {
-  const JSZip = await loadJsZip();
-  if (!JSZip || typeof JSZip !== 'function') {
-    files.forEach((f, i) => setTimeout(
-      () => downloadTextAsFile(f.code, f.path.split('/').pop() || `file-${i + 1}.txt`),
-      i * 140
-    ));
-    return;
-  }
+const downloadProjectAsZip = (files, zipName = 'vertex-project.zip') => {
   try {
-    const zip = new JSZip();
-    for (const f of files) zip.file(f.path, f.code);
-    const blob = await zip.generateAsync({ type: 'blob' });
+    const enc = new TextEncoder();
+    const localParts = [];
+    const centralParts = [];
+    let offset = 0;
+
+    for (const f of files) {
+      const nameBytes = enc.encode(f.path);
+      const dataBytes = enc.encode(f.code);
+      const crc = _zipCRC32(dataBytes);
+      const size = dataBytes.length;
+
+      // Local file header (30 bytes + name)
+      const localHdr = new Uint8Array(30 + nameBytes.length);
+      const dv = new DataView(localHdr.buffer);
+      dv.setUint32(0, 0x04034b50, true);   // local file header signature
+      dv.setUint16(4, 20, true);           // version needed
+      dv.setUint16(6, 0, true);            // flags
+      dv.setUint16(8, 0, true);            // compression: store
+      dv.setUint16(10, 0, true);           // mod time
+      dv.setUint16(12, 0, true);           // mod date
+      dv.setUint32(14, crc, true);         // CRC-32
+      dv.setUint32(18, size, true);        // compressed size
+      dv.setUint32(22, size, true);        // uncompressed size
+      dv.setUint16(26, nameBytes.length, true);
+      dv.setUint16(28, 0, true);           // extra field length
+      localHdr.set(nameBytes, 30);
+      localParts.push(localHdr, dataBytes);
+
+      // Central directory record (46 bytes + name)
+      const centralHdr = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(centralHdr.buffer);
+      cv.setUint32(0, 0x02014b50, true);   // central file header signature
+      cv.setUint16(4, 20, true);           // version made by
+      cv.setUint16(6, 20, true);           // version needed
+      cv.setUint16(8, 0, true);            // flags
+      cv.setUint16(10, 0, true);           // compression: store
+      cv.setUint16(12, 0, true);           // mod time
+      cv.setUint16(14, 0, true);           // mod date
+      cv.setUint32(16, crc, true);         // CRC-32
+      cv.setUint32(20, size, true);        // compressed size
+      cv.setUint32(24, size, true);        // uncompressed size
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);           // extra field length
+      cv.setUint16(32, 0, true);           // comment length
+      cv.setUint16(34, 0, true);           // disk number
+      cv.setUint16(36, 0, true);           // internal attrs
+      cv.setUint32(38, 0, true);           // external attrs
+      cv.setUint32(42, offset, true);      // offset of local header
+      centralHdr.set(nameBytes, 46);
+      centralParts.push(centralHdr);
+
+      offset += localHdr.length + dataBytes.length;
+    }
+
+    // End of central directory record (22 bytes)
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);     // EOCD signature
+    ev.setUint16(4, 0, true);              // disk number
+    ev.setUint16(6, 0, true);              // disk with central dir
+    ev.setUint16(8, files.length, true);   // entries on this disk
+    ev.setUint16(10, files.length, true);  // total entries
+    ev.setUint32(12, centralParts.reduce((n, p) => n + p.length, 0), true); // central dir size
+    ev.setUint32(16, offset, true);        // offset of central dir
+    ev.setUint16(20, 0, true);             // comment length
+
+    // Combine all parts
+    const totalLen = localParts.reduce((n, p) => n + p.length, 0)
+                    + centralParts.reduce((n, p) => n + p.length, 0)
+                    + eocd.length;
+    const blob = new Blob([...localParts, ...centralParts, eocd], { type: 'application/zip' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = zipName;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
   } catch (e) {
+    // Last-resort fallback: download files individually
     files.forEach((f, i) => setTimeout(
       () => downloadTextAsFile(f.code, f.path.split('/').pop() || `file-${i + 1}.txt`),
       i * 140
@@ -652,13 +716,15 @@ const extractLeadingTodos = (text) => {
   if (i < lines.length && lines[i].trim() === '') i++;
   const body = lines.slice(i).join('\n');
 
-  // Count "delivered" steps in the body: each `// file:`-tagged fence = 1 step,
-  // plus any other substantial fenced block (>= ~200 chars) = 1 step. Cap at
-  // the number of todos so we never over-tick. The marker regex matches all
-  // comment syntaxes: // # -- ; ;; <!-- /*
-  const fileMarkers = (body.match(/```[\w]*\n(?:\/\/|#|--|;;|;|<!--|\/\*)\s*\*?\s*(?:file|path|filename)\s*[:=]/g) || []).length;
-  const bigFences = (body.match(/```[\w]*\n[\s\S]{200,}?```/g) || []).length;
-  const deliveredSteps = Math.min(todoLines.length, fileMarkers + bigFences);
+  // Count "delivered" steps in the body: each CLOSED `// file:`-tagged fence
+  // = 1 delivered step. We only count CLOSED fences (with closing ```) — an
+  // open/streaming fence means the file isn't done yet, so its todo stays
+  // unticked. This stops the "5/7 in 10 seconds" problem where all todos
+  // ticked at once the moment files started appearing.
+  // Also count substantial closed code blocks (>= ~200 chars).
+  const closedFileMarkers = (body.match(/```[\w]*\n(?:\/\/|#|--|;;|;|<!--|\/\*)\s*\*?\s*(?:file|path|filename)\s*[:=][\s\S]*?```/g) || []).length;
+  const bigClosedFences = (body.match(/```[\w]*\n[\s\S]{200,}?```/g) || []).length;
+  const deliveredSteps = Math.min(todoLines.length, closedFileMarkers + bigClosedFences);
 
   const todos = todoLines.map((l, idx) => {
     const m = l.match(/^\s*[-*]\s+\[([xX\s-])\]\s+(.+)$/);
@@ -973,13 +1039,24 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
     if (!files.find(f => f.path === activePath) && files[0]) setActivePath(files[0].path);
   }, [files, activePath]);
 
+  // During streaming, auto-follow the file currently being written so the
+  // user sees the code appear in real time. When not streaming, stay on
+  // whatever the user manually selected.
+  useEffect(() => {
+    if (!streaming) return;
+    const streamingFile = files.find(f => f.streaming);
+    if (streamingFile && streamingFile.path !== activePath) {
+      setActivePath(streamingFile.path);
+    }
+  }, [files, streaming, activePath]);
+
   const activeFile = files.find(f => f.path === activePath) || files[0];
 
-  const handleZip = async () => {
+  const handleZip = () => {
     if (zipping || streaming) return;
     setZipping(true);
-    try { await downloadProjectAsZip(files); }
-    finally { setZipping(false); }
+    try { downloadProjectAsZip(files); }
+    finally { setTimeout(() => setZipping(false), 500); }
   };
 
   const renderNode = (node, depth = 0) => {
@@ -1014,6 +1091,7 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
     }
     for (const file of node.files) {
       const isActive = activeFile && file.path === activeFile.path;
+      const isStreaming = file.streaming === true;
       items.push(
         <button key={`file-${file.path}`}
           onClick={() => setActivePath(file.path)}
@@ -1029,7 +1107,17 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
           onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
         >
           <FileCode size={12} color={isActive ? '#e6e6e6' : '#7a7a7a'} style={{ flexShrink: 0 }}/>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+          <span style={{
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            flex: 1, minWidth: 0,
+          }}>{file.name}</span>
+          {isStreaming && (
+            <span style={{
+              width: 7, height: 7, borderRadius: '50%', background: '#10b981',
+              flexShrink: 0, animation: 'vertexPulse 1.2s ease-in-out infinite',
+              boxShadow: '0 0 6px rgba(16,185,129,.6)',
+            }} title="Writing…"/>
+          )}
         </button>
       );
     }
@@ -1088,7 +1176,11 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
               lang={activeFile.lang}
               codeText={activeFile.code}
               filePath={activeFile.path}
-              onOpenPanel={onOpenPanel}
+              onOpenPanel={(payload) => onOpenPanel({
+                ...payload,
+                filePath: activeFile.path,
+                projectFiles: files,
+              })}
               onSmartEdit={onSmartEdit}
               blockId={`${messageId || 'msg'}-tree-${activeFile.path.replace(/[^a-z0-9]/gi, '-')}`}
               embedded
@@ -1964,8 +2056,8 @@ const Vertex = ({
   const [panelHasError, setPanelHasError] = useState(false);
   const [panelBootMsg, setPanelBootMsg] = useState('');
 
-  const openCodePanel = useCallback(({ lang, code }) => {
-    setPanelCode({ lang, code });
+  const openCodePanel = useCallback(({ lang, code, filePath, projectFiles }) => {
+    setPanelCode({ lang, code, filePath, projectFiles: projectFiles || null });
     setPanelOutput(null);
     setPanelHasError(false);
   }, []);
@@ -2001,6 +2093,70 @@ const Vertex = ({
   }
 }, []);
 
+  /* Bundles a multi-file project into a single runnable blob.
+     - HTML entry: inlines all CSS files as <style> and all JS files as
+       <script> tags so the iframe preview works without a server.
+     - JS/TS entry: concatenates all JS/TS files with comment separators
+       so imports resolve to the concatenated code (works for simple cases).
+     - Python entry: concatenates all .py files so multi-module scripts run.
+     - Other: just returns the selected file's code. */
+  const bundleProjectForRun = useCallback((entryFile, projectFiles) => {
+    if (!projectFiles || projectFiles.length <= 1) return entryFile.code;
+    const entryLang = (entryFile.lang || '').toLowerCase();
+    const entryPath = entryFile.filePath || entryFile.path || '';
+    const entryExt = entryPath.split('.').pop().toLowerCase();
+
+    // HTML entry — inline CSS + JS
+    if (entryLang === 'html' || entryExt === 'html' || entryLang === 'htm' || entryExt === 'htm') {
+      let html = entryFile.code;
+      const cssFiles = projectFiles.filter(f =>
+        f !== entryFile && /\.(css|scss|less)$/i.test(f.path || '')
+      );
+      const jsFiles = projectFiles.filter(f =>
+        f !== entryFile && /\.(js|jsx|mjs|ts|tsx)$/i.test(f.path || '')
+      );
+      // Inline CSS before </head>
+      if (cssFiles.length) {
+        const styles = cssFiles.map(f => `<style data-file="${f.path}">\n${f.code}\n</style>`).join('\n');
+        if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, `${styles}\n</head>`);
+        else html = styles + '\n' + html;
+      }
+      // Inline JS before </body>
+      if (jsFiles.length) {
+        const scripts = jsFiles.map(f => `<script data-file="${f.path}">\n${f.code}\n</script>`).join('\n');
+        if (/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, `${scripts}\n</body>`);
+        else html = html + '\n' + scripts;
+      }
+      return html;
+    }
+
+    // JS/TS entry — concatenate all JS/TS files
+    if (['js', 'jsx', 'mjs', 'ts', 'tsx', 'javascript', 'typescript'].includes(entryLang) ||
+        ['js', 'jsx', 'mjs', 'ts', 'tsx'].includes(entryExt)) {
+      const jsFiles = projectFiles.filter(f => /\.(js|jsx|mjs|ts|tsx)$/i.test(f.path || ''));
+      // Sort so the entry file is last (its code runs after dependencies)
+      const sorted = jsFiles.sort((a, b) => {
+        if (a === entryFile) return 1;
+        if (b === entryFile) return -1;
+        return 0;
+      });
+      return sorted.map(f => `// === ${f.path} ===\n${f.code}`).join('\n\n');
+    }
+
+    // Python entry — concatenate all .py files
+    if (entryLang === 'python' || entryExt === 'py') {
+      const pyFiles = projectFiles.filter(f => /\.py$/i.test(f.path || ''));
+      const sorted = pyFiles.sort((a, b) => {
+        if (a === entryFile) return 1;
+        if (b === entryFile) return -1;
+        return 0;
+      });
+      return sorted.map(f => `# === ${f.path} ===\n${f.code}`).join('\n\n');
+    }
+
+    return entryFile.code;
+  }, []);
+
   const runPanelCode = useCallback(async () => {
     if (!panelCode || panelRunning || !safeExecuteCodeLocally) return;
     setPanelRunning(true);
@@ -2008,7 +2164,13 @@ const Vertex = ({
     setPanelHasError(false);
     setPanelBootMsg('');
     try {
-      const result = await safeExecuteCodeLocally(panelCode.lang, panelCode.code, (m) => setPanelBootMsg(m));
+      // If the panel was opened from a multi-file project, bundle all files
+      // together so imports/dependencies resolve. For HTML, this inlines
+      // CSS + JS. For JS/Python, it concatenates the files.
+      const runCode = panelCode.projectFiles
+        ? bundleProjectForRun(panelCode, panelCode.projectFiles)
+        : panelCode.code;
+      const result = await safeExecuteCodeLocally(panelCode.lang, runCode, (m) => setPanelBootMsg(m));
       setPanelHasError(!!result.isError);
       setPanelOutput(typeof result.output === 'string' ? result.output : JSON.stringify(result.output, null, 2));
     } catch (e) {
@@ -2018,7 +2180,7 @@ const Vertex = ({
       setPanelRunning(false);
       setPanelBootMsg('');
     }
-  }, [panelCode, panelRunning, safeExecuteCodeLocally]);
+  }, [panelCode, panelRunning, safeExecuteCodeLocally, bundleProjectForRun]);
 
   /* ── Preferences ── */
   const [style, setStyle] = useState(() => {
@@ -2401,7 +2563,7 @@ Title:`,
     }, 30);
   }, []);
 
- 
+
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
@@ -2561,6 +2723,20 @@ Title:`,
 }, [newChat, loadChats]);
 
   const loadChat = useCallback(async (id) => {
+    // If a stream is in progress, abort it immediately so the view switches
+    // to the selected chat right away — without this, the streaming preview
+    // keeps rendering the new chat's reply over whatever the user just
+    // clicked, making it look like the click was ignored.
+    if (abortRef.current !== null && typeof abortRef.current === 'boolean') {
+      abortRef.current = true;
+    }
+    setStreaming(false);
+    setThinking(false);
+    setSearching(false);
+    setStreamText('');
+    setReplyQuote(null);
+    setEditingMsgId(null);
+
     if (!userUidRef.current) return;
     try {
       const snap = await getDoc(doc(db, 'users', userUidRef.current, 'chats', id));
@@ -2570,6 +2746,8 @@ Title:`,
         // pointing at a ghost.
         const freshId = Date.now().toString();
         setChatId(freshId); chatIdRef.current = freshId;
+        setMessages([]);
+        convHistoryRef.current = [];
         return;
       }
 
@@ -2954,9 +3132,9 @@ Title:`,
     setThinking(false);
     setStreamText('');
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
-  
-  const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-  const handleClarifyAnswer = useCallback((messageId, answer) => {
+
+const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
+const handleClarifyAnswer = useCallback((messageId, answer) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
     next.add(messageId);
@@ -2964,7 +3142,7 @@ Title:`,
   });
   setTimeout(() => send(answer), 30);
 }, [send]);
-
+ 
   /* Smart Edit on a code block — sends a focused request that asks Vertex to
      return ONLY the corrected code (with a one-line summary) instead of
      regenerating the whole explanation. Saves tokens, saves scroll position,
