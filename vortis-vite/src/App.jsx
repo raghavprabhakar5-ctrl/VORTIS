@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, Suspense } from 'react';
 import ReactDOM from 'react-dom'; 
 import { Analytics } from '@vercel/analytics/react';
 import { getAuth, signInWithPopup, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, updateProfile, signOut } from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
-import "@fontsource/geist-sans"; // Defaults to weight 400
-import "@fontsource/geist-sans/700.css"; // Optional: Bold weight
-import "@fontsource/geist-mono"; // Optional: Monospace font
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -19,6 +16,13 @@ import LandingPage from './hero-1';
 import remarkGfm from "remark-gfm";
 import AICore from './AICore';
 import './index.css';
+
+/* ── Async font loading (non-blocking — loads AFTER first paint) ── */
+if (typeof document !== 'undefined') {
+  const _lf = (href) => { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.media = 'print'; l.onload = () => { l.media = 'all'; }; document.head.appendChild(l); };
+  _lf('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+}
+
 import {
   Mic, MicOff,Volume1, Volume2, VolumeX, X, Settings,
   Copy, Check, Image as ImageIcon, FileText,
@@ -2470,6 +2474,25 @@ const SettingsModal = ({
 const TIER_ORDER = ['free', 'silver', 'gold', 'platinum'];
 const tierIndex = (t) => TIER_ORDER.indexOf(t);
 
+
+/* ── Instant loading shell (shows immediately, no black screen) ── */
+const AppShell = () => (
+  <div style={{
+    position: 'fixed', inset: 0,
+    background: 'var(--app-bg, #080810)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexDirection: 'column', gap: 16, zIndex: 9999
+  }}>
+    <div style={{
+      width: 36, height: 36, borderRadius: 10,
+      border: '3px solid rgba(99,102,241,.2)',
+      borderTopColor: '#6366f1',
+      animation: 'spin .8s linear infinite'
+    }}/>
+    <span style={{ fontSize: 12, color: '#555575', letterSpacing: '.06em', fontFamily: 'system-ui, sans-serif' }}>Loading...</span>
+  </div>
+);
+
 export default function VortisAI() {
    useDevToolsGuard();
    const [isIncognito, setIsIncognito] = useState(
@@ -2962,12 +2985,9 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
       convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
       try { localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
-      if (userUidRef.current) 
-   { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats'));
-     const regularChats = snap.docs.filter(d => !d.data().isCodeChat);
-     for (const d of regularChats) await deleteDoc(d.ref); } catch(_) {} }
-     const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
-     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
+      if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); const regularChats = snap.docs.filter(d => !d.data().isCodeChat); for (const d of regularChats) await deleteDoc(d.ref); } catch(_) {} }
+      const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
+      setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
     }
   });
 };
@@ -5490,16 +5510,16 @@ Improved prompt:`,
 
  if (showLogin) {
   return (
-    <LandingPage
+    <Suspense fallback={<AppShell />}><LandingPage
       onLogin={handleLogin}
       authLoading={authLoading}
       authError={authError}
-    />
+    /></Suspense>
   );
 }
 
 return (
-  <div className="v-app">
+  <Suspense fallback={<AppShell />}><div className="v-app">
     {confirmDialog && <ConfirmDialog message={confirmDialog.message} onConfirm={confirmDialog.onConfirm} onCancel={() => setConfirmDialog(null)}/>}
 
       {showSidebar && window.innerWidth <= 768 && <div onClick={() => setShowSidebar(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 55, backdropFilter: 'blur(2px)' }}/>}
@@ -6548,6 +6568,6 @@ onChange={e => {
   </button>
 )}
        <Analytics />
-    </div>
+    </div></Suspense>
   );
 }

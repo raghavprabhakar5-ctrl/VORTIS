@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import mammoth from 'mammoth';
 import {
   X, Code2, Plus, Search, Trash2, Edit2, Check, Copy, ArrowUp,
@@ -726,19 +727,26 @@ const extractLeadingTodos = (text) => {
   if (i < lines.length && lines[i].trim() === '') i++;
   const body = lines.slice(i).join('\n');
 
-  // Count "delivered" steps in the body. ONLY count CLOSED fences (with
-  // closing ```), not open/streaming ones — so a todo only ticks when its
-  // file is fully emitted, not when it starts appearing.
+  // Count "delivered" steps in the body. We count BOTH closed fences
+  // (```...```) AND open/streaming fences (a ``` without a matching close).
+  // This makes todos tick one-by-one DURING streaming — each open fence
+  // means code is actively being written for that step. Once a fence closes,
+  // it's still counted (not double-counted since we track parity).
   //
-  // To avoid double-counting, we count file-tagged closed fences separately
-  // from substantial non-file closed fences. A fence is "file-tagged" if its
-  // first line matches the path-comment regex; otherwise it counts as a
-  // "big fence" only if it's >= 200 chars of code.
-  const closedFenceRe = /```(\w*)\n([\s\S]*?)```/g;
+  // How it works: split body on ``` markers. Alternating segments are
+  // "inside" vs "outside" code blocks. Every "inside" segment (odd index)
+  // is a code block — closed if there's an even number of segments,
+  // open if odd. File-tagged blocks count; non-tagged blocks >= 200 chars
+  // also count.
+  const fenceMarkers = body.split(/```/);
+  const segments = [];
+  for (let si = 0; si < fenceMarkers.length; si++) {
+    segments.push({ isCode: si % 2 === 1, text: fenceMarkers[si] });
+  }
   let deliveredSteps = 0;
-  let m2;
-  while ((m2 = closedFenceRe.exec(body))) {
-    const inner = m2[2] || '';
+  for (const seg of segments) {
+    if (!seg.isCode) continue;
+    const inner = seg.text.replace(/^\w*\n?/, '');
     const firstLineNl = inner.indexOf('\n');
     const firstLine = (firstLineNl === -1 ? inner : inner.slice(0, firstLineNl)).trim();
     if (FILE_PATH_LINE.test(firstLine)) {
@@ -908,15 +916,31 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
     }} data-vrtx-no-reply="">
       <div style={{
         padding: '10px 14px', background: '#141414', borderBottom: '1px solid #262626',
-        display: 'flex', alignItems: 'center', gap: 8,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <HelpCircle size={13} color="#9a9a9a"/>
-        <span style={{
-          fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8',
-          fontWeight: 700, letterSpacing: '.04em',
-        }}>
-          {frozen ? 'CLARIFYING · ANSWERED' : 'CLARIFYING · PICK AN OPTION'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <HelpCircle size={13} color="#9a9a9a"/>
+          <span style={{
+            fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8',
+            fontWeight: 700, letterSpacing: '.04em',
+          }}>
+            {frozen ? 'CLARIFYING · ANSWERED' : 'CLARIFYING · PICK AN OPTION'}
+          </span>
+        </div>
+        {!frozen && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {questions.map((_, i) => (
+              <div key={i} style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: isAnswered(i) ? '#6366f1' : '#333',
+                transition: 'background .2s',
+              }}/>
+            ))}
+            <span style={{ fontSize: 10, color: '#666', marginLeft: 4, fontFamily: 'JetBrains Mono, monospace' }}>
+              {questions.filter((_, i) => isAnswered(i)).length}/{questions.length}
+            </span>
+          </div>
+        )}
       </div>
       <div style={{ padding: '6px 14px 12px' }}>
         {questions.map((q, qi) => {
@@ -1021,21 +1045,37 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
               }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+          {/* ── PROMINENT CTA: impossible to miss ── */}
+          <div style={{ marginTop: 16 }}>
             <button onClick={submit} disabled={!allAnswered}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '7px 16px', borderRadius: 0,
-                background: allAnswered ? '#e6e6e6' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                width: '100%', padding: '12px 20px', borderRadius: 6,
+                background: allAnswered ? '#e6e6e6' : '#1a1a1a',
                 border: '1px solid ' + (allAnswered ? '#e6e6e6' : '#333'),
-                color: allAnswered ? '#0a0a0a' : '#5a5a5a',
-                fontSize: 12.5, fontWeight: 700,
+                color: allAnswered ? '#0a0a0a' : '#555',
+                fontSize: 14, fontWeight: 700,
                 cursor: allAnswered ? 'pointer' : 'not-allowed',
                 fontFamily: 'inherit',
-                transition: 'background .12s, color .12s',
+                letterSpacing: '.02em',
+                transition: 'background .15s, color .15s, border-color .15s',
               }}>
-              <Send size={12}/> Send answer{questions.length > 1 ? 's' : ''}
+              <Sparkles size={16}/>
+              {allAnswered ? 'Start Building' : `Answer all ${questions.length} question${questions.length > 1 ? 's' : ''} to continue`}
             </button>
+            {!allAnswered && (
+              <div style={{
+                display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10,
+              }}>
+                {questions.map((_, i) => (
+                  <div key={i} style={{
+                    flex: 1, maxWidth: 80, height: 3, borderRadius: 2,
+                    background: isAnswered(i) ? '#6366f1' : '#222',
+                    transition: 'background .25s',
+                  }}/>
+                ))}
+              </div>
+            )}
           </div>
           </>
         )}
@@ -1224,6 +1264,22 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
 // works in Claude — click it and the whole thing expands right there in the chat.
 const CAP_AFTER_LINES = 14;
 const CAPPED_HEIGHT = 320;
+
+/* Simple code block for user messages — just a <pre> with a copy button.
+   No header, no Open/Run/Save buttons. Used for pasted code and OCR-wrapped
+   image text the user sent. */
+const UserCodeBlock = ({ codeText }) => {
+  const [copied, setCopied] = useState(false);
+  const copyCode = () => { navigator.clipboard.writeText(codeText); setCopied(true); setTimeout(() => setCopied(false), 1500); };
+  return (
+    <div style={{ position: 'relative', margin: '8px 0', borderRadius: 0, border: '1px solid #262626', background: '#0a0a0a' }}>
+      <pre style={{ margin: 0, padding: '12px 14px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13, lineHeight: 1.7, color: '#dcdcdc', whiteSpace: 'pre', overflowX: 'auto', background: 'transparent' }}>{codeText}</pre>
+      <button onClick={copyCode} title="Copy" data-vrtx-no-reply="" style={{ position: 'absolute', top: 6, right: 8, background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 0, color: copied ? '#e6e6e6' : '#6a6a6a', cursor: 'pointer', padding: '3px 8px', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', display: 'flex', alignItems: 'center', gap: 4 }}>
+        {copied ? <Check size={10} /> : <Copy size={10} />} {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
+  );
+};
 
 const VertexCodeBlock = ({ lang, codeText, onOpenPanel, onSmartEdit, blockId, filePath, embedded }) => {
   const [copied, setCopied] = useState(false);
@@ -3018,7 +3074,7 @@ Title:`,
 
   /* ── Send message + stream response ── */
   const lastSendRef = useRef('');
-  const send = useCallback(async (overrideText, overrideMessages = null) => {
+  const send = useCallback(async (overrideText, overrideMessages = null, skipSearch = false) => {
     const rawText = (overrideText ?? input).trim();
     const pendingAttachments = overrideMessages ? [] : [...attachments];
 
@@ -3084,7 +3140,7 @@ Title:`,
     }));
 
    const sys = buildCoderSystemPrompt(style);
-    const willSearch = needsCodeWebSearch(text);
+    const willSearch = !skipSearch && needsCodeWebSearch(text);
     if (willSearch) {
       // The backend's code-chat handler already runs its own search internally
       // for the same message — this flag just drives the "searching the web…"
@@ -3188,7 +3244,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
       `The following code has an issue. Return ONLY the corrected code inside a single ${fence} fence, followed by ONE one-line summary of what changed. Do NOT re-explain the whole thing — output the full corrected version so it can be copy-pasted directly.\n\n` +
       `CODE:\n${fence}\n${code}\n${tripleBacktick}\n\n` +
       `ISSUE FROM USER:\n${feedback}`;
-    send(editPrompt);
+    send(editPrompt, null, true);
   }, [send, streaming]);
 
   /* Continue — asks Vertex to pick up where it left off, for when a response
@@ -3292,6 +3348,12 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
     a: ({href, children}) => <a href={href} target="_blank" rel="noreferrer" style={{ color: '#e6e6e6', textDecoration: 'none', borderBottom: '1px solid #4a4a4a' }}>{children}</a>,
     blockquote: ({children}) => <blockquote style={{ borderLeft: '3px solid #3a3a3a', margin: '8px 0', padding: '4px 12px', color: '#9a9a9a', background: '#141414', borderRadius: 0 }}>{children}</blockquote>,
     hr: () => <hr style={{ border: 'none', borderTop: '1px solid #232323', margin: '12px 0' }} />,
+    img: ({src, alt}) => (
+      <img src={src} alt={alt || ''} loading="lazy" style={{
+        maxWidth: '100%', borderRadius: 6, margin: '8px 0',
+        border: '1px solid #232323',
+      }} onError={(e) => { e.currentTarget.style.display = 'none'; }}/>
+    ),
     table: ({children}) => <div style={{ overflowX: 'auto', margin: '8px 0' }}><table style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>{children}</table></div>,
     thead: ({children}) => <thead style={{ background: '#141414' }}>{children}</thead>,
     th: ({children}) => <th style={{ padding: '6px 10px', border: '1px solid #232323', textAlign: 'left', color: '#e6e6e6', fontWeight: 600 }}>{children}</th>,
@@ -3300,6 +3362,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
   const rawCodeText = String(children).replace(/\n$/, '');
   const match = /language-(\w+)/.exec(className || '');
   const codeLang = match ? match[1] : '';
+  const codeLines = rawCodeText.split('\n');
 
   // No language + no newline = inline code (e.g. `nvidia/nemotron-3-ultra`)
   const isInline = !className && !rawCodeText.includes('\n');
@@ -3312,6 +3375,24 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
     );
   }
 
+  // ── User-message code blocks: simple <pre> with a tiny copy button ──
+  // No VertexCodeBlock header, no Open/Run/Save buttons. This covers
+  // pasted code AND OCR-wrapped image text the user sent.
+  if (isUserMessage) {
+    return <UserCodeBlock codeText={rawCodeText} />;
+  }
+
+  // ── Short code blocks (1-3 lines) in assistant replies: compact block ──
+  // Things like `npm run dev`, `pip install x`, `mkdir foo` — no need for the
+  // full VertexCodeBlock header with language badge, line count, file path, etc.
+  if (codeLines.length <= 3 && rawCodeText.length < 120) {
+    return (
+      <code style={{ background: '#000000', color: '#e6e6e6', padding: '3px 8px', borderRadius: 0, fontFamily: 'JetBrains Mono, monospace', fontSize: 12.5, border: '1px solid #2a2a2a', display: 'inline-block', lineHeight: 1.6, whiteSpace: 'pre' }}>
+        {children}
+      </code>
+    );
+  }
+
   // Single-file case: pull a `// file: path/to/x` first-line marker out so
   // the VertexCodeBlock header can show the path. Multi-file groups are
   // handled at the MessageContent level (stripped before reaching here).
@@ -3319,15 +3400,12 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
   const codeText = extracted ? extracted.code : rawCodeText;
   const filePath = extracted ? extracted.path : null;
 
-  // User-message code blocks don't get Open/Run/Smart-Edit — those are
-  // for code Vertex GENERATES, not code the user pasted in. The user
-  // just wants Copy + Save on their own pasted snippet.
-  const panel = isUserMessage ? null : openCodePanel;
-  const smartEdit = isUserMessage ? null : onSmartEdit;
+  const panel = openCodePanel;
+  const smartEdit = onSmartEdit;
 
   const bid = `${messageId || 'msg'}-${filePath || (codeLang || 'x')}-${codeText.length}-${codeText.slice(0, 20).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)}`;
   return <VertexCodeBlock lang={codeLang} codeText={codeText} filePath={filePath} onOpenPanel={panel} onSmartEdit={smartEdit} blockId={bid} />;
-},
+  }
   }), [openCodePanel]);
 
   /* Streaming preview uses a no-smart-edit variant — you can't fix code
@@ -3964,7 +4042,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                           padding: '12px 14px'
                         }}>
                           <MessageContent
-                            text={streamText}
+                            text={cleanStream(streamText)}
                             mdComponents={mdComponentsForStreaming}
                             onOpenPanel={openCodePanel}
                             onSmartEdit={null}
@@ -4354,6 +4432,21 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
  *  Then renders the cleaned markdown with whatever's left. Parsing is
  *  memoized so the wrapper adds negligible overhead during streaming.
  * ──────────────────────────────────────────────────────────────────────── */
+/* ── Stream text cleaner — strips incomplete control tokens,
+ *  think tags, and excessive whitespace that cause layout flicker
+ *  during streaming. Mirrors the cleanStream from App.jsx. ── */
+const cleanStream = (text) => {
+  if (!text) return '';
+  return text
+    .replace(/\[THINKING\][\s\S]*?<\/THINKING>/gi, '')
+    .replace(/\[THINKING\][\s\S]*$/gi, '')
+    .replace(/^GENERATE_IMAGE:.*$/gim, '')
+    .replace(/^WEB_SEARCH:.*$/gim, '')
+    .replace(/^CURRENT_TIME\s*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
 const MessageContent = React.memo(({
   text,
   mdComponents,
@@ -4368,8 +4461,11 @@ const MessageContent = React.memo(({
   // render as an interactive card on the user's own message.
   skipClarify = false,
 }) => {
+  // Use cleanStream to strip control tokens from raw text
+  const cleaned = useMemo(() => cleanStream(text || ''), [text]);
+
   const parsed = useMemo(() => {
-    let t = text || '';
+    let t = cleaned;
     const todosRes = extractLeadingTodos(t);
     t = todosRes.text;
     const clarifyRes = skipClarify ? { clarify: null, text: t } : extractClarify(t);
@@ -4382,7 +4478,7 @@ const MessageContent = React.memo(({
       project: projectRes.project,
       cleanedText: t,
     };
-  }, [text, skipClarify]);
+  }, [cleaned, skipClarify]);
 
   return (
     <>
@@ -4403,7 +4499,7 @@ const MessageContent = React.memo(({
           streaming={streaming}
         />
       )}
-      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]} components={mdComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]} components={mdComponents}>
         {parsed.cleanedText}
       </ReactMarkdown>
     </>
