@@ -4,7 +4,6 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, getDocs, deleteDoc } from 'firebase/firestore';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import JSZip from 'jszip';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import mammoth from 'mammoth';
@@ -204,23 +203,73 @@ YOUR JOB: help the user write, understand, debug, refactor, and ship code. You a
   The UI renders tappable option cards; the user's picks arrive as the next message and you then proceed to answer. Use this only for genuine ambiguity, not for every reply.
 - If it's only mildly ambiguous, make a reasonable assumption and state it inline: "(assuming React + TS — say if not)".
 
-═══ MULTI-FILE OUTPUT ═══
-- When a reply produces multiple files, give EACH file its OWN fenced code block. The FIRST line inside the fence MUST be a path comment marking the file's path:
+═══ MULTI-FILE OUTPUT (STRICT — ALWAYS TAG EVERY FILE) ═══
+EVERY fenced code block you emit — no exceptions — MUST start with a path comment marking the file's relative path. This is what makes the UI render the IDE-style file tree with a "Download .zip" button instead of a flat code wall.
+
   \`\`\`jsx
   // file: src/components/Navbar.jsx
-  ...
+  import React from 'react';
+  export default function Navbar() { ... }
   \`\`\`
+
   \`\`\`python
   # file: app/main.py
+  print('hello')
+  \`\`\`
+
+  \`\`\`html
+  <!-- file: public/index.html -->
+  <!doctype html>...
+  \`\`\`
+
+Path-comment syntax by language:
+  - \`// file:\` for JS, TS, JSX, TSX, C, C++, Java, Rust, Go, Swift, Kotlin, Dart
+  - \`# file:\` for Python, Ruby, Shell, Bash, YAML, TOML, Makefile, Dockerfile, .gitignore
+  - \`<!-- file: -->\` for HTML, XML, SVG, Markdown
+  - \`-- file:\` for SQL, Haskell, Ada
+  - \`; file:\` for Lisp, Clojure, INI, .env
+
+RULES:
+- Tag EVERY file, even when there's only one. A single tagged file still gets the IDE panel + zip download.
+- NEVER merge multiple files into one fence. One file = one fence.
+- NEVER skip the path comment on a code block, even for inline examples — use a meaningful path like \`examples/demo.js\` or \`snippet.py\`.
+- Use real, runnable relative paths: \`src/App.tsx\`, \`app/api/route.ts\`, \`components/Chat.tsx\`, \`package.json\`. For files where comments would be invalid JSON/YAML/etc., still emit the path comment as the first line — the UI parser strips it before display so the resulting file is valid.
+- Folder structure should match what the user would actually create: \`src/\` for source, \`app/\` for routes, \`public/\` for static assets, \`tests/\` or \`__tests__/\` for tests, \`scripts/\` for build/run scripts.
+
+═══ TODOS / PROGRESS TRACKING (STRICT — USE FOR EVERY MULTI-STEP REPLY) ═══
+When your reply has 2+ logical steps (refactor in N steps, "do X then Y then Z", building a feature with multiple files, fixing multiple bugs), you MUST start the message with one GFM task-list block at the very top, BEFORE any prose. Format:
+
+  - [ ] Step 1 short description
+  - [ ] Step 2 short description
+  - [ ] Step 3 short description
+  - [ ] Step 4 short description
+
+  Then your intro prose, then the code blocks.
+
+Example of a CORRECT reply:
+  - [ ] Extract the ChatHeader component
+  - [ ] Move hooks into a custom useChat hook
+  - [ ] Add shared type definitions
+  - [ ] Wrap with a ChatProvider context
+
+  Refactoring in 4 steps. Here's each file:
+
+  \`\`\`tsx
+  // file: src/components/ChatHeader.tsx
   ...
   \`\`\`
-- Path comment syntax: \`// file:\` for JS/TS/C/C++/Java/Rust/Go, \`# file:\` for Python/Ruby/Shell/YAML/TOML, \`<!-- file: -->\` for HTML/XML/Markdown, \`-- file:\` for SQL, \`; file:\` for Lisp/INI.
-- Use this even for a single file when the path is meaningful (e.g. \`src/App.tsx\`). NEVER merge multiple files into one fence.
 
-═══ TODOS / PROGRESS TRACKING ═══
-- For multi-step replies, START the message with 2+ GFM task-list lines (\`- [ ] step\` or \`- [x] done step\`). The UI extracts these leading task lines and renders them as a collapsible checklist above the reply body.
-- Only leading task lines (at the very top of the reply) become checklist entries. Stray task lines elsewhere still render as normal markdown.
-- Mark items \`- [x]\` only after you've actually delivered that step in the body below.
+  \`\`\`ts
+  // file: src/hooks/useChat.ts
+  ...
+  \`\`\`
+
+RULES:
+- Use literal \`- [ ]\` (lowercase x for done: \`- [x]\`) — NOT bold text, NOT "Step 1:", NOT a numbered list. The leading dash-space-bracket is what the UI detects.
+- Minimum 2 task lines for the checklist to render. If you only have 1 step, skip the checklist and just answer.
+- Mark \`- [x]\` ONLY after that step's code has actually been delivered below.
+- Keep each task line short (≤ 8 words). The body of the reply explains each step.
+- These leading task lines are stripped from the rendered markdown and shown as a collapsible checklist with a progress bar above the reply body.
 
 ═══ CURRENT INFO ═══
 If live web search results are appended below this prompt, treat them as ground truth for anything version-specific, recently changed, or time-sensitive (library versions, deprecations, new APIs) — they override your training data.
@@ -331,9 +380,12 @@ const extractFilePath = (code, lang) => {
 };
 
 /* Scans a message for ALL fenced code blocks with a `// file:` first line.
-   If 2+ are found, they're returned as a single project; the matching
-   fences are stripped from the markdown so ReactMarkdown doesn't render
-   them a second time. Single-file or zero-file cases return project=null. */
+   If 1+ are found, they're returned as a project; the matching fences are
+   stripped from the markdown so ReactMarkdown doesn't render them a second
+   time. Even a single tagged file goes through the FileTreePanel so the
+   user gets the IDE layout + Download .zip button. Untagged fences (rare
+   since the system prompt mandates tagging) fall through to plain
+   VertexCodeBlock rendering. */
 const extractProjectFromMessage = (text) => {
   if (!text || !text.includes('```')) return { project: null, text: text || '' };
   const fenceRe = /```(\w*)\n([\s\S]*?)```/g;
@@ -352,7 +404,7 @@ const extractProjectFromMessage = (text) => {
     }
   }
   out += text.slice(lastIdx);
-  if (files.length < 2) return { project: null, text };
+  if (files.length === 0) return { project: null, text };
   // collapse the gap left by stripping (avoid triple blank lines)
   const cleanedText = out.replace(/\n{3,}/g, '\n\n');
   return { project: files, text: cleanedText };
@@ -778,12 +830,14 @@ const FileTreePanel = ({ files, onOpenPanel, onSmartEdit, messageId, streaming }
         )}
       </div>
       <div style={{ display: 'flex', minHeight: 240, maxHeight: 520 }}>
-        <div style={{
-          width: 220, flexShrink: 0, borderRight: '1px solid #1a1a1a',
-          background: '#0c0c0c', overflowY: 'auto', padding: '6px 0',
-        }}>
-          {renderNode(tree)}
-        </div>
+        {files.length > 1 && (
+          <div style={{
+            width: 220, flexShrink: 0, borderRight: '1px solid #1a1a1a',
+            background: '#0c0c0c', overflowY: 'auto', padding: '6px 0',
+          }}>
+            {renderNode(tree)}
+          </div>
+        )}
         <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
           {activeFile && (
             <VertexCodeBlock
@@ -1516,8 +1570,9 @@ const extractCodeBlocksFromMessages = (messages) => {
     const fileBlocks = allBlocks.filter(b => b.filePath);
     const plainBlocks = allBlocks.filter(b => !b.filePath);
 
-    if (fileBlocks.length >= 2) {
-      // Multi-file project: one expandable entry for the whole project
+    if (fileBlocks.length >= 1) {
+      // Tagged-file project: one expandable entry for the whole project
+      // (works for 1 file too — user gets the IDE panel + zip download).
       out.push({
         type: 'project',
         id: `${m.id}-proj`,
@@ -1531,7 +1586,7 @@ const extractCodeBlocksFromMessages = (messages) => {
         out.push({ type: 'file', id: `${m.id}-${out.length}`, lang: b.lang, code: b.code, ts: m.ts });
       }
     } else {
-      // No project (or just one tagged file) — flat list, same as before
+      // No tagged files — flat list, same as before
       for (const b of allBlocks) {
         const trimmed = b.code.trim();
         const lineCount = trimmed.split('\n').length;
@@ -2631,7 +2686,7 @@ Title:`,
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
 
   const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-const handleClarifyAnswer = useCallback((messageId, answer) => {
+  const handleClarifyAnswer = useCallback((messageId, answer) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
     next.add(messageId);
