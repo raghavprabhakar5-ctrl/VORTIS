@@ -915,8 +915,8 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   };
 
   const answeredCount = questions.filter((_, i) => isAnswered(i)).length;
-  const hasAtLeastOne = true;
-
+  const hasAtLeastOne = Object.keys(selected).length > 0 || extraNotes.trim().length > 0;
+  
   const submit = () => {
   if (!hasAtLeastOne || frozen || !onAnswer) return;
   const parts = questions.map((q, i) => {
@@ -3239,7 +3239,7 @@ Title:`,
       const retryResult = await fetchAssistantReply(fullPrompt, historyForBackend);
       result = retryResult;
     }
-    
+
     setThinking(false);
 
     if (result.errorMsg) {
