@@ -848,7 +848,6 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   const [selected, setSelected] = useState({});
   const [skipped, setSkipped] = useState({});
   const [extraNotes, setExtraNotes] = useState('');
-  const [remember, setRemember] = useState(false);
   const otherInputRef = useRef(null);
 
   const toggle = (qIdx, optIdx) => {
@@ -930,7 +929,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   }).filter(Boolean);
   const notes = extraNotes.trim();
   if (notes) parts.push(`Additional notes: ${notes}`);
-  onAnswer(parts.join('  ·  '), remember); // ← second argument added
+  onAnswer(parts.join('  ·  '));
 };
 
   return (
@@ -1103,20 +1102,6 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
             />
           </div>
 
-          <div style={{ marginTop: 14 }}>
-            <label style={{
-              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-              fontSize: 12, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace',
-            }}>
-              <input
-                type="checkbox"
-                checked={remember}
-                onChange={e => setRemember(e.target.checked)}
-                style={{ width: 14, height: 14, accentColor: '#e6e6e6', cursor: 'pointer' }}
-              />
-              Remember these as my defaults for future builds
-            </label>
-          </div>
           {/* ── PROMINENT CTA: impossible to miss ── */}
           <div style={{ marginTop: 16 }}>
             <button onClick={submit} disabled={!hasAtLeastOne}
@@ -3230,21 +3215,16 @@ Title:`,
     }));
 
    const sys = buildCoderSystemPrompt(style);
-   let savedPrefs = null;
-   try { savedPrefs = localStorage.getItem('vortis_build_prefs'); } catch (_) {}
-   const prefsBlock = savedPrefs
-  ? `\n\n=== USER'S SAVED DEFAULT PREFERENCES — apply these automatically, do NOT ask the clarifying-question block about anything already covered here unless the user's request explicitly contradicts it ===\n${savedPrefs}`
-  : '';
 
-     const willSearch = !skipSearch && needsCodeWebSearch(text);
-if (willSearch) {
-  setThinking(false);
-  setSearching(true);
-}
+    const willSearch = !skipSearch && needsCodeWebSearch(text);
+    if (willSearch) {
+      setThinking(false);
+      setSearching(true);
+    }
 
-const fullPrompt = sys + prefsBlock + '\n\n=== USER REQUEST ===\n' + text;
-let result = await fetchAssistantReply(fullPrompt, historyForBackend);
-if (willSearch) { setSearching(false); setThinking(true); }
+    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+    let result = await fetchAssistantReply(fullPrompt, historyForBackend);
+    if (willSearch) { setSearching(false); setThinking(true); }
 
     // A 503, a dropped connection, or a stream that came back completely empty is often
     // just a transient hiccup — quietly try once more before bothering the user about it.
@@ -3259,7 +3239,7 @@ if (willSearch) { setSearching(false); setThinking(true); }
       const retryResult = await fetchAssistantReply(fullPrompt, historyForBackend);
       result = retryResult;
     }
-
+    
     setThinking(false);
 
     if (result.errorMsg) {
@@ -3314,15 +3294,12 @@ if (willSearch) { setSearching(false); setThinking(true); }
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
 
 const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-const handleClarifyAnswer = useCallback((messageId, answer, remember) => {
+const handleClarifyAnswer = useCallback((messageId, answer) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
     next.add(messageId);
     return next;
   });
-  if (remember) {
-    try { localStorage.setItem('vortis_build_prefs', answer); } catch (_) {}
-  }
   setTimeout(() => send(answer, null, true, true), 30);
 }, [send]);
 
@@ -3791,26 +3768,6 @@ const handleClarifyAnswer = useCallback((messageId, answer, remember) => {
                     }}/>
                   </span>
                 </button>
-
-                {/* Forget saved build preferences — only shows if something is saved */}
-                {(() => {
-                  let saved = null;
-                  try { saved = localStorage.getItem('vortis_build_prefs'); } catch (_) {}
-                  if (!saved) return null;
-                  return (
-                    <button
-                      onClick={() => { try { localStorage.removeItem('vortis_build_prefs'); } catch (_) {} setShowSettings(false); }}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', gap: 9,
-                        padding: '9px 10px', borderRadius: 0, cursor: 'pointer',
-                        background: 'transparent', border: '1px solid #1e1e1e', marginTop: 5,
-                        color: '#c8746f', fontSize: 12.5, fontWeight: 600,
-                      }}
-                    >
-                      <RotateCcw size={12}/> Forget saved build preferences
-                    </button>
-                  );
-                })()}
               </div>
             )}
           </div>
@@ -4118,7 +4075,7 @@ const handleClarifyAnswer = useCallback((messageId, answer, remember) => {
                     onEditUserMessage={handleEditUserMessage}
                     isLast={i === messages.length - 1} streaming={false}
                     onOpenPanel={openCodePanel}
-                    onAnswerClarify={(answer, remember) => handleClarifyAnswer(m.id, answer, remember)}
+                    onAnswerClarify={(answer) => handleClarifyAnswer(m.id, answer)}
                     frozenClarify={frozenClarifyIds.has(m.id)} compact={m._compact} />
                 ))}
 
