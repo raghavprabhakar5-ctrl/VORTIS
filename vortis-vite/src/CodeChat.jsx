@@ -717,7 +717,7 @@ const extractClarify = (text) => {
  *  markings are always respected.
  * ──────────────────────────────────────────────────────────────────────── */
 const TODO_LINE = /^\s*[-*]\s+\[(?:x|X|\s|[-])\]\s+.+$/;
-const extractLeadingTodos = (text) => {
+const extractLeadingTodos = (text, isFinal = false) => {
   if (!text) return { todos: null, text: '' };
   const lines = text.split('\n');
   let i = 0;
@@ -728,21 +728,9 @@ const extractLeadingTodos = (text) => {
     i++;
   }
   if (todoLines.length < 3) return { todos: null, text };
-  // skip one blank line after the todos so the body doesn't start with an awkward gap
   if (i < lines.length && lines[i].trim() === '') i++;
   const body = lines.slice(i).join('\n');
 
-  // Count "delivered" steps in the body. We count BOTH closed fences
-  // (```...```) AND open/streaming fences (a ``` without a matching close).
-  // This makes todos tick one-by-one DURING streaming — each open fence
-  // means code is actively being written for that step. Once a fence closes,
-  // it's still counted (not double-counted since we track parity).
-  //
-  // How it works: split body on ``` markers. Alternating segments are
-  // "inside" vs "outside" code blocks. Every "inside" segment (odd index)
-  // is a code block — closed if there's an even number of segments,
-  // open if odd. File-tagged blocks count; non-tagged blocks >= 200 chars
-  // also count.
   const fenceMarkers = body.split(/```/);
   const segments = [];
   for (let si = 0; si < fenceMarkers.length; si++) {
@@ -927,7 +915,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   };
 
   const answeredCount = questions.filter((_, i) => isAnswered(i)).length;
-  const hasAtLeastOne = Object.keys(selected).length > 0;
+  const hasAtLeastOne = Object.keys(selected).length > 0 || extraNotes.trim().length > 0;
 
   const submit = () => {
     if (!hasAtLeastOne || frozen || !onAnswer) return;
@@ -3719,57 +3707,40 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#f0f0f0', marginBottom: 12, letterSpacing: '-.01em' }}>Settings</div>
 
                 {/* Coder style */}
-<div style={{ fontSize: 10.5, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.08em', marginBottom: 8, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
-<div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-  {STYLES.map(s => {
-    const meta = {
-      concise:  { Icon: Zap,       tint: '#f59e0b', bg: 'rgba(245,158,11,.12)' },
-      detailed: { Icon: BookOpen,  tint: '#3b82f6', bg: 'rgba(59,130,246,.12)' },
-      teach:    { Icon: Sparkles,  tint: '#a855f7', bg: 'rgba(168,85,247,.12)' },
-    }[s.id];
-    const active = style === s.id;
-    return (
-      <button key={s.id} onClick={() => setStyle(s.id)}
-        style={{
-          position: 'relative', width: '100%', textAlign: 'left', padding: '10px 12px',
-          borderRadius: 10, cursor: 'pointer',
-          background: active ? '#181818' : 'transparent',
-          border: '1px solid ' + (active ? meta.tint + '55' : '#1e1e1e'),
-          boxShadow: active ? `0 0 0 1px ${meta.tint}22, 0 4px 14px -6px ${meta.tint}44` : 'none',
-          display: 'flex', alignItems: 'flex-start', gap: 10,
-          transition: 'all .18s cubic-bezier(.2,.7,.3,1)',
-        }}
-        onMouseEnter={e => { if (!active) { e.currentTarget.style.background = '#161616'; e.currentTarget.style.borderColor = '#2a2a2a'; } }}
-        onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#1e1e1e'; } }}
-      >
-        <div style={{
-          width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginTop: 1, display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          background: active ? meta.bg : '#1a1a1a',
-          border: '1px solid ' + (active ? meta.tint + '40' : '#2a2a2a'),
-          transition: 'all .18s',
-        }}>
-          <meta.Icon size={13} color={active ? meta.tint : '#7a7a7a'}/>
-        </div>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#f5f5f5' : '#dcdcdc' }}>{s.label}</span>
-          <span style={{ fontSize: 10.5, color: '#6a6a6a', lineHeight: 1.4 }}>{s.hint}</span>
-        </span>
-        <div style={{
-          width: 16, height: 16, borderRadius: '50%', flexShrink: 0, marginTop: 3,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: active ? meta.tint : 'transparent',
-          border: '1.5px solid ' + (active ? meta.tint : '#3a3a3a'),
-          transition: 'all .18s',
-        }}>
-          {active && <Check size={10} color="#0a0a0a" strokeWidth={3}/>}
-        </div>
-      </button>
-    );
-  })}
-</div>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.08em', marginBottom: 6, fontFamily: 'JetBrains Mono' }}>CODER STYLE</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 14 }}>
+                  {STYLES.map(s => {
+                    const StyleIcon = s.id === 'concise' ? Zap : s.id === 'detailed' ? BookOpen : Sparkles;
+                    const active = style === s.id;
+                    return (
+                      <button key={s.id} onClick={() => { setStyle(s.id); }}
+                        style={{
+                          width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 0, cursor: 'pointer',
+                          background: active ? 'rgba(230,230,230,.08)' : 'transparent',
+                          border: '1px solid ' + (active ? '#3a3a3a' : '#1e1e1e'),
+                          display: 'flex', alignItems: 'flex-start', gap: 9, transition: 'all .12s'
+                        }}
+                        onMouseEnter={e => { if (!active) e.currentTarget.style.background = '#191919'; }}
+                        onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <div style={{
+                          width: 24, height: 24, borderRadius: 0, flexShrink: 0, marginTop: 1, display: 'flex',
+                          alignItems: 'center', justifyContent: 'center',
+                          background: active ? '#e6e6e6' : '#1e1e1e', border: '1px solid ' + (active ? '#e6e6e6' : '#2a2a2a'),
+                        }}>
+                          <StyleIcon size={12} color={active ? '#0a0a0a' : '#8a8a8a'}/>
+                        </div>
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: active ? '#f0f0f0' : '#dcdcdc' }}>{s.label}</span>
+                          <span style={{ fontSize: 10.5, color: '#6a6a6a', lineHeight: 1.35 }}>{s.hint}</span>
+                        </span>
+                        {active && <Check size={13} color="#e6e6e6" style={{ marginLeft: 'auto', flexShrink: 0, marginTop: 4 }}/>}
+                      </button>
+                    );
+                  })}
+                </div>
 
-        <div style={{ borderTop: '1px solid #1f1f1f', margin: '2px 0 12px' }} />
+                <div style={{ borderTop: '1px solid #1f1f1f', margin: '2px 0 12px' }} />
 
                 {/* Other options */}
                 <div style={{ fontSize: 10.5, fontWeight: 700, color: '#6a6a6a', letterSpacing: '.08em', marginBottom: 6, fontFamily: 'JetBrains Mono' }}>OPTIONS</div>
