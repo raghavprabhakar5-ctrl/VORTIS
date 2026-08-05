@@ -848,6 +848,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   const [selected, setSelected] = useState({});
   const [skipped, setSkipped] = useState({});
   const [extraNotes, setExtraNotes] = useState('');
+  const [remember, setRemember] = useState(false);
   const otherInputRef = useRef(null);
 
   const toggle = (qIdx, optIdx) => {
@@ -915,22 +916,22 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   };
 
   const answeredCount = questions.filter((_, i) => isAnswered(i)).length;
-  const hasAtLeastOne = Object.keys(selected).length > 0 || extraNotes.trim().length > 0;
+  const hasAtLeastOne = true;
 
   const submit = () => {
-    if (!hasAtLeastOne || frozen || !onAnswer) return;
-    const parts = questions.map((q, i) => {
-      if (skipped[i]) return null; // skip this question
-      const s = selected[i];
-      if (!s) return null;
-      const val = s.type === 'option' ? q.options[s.idx] : s.text.trim();
-      const qLabel = q.question.replace(/\?+\s*$/, '').trim();
-      return `${qLabel}: ${val}`;
-    }).filter(Boolean);
-    const notes = extraNotes.trim();
-    if (notes) parts.push(`Additional notes: ${notes}`);
-    onAnswer(parts.join('  ·  '));
-  };
+  if (!hasAtLeastOne || frozen || !onAnswer) return;
+  const parts = questions.map((q, i) => {
+    if (skipped[i]) return null;
+    const s = selected[i];
+    if (!s) return null;
+    const val = s.type === 'option' ? q.options[s.idx] : s.text.trim();
+    const qLabel = q.question.replace(/\?+\s*$/, '').trim();
+    return `${qLabel}: ${val}`;
+  }).filter(Boolean);
+  const notes = extraNotes.trim();
+  if (notes) parts.push(`Additional notes: ${notes}`);
+  onAnswer(parts.join('  ·  '), remember); // ← second argument added
+};
 
   return (
     <div style={{
@@ -1101,6 +1102,21 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
               }}
             />
           </div>
+
+          <div style={{ marginTop: 14 }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+              fontSize: 12, color: '#9a9a9a', fontFamily: 'JetBrains Mono, monospace',
+            }}>
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={e => setRemember(e.target.checked)}
+                style={{ width: 14, height: 14, accentColor: '#e6e6e6', cursor: 'pointer' }}
+              />
+              Remember these as my defaults for future builds
+            </label>
+          </div>
           {/* ── PROMINENT CTA: impossible to miss ── */}
           <div style={{ marginTop: 16 }}>
             <button onClick={submit} disabled={!hasAtLeastOne}
@@ -1117,7 +1133,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                 transition: 'background .15s, color .15s, border-color .15s',
               }}>
               <Sparkles size={16}/>
-              {hasAtLeastOne ? 'Start Building' : 'Pick at least one option to continue'}
+              {hasAtLeastOne ? 'Start Building' : 'Answer to continue'}
             </button>
             {!hasAtLeastOne && (
               <div style={{
@@ -3214,20 +3230,21 @@ Title:`,
     }));
 
    const sys = buildCoderSystemPrompt(style);
-    const willSearch = !skipSearch && needsCodeWebSearch(text);
-    if (willSearch) {
-      // The backend's code-chat handler already runs its own search internally
-      // for the same message — this flag just drives the "searching the web…"
-      // indicator in the UI so the user sees why the response is taking longer.
-      // No separate network call here to avoid double-searching and double
-      // quota usage against the same daily message limit.
-      setThinking(false);
-      setSearching(true);
-    }
-    const fullPrompt = sys + '\n\n=== USER REQUEST ===\n' + text;
+   let savedPrefs = null;
+   try { savedPrefs = localStorage.getItem('vortis_build_prefs'); } catch (_) {}
+   const prefsBlock = savedPrefs
+  ? `\n\n=== USER'S SAVED DEFAULT PREFERENCES — apply these automatically, do NOT ask the clarifying-question block about anything already covered here unless the user's request explicitly contradicts it ===\n${savedPrefs}`
+  : '';
 
-    let result = await fetchAssistantReply(fullPrompt, historyForBackend);
-    if (willSearch) { setSearching(false); setThinking(true); }
+     const willSearch = !skipSearch && needsCodeWebSearch(text);
+if (willSearch) {
+  setThinking(false);
+  setSearching(true);
+}
+
+const fullPrompt = sys + prefsBlock + '\n\n=== USER REQUEST ===\n' + text;
+let result = await fetchAssistantReply(fullPrompt, historyForBackend);
+if (willSearch) { setSearching(false); setThinking(true); }
 
     // A 503, a dropped connection, or a stream that came back completely empty is often
     // just a transient hiccup — quietly try once more before bothering the user about it.
@@ -3297,17 +3314,15 @@ Title:`,
   }, [input, messages, streaming, style, persistChat, attachments, ocrMode, fetchAssistantReply, replyQuote, editingMsgId]);
 
 const [frozenClarifyIds, setFrozenClarifyIds] = useState(() => new Set());
-const handleClarifyAnswer = useCallback((messageId, answer) => {
+const handleClarifyAnswer = useCallback((messageId, answer, remember) => {
   setFrozenClarifyIds(prev => {
     const next = new Set(prev);
     next.add(messageId);
     return next;
   });
-  // Send with skipSearch=true to avoid "searching the web…" trigger from
-  // words like "search" or "latest" inside the preference string.
-  // The answer text is also sent as a minimal user message so the chat
-  // history has context, but we mark it so it renders as a tiny chip
-  // instead of a full text dump in the user bubble.
+  if (remember) {
+    try { localStorage.setItem('vortis_build_prefs', answer); } catch (_) {}
+  }
   setTimeout(() => send(answer, null, true, true), 30);
 }, [send]);
 
@@ -3776,6 +3791,26 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                     }}/>
                   </span>
                 </button>
+
+                {/* Forget saved build preferences — only shows if something is saved */}
+                {(() => {
+                  let saved = null;
+                  try { saved = localStorage.getItem('vortis_build_prefs'); } catch (_) {}
+                  if (!saved) return null;
+                  return (
+                    <button
+                      onClick={() => { try { localStorage.removeItem('vortis_build_prefs'); } catch (_) {} setShowSettings(false); }}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+                        padding: '9px 10px', borderRadius: 0, cursor: 'pointer',
+                        background: 'transparent', border: '1px solid #1e1e1e', marginTop: 5,
+                        color: '#c8746f', fontSize: 12.5, fontWeight: 600,
+                      }}
+                    >
+                      <RotateCcw size={12}/> Forget saved build preferences
+                    </button>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -4083,7 +4118,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
                     onEditUserMessage={handleEditUserMessage}
                     isLast={i === messages.length - 1} streaming={false}
                     onOpenPanel={openCodePanel}
-                    onAnswerClarify={(answer) => handleClarifyAnswer(m.id, answer)}
+                    onAnswerClarify={(answer, remember) => handleClarifyAnswer(m.id, answer, remember)}
                     frozenClarify={frozenClarifyIds.has(m.id)} compact={m._compact} />
                 ))}
 
@@ -4557,7 +4592,7 @@ const MessageContent = React.memo(({
       project: projectRes.project,
       cleanedText: t,
     };
-  }, [cleaned, skipClarify]);
+ }, [cleaned, skipClarify, streaming]);
 
   return (
     <>
