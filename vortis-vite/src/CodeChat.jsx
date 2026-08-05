@@ -916,7 +916,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
 
   const answeredCount = questions.filter((_, i) => isAnswered(i)).length;
   const hasAtLeastOne = Object.keys(selected).length > 0 || extraNotes.trim().length > 0;
-  
+
   const submit = () => {
   if (!hasAtLeastOne || frozen || !onAnswer) return;
   const parts = questions.map((q, i) => {
@@ -1054,7 +1054,7 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                 type="text"
                 value={sel.text || ''}
                 onChange={e => setOtherText(qi, e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && hasAtLeastOne) { e.preventDefault(); submit(); } }}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); } }}
                 placeholder="Type your own answer…"
                 style={{
                   marginTop: 8, width: '100%', boxSizing: 'border-box',
