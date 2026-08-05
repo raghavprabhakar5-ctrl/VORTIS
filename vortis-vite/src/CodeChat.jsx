@@ -4686,7 +4686,7 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
             onSmartEdit={onSmartEdit}
             messageId={messageId}
             onAnswerClarify={onAnswerClarify}
-            frozenClarify={frozenClarify}
+            frozenClarify={frozenClarify || !isLast}
             streaming={streaming}
           />
         </div>
