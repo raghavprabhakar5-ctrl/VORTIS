@@ -932,56 +932,66 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
   onAnswer(parts.join('  ·  '));
 };
 
-  return (
+ return (
     <div style={{
-      margin: '12px 0', borderRadius: 0, overflow: 'hidden',
-      border: '1px solid #2a2a2a', background: '#101010',
+      margin: '16px 0', borderRadius: 14, overflow: 'hidden',
+      border: '1px solid #2a2a2a', background: '#111111',
       animation: 'vertexCodeIn .28s cubic-bezier(.2,.7,.3,1)',
-      boxShadow: '0 10px 28px -14px rgba(0,0,0,.7)',
+      boxShadow: '0 14px 34px -16px rgba(0,0,0,.75)',
       opacity: frozen ? 0.55 : 1,
       pointerEvents: frozen ? 'none' : 'auto',
       transition: 'opacity .2s',
     }} data-vrtx-no-reply="">
       <div style={{
-        padding: '10px 14px', background: '#141414', borderBottom: '1px solid #262626',
+        padding: '14px 18px', background: '#161616', borderBottom: '1px solid #262626',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <HelpCircle size={13} color="#9a9a9a"/>
-          <span style={{
-            fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace', color: '#c8c8c8',
-            fontWeight: 700, letterSpacing: '.04em',
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          <div style={{
+            width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center', background: '#1f1f1f', border: '1px solid #2f2f2f',
           }}>
-            {frozen ? 'CLARIFYING · ANSWERED' : 'CLARIFYING · PICK AN OPTION'}
+            <HelpCircle size={13} color="#b8b8b8"/>
+          </div>
+          <span style={{
+            fontSize: 12.5, fontFamily: 'JetBrains Mono, monospace', color: '#d8d8d8',
+            fontWeight: 700, letterSpacing: '.03em',
+          }}>
+            {frozen ? 'Clarifying · Answered' : 'A few quick questions'}
           </span>
         </div>
         {!frozen && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {questions.map((_, i) => (
               <div key={i} style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: skipped[i] ? '#92400e' : isAnswered(i) ? '#6366f1' : '#333',
+                width: 6, height: 6, borderRadius: '50%',
+                background: skipped[i] ? '#a3672a' : isAnswered(i) ? '#8b8bf0' : '#3a3a3a',
                 transition: 'background .2s',
               }}/>
             ))}
-            <span style={{ fontSize: 10, color: '#666', marginLeft: 4, fontFamily: 'JetBrains Mono, monospace' }}>
+            <span style={{ fontSize: 10.5, color: '#6a6a6a', marginLeft: 5, fontFamily: 'JetBrains Mono, monospace' }}>
               {answeredCount}/{questions.length}
             </span>
           </div>
         )}
       </div>
-      <div style={{ padding: '6px 14px 12px' }}>
+
+      <div style={{ padding: '18px 18px 16px' }}>
         {questions.map((q, qi) => {
           const sel = selected[qi];
           const otherActive = sel?.type === 'other';
           const isSkipped = !!skipped[qi];
           return (
-          <div key={qi} style={{ marginTop: 10 }}>
+          <div key={qi} style={{
+            marginTop: qi === 0 ? 0 : 22,
+            paddingTop: qi === 0 ? 0 : 18,
+            borderTop: qi === 0 ? 'none' : '1px solid #1c1c1c',
+          }}>
             <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 11,
             }}>
               <div style={{
-                fontSize: 13.5, color: isSkipped ? '#5a5a5a' : '#e6e6e6',
+                fontSize: 14, color: isSkipped ? '#5a5a5a' : '#eaeaea',
                 fontWeight: 600, lineHeight: 1.4,
                 textDecoration: isSkipped ? 'line-through' : 'none',
               }}>
@@ -993,14 +1003,14 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                   title={isSkipped ? 'Undo skip' : 'Skip this question'}
                   style={{
                     background: 'transparent', border: '1px solid ' + (isSkipped ? '#5a5a5a' : '#2a2a2a'),
-                    borderRadius: 0, color: isSkipped ? '#9a9a9a' : '#555',
-                    cursor: 'pointer', padding: '3px 9px', fontSize: 10.5,
+                    borderRadius: 7, color: isSkipped ? '#9a9a9a' : '#5a5a5a',
+                    cursor: 'pointer', padding: '4px 10px', fontSize: 10.5,
                     fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
                     letterSpacing: '.03em', transition: 'all .15s',
-                    flexShrink: 0, marginLeft: 10,
+                    flexShrink: 0, marginLeft: 12,
                   }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = '#5a5a5a'; e.currentTarget.style.color = '#c8c8c8'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = isSkipped ? '#5a5a5a' : '#2a2a2a'; e.currentTarget.style.color = isSkipped ? '#9a9a9a' : '#555'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = isSkipped ? '#5a5a5a' : '#2a2a2a'; e.currentTarget.style.color = isSkipped ? '#9a9a9a' : '#5a5a5a'; }}
                 >
                   {isSkipped ? 'Undo' : 'Skip'}
                 </button>
@@ -1008,41 +1018,39 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
             </div>
             {!isSkipped && (
               <>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {q.options.map((opt, oi) => {
                 const isSel = sel?.type === 'option' && sel.idx === oi;
                 return (
                   <button key={oi}
                     onClick={() => toggle(qi, oi)}
                     style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5,
-                      padding: '6px 13px', borderRadius: 0,
-                      background: isSel ? '#e6e6e6' : '#1a1a1a',
-                      border: '1px solid ' + (isSel ? '#e6e6e6' : '#333333'),
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                      padding: '8px 15px', borderRadius: 9,
+                      background: isSel ? '#eaeaea' : '#1a1a1a',
+                      border: '1px solid ' + (isSel ? '#eaeaea' : '#2f2f2f'),
                       color: isSel ? '#0a0a0a' : '#dcdcdc',
                       fontSize: 12.5, fontFamily: 'inherit', fontWeight: 600,
-                      cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s',
+                      cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s, transform .1s',
                     }}
-                    onMouseEnter={e => { if (!isSel && !frozen) { e.currentTarget.style.borderColor = '#5a5a5a'; e.currentTarget.style.background = '#232323'; } }}
-                    onMouseLeave={e => { if (!isSel && !frozen) { e.currentTarget.style.borderColor = '#333333'; e.currentTarget.style.background = '#1a1a1a'; } }}
+                    onMouseEnter={e => { if (!isSel && !frozen) { e.currentTarget.style.borderColor = '#5a5a5a'; e.currentTarget.style.background = '#242424'; } }}
+                    onMouseLeave={e => { if (!isSel && !frozen) { e.currentTarget.style.borderColor = '#2f2f2f'; e.currentTarget.style.background = '#1a1a1a'; } }}
                   >
                     {isSel && <Check size={11}/>}
                     {opt}
                   </button>
                 );
               })}
-              {/* "Other" pill — opens a free-text input */}
               <button
                 onClick={() => selectOther(qi)}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '6px 13px', borderRadius: 0,
-                  background: otherActive ? '#2a2a2a' : '#1a1a1a',
-                  border: '1px solid ' + (otherActive ? '#5a5a5a' : '#333333'),
-                  borderStyle: otherActive ? 'solid' : 'dashed',
-                  color: otherActive ? '#e6e6e6' : '#9a9a9a',
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 15px', borderRadius: 9,
+                  background: otherActive ? '#2a2a2a' : 'transparent',
+                  border: '1px dashed ' + (otherActive ? '#6a6a6a' : '#3a3a3a'),
+                  color: otherActive ? '#e6e6e6' : '#7a7a7a',
                   fontSize: 12.5, fontFamily: 'inherit', fontWeight: 600,
-                  cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s',
+                  cursor: 'pointer', transition: 'all .12s',
                 }}
               >
                 <Plus size={11}/> Other
@@ -1057,9 +1065,9 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); } }}
                 placeholder="Type your own answer…"
                 style={{
-                  marginTop: 8, width: '100%', boxSizing: 'border-box',
+                  marginTop: 10, width: '100%', boxSizing: 'border-box',
                   background: '#0a0a0a', border: '1px solid #333333',
-                  borderRadius: 0, padding: '7px 10px',
+                  borderRadius: 8, padding: '9px 12px',
                   color: '#e6e6e6', fontSize: 12.5,
                   fontFamily: 'JetBrains Mono, monospace',
                   outline: 'none',
@@ -1073,43 +1081,37 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
         })}
         {!frozen && (
           <>
-          {/* Card-level "Anything else?" textarea — lets the user add any
-              extra context, constraints, or preferences that weren't covered
-              by the per-question options. Appended to the composed answer as
-              "Additional notes: ...". Always visible (not behind a toggle)
-              so users immediately see they can type free-form context. */}
-          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid #1f1f1f' }}>
+          <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #1c1c1c' }}>
             <div style={{
-              fontSize: 11, color: '#8a8a8a', fontFamily: 'JetBrains Mono, monospace',
-              fontWeight: 700, letterSpacing: '.04em', marginBottom: 6,
+              fontSize: 11, color: '#7a7a7a', fontFamily: 'JetBrains Mono, monospace',
+              fontWeight: 700, letterSpacing: '.04em', marginBottom: 8,
             }}>
-              ANYTHING ELSE?
+              Anything else?
             </div>
             <textarea
               value={extraNotes}
               onChange={e => setExtraNotes(e.target.value)}
-              placeholder="Type any extra details, constraints, or preferences not covered above (optional)…"
+              placeholder="Extra details, constraints, or preferences not covered above (optional)…"
               rows={2}
               style={{
                 width: '100%', boxSizing: 'border-box',
-                background: '#0a0a0a', border: '1px solid #333333',
-                borderRadius: 0, padding: '8px 10px',
+                background: '#0a0a0a', border: '1px solid #2f2f2f',
+                borderRadius: 9, padding: '10px 12px',
                 color: '#e6e6e6', fontSize: 12.5,
                 fontFamily: 'inherit', lineHeight: 1.5,
                 resize: 'vertical', outline: 'none',
-                minHeight: 44,
+                minHeight: 46,
               }}
             />
           </div>
 
-          {/* ── PROMINENT CTA: impossible to miss ── */}
-          <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 18 }}>
             <button onClick={submit} disabled={!hasAtLeastOne}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                width: '100%', padding: '12px 20px', borderRadius: 6,
-                background: hasAtLeastOne ? '#e6e6e6' : '#1a1a1a',
-                border: '1px solid ' + (hasAtLeastOne ? '#e6e6e6' : '#333'),
+                width: '100%', padding: '13px 20px', borderRadius: 10,
+                background: hasAtLeastOne ? '#eaeaea' : '#1a1a1a',
+                border: '1px solid ' + (hasAtLeastOne ? '#eaeaea' : '#2f2f2f'),
                 color: hasAtLeastOne ? '#0a0a0a' : '#555',
                 fontSize: 14, fontWeight: 700,
                 cursor: hasAtLeastOne ? 'pointer' : 'not-allowed',
@@ -1120,19 +1122,6 @@ const ClarifyCard = ({ questions, onAnswer, frozen }) => {
               <Sparkles size={16}/>
               {hasAtLeastOne ? 'Start Building' : 'Answer to continue'}
             </button>
-            {!hasAtLeastOne && (
-              <div style={{
-                display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10,
-              }}>
-                {questions.map((_, i) => (
-                  <div key={i} style={{
-                    flex: 1, maxWidth: 80, height: 3, borderRadius: 2,
-                    background: skipped[i] ? '#92400e' : isAnswered(i) ? '#6366f1' : '#222',
-                    transition: 'background .25s',
-                  }}/>
-                ))}
-              </div>
-            )}
           </div>
           </>
         )}
