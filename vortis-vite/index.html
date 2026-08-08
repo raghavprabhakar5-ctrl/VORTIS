@@ -27,7 +27,7 @@
   (function () {
     var DESIGN_WIDTH = 1512; // width your layout was designed for
     function applyScale() {
-      var scale = window.innerWidth / DESIGN_WIDTH;
+      var scale = window.screen.width / DESIGN_WIDTH;
       scale = Math.max(0.6, Math.min(scale, 1.3));
       document.documentElement.style.zoom = scale;
     }
