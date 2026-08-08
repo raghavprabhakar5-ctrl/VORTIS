@@ -284,10 +284,20 @@ You MUST start your reply with a GFM task-list block whenever ANY of the followi
 - The reply will take more than ~30 seconds for a user to read and apply
 - You're fixing multiple bugs, building a feature, or implementing a UI
 
-Format (literal characters, leading dashes, square brackets):
+Format (literal characters, leading dashes, square brackets). Every todo that
+produces a file MUST end with that file's exact path in backticks — this is
+how the UI knows the step is actually done, so get the path exact and
+matching the // file: path you use later in that code block:
 
-- [ ] Step 1 short description
-- [ ] Step 2 short description
+- [ ] Extract the header component 
+- [ ] Add the chat hook 
+- [ ] Wire up shared types 
+- [ ] Explain the data flow
+
+Steps that don't produce a file (e.g. pure explanation) omit the backticked path.
+The path in the todo line MUST exactly match the path comment in the corresponding
+code block later in your reply — same string, same case, same slashes.
+
 - [ ] Step 3 short description
 - [ ] Step 4 short description
 
@@ -717,7 +727,9 @@ const extractClarify = (text) => {
  *  markings are always respected.
  * ──────────────────────────────────────────────────────────────────────── */
 const TODO_LINE = /^\s*[-*]\s+\[(?:x|X|\s|[-])\]\s+.+$/;
-const extractLeadingTodos = (text, isFinal = false) => {
+const TODO_PATH = /`([^`]+)`\s*$/;
+
+const extractLeadingTodos = (text, deliveredFiles = []) => {
   if (!text) return { todos: null, text: '' };
   const lines = text.split('\n');
   let i = 0;
@@ -731,32 +743,20 @@ const extractLeadingTodos = (text, isFinal = false) => {
   if (i < lines.length && lines[i].trim() === '') i++;
   const body = lines.slice(i).join('\n');
 
-  const fenceMarkers = body.split(/```/);
-  const segments = [];
-  for (let si = 0; si < fenceMarkers.length; si++) {
-    segments.push({ isCode: si % 2 === 1, text: fenceMarkers[si] });
-  }
-  let deliveredSteps = 0;
-  for (const seg of segments) {
-    if (!seg.isCode) continue;
-    const inner = seg.text.replace(/^\w*\n?/, '');
-    const firstLineNl = inner.indexOf('\n');
-    const firstLine = (firstLineNl === -1 ? inner : inner.slice(0, firstLineNl)).trim();
-    if (FILE_PATH_LINE.test(firstLine)) {
-      deliveredSteps++;
-    } else if (inner.length >= 200) {
-      deliveredSteps++;
-    }
-  }
-  deliveredSteps = Math.min(todoLines.length, deliveredSteps);
+  // Ground truth: paths that have actually landed in this message so far.
+  // Works identically mid-stream and after streaming ends — no force-complete.
+  const deliveredPaths = new Set(deliveredFiles.map(f => f.path));
 
-  const todos = todoLines.map((l, idx) => {
+  const todos = todoLines.map(l => {
     const m = l.match(/^\s*[-*]\s+\[([xX\s-])\]\s+(.+)$/);
+    const raw = m ? m[2] : l;
     const modelSaysDone = !!(m && (m[1] === 'x' || m[1] === 'X'));
-    const autoDone = isFinal ? true : (!modelSaysDone && idx < deliveredSteps);
+    const pathMatch = raw.match(TODO_PATH);
+    const boundPath = pathMatch ? pathMatch[1].trim() : null;
+    const pathDone = boundPath ? deliveredPaths.has(boundPath) : false;
     return {
-      done: modelSaysDone || autoDone,
-      text: m ? m[2] : l,
+      done: modelSaysDone || pathDone,
+      text: raw.replace(TODO_PATH, '').trim(), // strip trailing `path` from the visible label
     };
   });
   return { todos, text: body };
@@ -4525,20 +4525,25 @@ const MessageContent = React.memo(({
   const cleaned = useMemo(() => cleanStream(text || ''), [text]);
 
   const parsed = useMemo(() => {
-    let t = cleaned;
-    const todosRes = extractLeadingTodos(t, !streaming); 
-    t = todosRes.text;
-    const clarifyRes = skipClarify ? { clarify: null, text: t } : extractClarify(t);
-    t = clarifyRes.text;
-    const projectRes = extractProjectFromMessage(t, streaming);
-    t = projectRes.text;
-    return {
-      todos: todosRes.todos,
-      clarify: clarifyRes.clarify,
-      project: projectRes.project,
-      cleanedText: t,
-    };
- }, [cleaned, skipClarify, streaming]);
+  let t = cleaned;
+
+  const clarifyRes = skipClarify ? { clarify: null, text: t } : extractClarify(t);
+  t = clarifyRes.text;
+
+  // Extract files FIRST — todos need the real delivered paths to check against.
+  const projectRes = extractProjectFromMessage(t, streaming);
+  t = projectRes.text;
+
+  const todosRes = extractLeadingTodos(t, projectRes.project || []);
+  t = todosRes.text;
+
+  return {
+    todos: todosRes.todos,
+    clarify: clarifyRes.clarify,
+    project: projectRes.project,
+    cleanedText: t,
+  };
+}, [cleaned, skipClarify, streaming]);
 
   return (
     <>
