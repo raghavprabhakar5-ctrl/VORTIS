@@ -1405,10 +1405,8 @@ const CodeBlock = ({ lang, codeText }) => {
     </div>
   );
 };
-const parseUserContent = (text) => {
-  const parts = [];
-  const regex = /```(\w*)\n?([\s\S]*?)```/g;
-  const fixInlineBullets = (text) => {
+
+const fixInlineBullets = (text) => {
   if (!text) return text;
   const inlineBulletPattern = /\s\*\s(?=\*\*|[A-Z])/g;
   const matches = text.match(inlineBulletPattern) || [];
@@ -1417,6 +1415,10 @@ const parseUserContent = (text) => {
   }
   return text;
 };
+
+const parseUserContent = (text) => {
+  const parts = [];
+  const regex = /```(\w*)\n?([\s\S]*?)```/g;
   let lastIndex = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
@@ -5041,15 +5043,22 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
   .trim();
 
 // ── SAFE FALLBACK: never lose real content ──
-const finalDisplay = fixInlineBullets(
-  displayText.length > 1
-    ? displayText
-    : full.trim().length > 1
-      ? full.trim()
-      : "Something went wrong — please try again."
-);
+let finalDisplay;
+try {
+  finalDisplay = fixInlineBullets(
+    displayText.length > 1
+      ? displayText
+      : full.trim().length > 1
+        ? full.trim()
+        : "Something went wrong — please try again."
+  );
+} catch (postErr) {
+  console.error('Post-processing failed, falling back to raw text:', postErr);
+  finalDisplay = full.trim() || "Something went wrong — please try again.";
+}
 
 addMsg('vortis', finalDisplay, shouldSpeak);
+
    } catch(e) {
       clearTimeout(aiTimeoutRef.current); setShowAITimeout(false); setIsStreaming(false); setStreamText(''); setProcessingStatus('');
       convHistory.current = convHistory.current.slice(0, -1);
