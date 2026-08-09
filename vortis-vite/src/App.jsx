@@ -1408,6 +1408,15 @@ const CodeBlock = ({ lang, codeText }) => {
 const parseUserContent = (text) => {
   const parts = [];
   const regex = /```(\w*)\n?([\s\S]*?)```/g;
+  const fixInlineBullets = (text) => {
+  if (!text) return text;
+  const inlineBulletPattern = /\s\*\s(?=\*\*|[A-Z])/g;
+  const matches = text.match(inlineBulletPattern) || [];
+  if (matches.length >= 2) {
+    return text.replace(inlineBulletPattern, '\n* ');
+  }
+  return text;
+};
   let lastIndex = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
@@ -4811,6 +4820,7 @@ RESPONSE QUALITY RULES
 - When giving steps or instructions, present them in the order they should be followed.
 - Use tables only when they improve readability.
 - Preserve user-provided formatting, code, and data whenever possible.
+- LIST FORMATTING — CRITICAL: When writing a bulleted or numbered list, each item MUST start on its own new line. NEVER write multiple "* item" bullets inline within the same paragraph separated by spaces.
 ═══════════════════════════════════════
 IDENTITY
 ═══════════════════════════════════════
@@ -5031,11 +5041,13 @@ console.log('[IMG DEBUG] genMatch result:', genMatch);
   .trim();
 
 // ── SAFE FALLBACK: never lose real content ──
-const finalDisplay = displayText.length > 1
-  ? displayText
-  : full.trim().length > 1
-    ? full.trim()
-    : "Something went wrong — please try again.";
+const finalDisplay = fixInlineBullets(
+  displayText.length > 1
+    ? displayText
+    : full.trim().length > 1
+      ? full.trim()
+      : "Something went wrong — please try again."
+);
 
 addMsg('vortis', finalDisplay, shouldSpeak);
    } catch(e) {
@@ -5224,7 +5236,7 @@ setProcessingStatus('');
       }
     } catch(_) {}
 
-    report = report.trim() || "Here's what I found, but I couldn't put together a written summary — check the sources below.";
+    report = fixInlineBullets(report.trim()) || "Here's what I found, but I couldn't put together a written summary — check the sources below.";
 
     const rows = sources.map((r, i) => `
       <tr>
@@ -5973,23 +5985,27 @@ return (
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', width: '100%', maxWidth: '100%' }}>
       {replyInfo && (
-        <div style={{
-          maxWidth: 260,
-          padding: '6px 10px',
-          borderRight: '3px solid rgba(255,255,255,.45)',
-          background: 'rgba(255,255,255,.08)',
-          borderRadius: '8px 8px 2px 8px',
-          fontSize: 12,
-          color: 'rgba(255,255,255,.72)',
-          lineHeight: 1.4,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-        }}>
-          {replyInfo.quoted}
-        </div>
-      )}
+  <div style={{
+    maxWidth: 260,
+    maxHeight: 36,
+    padding: '6px 10px',
+    borderRight: '3px solid rgba(255,255,255,.45)',
+    background: 'rgba(255,255,255,.08)',
+    borderRadius: '8px 8px 2px 8px',
+    fontSize: 12,
+    color: 'rgba(255,255,255,.72)',
+    lineHeight: 1.4,
+    overflow: 'hidden',
+    wordBreak: 'break-word',
+    position: 'relative',
+    isolation: 'isolate',
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+  }}>
+    {replyInfo.quoted}
+  </div>
+)}
       {!hasCode ? (
         <div className="bubble-user">{bodyText}</div>
       ) : (
