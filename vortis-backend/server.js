@@ -18,7 +18,8 @@ const GROQ_CLASSIFIER_MODEL = 'llama-3.1-8b-instant';
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';
 const NVIDIA_CHAT_QUALITY = 'meta/llama-3.3-70b-instruct';
-const NVIDIA_CHAT_CODE    = 'z-ai/glm-5.2';
+const NVIDIA_CHAT_CODE    = 'mistralai/codestral-22b-instruct-v0.1'; 
+const NVIDIA_CHAT_CODE_FALLBACK = 'meta/llama-3.3-70b-instruct';       
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
 const CF_CHAT_MODELS = [
@@ -517,7 +518,7 @@ function looksLikeTableRequest(text) {
   return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
-// ── Code-chat streaming (NVIDIA GLM only) ──────────────────────
+// ── Code-chat streaming (NVIDIA, with fallback model) ──────────────────
 async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
@@ -531,10 +532,12 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 45000; // shorter than before — fail faster so a retry has time to run
-  const MAX_ATTEMPTS = 2;           // NVIDIA only — retry same model, no other provider
+  const REQUEST_TIMEOUT_MS = 30000; // healthy NVIDIA responses land in ~1-5s; 30s is generous headroom, not 90s
+  const IDLE_TIMEOUT_MS = 20000;    // NEW: bail if the stream stalls mid-response instead of hanging forever
+  const MODELS_TO_TRY = [NVIDIA_CHAT_CODE, NVIDIA_CHAT_CODE_FALLBACK]; // try primary, then fallback — not the same model twice
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let modelIdx = 0; modelIdx < MODELS_TO_TRY.length; modelIdx++) {
+    const modelToTry = MODELS_TO_TRY[modelIdx];
     let written = 0;
     let convoMessages = [...messages];
     let continuations = 0;
@@ -552,7 +555,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               'Content-Type':  'application/json',
             },
             body: JSON.stringify({
-              model:           NVIDIA_CHAT_CODE,
+              model:           modelToTry,
               messages:        convoMessages,
               max_tokens:      maxTokens,
               temperature:     0.5,
@@ -566,7 +569,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         if (!nvRes.ok) {
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
-          console.error(`Code-chat stream: HTTP ${nvRes.status} (attempt ${attempt}) - ${errBody.slice(0, 300)}`);
+          console.error(`Code-chat stream: HTTP ${nvRes.status} (model ${modelToTry}) - ${errBody.slice(0, 300)}`);
           attemptFailed = true;
           break;
         }
@@ -579,8 +582,24 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         let turnBuffer = '';
         let finishReason = null;
 
+        // NEW: idle watchdog — if no chunk arrives within IDLE_TIMEOUT_MS, abort this read
         while (true) {
-          const { done, value } = await reader.read();
+          let done, value;
+          try {
+            const result = await Promise.race([
+              reader.read(),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('idle read timeout')), IDLE_TIMEOUT_MS)
+              ),
+            ]);
+            done = result.done;
+            value = result.value;
+          } catch (idleErr) {
+            console.error(`Code-chat stream: idle timeout mid-stream (model ${modelToTry})`);
+            try { reader.cancel(); } catch (_) {}
+            attemptFailed = true;
+            break;
+          }
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
@@ -639,6 +658,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
           }
         }
 
+        if (attemptFailed) break; // idle timeout hit — stop this model, try next
+
         if (!inThink && pending) {
           written += pending.length;
           res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
@@ -659,14 +680,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         break;
       }
     } catch (e) {
-      console.error(`Code-chat stream error (attempt ${attempt}):`, e.message);
+      console.error(`Code-chat stream error (model ${modelToTry}):`, e.message);
       attemptFailed = true;
     }
 
     if (written > 0) {
       res.write('data: [DONE]\n\n');
       res.end();
-      console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, attempt ${attempt}`);
+      console.log(`Code-chat stream OK (${modelToTry}) - ${written} chars written`);
       return true;
     }
 
@@ -679,18 +700,17 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
-        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response (attempt ${attempt})`);
+        console.log(`Code-chat stream: salvaged ${salvaged.length} chars (model ${modelToTry})`);
         return true;
       }
     }
 
-    if (attempt < MAX_ATTEMPTS) {
-      console.warn(`Code-chat: attempt ${attempt} produced nothing — retrying NVIDIA (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
-      await new Promise(r => setTimeout(r, 600));
+    if (modelIdx < MODELS_TO_TRY.length - 1) {
+      console.warn(`Code-chat: ${modelToTry} produced nothing — trying fallback model ${MODELS_TO_TRY[modelIdx + 1]}`);
     }
   }
 
-  console.error('Code-chat stream: all NVIDIA attempts failed');
+  console.error('Code-chat stream: all models failed');
   if (!res.writableEnded) {
     try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
   }
