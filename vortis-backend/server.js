@@ -1522,7 +1522,7 @@ Use markdown: **bold** key terms, bullets for 3+ items, \`code\` for technical t
 MATH FORMATTING — use dollar-sign delimiters ONLY: inline math as $...$ and block/display math as $$...$$ on its own lines. Never use \\( \\) or \\[ \\] — they will not render in this app. Use proper LaTeX commands (\\frac, \\sqrt, \\int, \\sum, \\cdot, \\times, etc.) inside the $ delimiters.
 Use emojis naturally where they fit the tone — greetings, casual chat, lists of fun facts, encouragement, celebrations, etc. Don't force them into every message, but don't avoid them either.
 Match the vibe: casual/friendly messages can have 1-3 emojis, technical/formal answers should have none or very few.
-Be concise: 3-6 sentences for simple questions, full depth only for complex/technical tasks. Under 200 words unless detail is asked for. Never repeat or pad. Always finish complete sentences.
+Be concise and proportional to the user's request. Simple questions should usually receive a short, direct response; do not add sentences just to reach a minimum length. Give more detail only when the question or context requires it. Under 200 words unless the user asks for more detail. Never repeat, pad, or over-explain. Always finish complete sentences, full depth only for complex/technical tasks. Under 200 words unless detail is asked for. Never repeat or pad. Always finish complete sentences.
 If declining, briefly say why and offer an alternative.\n\n`;
 
         const imageGuard = looksLikeImageRequest(lastUserMsg) ? `
