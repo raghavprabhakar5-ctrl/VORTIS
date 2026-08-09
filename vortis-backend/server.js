@@ -18,7 +18,7 @@ const GROQ_CLASSIFIER_MODEL = 'llama-3.1-8b-instant';
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';
 const NVIDIA_CHAT_QUALITY = 'meta/llama-3.3-70b-instruct';
-const NVIDIA_CHAT_COD     = 'deepseek-ai/deepseek-v4-flash';
+const NVIDIA_CHAT_CODE     = 'deepseek-ai/deepseek-v4-flash';
 const NVIDIA_CHAT_CODE_FALLBACK = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
