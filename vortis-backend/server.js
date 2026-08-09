@@ -18,8 +18,8 @@ const GROQ_CLASSIFIER_MODEL = 'llama-3.1-8b-instant';
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';
 const NVIDIA_CHAT_QUALITY = 'meta/llama-3.3-70b-instruct';
-const NVIDIA_CHAT_CODE    = 'mistralai/codestral-22b-instruct-v0.1'; 
-const NVIDIA_CHAT_CODE_FALLBACK = 'meta/llama-3.3-70b-instruct';       
+const NVIDIA_CHAT_CODE    = 'stepfun-ai/step-3.7-flash';
+const NVIDIA_CHAT_CODE_FALLBACK = 'nvidia/llama-3.1-nemotron-ultra-253b-v1'; 
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
 const CF_CHAT_MODELS = [
