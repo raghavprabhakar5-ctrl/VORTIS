@@ -19,7 +19,7 @@ const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';
 const NVIDIA_CHAT_QUALITY = 'meta/llama-3.3-70b-instruct';
 const NVIDIA_CHAT_CODE    = 'stepfun-ai/step-3.7-flash';
-const NVIDIA_CHAT_CODE_FALLBACK = 'nvidia/llama-3.1-nemotron-ultra-253b-v1'; 
+const NVIDIA_CHAT_CODE_FALLBACK = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
 const CF_CHAT_MODELS = [
@@ -533,7 +533,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
 
   const MAX_CONTINUATIONS = 4;
   const REQUEST_TIMEOUT_MS = 30000; // healthy NVIDIA responses land in ~1-5s; 30s is generous headroom, not 90s
-  const IDLE_TIMEOUT_MS = 20000;    // NEW: bail if the stream stalls mid-response instead of hanging forever
+  const IDLE_TIMEOUT_MS = 45000;    // NEW: bail if the stream stalls mid-response instead of hanging forever
   const MODELS_TO_TRY = [NVIDIA_CHAT_CODE, NVIDIA_CHAT_CODE_FALLBACK]; // try primary, then fallback — not the same model twice
 
   for (let modelIdx = 0; modelIdx < MODELS_TO_TRY.length; modelIdx++) {
