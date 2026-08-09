@@ -1426,6 +1426,13 @@ const parseUserContent = (text) => {
   return parts;
 };
 
+const parseReplyQuote = (text) => {
+  if (!text) return null;
+  const m = text.match(/^>\s?([\s\S]*?)\n\n([\s\S]*)$/);
+  if (!m) return null;
+  return { quoted: m[1].trim(), body: m[2] };
+};
+
 // Plain function (not a hook) — detects a double-tap/double-click vs a single tap
 const createDoubleTapHandlers = (onDoubleTap, onTap, delay = 300) => {
   let lastTap = 0;
@@ -4661,7 +4668,10 @@ const stopGeneration = useCallback(() => {
      abortGenRef.current = false;
     aiTimeoutRef.current = setTimeout(() => setShowAITimeout(true), 30000);
     try {
-     const cleanInput = userInput.replace(/^>.*?\n\n/s, '').trim();
+     const replyInfo = parseReplyQuote(userInput);
+    const cleanInput = replyInfo
+  ? `[Replying to: "${replyInfo.quoted.slice(0, 200)}"] ${replyInfo.body.trim()}`
+  : userInput.trim();
      pushHistory(convHistory, 'user', cleanInput || userInput);
       const now = new Date(); const userName = profile.name ? profile.name.split(' ')[0] : null;
       let memoriesContext = '';
@@ -5955,15 +5965,39 @@ return (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
                       {msg.image && <img src={msg.image} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.text && (() => {
-  const parts = parseUserContent(msg.text);
+  const replyInfo = parseReplyQuote(msg.text);
+  const bodyText = replyInfo ? replyInfo.body : msg.text;
+  const parts = parseUserContent(bodyText);
   const hasCode = parts.some(p => p.type === 'code');
-  if (!hasCode) return <div className="bubble-user">{msg.text}</div>;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end', width: '100%', maxWidth: '100%' }}>
-      {parts.map((p, i) =>
-        p.type === 'code'
-          ? <div key={i} style={{ width: '100%', maxWidth: 480 }}><CodeBlock lang={p.lang} codeText={p.content} /></div>
-          : <div key={i} className="bubble-user">{p.content}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', width: '100%', maxWidth: '100%' }}>
+      {replyInfo && (
+        <div style={{
+          maxWidth: 260,
+          padding: '6px 10px',
+          borderRight: '3px solid rgba(255,255,255,.45)',
+          background: 'rgba(255,255,255,.08)',
+          borderRadius: '8px 8px 2px 8px',
+          fontSize: 12,
+          color: 'rgba(255,255,255,.72)',
+          lineHeight: 1.4,
+          overflow: 'hidden',
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+        }}>
+          {replyInfo.quoted}
+        </div>
+      )}
+      {!hasCode ? (
+        <div className="bubble-user">{bodyText}</div>
+      ) : (
+        parts.map((p, i) =>
+          p.type === 'code'
+            ? <div key={i} style={{ width: '100%', maxWidth: 480 }}><CodeBlock lang={p.lang} codeText={p.content} /></div>
+            : <div key={i} className="bubble-user">{p.content}</div>
+        )
       )}
     </div>
   );

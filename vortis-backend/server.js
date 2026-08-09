@@ -11,9 +11,9 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-const GROQ_CHAT_PRIMARY = 'llama-3.3-70b-versatile';
-const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';   
-const GROQ_CLASSIFIER_MODEL = 'llama-3.1-8b-instant';
+const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
+const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
+const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';
