@@ -278,6 +278,13 @@ const makeStyles = (isDark, fontFamily = "'Inter', sans-serif") =>  `
 @keyframes glow{0%,100%{box-shadow:0 0 20px rgba(99,102,241,.3)}50%{box-shadow:0 0 40px rgba(99,102,241,.6)}}
 @keyframes borderPulse{0%,100%{border-color:rgba(99,102,241,.3)}50%{border-color:rgba(99,102,241,.7)}}
 @keyframes drShimmer{0%{background-position:0% 0}100%{background-position:250% 0}}
+@keyframes runnerScan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@keyframes runnerSlideUp{from{opacity:0;transform:translateY(8px) scale(.995);max-height:0}to{opacity:1;transform:translateY(0) scale(1);max-height:760px}}
+@keyframes runnerBorderGlow{0%,100%{box-shadow:0 0 0 1px rgba(99,102,241,.35),0 0 22px rgba(99,102,241,.18)}50%{box-shadow:0 0 0 1px rgba(99,102,241,.7),0 0 36px rgba(99,102,241,.42)}}
+@keyframes runnerPulseDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.65}}
+@keyframes runnerCursorBlink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes runnerBarber{0%{background-position:0 0}100%{background-position:40px 0}}
+@keyframes runnerFadeType{from{opacity:0;transform:translateX(-2px)}to{opacity:1;transform:translateX(0)}}
 @keyframes typingDot{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 html{-webkit-text-size-adjust:100%;height:100%}
 *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
@@ -928,11 +935,28 @@ const safeExecuteCodeLocally = async (langKey, codeText, onStatus) => {
   }
 };
  
-// ── live-preview HTML wrapper for HTML / SVG / CSS blocks (unchanged behavior) ──
+// ── live-preview HTML wrapper for HTML / SVG / CSS blocks ──
+// Injects a tiny postMessage script so the parent <iframe> can auto-size
+// to the content's measured height. Small snippets no longer float inside
+// a 360px box; tall snippets cap at 720px and scroll.
+const _PREVIEW_HEIGHT_SCRIPT = `
+<script>
+(function(){
+  var send=function(){try{parent.postMessage({type:'vortis-preview-height',height:Math.max(document.body.scrollHeight,document.documentElement.scrollHeight)+8},'*');}catch(e){}};
+  if(document.readyState==='complete'){send();}else{window.addEventListener('load',send);}
+  window.addEventListener('resize',send);
+  if(window.ResizeObserver){new ResizeObserver(function(){send();}).observe(document.body);}
+  setTimeout(send,80);setTimeout(send,300);setTimeout(send,1000);
+})();
+<\/script>`;
 const getPreviewContent = (langKey, codeText) => {
-  if (langKey === 'html') return codeText;
-  if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>`;
-  if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>`;
+  if (langKey === 'html') {
+    // Inject the height-reporter before </body> if possible, else append.
+    if (/<\/body>/i.test(codeText)) return codeText.replace(/<\/body>/i, _PREVIEW_HEIGHT_SCRIPT + '</body>');
+    return codeText + _PREVIEW_HEIGHT_SCRIPT;
+  }
+  if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>` + _PREVIEW_HEIGHT_SCRIPT;
+  if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>` + _PREVIEW_HEIGHT_SCRIPT;
   return null;
 };
  
@@ -1061,9 +1085,12 @@ const CodeBlock = ({ lang, codeText }) => {
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const [execStatus, setExecStatus] = React.useState('');
+  const [execStatus, setExecStatus] = React.useState('IDLE');
   const [execTime, setExecTime] = React.useState('');
   const [bootMsg, setBootMsg] = React.useState('');
+  const [iframeHeight, setIframeHeight] = React.useState(220);
+  const [codeCollapsed, setCodeCollapsed] = React.useState(true);
+  const [runFlash, setRunFlash] = React.useState(false);
  
   const langKey = (lang || '').toLowerCase().trim();
   const engine = LANG_ENGINE[langKey];
@@ -1072,26 +1099,47 @@ const CodeBlock = ({ lang, codeText }) => {
   const isRunnable = !!engine;
   const canRun = isRunnable || isPreviewable;
  
+  // Listen for height reports from the preview iframe so small snippets
+  // no longer sit in a giant 360px white box. Caps at 720 so tall content
+  // scrolls instead of stretching the chat forever.
+  React.useEffect(() => {
+    if (!output || output.type !== 'html') return;
+    const handler = (e) => {
+      if (e.data && e.data.type === 'vortis-preview-height' && typeof e.data.height === 'number') {
+        setIframeHeight(Math.min(720, Math.max(160, Math.round(e.data.height))));
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [output]);
+
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
     setHasError(false);
-    setExecStatus('');
+    setExecStatus('BOOTING');
     setExecTime('');
     setBootMsg('');
- 
+    setIframeHeight(220);
+    setRunFlash(true);
+    setTimeout(() => setRunFlash(false), 600);
+
     const startTime = performance.now();
- 
+
     // 1. Visual browser preview pipeline
     const preview = getPreviewContent(langKey, codeText);
     if (preview) {
+      setExecStatus('RENDERING');
+      // Small delay so the running animation is visible even for instant
+      // previews — feels more polished than an instant snap.
+      await new Promise(r => setTimeout(r, 140));
       setOutput({ type: 'html', content: preview });
-      setExecStatus('PREVIEW RENDERED');
+      setExecStatus('PREVIEW');
       setExecTime(`${(performance.now() - startTime).toFixed(0)}ms`);
       setRunning(false);
       return;
     }
- 
+
     if (!isRunnable) {
       setHasError(true);
       setOutput({ type: 'text', content: `Language "${lang || 'unknown'}" doesn't have a browser runtime wired up yet.` });
@@ -1099,19 +1147,19 @@ const CodeBlock = ({ lang, codeText }) => {
       setRunning(false);
       return;
     }
- 
-    // 2. Local sandboxed execution pipeline (WASM / interpreter / native)
+
+    setExecStatus('RUNNING');
     try {
       const result = await safeExecuteCodeLocally(langKey, codeText, (msg) => setBootMsg(msg));
       const endTime = performance.now();
       setHasError(!!result.isError);
       setOutput({ type: 'text', content: tidyOutput(result.output) });
-      setExecStatus(result.unsupported ? 'UNSUPPORTED' : result.isError ? 'EXECUTION FAILED' : 'CODE EXECUTED');
+      setExecStatus(result.unsupported ? 'UNSUPPORTED' : result.isError ? 'ERROR' : 'SUCCESS');
       setExecTime(`${(endTime - startTime).toFixed(0)}ms`);
     } catch (err) {
       setHasError(true);
       setOutput({ type: 'text', content: `Execution error: ${err?.message || String(err)}` });
-      setExecStatus('RUNTIME ERROR');
+      setExecStatus('ERROR');
     } finally {
       setRunning(false);
       setBootMsg('');
@@ -1145,34 +1193,68 @@ const CodeBlock = ({ lang, codeText }) => {
   };
  
   const langColor = getLangColor();
+  const lineCount = (codeText || '').split('\n').length;
+  const charCount = (codeText || '').length;
+  const isLongCode = lineCount > 18;
+  const showFullCode = !isLongCode || !codeCollapsed;
+ 
+  // Status pill styling — driven by current state, not a separate state var
+  const statusConfig = (() => {
+    if (running && bootMsg) return { label: bootMsg.slice(0, 36) + (bootMsg.length > 36 ? '…' : ''), color: '#fbbf24', pulse: true };
+    if (running) return { label: 'RUNNING', color: 'var(--indigo)', pulse: true };
+    if (hasError) return { label: execStatus, color: '#ef4444', pulse: false };
+    if (output && output.type === 'html') return { label: 'PREVIEW', color: '#a78bfa', pulse: false };
+    if (output) return { label: execStatus, color: '#10b981', pulse: false };
+    return { label: 'IDLE', color: 'var(--text4)', pulse: false };
+  })();
  
   return (
     <div style={{
       position: 'relative',
-      margin: '10px 0',
-      borderRadius: 12,
+      margin: '12px 0',
+      borderRadius: 14,
       overflow: 'hidden',
-      border: '1px solid var(--border)',
+      border: `1px solid ${running ? 'rgba(99,102,241,.4)' : 'var(--border)'}`,
       background: 'var(--bg2)',
+      transition: 'border-color .25s ease, box-shadow .25s ease',
+      boxShadow: running
+        ? '0 0 0 1px rgba(99,102,241,.15), 0 8px 28px rgba(99,102,241,.10)'
+        : runFlash ? '0 0 0 1px rgba(16,185,129,.3), 0 6px 22px rgba(16,185,129,.10)' : 'none',
     }}>
+      {/* Animated shimmer scan-line across the top while running */}
+      {running && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 2,
+          background: 'linear-gradient(90deg, transparent 0%, rgba(99,102,241,.1) 20%, rgba(124,58,237,.95) 50%, rgba(99,102,241,.1) 80%, transparent 100%)',
+          backgroundSize: '200% 100%',
+          animation: 'drShimmer 1.4s linear infinite',
+          zIndex: 3,
+          pointerEvents: 'none',
+        }} />
+      )}
+
       {/* Header bar */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '7px 12px',
-        background: 'var(--bg3)',
+        padding: '8px 13px',
+        background: 'linear-gradient(180deg, var(--bg3) 0%, var(--bg2) 100%)',
         borderBottom: '1px solid var(--border)',
+        position: 'relative',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+          {/* Language dot — pulses while running */}
           <div style={{
-            width: 8, height: 8, borderRadius: '50%',
+            width: 9, height: 9, borderRadius: '50%',
             background: langColor,
-            boxShadow: `0 0 6px ${langColor}88`,
+            boxShadow: `0 0 8px ${langColor}aa`,
             flexShrink: 0,
+            animation: running ? 'runnerPulseDot 1s ease-in-out infinite' : 'none',
           }} />
+          {/* Language label */}
           <span style={{
-            fontSize: 11,
+            fontSize: 11.5,
             fontFamily: 'JetBrains Mono, monospace',
             fontWeight: 700,
             color: langColor,
@@ -1182,6 +1264,7 @@ const CodeBlock = ({ lang, codeText }) => {
           }}>
             {lang || 'code'}
           </span>
+          {/* Engine tag chip */}
           {canRun && (
             <span style={{
               fontSize: 10,
@@ -1191,13 +1274,29 @@ const CodeBlock = ({ lang, codeText }) => {
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              padding: '1.5px 7px',
+              borderRadius: 5,
+              background: 'rgba(99,102,241,.05)',
+              border: '1px solid var(--border)',
             }}>
-              {isPreviewable ? '· live preview' : meta ? `· via ${meta.name}` : '· runnable'}
+              {isPreviewable ? 'live preview' : meta ? meta.name : 'runnable'}
             </span>
           )}
+          {/* Line / byte count chip */}
+          <span style={{
+            fontSize: 10,
+            fontFamily: 'JetBrains Mono, monospace',
+            color: 'var(--text4)',
+            opacity: 0.65,
+            letterSpacing: '.02em',
+            whiteSpace: 'nowrap',
+          }}>
+            {lineCount}L · {charCount}B
+          </span>
         </div>
- 
+
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          {/* Run / Preview button — gradient bg, glow on hover, barber-pole stripe while running */}
           {canRun && (
             <button
               onClick={runCode}
@@ -1205,31 +1304,57 @@ const CodeBlock = ({ lang, codeText }) => {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
-                padding: '4px 11px',
-                borderRadius: 7,
-                border: `1px solid ${running ? 'rgba(99,102,241,.3)' : 'rgba(16,185,129,.3)'}`,
-                background: running ? 'rgba(99,102,241,.08)' : 'rgba(16,185,129,.08)',
+                gap: 6,
+                padding: '5px 13px',
+                borderRadius: 8,
+                position: 'relative',
+                overflow: 'hidden',
+                border: running ? '1px solid rgba(99,102,241,.45)' : '1px solid rgba(16,185,129,.4)',
+                background: running
+                  ? 'linear-gradient(135deg, rgba(99,102,241,.18), rgba(124,58,237,.12))'
+                  : 'linear-gradient(135deg, rgba(16,185,129,.14), rgba(34,197,94,.08))',
                 color: running ? 'var(--indigo)' : '#10b981',
                 fontFamily: 'JetBrains Mono, monospace',
                 fontSize: 11,
                 fontWeight: 700,
                 cursor: running ? 'not-allowed' : 'pointer',
-                transition: 'all .15s',
-                letterSpacing: '.04em',
+                transition: 'transform .15s ease, background .2s ease, box-shadow .2s ease',
+                letterSpacing: '.05em',
                 whiteSpace: 'nowrap',
+                boxShadow: running ? '0 0 14px rgba(99,102,241,.3)' : 'none',
+              }}
+              onMouseEnter={e => {
+                if (running) return;
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16,185,129,.22), rgba(34,197,94,.14))';
+                e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,.22)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = '';
+                e.currentTarget.style.background = running
+                  ? 'linear-gradient(135deg, rgba(99,102,241,.18), rgba(124,58,237,.12))'
+                  : 'linear-gradient(135deg, rgba(16,185,129,.14), rgba(34,197,94,.08))';
+                e.currentTarget.style.boxShadow = running ? '0 0 14px rgba(99,102,241,.3)' : 'none';
               }}
             >
               {running ? (
                 <>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                  {/* Animated barber-pole stripe overlay while running */}
+                  <span style={{
+                    position: 'absolute', inset: 0,
+                    backgroundImage: 'repeating-linear-gradient(45deg, rgba(124,58,237,.18) 0 8px, transparent 8px 16px)',
+                    backgroundSize: '40px 40px',
+                    animation: 'runnerBarber .9s linear infinite',
+                    pointerEvents: 'none',
+                  }} />
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" style={{ animation: 'spin .9s linear infinite', flexShrink: 0, position: 'relative' }}>
                     <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                   </svg>
-                  Running…
+                  <span style={{ position: 'relative' }}>Running…</span>
                 </>
               ) : (
                 <>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0, filter: 'drop-shadow(0 0 3px currentColor)' }}>
                     <polygon points="5,3 19,12 5,21" />
                   </svg>
                   {isPreviewable ? 'Preview' : (meta?.verb || 'Run')}
@@ -1238,14 +1363,15 @@ const CodeBlock = ({ lang, codeText }) => {
             </button>
           )}
  
+          {/* Copy button */}
           <button
             onClick={copyCode}
             style={{
               display: 'flex',
               alignItems: 'center',
               gap: 5,
-              padding: '4px 11px',
-              borderRadius: 7,
+              padding: '5px 11px',
+              borderRadius: 8,
               border: '1px solid var(--border2)',
               background: 'transparent',
               color: copied ? '#10b981' : 'var(--text3)',
@@ -1256,17 +1382,19 @@ const CodeBlock = ({ lang, codeText }) => {
               letterSpacing: '.04em',
               whiteSpace: 'nowrap',
             }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,.06)'; e.currentTarget.style.borderColor = 'rgba(99,102,241,.3)'; e.currentTarget.style.color = 'var(--text1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.color = copied ? '#10b981' : 'var(--text3)'; }}
           >
             {copied ? (
               <>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" style={{ animation: 'scaleIn .2s ease' }}>
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                Copied!
+                Copied
               </>
             ) : (
               <>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
                 Copy
@@ -1275,70 +1403,115 @@ const CodeBlock = ({ lang, codeText }) => {
           </button>
         </div>
       </div>
- 
-      {/* Boot status strip — only visible while a fresh engine is loading */}
+
+      {/* Boot status strip — only while a fresh WASM engine is loading */}
       {running && bootMsg && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 7,
-          padding: '6px 12px',
-          background: 'rgba(99,102,241,.05)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '7px 13px',
+          background: 'linear-gradient(90deg, rgba(245,158,11,.07), rgba(99,102,241,.05))',
           borderBottom: '1px solid var(--border)',
           fontSize: 10.5,
           fontFamily: 'JetBrains Mono, monospace',
-          color: 'var(--indigo)',
+          color: '#fbbf24',
+          animation: 'fadeUp .2s ease',
         }}>
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bootMsg}</span>
+          <span style={{ marginLeft: 'auto', opacity: .55, fontSize: 10, letterSpacing: '.06em' }}>ENGINE BOOT</span>
         </div>
       )}
- 
-      {/* Code area */}
-      <pre style={{
-        margin: 0,
-        padding: '14px 16px',
-        overflowX: 'auto',
-        background: 'var(--bg3)',
-        fontFamily: 'JetBrains Mono, monospace',
-        fontSize: 13,
-        lineHeight: 1.7,
-        color: 'var(--cyan)',
-        whiteSpace: 'pre',
-        wordBreak: 'normal',
-        maxHeight: 420,
-        overflowY: 'auto',
-      }}>
-        <code>{codeText}</code>
-      </pre>
- 
-      {/* Output panel */}
+
+      {/* Code area — collapsible for long blocks with a soft fade */}
+      <div style={{ position: 'relative', background: 'var(--bg3)' }}>
+        <pre style={{
+          margin: 0,
+          padding: '14px 16px',
+          overflowX: 'auto',
+          background: 'transparent',
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 13,
+          lineHeight: 1.7,
+          color: 'var(--cyan)',
+          whiteSpace: 'pre',
+          wordBreak: 'normal',
+          maxHeight: showFullCode ? 520 : 200,
+          overflowY: 'hidden',
+          transition: 'max-height .3s ease',
+          maskImage: !showFullCode ? 'linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%)' : 'none',
+          WebkitMaskImage: !showFullCode ? 'linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%)' : 'none',
+        }}>
+          <code>{codeText}</code>
+        </pre>
+        {isLongCode && (
+          <button
+            onClick={() => setCodeCollapsed(v => !v)}
+            style={{
+              position: 'absolute',
+              bottom: 6, left: '50%',
+              transform: 'translateX(-50%)',
+              padding: '4px 12px',
+              borderRadius: 12,
+              background: 'var(--bg2)',
+              border: '1px solid var(--border2)',
+              color: 'var(--text3)',
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 10.5,
+              fontWeight: 600,
+              cursor: 'pointer',
+              letterSpacing: '.04em',
+              transition: 'all .15s',
+              backdropFilter: 'blur(4px)',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.4)'; e.currentTarget.style.color = 'var(--text1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.color = 'var(--text3)'; }}
+          >
+            {codeCollapsed ? `▾ Show all ${lineCount} lines` : '▴ Collapse'}
+          </button>
+        )}
+      </div>
+
+      {/* Output panel — slides in */}
       {output && (
-        <div style={{ borderTop: '1px solid var(--border)' }}>
+        <div style={{
+          borderTop: '1px solid var(--border)',
+          animation: 'runnerSlideUp .35s cubic-bezier(.22,.61,.36,1)',
+          overflow: 'hidden',
+        }}>
+          {/* Output header with status pill */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '6px 12px',
-            background: hasError ? 'rgba(239,68,68,.06)' : isPreviewable ? 'rgba(99,102,241,.06)' : 'rgba(16,185,129,.06)',
+            padding: '7px 13px',
+            background: hasError
+              ? 'linear-gradient(90deg, rgba(239,68,68,.10), rgba(239,68,68,.04))'
+              : output.type === 'html'
+                ? 'linear-gradient(90deg, rgba(167,139,250,.10), rgba(99,102,241,.04))'
+                : 'linear-gradient(90deg, rgba(16,185,129,.10), rgba(16,185,129,.04))',
             borderBottom: '1px solid var(--border)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+              {/* Status dot — pulses while running */}
               <div style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
-                boxShadow: `0 0 6px ${hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981'}aa`,
+                width: 8, height: 8, borderRadius: '50%',
+                background: statusConfig.color,
+                boxShadow: `0 0 8px ${statusConfig.color}cc`,
                 flexShrink: 0,
+                animation: statusConfig.pulse ? 'runnerPulseDot 1s ease-in-out infinite' : 'none',
               }} />
               <span style={{
-                fontSize: 10,
+                fontSize: 10.5,
                 fontFamily: 'JetBrains Mono, monospace',
                 fontWeight: 800,
-                letterSpacing: '.08em',
-                color: hasError ? '#ef4444' : isPreviewable ? 'var(--indigo)' : '#10b981',
+                letterSpacing: '.1em',
+                color: statusConfig.color,
                 whiteSpace: 'nowrap',
+                textTransform: 'uppercase',
               }}>
-                {execStatus}
+                {statusConfig.label}
               </span>
               {meta && !isPreviewable && (
                 <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: .8, whiteSpace: 'nowrap' }}>
@@ -1346,59 +1519,91 @@ const CodeBlock = ({ lang, codeText }) => {
                 </span>
               )}
               {execTime && (
-                <span style={{ fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: 0.7, marginLeft: 2, whiteSpace: 'nowrap' }}>
-                  · {execTime}
+                <span style={{
+                  fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: 0.75, marginLeft: 2, whiteSpace: 'nowrap',
+                  padding: '1px 7px', borderRadius: 4, background: 'rgba(99,102,241,.06)', border: '1px solid var(--border)',
+                }}>
+                  ⏱ {execTime}
                 </span>
               )}
             </div>
             <button
-              onClick={() => { setOutput(null); setHasError(false); setExecStatus(''); setExecTime(''); }}
+              onClick={() => { setOutput(null); setHasError(false); setExecStatus('IDLE'); setExecTime(''); }}
               style={{
                 background: 'none', border: 'none',
                 color: 'var(--text3)', cursor: 'pointer',
                 display: 'flex', alignItems: 'center',
-                width: 22, height: 22, borderRadius: 5,
+                width: 24, height: 24, borderRadius: 6,
                 justifyContent: 'center',
                 transition: 'all .12s',
                 flexShrink: 0,
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.1)'; e.currentTarget.style.color = '#ef4444'; }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.12)'; e.currentTarget.style.color = '#ef4444'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
+              title="Close output"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
- 
+
+          {/* Output body — adaptive iframe for HTML, terminal grid for text */}
           {output.type === 'html' ? (
-            <iframe
-              srcDoc={output.content}
-              style={{
-                width: '100%',
-                height: 360,
-                border: 'none',
-                background: '#fff',
-                display: 'block',
-              }}
-              sandbox="allow-scripts allow-same-origin"
-              title="Code preview"
-            />
+            <div style={{ position: 'relative', background: '#fff' }}>
+              <iframe
+                srcDoc={output.content}
+                style={{
+                  width: '100%',
+                  height: iframeHeight,
+                  border: 'none',
+                  background: '#fff',
+                  display: 'block',
+                  transition: 'height .2s ease',
+                }}
+                sandbox="allow-scripts allow-same-origin"
+                title="Code preview"
+              />
+              {/* Subtle "device" badge showing live measured height */}
+              <div style={{
+                position: 'absolute', top: 6, right: 8,
+                fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: 'rgba(0,0,0,.32)',
+                background: 'rgba(255,255,255,.7)', padding: '1px 6px', borderRadius: 4,
+                backdropFilter: 'blur(4px)', pointerEvents: 'none',
+                letterSpacing: '.08em', fontWeight: 600,
+              }}>
+                {iframeHeight}px
+              </div>
+            </div>
           ) : (
             <pre style={{
               margin: 0,
-              padding: '14px 16px',
-              background: '#080810',
+              padding: '16px 18px',
+              background: '#080812',
+              backgroundImage: 'linear-gradient(rgba(99,102,241,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,.025) 1px, transparent 1px)',
+              backgroundSize: '24px 24px',
               fontFamily: 'JetBrains Mono, monospace',
               fontSize: 13,
-              lineHeight: 1.75,
-              color: hasError ? '#f87171' : '#a5f3fc',
+              lineHeight: 1.8,
+              color: hasError ? '#fca5a5' : '#a5f3fc',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
-              maxHeight: 320,
+              maxHeight: 380,
               overflowY: 'auto',
+              position: 'relative',
             }}>
-              {output.content}
+              <span style={{ animation: 'runnerFadeType .25s ease', display: 'inline' }}>{output.content}</span>
+              {/* Blinking terminal cursor at the end while still running */}
+              {running && (
+                <span style={{
+                  display: 'inline-block', width: 8, height: 14,
+                  background: hasError ? '#fca5a5' : '#a5f3fc',
+                  marginLeft: 2, verticalAlign: 'text-bottom',
+                  animation: 'runnerCursorBlink 1s steps(1) infinite',
+                  borderRadius: 1,
+                  boxShadow: `0 0 6px ${hasError ? '#fca5a5' : '#a5f3fc'}66`,
+                }} />
+              )}
             </pre>
           )}
         </div>
