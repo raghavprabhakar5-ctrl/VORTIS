@@ -510,10 +510,13 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
    Rendered via ReactDOM.createPortal(..., document.body) so it escapes the
    cramped chat bubble (maxWidth:480 for user code / max-width:94% for AI code)
    and actually takes the right side of the SCREEN. On mobile it becomes a
-   bottom sheet so it doesn't crush the chat into a sliver. */
+   bottom sheet so it doesn't crush the chat into a sliver.
+   Width = 50vw (true half-split) bounded so it never gets absurd on tiny or
+   ultra-wide monitors. Previous cap of 560px made the preview feel tiny on
+   any monitor wider than ~1200px — that's now gone. */
 .preview-split-panel{
   position:fixed;top:0;right:0;bottom:0;
-  width:min(46vw,560px);max-width:100vw;height:100vh;
+  width:clamp(420px,50vw,1400px);max-width:100vw;height:100vh;
   z-index:200;
   border-left:1px solid var(--border2);
   background:var(--bg2);
@@ -545,9 +548,11 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
    When a preview is open in split mode, we tag <body> with .vortis-preview-open.
    That pushes the .main container (chat + header + input) left by exactly the
    width of the preview panel — so the chat no longer sits underneath the panel,
-   it actually moves out of the way. Result: a real side-by-side split. */
+   it actually moves out of the way. Result: a real side-by-side split.
+   padding-right MUST mirror the .preview-split-panel width above so the chat
+   column doesn't get overlapped. */
 body.vortis-preview-open .main{
-  padding-right:min(46vw,560px);
+  padding-right:clamp(420px,50vw,1400px);
   transition:padding-right .3s cubic-bezier(.22,.61,.36,1);
 }
 @media(max-width:768px){
@@ -1004,8 +1009,19 @@ const safeExecuteCodeLocally = async (langKey, codeText, onStatus) => {
  
 // ── live-preview HTML wrapper for HTML / SVG / CSS blocks ──
 // Injects a tiny postMessage script so the parent <iframe> can auto-size
-// to the content's measured height. Small snippets no longer float inside
-// a 360px box; tall snippets cap at 720px and scroll.
+// to the content's measured height (used for the {iframeHeight}px badge and
+// for sizing the iframe when it lives inline inside the chat bubble — NOT for
+// the split-screen panel, which always stretches the iframe to fill).
+//
+// We ALSO inject a small <style> block at the top of <head> for HTML previews:
+//   html,body { height:100%; margin:0; padding:0; }
+//   body { background:#fff; min-height:100vh; display:flex;
+//          align-items:flex-start; justify-content:center; }
+// This means fixed-size user content (e.g., a 544px Pac-Man canvas) no longer
+// sits in the top-left corner with empty white space around it — it centers
+// horizontally and the iframe body itself fills the panel. User-supplied
+// <style> tags declared later in the document override these defaults via the
+// normal cascade (same specificity, later declaration wins).
 
 // ── Persistent preview-state store (module-level) ──
 // Why this exists: when an AI message transitions from "streaming" to
@@ -1031,11 +1047,26 @@ const _PREVIEW_HEIGHT_SCRIPT = `
   setTimeout(send,80);setTimeout(send,300);setTimeout(send,1000);
 })();
 <\/script>`;
+// Default body styling for HTML previews — gives the iframe a proper
+// full-height, centered layout so fixed-size user content (canvas games,
+// SVG art, etc.) no longer sits in the top-left corner with empty white
+// space around it. User-supplied <style> tags override these defaults via
+// the normal cascade (same specificity, declared later wins).
+const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;}</style>`;
 const getPreviewContent = (langKey, codeText) => {
   if (langKey === 'html') {
-    // Inject the height-reporter before </body> if possible, else append.
-    if (/<\/body>/i.test(codeText)) return codeText.replace(/<\/body>/i, _PREVIEW_HEIGHT_SCRIPT + '</body>');
-    return codeText + _PREVIEW_HEIGHT_SCRIPT;
+    // Inject default body styles + height-reporter.
+    // If user has <head>, put defaults there; if user has <body> but no <head>,
+    // inject right after <body>; otherwise just prepend to the document.
+    let html = codeText;
+    if (/<\/head>/i.test(html)) {
+      html = html.replace(/<\/head>/i, _PREVIEW_BODY_DEFAULTS + _PREVIEW_HEIGHT_SCRIPT + '</head>');
+    } else if (/<body[^>]*>/i.test(html)) {
+      html = html.replace(/(<body[^>]*>)/i, '$1' + _PREVIEW_BODY_DEFAULTS + _PREVIEW_HEIGHT_SCRIPT);
+    } else {
+      html = _PREVIEW_BODY_DEFAULTS + _PREVIEW_HEIGHT_SCRIPT + html;
+    }
+    return html;
   }
   if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>` + _PREVIEW_HEIGHT_SCRIPT;
   if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>` + _PREVIEW_HEIGHT_SCRIPT;
@@ -1165,7 +1196,17 @@ const CodeTerminal = ({ onClose }) => {
 // Stable iframe — only updates srcdoc when the HTML content itself changes,
 // never on unrelated re-renders (height updates, status changes, hover state
 // elsewhere in the app). This is what stops the reload flicker.
-const PreviewFrame = React.memo(({ content, minHeight }) => {
+//
+// IMPORTANT — flex fill rules:
+// The parent wrapper is `display:flex; flex-direction:column` and itself lives
+// inside another flex column (.preview-split-panel). Neither has a *definite*
+// height — both rely on flex to resolve. That means `height:100%` on the iframe
+// DOES NOT resolve (CSS requires the parent to have a definite height for %
+// heights to work). The old code had `height:'100%'` which silently fell back to
+// the iframe default of 150px — that's why previews looked tiny with grey space
+// underneath. The fix is to rely purely on `flex:1` + `minHeight:0` so the
+// iframe stretches to fill whatever vertical space the panel gives it.
+const PreviewFrame = React.memo(({ content }) => {
   const ref = React.useRef(null);
   const lastContent = React.useRef(null);
 
@@ -1182,8 +1223,7 @@ const PreviewFrame = React.memo(({ content, minHeight }) => {
       style={{
         width: '100%',
         flex: 1,
-        minHeight,
-        height: '100%',
+        minHeight: 0,
         border: '1px solid var(--border)',
         borderRadius: 6,
         background: '#fff',
@@ -1193,7 +1233,7 @@ const PreviewFrame = React.memo(({ content, minHeight }) => {
       title="Code preview"
     />
   );
-}, (prev, next) => prev.content === next.content && prev.minHeight === next.minHeight);
+}, (prev, next) => prev.content === next.content);
 PreviewFrame.displayName = 'PreviewFrame';
 
 const CodeBlock = React.memo(({ lang, codeText }) => {
@@ -1710,12 +1750,16 @@ const CodeBlock = React.memo(({ lang, codeText }) => {
 
           {/* Output body — adaptive iframe for HTML, terminal grid for text.
               In split/full mode the panel is tall enough that we let the iframe
-              fill the available body height (flex:1) instead of capping at 720px.
+              fill the available body height (flex:1) instead of capping at 360px.
               Wrapper uses var(--bg3) so the bezel around the iframe matches the
-              theme; the iframe itself stays white so HTML renders correctly. */}
+              theme; the iframe itself stays white so HTML renders correctly.
+              NOTE: we no longer pass minHeight to PreviewFrame — the iframe
+              stretches to fill the wrapper via flex:1, which is what we want
+              in split/full mode. The {iframeHeight}px badge below still uses
+              the measured height for display purposes. */}
           {output.type === 'html' ? (
             <div style={{ position: 'relative', background: 'var(--bg3)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 6 }}>
-              <PreviewFrame content={output.content} minHeight={Math.min(iframeHeight, 360)} />
+              <PreviewFrame content={output.content} />
               {/* Subtle "device" badge showing live measured height — themed */}
               <div style={{
                 position: 'absolute', top: 10, right: 12,
@@ -2178,7 +2222,12 @@ const SettingsModal = ({
   handleLogout, setShowUpgrade, onClose,
   memories, onDeleteMemory, onClearMemories,
   setConfirmDialog, ttsGender, setTtsGender,
-  uiFont, setUiFont
+  uiFont, setUiFont,
+  // ── Personalization props ──
+  aiTone, setAiTone,
+  aiPersona, setAiPersona,
+  responseLength, setResponseLength,
+  customInstructions, setCustomInstructions
 }) => {
   const [tab, setTab] = useState('account');
 
@@ -2307,11 +2356,12 @@ const SettingsModal = ({
 
 
   const NAV = [
-    { id: 'account',   label: 'Account',   color: '#6366f1', icon: <Crown size={13}/> },
-    { id: 'memories',  label: 'Memories',  color: '#8b5cf6', icon: <Brain size={13}/> },
-    { id: 'billing',   label: 'Billing',   color: '#f59e0b', icon: <CreditCard size={13}/> },
-    { id: 'display',   label: 'Display',   color: '#06b6d4', icon: <Sun size={13}/> },
-    { id: 'shortcuts', label: 'Shortcuts', color: '#ec4899', icon: <Settings size={13}/> },
+    { id: 'account',          label: 'Account',         color: '#6366f1', icon: <Crown size={13}/> },
+    { id: 'memories',         label: 'Memories',        color: '#8b5cf6', icon: <Brain size={13}/> },
+    { id: 'billing',          label: 'Billing',         color: '#f59e0b', icon: <CreditCard size={13}/> },
+    { id: 'display',          label: 'Display',         color: '#06b6d4', icon: <Sun size={13}/> },
+    { id: 'personalization', label: 'Personalization', color: '#10b981', icon: <Sparkles size={13}/> },
+    { id: 'shortcuts',        label: 'Shortcuts',       color: '#ec4899', icon: <Settings size={13}/> },
   ];
 
   // ── Toggle ──
@@ -2721,34 +2771,235 @@ const SettingsModal = ({
   );
 
   // ── SHORTCUTS TAB ──
+  // Redesigned: sectioned by category, shows platform-appropriate modifier
+  // (⌘ on mac, Ctrl elsewhere), and lists the shortcuts that actually work in
+  // the app (with handlers wired up in App's main keydown effect).
+  // Shift+Enter (newline) was removed by user request — it's common sense.
   const ShortcutsTab = () => {
-    const shortcuts = [
-    { label: 'New chat',        keys: ['⌘', 'K'] },
-    { label: 'Toggle sidebar',  keys: ['⌘', '/'] },
-    { label: 'Incognito mode',  keys: ['⌘', 'F12'] },
-    { label: 'New line',        keys: ['Shift', 'Enter'] },
-    { label: 'Settings',        keys: ['⌘', ','] },
-  ];
+    const isMac = useMemo(() => {
+      try { return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || ''); }
+      catch(_) { return false; }
+    }, []);
+    const mod = isMac ? '⌘' : 'Ctrl';
+    const shift = isMac ? '⇧' : 'Shift';
+
+    const sections = [
+      {
+        title: 'General',
+        items: [
+          { label: 'New chat',        keys: [mod, 'K'] },
+          { label: 'Open settings',   keys: [mod, ','] },
+          { label: 'Toggle theme',    keys: [mod, shift, 'L'] },
+        ],
+      },
+      {
+        title: 'Chat',
+        items: [
+          { label: 'Stop generation',       keys: ['Esc'] },
+          { label: 'Regenerate last reply', keys: [mod, shift, 'R'] },
+          { label: 'Copy last AI reply',   keys: [mod, shift, 'C'] },
+        ],
+      },
+      {
+        title: 'Navigation',
+        items: [
+          { label: 'Toggle sidebar',  keys: [mod, '/'] },
+          { label: 'Incognito mode',  keys: [mod, 'F12'] },
+        ],
+      },
+      {
+        title: 'Code & Preview',
+        items: [
+          { label: 'Run code (in editor)', keys: [mod, 'Enter'] },
+        ],
+      },
+    ];
+
+    const sectionHeaderStyle = {
+      fontSize: 10.5, color: 'var(--text3)',
+      fontFamily: 'JetBrains Mono,monospace',
+      letterSpacing: '.12em', textTransform: 'uppercase',
+      fontWeight: 700, padding: '14px 4px 6px',
+    };
+    const kbdStyle = {
+      background: 'var(--bg4)', border: '1px solid var(--border2)',
+      borderBottomWidth: 2, borderRadius: 6, padding: '3px 9px',
+      fontSize: 11.5, fontFamily: 'JetBrains Mono,monospace',
+      color: 'var(--text2)', minWidth: 22, textAlign: 'center',
+      lineHeight: 1.4, display: 'inline-block',
+    };
+
     return (
       <>
         <div style={S.sTitle}>Keyboard shortcuts</div>
-        <div style={S.sSub}>Speed up your workflow</div>
-        <div style={S.card}>
-          {shortcuts.map((s, i) => (
-            <div key={i} style={i < shortcuts.length - 1 ? S.row : S.rowLast}>
-              <span style={{ fontSize: 13, color: 'var(--text1)' }}>{s.label}</span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {s.keys.map((k, ki) => (
-                  <kbd key={ki} style={{
-                    background: 'var(--bg4)', border: '1px solid var(--border2)',
-                    borderRadius: 6, padding: '3px 9px',
-                    fontSize: 12, fontFamily: 'JetBrains Mono,monospace',
-                    color: 'var(--text2)',
-                  }}>{k}</kbd>
-                ))}
-              </div>
+        <div style={S.sSub}>Speed up your workflow — {isMac ? 'macOS' : 'Windows / Linux'} layout</div>
+        {sections.map(sec => (
+          <React.Fragment key={sec.title}>
+            <div style={sectionHeaderStyle}>{sec.title}</div>
+            <div style={{ ...S.card, marginBottom: 0 }}>
+              {sec.items.map((s, i) => (
+                <div key={i} style={i < sec.items.length - 1 ? S.row : S.rowLast}>
+                  <span style={{ fontSize: 13, color: 'var(--text1)' }}>{s.label}</span>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    {s.keys.map((k, ki) => (
+                      <kbd key={ki} style={kbdStyle}>{k}</kbd>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </React.Fragment>
+        ))}
+        <div style={{
+          marginTop: 14, padding: '11px 14px',
+          background: 'rgba(99,102,241,.06)',
+          border: '1px solid rgba(99,102,241,.18)',
+          borderRadius: 11, fontSize: 12, color: 'var(--text2)',
+          display: 'flex', alignItems: 'flex-start', gap: 9,
+        }}>
+          <Sparkles size={13} color="var(--indigo)" style={{ marginTop: 1, flexShrink: 0 }}/>
+          <span>Shortcuts fire app-wide, even while focused in the message box. <b style={{ color: 'var(--text1)' }}>{mod} + K</b> always starts a fresh chat.</span>
+        </div>
+      </>
+    );
+  };
+
+  // ── PERSONALIZATION TAB ──
+  // User-controlled AI behavior: tone, persona, response length, and free-form
+  // custom instructions. Persisted to localStorage by the parent; injected into
+  // the system prompt before each chat fetch (see getAI in App).
+  const PersonalizationTab = () => {
+    const tones = [
+      { id: 'concise',  label: 'Concise',  desc: 'Direct, no fluff' },
+      { id: 'balanced', label: 'Balanced', desc: 'Friendly but efficient' },
+      { id: 'friendly', label: 'Friendly', desc: 'Warm and conversational' },
+      { id: 'formal',   label: 'Formal',   desc: 'Professional tone' },
+    ];
+    const personas = [
+      { id: 'helpful',    label: 'Helpful',    desc: 'Default assistant mode' },
+      { id: 'creative',   label: 'Creative',   desc: 'Fresh ideas, lateral thinking' },
+      { id: 'analytical', label: 'Analytical', desc: 'Step-by-step reasoning' },
+      { id: 'tutor',      label: 'Tutor',      desc: 'Teaches and checks understanding' },
+      { id: 'direct',     label: 'Direct',     desc: 'Just the answer, no hedging' },
+    ];
+    const lengths = [
+      { id: 'auto',   label: 'Auto',   desc: 'Match the question' },
+      { id: 'short',  label: 'Short',  desc: '2-3 sentences max' },
+      { id: 'medium', label: 'Medium', desc: 'A short paragraph' },
+      { id: 'long',   label: 'Long',   desc: 'Multi-paragraph, thorough' },
+    ];
+
+    const Chip = ({ active, label, desc, onClick }) => (
+      <button onClick={onClick} style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3,
+        padding: '10px 12px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+        border: `1px solid ${active ? 'rgba(99,102,241,.45)' : 'var(--border2)'}`,
+        background: active ? 'rgba(99,102,241,.10)' : 'var(--bg3)',
+        transition: 'all .15s', flex: '1 1 120px', minWidth: 120,
+      }}>
+        <span style={{
+          fontSize: 12.5, fontWeight: active ? 700 : 500,
+          fontFamily: 'Geist,sans-serif',
+          color: active ? 'var(--indigo)' : 'var(--text1)',
+        }}>{label}</span>
+        <span style={{ fontSize: 10.5, color: 'var(--text3)', fontFamily: 'Geist,sans-serif' }}>{desc}</span>
+      </button>
+    );
+
+    const Section = ({ title, children }) => (
+      <div style={{ padding: '13px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: 'var(--text3)',
+          fontFamily: 'JetBrains Mono,monospace', letterSpacing: '.1em',
+          textTransform: 'uppercase', marginBottom: 10,
+        }}>{title}</div>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>{children}</div>
+      </div>
+    );
+
+    const resetAll = () => {
+      setAiTone('balanced'); setAiPersona('helpful'); setResponseLength('auto'); setCustomInstructions('');
+      try {
+        localStorage.removeItem('vortis_ai_tone');
+        localStorage.removeItem('vortis_ai_persona');
+        localStorage.removeItem('vortis_resp_len');
+        localStorage.removeItem('vortis_custom_instr');
+      } catch(_) {}
+    };
+
+    return (
+      <>
+        <div style={S.sTitle}>Personalization</div>
+        <div style={S.sSub}>Tune how Vortis talks and responds to you</div>
+        <div style={S.card}>
+          <Section title="Tone">
+            {tones.map(t => (
+              <Chip key={t.id} active={aiTone === t.id} label={t.label} desc={t.desc}
+                onClick={() => { setAiTone(t.id); try { localStorage.setItem('vortis_ai_tone', t.id); } catch(_) {} }}/>
+            ))}
+          </Section>
+          <Section title="Persona">
+            {personas.map(p => (
+              <Chip key={p.id} active={aiPersona === p.id} label={p.label} desc={p.desc}
+                onClick={() => { setAiPersona(p.id); try { localStorage.setItem('vortis_ai_persona', p.id); } catch(_) {} }}/>
+            ))}
+          </Section>
+          <Section title="Response length">
+            {lengths.map(l => (
+              <Chip key={l.id} active={responseLength === l.id} label={l.label} desc={l.desc}
+                onClick={() => { setResponseLength(l.id); try { localStorage.setItem('vortis_resp_len', l.id); } catch(_) {} }}/>
+            ))}
+          </Section>
+          <div style={{ padding: '13px 16px' }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: 'var(--text3)',
+              fontFamily: 'JetBrains Mono,monospace', letterSpacing: '.1em',
+              textTransform: 'uppercase', marginBottom: 8,
+            }}>Custom instructions</div>
+            <div style={{ fontSize: 11.5, color: 'var(--text4)', marginBottom: 8 }}>
+              Anything you want Vortis to always remember or follow. Applied to every conversation.
+            </div>
+            <textarea
+              value={customInstructions}
+              onChange={e => {
+                const v = e.target.value.slice(0, 800);
+                setCustomInstructions(v);
+                try { localStorage.setItem('vortis_custom_instr', v); } catch(_) {}
+              }}
+              placeholder="e.g. I'm a CS student — use Python examples and skip basics. Always format code with explanations underneath, not above."
+              rows={3}
+              style={{
+                width: '100%', resize: 'vertical', minHeight: 70,
+                padding: '10px 12px', borderRadius: 9,
+                background: 'var(--bg3)', border: '1px solid var(--border2)',
+                color: 'var(--text1)', fontFamily: 'Geist,sans-serif', fontSize: 13,
+                lineHeight: 1.5, outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+              <span style={{ fontSize: 10.5, color: 'var(--text4)', fontFamily: 'JetBrains Mono,monospace' }}>
+                {customInstructions.length} / 800
+              </span>
+              <button
+                onClick={resetAll}
+                style={{
+                  padding: '5px 10px', borderRadius: 7, background: 'transparent',
+                  border: '1px solid var(--border2)', color: 'var(--text3)',
+                  fontSize: 11, fontFamily: 'Geist,sans-serif', cursor: 'pointer', transition: 'all .15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.4)'; e.currentTarget.style.color = 'var(--text1)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border2)'; e.currentTarget.style.color = 'var(--text3)'; }}
+              >Reset to defaults</button>
+            </div>
+          </div>
+        </div>
+        <div style={{
+          marginTop: 12, padding: '11px 14px', background: 'rgba(99,102,241,.06)',
+          border: '1px solid rgba(99,102,241,.18)', borderRadius: 11,
+          fontSize: 12, color: 'var(--text2)', display: 'flex', alignItems: 'flex-start', gap: 9,
+        }}>
+          <Sparkles size={13} color="var(--indigo)" style={{ marginTop: 1, flexShrink: 0 }}/>
+          <span>Changes apply to your next message. Existing conversations won't be retroactively re-toned.</span>
         </div>
       </>
     );
@@ -2797,11 +3048,12 @@ const SettingsModal = ({
   };
 
   const TAB_CONTENT = {
-    account:   <AccountTab/>,
-    memories:  <MemoriesTab/>,
-    billing:   <BillingTab/>,
-    display:   <DisplayTab/>,
-    shortcuts: <ShortcutsTab/>,
+    account:         <AccountTab/>,
+    memories:        <MemoriesTab/>,
+    billing:         <BillingTab/>,
+    display:         <DisplayTab/>,
+    personalization: <PersonalizationTab/>,
+    shortcuts:       <ShortcutsTab/>,
   };
 
   return (
@@ -2935,6 +3187,22 @@ export default function VortisAI() {
   const [ttsGender, setTtsGender] = useState(() => {
   try { return localStorage.getItem('vortis_tts_gender') || 'male'; } catch(_) { return 'male'; }
 });
+  // ── Personalization state ──
+  // Persisted to localStorage so the user's preferences survive reloads and
+  // remounts. Injected into the AI system prompt in getAI() before each chat
+  // fetch — see the PERSONALIZATION block below.
+  const [aiTone, setAiTone] = useState(() => {
+    try { return localStorage.getItem('vortis_ai_tone') || 'balanced'; } catch(_) { return 'balanced'; }
+  });
+  const [aiPersona, setAiPersona] = useState(() => {
+    try { return localStorage.getItem('vortis_ai_persona') || 'helpful'; } catch(_) { return 'helpful'; }
+  });
+  const [responseLength, setResponseLength] = useState(() => {
+    try { return localStorage.getItem('vortis_resp_len') || 'auto'; } catch(_) { return 'auto'; }
+  });
+  const [customInstructions, setCustomInstructions] = useState(() => {
+    try { return localStorage.getItem('vortis_custom_instr') || ''; } catch(_) { return ''; }
+  });
   const [payMethod, setPayMethod] = useState('card');
   const [cardNum, setCardNum] = useState('');
   const [cardExp, setCardExp] = useState('');
@@ -3052,6 +3320,13 @@ useEffect(() => {
   const aiTimeoutRef = useRef(null);
   const chatIdRef = useRef(chatId);
   const userUidRef = useRef('');
+  // ── Keyboard-shortcut state ref ──
+  // The keydown handler is attached once with [] deps, so it can't read
+  // fresh state directly. We mirror the latest values into this ref via a
+  // useEffect (below, near the keydown handler) that runs after every render.
+  // The handler reads from this ref, so it always sees fresh `messages`,
+  // `isProcessing`, `getAI`, etc. without needing its own deps.
+  const kbStateRef = useRef({});
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
 
   const showToast = (msg, color = 'var(--green)') => { setToast({ msg, color }); setTimeout(() => setToast(null), 3500); };
@@ -3555,10 +3830,91 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
     return () => { recogRef.current?.stop(); synthRef.current.cancel(); clearTimeout(aiTimeoutRef.current); clearTimeout(saveTimerRef.current); };
   }, []);
 
+  // Sync the keyboard handler's state ref with the latest render's values.
+  // No deps array → runs after EVERY render, so the handler always sees
+  // fresh `messages`, `isProcessing`, `getAI`, etc. even though the handler
+  // itself is attached only once.
+  useEffect(() => {
+    kbStateRef.current = {
+      getAI, messages, isProcessing, isIncognito, isDark,
+      setMessages, setIsProcessing, setIsStreaming, setStreamText,
+      setIsDark, setShowSettings, setShowSidebar, setIsIncognito,
+      setShowLogin, setToast,
+    };
+  });
+
   useEffect(() => {
     const handler = (e) => {
-      if ((e.ctrlKey||e.metaKey) && e.key === 'k') { e.preventDefault(); startNewChat(); }
-      if ((e.ctrlKey||e.metaKey) && e.key === '/') { e.preventDefault(); setShowSidebar(p => !p); }
+      const mod = e.ctrlKey || e.metaKey;
+      const shift = e.shiftKey;
+      const s = kbStateRef.current;
+      const target = e.target;
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+      // ── Global shortcuts — fire even when focused in an input ──
+      // ⌘/Ctrl + K → new chat (always works, even mid-message)
+      if (mod && !shift && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); startNewChat(); return; }
+      // ⌘/Ctrl + , → open settings
+      if (mod && !shift && e.key === ',') { e.preventDefault(); s.setShowSettings(true); return; }
+      // ⌘/Ctrl + / → toggle sidebar
+      if (mod && !shift && e.key === '/') { e.preventDefault(); s.setShowSidebar(p => !p); return; }
+      // ⌘/Ctrl + F12 → toggle incognito (kept on F12 because ⌘⇧N conflicts with browser private window)
+      if (mod && !shift && e.key === 'F12') {
+        e.preventDefault();
+        const newIncog = !s.isIncognito;
+        try {
+          const url = new URL(window.location.href);
+          if (newIncog) url.searchParams.set('incognito', 'true');
+          else url.searchParams.delete('incognito');
+          window.history.replaceState({}, '', url);
+        } catch(_) {}
+        s.setIsIncognito(newIncog);
+        window.dispatchEvent(new CustomEvent('vortis-incognito-toggle', { detail: { incognito: newIncog } }));
+        return;
+      }
+
+      // ── App-level shortcuts — skip while typing in a text field ──
+      // (so we don't hijack normal text entry)
+      if (isTyping) return;
+
+      // ⌘/Ctrl + Shift + L → toggle theme
+      if (mod && shift && (e.key === 'L' || e.key === 'l')) { e.preventDefault(); s.setIsDark(p => !p); return; }
+
+      // Esc → stop generation (only if no modal is open — modals handle Esc themselves)
+      if (e.key === 'Escape' && s.isProcessing) {
+        const modalOpen = document.querySelector('.modal-overlay, [role="dialog"]');
+        if (!modalOpen) {
+          e.preventDefault();
+          abortGenRef.current = true;
+          s.setIsProcessing(false); s.setIsStreaming(false); s.setStreamText('');
+          return;
+        }
+      }
+
+      // ⌘/Ctrl + Shift + R → regenerate last reply
+      if (mod && shift && (e.key === 'R' || e.key === 'r')) {
+        e.preventDefault();
+        if (s.isProcessing) return;
+        let lastUserIdx = -1;
+        for (let i = s.messages.length - 1; i >= 0; i--) { if (s.messages[i].type === 'user') { lastUserIdx = i; break; } }
+        if (lastUserIdx === -1) return;
+        const lastUser = s.messages[lastUserIdx];
+        s.setMessages(prev => prev.slice(0, lastUserIdx + 1));
+        s.setIsProcessing(true);
+        Promise.resolve(s.getAI(lastUser.text, false)).finally(() => s.setIsProcessing(false));
+        return;
+      }
+
+      // ⌘/Ctrl + Shift + C → copy last AI reply
+      if (mod && shift && (e.key === 'C' || e.key === 'c')) {
+        e.preventDefault();
+        let lastAi = null;
+        for (let i = s.messages.length - 1; i >= 0; i--) { if (s.messages[i].type === 'ai') { lastAi = s.messages[i]; break; } }
+        if (lastAi?.text) {
+          try { navigator.clipboard?.writeText(lastAi.text); s.setToast?.({ msg: 'Last reply copied', color: 'var(--green)' }); setTimeout(() => s.setToast?.(null), 1800); } catch(_) {}
+        }
+        return;
+      }
     };
     window.addEventListener('keydown', handler); return () => window.removeEventListener('keydown', handler);
   }, []);
@@ -5456,6 +5812,38 @@ sys += '\n\nTRANSLITERATION & WRITING STYLE: When replying in any language writt
 sys += '\n\nHINGLISH SPECIFIC: For Hindi written in Roman script, never use IAST/academic diacritics (ā, ī, ū, ṇ, ṅ, ṭ, ḍ, ṣ, ñ). Write "mulyankan" not "mūlyāṅkan", "path-pustak" not "pāṭh-pustak", "kya" not "kyā" — plain casual spelling only.';
       if (uploadedDoc) sys += `\n\nUser uploaded "${uploadedDoc.name}":\n${uploadedDoc.content.slice(0, 6000)}`;
       
+// ── Personalization (user-configured via Settings → Personalization) ──
+// Injected right before the request body so every chat fetch picks up the
+// latest tone / persona / length / custom instructions. Defaults are safe —
+// if the user never opens Personalization, this block is mostly a no-op.
+{
+  const _toneMap = {
+    concise:  'Be concise and direct. Skip pleasantries and get to the point fast.',
+    balanced: 'Be balanced — friendly but efficient, no padding.',
+    friendly: 'Be warm and conversational. Use a friendly, approachable tone.',
+    formal:   'Be professional and formal. Use polished, business-appropriate language.',
+  };
+  const _personaMap = {
+    helpful:    'Default helpful-assistant mode.',
+    creative:   'Be creative — bring fresh ideas, lateral thinking, and bold suggestions when appropriate.',
+    analytical: 'Be analytical — break problems down, consider edge cases, and show your reasoning.',
+    tutor:      'Be a tutor — explain step by step, ask check-in questions, and make sure the user understands before moving on.',
+    direct:     'Be direct — give the answer with no hedging, no fluff, no caveats unless they materially matter.',
+  };
+  const _lengthMap = {
+    auto:   'Use natural length — short for simple questions, longer for complex ones.',
+    short:  'Keep responses to 2-3 sentences when possible. Be ruthless about trimming.',
+    medium: 'Aim for medium length — a short paragraph or a few focused bullet points.',
+    long:   'Be thorough — multi-paragraph responses where useful, but stay on-topic.',
+  };
+  sys += '\n\n═══════════════════════════════════════\nPERSONALIZATION (user-configured — apply to ALL responses)\n═══════════════════════════════════════\n';
+  sys += `Tone: ${_toneMap[aiTone] || _toneMap.balanced}\n`;
+  sys += `Persona: ${_personaMap[aiPersona] || _personaMap.helpful}\n`;
+  sys += `Response length: ${_lengthMap[responseLength] || _lengthMap.auto}\n`;
+  if (customInstructions && customInstructions.trim()) {
+    sys += `Custom instructions from the user (ALWAYS follow these unless impossible or unsafe):\n${customInstructions.trim().slice(0, 800)}\n`;
+  }
+}
 
 const trimmedHistory = convHistory.current.slice(-12);
 setIsStreaming(true); setStreamText(''); setProcessingStatus('thinking');
@@ -6696,8 +7084,6 @@ return (
           ))}
 
             
-
-            
             {isProcessing && !streamText && !messages.some(m => m.text === '__IMG_LOADING__') && (
   <div className="msg-wrap" style={{ display: 'flex', gap: 12, marginBottom: 18 }}>
     <VortisAvatar size={35} animating/>
@@ -6940,6 +7326,11 @@ onChange={e => {
     setTtsGender={setTtsGender}
     uiFont={uiFont}
     setUiFont={setUiFont}
+    // ── Personalization props ──
+    aiTone={aiTone}                 setAiTone={setAiTone}
+    aiPersona={aiPersona}           setAiPersona={setAiPersona}
+    responseLength={responseLength} setResponseLength={setResponseLength}
+    customInstructions={customInstructions} setCustomInstructions={setCustomInstructions}
   />
 )}
 
@@ -7259,3 +7650,4 @@ onChange={e => {
     </div></Suspense>
   );
 }
+
