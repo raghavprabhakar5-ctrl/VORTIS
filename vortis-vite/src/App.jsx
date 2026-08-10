@@ -450,6 +450,8 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
 .menu-item:last-child{border-bottom:none}
 .menu-item:hover,.menu-item:active{background:rgba(99,102,241,.06)}
 .menu-item-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.msg-actions{opacity:0;pointer-events:none;transition:opacity .15s}
+.msg-wrap:hover .msg-actions{opacity:1;pointer-events:auto}
 .pay-input{width:100%;padding:10px 12px;border-radius:10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text1);font-family:'JetBrains Mono',monospace;font-size:14px;outline:none;display:block;transition:border-color .15s}
 .pay-input:focus{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.08)}
 .btn-primary{background:linear-gradient(135deg,var(--indigo),var(--violet));border:none;color:white;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font-main);transition:all .2s;display:flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent}
@@ -6593,7 +6595,7 @@ return (
                     </div>
                   </div>
                 ) : msg.type === 'user' ? (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }} onMouseEnter={() => setHoveredMsg('u_'+idx)} onMouseLeave={() => setHoveredMsg(null)}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
                       {msg.image && <img src={msg.image} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.text && (() => {
@@ -6626,9 +6628,10 @@ return (
     {replyInfo.quoted}
   </div>
 )}
-      {!hasCode ? (
-        <div className="bubble-user">{bodyText}</div>
-      ) : (
+
+ {!hasCode ? (
+    <div className="bubble-user">{bodyText}</div>
+       ) : (
         parts.map((p, i) =>
           p.type === 'code'
             ? <div key={i} style={{ width: '100%', maxWidth: 480 }}><CodeBlock lang={p.lang} codeText={p.content} /></div>
@@ -6638,20 +6641,15 @@ return (
     </div>
   );
 })()}
-                      <div style={{ display: 'flex', gap: 4, opacity: hoveredMsg === 'u_'+idx ? 1 : 0, transition: 'opacity .15s', pointerEvents: hoveredMsg === 'u_'+idx ? 'auto' : 'none', marginTop: 2 }}>
-                        <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
-                        <button className="user-action-btn" title="Edit & resend" onClick={() => { setInput(msg.text||''); setMessages(prev => prev.slice(0, idx)); convHistory.current = []; setTimeout(() => { textareaRef.current?.focus(); if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight,140)+'px'; } }, 50); }}><Edit2 size={11}/></button>
-                      </div>
-                    </div>
-                    <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
+                      <div className="msg-actions" style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                     <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
+                   <button className="user-action-btn" title="Edit & resend" onClick={() => { setInput(msg.text||''); setMessages(prev => prev.slice(0, idx)); convHistory.current = []; setTimeout(() => { textareaRef.current?.focus(); if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight,140)+'px'; } }, 50); }}><Edit2 size={11}/></button>
                   </div>
+                </div>
+                 <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
+               </div>
                ) : (
-            <div
-              data-msgid={msg.id}
-              style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}
-              onMouseEnter={() => setHoveredMsg(idx)}
-              onMouseLeave={() => setHoveredMsg(null)}
-            >
+            <div data-msgid={msg.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ width: 34, flexShrink: 0 }}/>
             <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
             <div className="bubble-ai">
@@ -6661,7 +6659,8 @@ return (
   onUpgradeClick={() => setShowUpgrade(true)}
 />
 </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5, opacity: (hoveredMsg===idx && msg.text !== '__IMG_LOADING__') ? 1 : 0, transition: 'opacity .15s' }}>
+                   {msg.text !== '__IMG_LOADING__' && (
+                    <div className="msg-actions" style={{ display: 'flex', alignItems: 'center', gap: 1, marginTop: 5 }}>
                         {(() => {
                           const hasCodeOrImage = /```/.test(msg.text || '') || (msg.text || '').startsWith('__IMG_B64__');
                           const actions = [
@@ -6688,12 +6687,15 @@ return (
                         <button onClick={() => setReaction(msg.id,'up')} className={`action-btn ${reactions[msg.id]==='up'?'active-up':''}`}><ThumbsUp size={11}/></button>
                         <button onClick={() => setReaction(msg.id,'down')} className={`action-btn ${reactions[msg.id]==='down'?'active-down':''}`}><ThumbsDown size={11}/></button>
                         <button onClick={() => toggleStar(msg)} className={`star-btn ${starred[msg.id]?'starred':''}`}><Star size={11} fill={starred[msg.id]?'currentColor':'none'}/></button>
-                      </div>
-                    </div>
+                       </div>
+                      )}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              )}
+            </div>
+          ))}
+
+            
 
             
             {isProcessing && !streamText && !messages.some(m => m.text === '__IMG_LOADING__') && (
