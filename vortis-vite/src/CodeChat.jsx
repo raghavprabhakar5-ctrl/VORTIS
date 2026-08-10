@@ -3947,7 +3947,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
         {/* ── Main chat area ── */}
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: '#0a0a0a' }}>
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-          <div ref={scrollRef} onScroll={handleScroll} style={{ position: 'absolute', inset: 0, overflowY: 'auto' }} className="scr">
+          <div ref={scrollRef} onScroll={handleScroll} style={{ position: 'absolute', inset: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }} className="scr">
             {messages.length === 0 && !streaming ? (
   incognito ? (
     <div style={{
@@ -4055,7 +4055,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
     </div>
   )
 ) : (
-  <div style={{ maxWidth: 820, margin: '0 auto', padding: '20px 22px 12px' }}>
+  <div style={{ maxWidth: 820, width: '100%', boxSizing: 'border-box', padding: '20px 22px 12px' }}>
                 {messages.map((m, i) => (
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
                     makeMdComponents={makeMdComponents} onSmartEdit={handleSmartEdit} messageId={m.id}
@@ -4154,7 +4154,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
             flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
             padding: '12px 22px 16px'
           }}>
-            <div style={{ maxWidth: 820, margin: '0 auto' }}>
+            <div style={{ maxWidth: 820, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
 
               {/* Editing banner — shows when the user is editing a previous
                   message. Lets them cancel and keep the original intact. */}

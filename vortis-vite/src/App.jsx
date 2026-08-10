@@ -331,12 +331,12 @@ input,textarea,select{font-size:16px}
 .status-reading{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:var(--green)}
 .status-vision{background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);color:var(--cyan)}
 .chat-feed{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;align-items:center;-webkit-overflow-scrolling:touch}
-.chat-inner{max-width:720px;width:100%;margin:0 auto;padding:16px 20px 12px;flex:1;display:flex;flex-direction:column;align-self:center}
+.chat-inner{max-width:900px;width:100%;margin:0 auto;padding:16px 20px 12px;flex:1;display:flex;flex-direction:column;align-self:center}
 .welcome-wrap{padding-top:32px;display:flex;flex-direction:column;align-items:center}
 .welcome-greeting{font-size:clamp(20px,5vw,32px);font-weight:700;color:var(--text1);letter-spacing:-.04em;margin-bottom:5px;background:linear-gradient(135deg,var(--text1) 0%,var(--indigo) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;text-align:center}
 .welcome-sub{font-size:13.5px;color:var(--text3);margin-bottom:20px;display:block;text-align:center}
 .input-section{padding:0 12px 10px;flex-shrink:0}
-.input-inner{max-width:720px;margin:0 auto}
+.input-inner{max-width:900px;margin:0 auto}
 .input-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;transition:border-color .2s,box-shadow .2s}
 .input-box:focus-within{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.08),0 4px 24px rgba(99,102,241,.1)}
 .input-field{background:transparent;border:none;outline:none;color:var(--text1);font-family:var(--font-main);font-size:15px;line-height:1.6;resize:none;width:100%;padding:14px 16px 6px;min-height:36px;max-height:140px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -2670,6 +2670,8 @@ useEffect(() => {
   const inited = useRef(false);
   const styleEl = useRef(null);
   const textareaRef = useRef(null);
+  const menuRef = useRef(null);
+  const menuBtnRef = useRef(null);
   const imgGenLock = useRef(false);
   const abortGenRef = useRef(false);
   const streamTextRef = useRef('');
@@ -2710,6 +2712,20 @@ useEffect(() => {
 
 useEffect(() => {
   const clearSel = () => setSelectionReply(null);
+
+  useEffect(() => {
+  if (!showMenu) return;
+  const handleClickOutside = (e) => {
+    if (
+      menuRef.current && !menuRef.current.contains(e.target) &&
+      menuBtnRef.current && !menuBtnRef.current.contains(e.target)
+    ) {
+      setShowMenu(false);
+    }
+  };
+  document.addEventListener('mousedown', handleClickOutside);
+  return () => document.removeEventListener('mousedown', handleClickOutside);
+}, [showMenu]);
 
   const handleMouseUp = (e) => {
     if (e.target.closest('[data-reply-btn]')) return;
@@ -5824,7 +5840,7 @@ return (
         <div className="welcome-wrap">
           <div className="welcome-greeting">{getGreeting(profile.name)}</div>
           <p className="welcome-sub">Ask me anything — I'll search the web, create images, and analyze for you.</p>
-          <div className="quick-pills" style={{ maxWidth: 680, width: '100%', marginTop: 5 }}>
+          <div className="quick-pills" style={{ maxWidth: 860, width: '100%', marginTop: 5 }}>
             {QUICK_ACTIONS.map(s => <button key={s.text} className="q-pill" onClick={() => { setInput(s.text); setTimeout(() => textareaRef.current?.focus(), 50); }}><span style={{ color: s.color }}>{s.icon}</span>{s.text}</button>)}
           </div>
 
@@ -5834,7 +5850,7 @@ return (
           </div>
           {showRecentChats && (
             savedChats.length > 0 ? (
-              <div className="recent-grid" style={{ maxWidth: 680 }}>
+              <div className="recent-grid" style={{ maxWidth: 860 }}>
                 {savedChats.slice(0, 3).map(c => (
                  <div className="recent-card" onClick={() => loadChat(c.id)}>
                     <div className="rc-icon"><MessageSquare size={11} color="var(--indigo)"/></div>
@@ -6166,8 +6182,8 @@ return (
               </div>
             )}
 
-            {showMenu && (
-              <div className="menu-popup">
+           {showMenu && (
+              <div className="menu-popup" ref={menuRef}>
                 {menuItems.map((item, i) => (
                   <button key={i} className="menu-item" onClick={item.fn} style={{ borderBottom: i < menuItems.length-1 ? '1px solid var(--border)' : 'none', background: item.active ? 'rgba(99,102,241,.05)' : 'transparent' }}>
                     <div className="menu-item-icon" style={{ background: item.bg }}><span style={{ color: item.col }}>{item.icon}</span></div>
@@ -6271,9 +6287,9 @@ onChange={e => {
   className="input-field"
 />
       <div className="input-actions-row">
-         <button className={`ia-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)}>
-             <Plus size={13}/><span>Add</span>
-                </button>
+         <button ref={menuBtnRef} className={`ia-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)}>
+          <Plus size={13}/><span>Add</span>
+          </button>
                 {imgGenMode && (
   <button
     className="ia-btn"
