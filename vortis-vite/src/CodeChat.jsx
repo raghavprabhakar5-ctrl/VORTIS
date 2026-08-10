@@ -4056,7 +4056,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
     </div>
   )
 ) : (
-  <div style={{ maxWidth: 820, width: '100%', boxSizing: 'border-box', padding: '20px 22px 12px' }}>
+  <div style={{ maxWidth: sidebarOpen ? 680 : 820, width: '100%', boxSizing: 'border-box', padding: '20px 22px 12px', margin: '0 auto', transition: 'max-width .25s ease' }}>
                 {messages.map((m, i) => (
                   <MessageBubble key={m.id} role={m.role} text={m.text} ts={m.ts}
                     makeMdComponents={makeMdComponents} onSmartEdit={handleSmartEdit} messageId={m.id}
@@ -4155,7 +4155,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
             flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
             padding: '12px 22px 16px'
           }}>
-            <div style={{ maxWidth: 820, width: '100%', boxSizing: 'border-box', margin: '0 auto' }}>
+            <div style={{ maxWidth: sidebarOpen ? 680 : 820, width: '100%', boxSizing: 'border-box', margin: '0 auto', transition: 'max-width .25s ease' }}>
 
               {/* Editing banner — shows when the user is editing a previous
                   message. Lets them cancel and keep the original intact. */}

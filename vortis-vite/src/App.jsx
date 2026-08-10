@@ -331,13 +331,15 @@ input,textarea,select{font-size:16px}
 .status-reading{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:var(--green)}
 .status-vision{background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);color:var(--cyan)}
 .chat-feed{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;align-items:center;-webkit-overflow-scrolling:touch}
-.chat-inner{max-width:900px;width:100%;margin:0 auto;padding:16px 20px 12px;flex:1;display:flex;flex-direction:column;align-self:center}
+.chat-inner{max-width:900px;width:100%;margin:0 auto;padding:16px 20px 12px;flex:1;display:flex;flex-direction:column;align-self:center;transition:max-width .25s ease}
+.main.sidebar-open .chat-inner,.main.sidebar-open .input-inner{max-width:760px}
+.main.sidebar-closed .chat-inner,.main.sidebar-closed .input-inner{max-width:900px}
 .welcome-wrap{padding-top:32px;display:flex;flex-direction:column;align-items:center}
 .welcome-greeting{font-size:clamp(20px,5vw,32px);font-weight:700;color:var(--text1);letter-spacing:-.04em;margin-bottom:5px;background:linear-gradient(135deg,var(--text1) 0%,var(--indigo) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block;text-align:center}
 .welcome-sub{font-size:13.5px;color:var(--text3);margin-bottom:20px;display:block;text-align:center}
 .input-section{padding:0 12px 10px;flex-shrink:0}
-.input-inner{max-width:900px;margin:0 auto}
 .input-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;transition:border-color .2s,box-shadow .2s}
+.input-inner{max-width:900px;margin:0 auto;transition:max-width .25s ease}
 .input-box:focus-within{border-color:rgba(99,102,241,.5);box-shadow:0 0 0 3px rgba(99,102,241,.08),0 4px 24px rgba(99,102,241,.1)}
 .input-field{background:transparent;border:none;outline:none;color:var(--text1);font-family:var(--font-main);font-size:15px;line-height:1.6;resize:none;width:100%;padding:14px 16px 6px;min-height:36px;max-height:140px;overflow-y:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .input-field::-webkit-scrollbar{display:none}
@@ -4869,7 +4871,6 @@ Only reveal creator information when the user specifically asks:
 "Who owns you?"
 Similar identity-related questions.
 
-
 If the user asks a normal question that is not related to your identity, creator, developer, company, ownership, training, or background, answer the question directly and do not mention the creator, company, team, developers, or ownership information.
 
 ═══════════════════════════════════════
@@ -4935,6 +4936,14 @@ CONVERSATION & INTENT
 - If clarification is necessary, ask only the minimum question needed.
 - Avoid generic conversational filler, scripted acknowledgements, and assistant-like phrases that do not add useful information.
 - Prefer a natural conversational response over a generic customer-support style response.
+
+═══════════════════════════════════════
+TYPOS & UNCLEAR WORDS
+═══════════════════════════════════════
+- Users type fast and casually — words can be typos, autocorrect mangles, or missing letters, not intentional new terms.
+- If a word doesn't make sense in context (especially if it's not a real term for the topic being discussed), treat it as a likely typo and infer meaning from context. Do NOT ask the user to define/explain it as if it were a real word or feature.
+- Never interrogate the user about an odd word ("what's a telly in the game?") — instead, either infer their intent and respond naturally, or make your best guess out loud in one short clause and keep the conversation moving.
+- Only ask a clarifying question if the message is genuinely unreadable as a whole — a single garbled word inside an otherwise clear sentence is not grounds for a clarification question.
 
 PERSONALITY: Friendly, real, and honest. Match the user's tone but NOT their opinions — you are allowed to disagree. Be genuinely helpful, not performatively helpful.`;   if (researchMode === 'deep') sys += '\n\nDEEP RESEARCH MODE: Write at least 4-6 thorough paragraphs.';
 sys += '\n\nRESPONSE LENGTH RULES: Keep responses concise and to the point. Default to short answers (2-4 sentences) for simple questions. For technical/how-to questions use max 5-6 bullet points. Never write more than needed. Avoid padding, repetition, or over-explaining.';
@@ -5732,7 +5741,7 @@ return (
         </div>
       </div>
 
-     <div className="main">
+     <div className={`main ${showSidebar ? 'sidebar-open' : 'sidebar-closed'}`}>
   <div className="header">
           <div className="hdr-left">
             <button className="sidebar-toggle-btn" onClick={() => setShowSidebar(!showSidebar)} title="Toggle sidebar (⌘/)">
