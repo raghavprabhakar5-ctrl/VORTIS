@@ -1160,6 +1160,40 @@ const CodeTerminal = ({ onClose }) => {
   );
 };
 
+// Stable iframe — only updates srcdoc when the HTML content itself changes,
+// never on unrelated re-renders (height updates, status changes, hover state
+// elsewhere in the app). This is what stops the reload flicker.
+const PreviewFrame = React.memo(({ content, minHeight }) => {
+  const ref = React.useRef(null);
+  const lastContent = React.useRef(null);
+
+  React.useEffect(() => {
+    if (ref.current && lastContent.current !== content) {
+      ref.current.srcdoc = content;
+      lastContent.current = content;
+    }
+  }, [content]);
+
+  return (
+    <iframe
+      ref={ref}
+      style={{
+        width: '100%',
+        flex: 1,
+        minHeight,
+        height: '100%',
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        background: '#fff',
+        display: 'block',
+      }}
+      sandbox="allow-scripts allow-same-origin"
+      title="Code preview"
+    />
+  );
+}, (prev, next) => prev.content === next.content && prev.minHeight === next.minHeight);
+PreviewFrame.displayName = 'PreviewFrame';
+
 const CodeBlock = React.memo(({ lang, codeText }) => {
   // ── Persistent state across ReactMarkdown remounts ──
   // When the AI message transitions from "streaming" to "finalized", the streaming
@@ -1679,22 +1713,7 @@ const CodeBlock = React.memo(({ lang, codeText }) => {
               theme; the iframe itself stays white so HTML renders correctly. */}
           {output.type === 'html' ? (
             <div style={{ position: 'relative', background: 'var(--bg3)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 6 }}>
-              <iframe
-                srcDoc={output.content}
-                style={{
-                  width: '100%',
-                  flex: 1,
-                  minHeight: Math.min(iframeHeight, 360),
-                  height: '100%',
-                  border: '1px solid var(--border)',
-                  borderRadius: 6,
-                  background: '#fff',
-                  display: 'block',
-                  transition: 'min-height .2s ease',
-                }}
-                sandbox="allow-scripts allow-same-origin"
-                title="Code preview"
-              />
+              <PreviewFrame content={output.content} minHeight={Math.min(iframeHeight, 360)} />
               {/* Subtle "device" badge showing live measured height — themed */}
               <div style={{
                 position: 'absolute', top: 10, right: 12,
