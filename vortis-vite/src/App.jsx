@@ -1040,11 +1040,23 @@ const _activePreviews = new Set();
 const _PREVIEW_HEIGHT_SCRIPT = `
 <script>
 (function(){
-  var send=function(){try{parent.postMessage({type:'vortis-preview-height',height:Math.max(document.body.scrollHeight,document.documentElement.scrollHeight)+8},'*');}catch(e){}};
+  var send=function(){
+    try{
+      var body=document.body;
+      var h=Math.max(body.scrollHeight,document.documentElement.scrollHeight);
+      // If the fit script applied a transform: scale, the visible height
+      // is the natural height * scale. Report that so the {height}px badge
+      // matches what the user actually sees.
+      var transform=body.style.transform||'';
+      var m=transform.match(/scale\\(([\\d.]+)\\)/);
+      if(m&&m[1]){var s=parseFloat(m[1]);if(!isNaN(s)&&s>0){h=Math.round(h*s);}}
+      parent.postMessage({type:'vortis-preview-height',height:h+8},'*');
+    }catch(e){}
+  };
   if(document.readyState==='complete'){send();}else{window.addEventListener('load',send);}
   window.addEventListener('resize',send);
   if(window.ResizeObserver){new ResizeObserver(function(){send();}).observe(document.body);}
-  setTimeout(send,80);setTimeout(send,300);setTimeout(send,1000);
+  setTimeout(send,80);setTimeout(send,300);setTimeout(send,1000);setTimeout(send,2000);
 })();
 <\/script>`;
 // Default body styling for HTML previews — gives the iframe a proper
@@ -1052,23 +1064,96 @@ const _PREVIEW_HEIGHT_SCRIPT = `
 // SVG art, etc.) no longer sits in the top-left corner with empty white
 // space around it. User-supplied <style> tags override these defaults via
 // the normal cascade (same specificity, declared later wins).
-const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;}</style>`;
+//
+// body is a flex container that centers its children. Combined with the
+// _PREVIEW_FIT_SCRIPT below (which scales body up to fill the iframe),
+// this produces a centered, scaled-to-fit preview — no white borders.
+const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}</style>`;
+
+// ── Fit-to-container script ──
+// Measures the natural size of body's children (the user's content), then
+// scales body with CSS transform so the content FILLS the iframe viewport
+// (contain behaviour — aspect ratio preserved, content fully visible).
+//
+// Why transform: scale instead of zoom:
+//   - zoom is non-standard (Chrome/Safari/Edge only until FF 126)
+//   - transform: scale works everywhere and doesn't affect layout, so
+//     body's flex centering keeps the content centered after scaling
+//
+// Why transform-origin: center center:
+//   - body's layout fills the viewport (height:100%, width:100% by default)
+//   - content is centered in body via flex
+//   - scaling from center keeps content centered → symmetric letterbox
+//     on the axis that doesn't fill (instead of all-space-on-one-side)
+//
+// Multi-fire: runs on load, on resize, on a few timeouts (catches slow-
+// rendering canvas games), and via ResizeObserver (catches dynamic
+// content changes after initial render).
+const _PREVIEW_FIT_SCRIPT = `
+<script>
+(function(){
+  function getContentSize(){
+    var body=document.body;
+    if(!body||body.children.length===0)return{w:0,h:0};
+    var maxW=0,maxH=0;
+    for(var i=0;i<body.children.length;i++){
+      var c=body.children[i];
+      // offsetWidth/Height are NOT affected by CSS transforms — they
+      // return the layout box, so we get the natural content size even
+      // if a previous fit pass left a transform on body.
+      if(c.offsetWidth>maxW)maxW=c.offsetWidth;
+      if(c.offsetHeight>maxH)maxH=c.offsetHeight;
+    }
+    return{w:maxW,h:maxH};
+  }
+  function fit(){
+    var body=document.body;
+    if(!body)return;
+    var panelW=window.innerWidth;
+    var panelH=window.innerHeight;
+    // Reset previous transform so measurement is natural
+    body.style.transform='';
+    body.style.transformOrigin='';
+    // Force reflow so layout recomputes without the old transform
+    void body.offsetHeight;
+    var size=getContentSize();
+    if(size.w<=0||size.h<=0)return;
+    // Contain: scale to fit entirely (preserve aspect ratio)
+    var scale=Math.min(panelW/size.w,panelH/size.h);
+    // Only apply if meaningfully different from 1 (avoids jitter)
+    if(scale>0.97&&scale<1.03)return;
+    body.style.transform='scale('+scale+')';
+    body.style.transformOrigin='center center';
+  }
+  if(document.readyState==='complete')setTimeout(fit,0);
+  else window.addEventListener('load',function(){setTimeout(fit,0);});
+  window.addEventListener('resize',fit);
+  setTimeout(fit,50);
+  setTimeout(fit,200);
+  setTimeout(fit,600);
+  setTimeout(fit,1500);
+  if(window.ResizeObserver){new ResizeObserver(fit).observe(document.body);}
+})();
+<\/script>`;
+
 const getPreviewContent = (langKey, codeText) => {
   if (langKey === 'html') {
-    // Inject default body styles + height-reporter.
-    // If user has <head>, put defaults there; if user has <body> but no <head>,
-    // inject right after <body>; otherwise just prepend to the document.
+    // Inject default body styles + fit-to-container + height-reporter.
+    // Order matters: body defaults first (so fit script can measure),
+    // then fit script (scales content), then height reporter (posts
+    // the final size to the parent for the {height}px badge).
     let html = codeText;
+    const injections = _PREVIEW_BODY_DEFAULTS + _PREVIEW_FIT_SCRIPT + _PREVIEW_HEIGHT_SCRIPT;
     if (/<\/head>/i.test(html)) {
-      html = html.replace(/<\/head>/i, _PREVIEW_BODY_DEFAULTS + _PREVIEW_HEIGHT_SCRIPT + '</head>');
+      html = html.replace(/<\/head>/i, injections + '</head>');
     } else if (/<body[^>]*>/i.test(html)) {
-      html = html.replace(/(<body[^>]*>)/i, '$1' + _PREVIEW_BODY_DEFAULTS + _PREVIEW_HEIGHT_SCRIPT);
+      html = html.replace(/(<body[^>]*>)/i, '$1' + injections);
     } else {
-      html = _PREVIEW_BODY_DEFAULTS + _PREVIEW_HEIGHT_SCRIPT + html;
+      html = injections + html;
     }
     return html;
   }
-  if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>` + _PREVIEW_HEIGHT_SCRIPT;
+  if (langKey === 'svg') return `<!DOCTYPE html><html><body style="margin:0;background:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh">${codeText}</body></html>` + _PREVIEW_FIT_SCRIPT + _PREVIEW_HEIGHT_SCRIPT;
   if (langKey === 'css') return `<!DOCTYPE html><html><head><style>body{padding:24px;font-family:sans-serif}${codeText}</style></head><body><p>CSS Preview</p><div class="box">Styled element</div><button class="btn">Button</button></body></html>` + _PREVIEW_HEIGHT_SCRIPT;
   return null;
 };
@@ -2938,7 +3023,7 @@ const SettingsModal = ({
                 onClick={() => { setAiTone(t.id); try { localStorage.setItem('vortis_ai_tone', t.id); } catch(_) {} }}/>
             ))}
           </Section>
-          <Section title="Persona">
+          <Section title="Personality">
             {personas.map(p => (
               <Chip key={p.id} active={aiPersona === p.id} label={p.label} desc={p.desc}
                 onClick={() => { setAiPersona(p.id); try { localStorage.setItem('vortis_ai_persona', p.id); } catch(_) {} }}/>
@@ -7650,4 +7735,3 @@ onChange={e => {
     </div></Suspense>
   );
 }
-
