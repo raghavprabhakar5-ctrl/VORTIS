@@ -1533,10 +1533,9 @@ IMAGE RULE: Before GENERATE_IMAGE:<desc>, confirm a real subject exists (this ms
         // Trimmed from 10000 → 6000 chars: cuts token cost per request without losing
         // meaningful system-prompt content, which directly reduces how fast we hit the Groq TPM cap.
         const tableGuard = looksLikeTableRequest(lastUserMsg) ? `
-TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank line before the table starts, put each row on its own separate line (never join rows with "| |"), and put the header separator row (|---|---|) on its own line too. Never compress a table into one paragraph.\n\n` : '';
+        TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank line before the table starts, put each row on its own separate line (never join rows with "| |"), and put the header separator row (|---|---|) on its own line too. Never compress a table into one paragraph.\n\n` : '';
 
-        const sysContent = identityOverride + imageGuard + tableGuard + prompt.trim().slice(0, 6000) + locationNote + searchContext;
-
+        const sysContent = identityOverride + imageGuard + tableGuard + prompt.trim().slice(0, 14000) + locationNote + searchContext;
         const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
         messages.push(...history);
