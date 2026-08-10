@@ -1103,7 +1103,13 @@ const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults">
 
    We ALSO !important everything and use  html > body  specificity so we beat
    user CSS AND inline  style="..."  on <body>. Injected at END of <head>
-   so we win the cascade order too. */
+   so we win the cascade order too.
+
+   v2.1 — added a small  padding-top:14px  so content is not visually
+   touching the top edge (user request: "slightly down, not too much").
+   box-sizing:border-box keeps body height at 100% (padding included).
+   line-height:0 kills the inline-block leading gap so the 14px is exact.
+   The fit script subtracts 14 from panelH to avoid bottom clipping. */
 html, html > body{height:100% !important;margin:0 !important;padding:0 !important;}
 html > body{
   min-height:100vh !important;
@@ -1111,6 +1117,14 @@ html > body{
   text-align:center !important;
   overflow:hidden !important;
   transform-origin:top center !important;
+  /* Small breathing room at the top so content doesn't touch the edge.
+     MUST stay in sync with _PREVIEW_FIT_SCRIPT's panelH calculation. */
+  padding-top:14px !important;
+  padding-right:0 !important;
+  padding-bottom:0 !important;
+  padding-left:0 !important;
+  box-sizing:border-box !important;
+  line-height:0 !important;
   /* Reset every flex/grid property the user might have set — these have
      NO effect on a block container, but if a !important user rule somewhere
      resurrects display:flex, we want the alignment to still be top-left. */
@@ -1150,6 +1164,10 @@ html > body > div:only-child{
   text-align:center !important;
   align-items:flex-start !important;
   justify-content:center !important;
+  /* Kill any top margin/padding the wrapper might have — body's padding-top
+     already provides the breathing room, don't double it up. */
+  margin-top:0 !important;
+  padding-top:0 !important;
 }
 html > body > div:only-child > canvas,
 html > body > div:only-child > svg,
@@ -1213,7 +1231,19 @@ const _PREVIEW_FIT_SCRIPT = `
     var body=document.body;
     if(!body)return;
     var panelW=window.innerWidth;
-    var panelH=window.innerHeight;
+    // Subtract body's padding-top (14px, see _PREVIEW_BODY_DEFAULTS v2.1) so
+    // the scaled content does not get clipped at the bottom by overflow:hidden.
+    // Reading computed style is more robust than hardcoding 14, but adds a
+    // tiny reflow cost - acceptable since fit() only runs on load/resize.
+    var padTop=0;
+    try{
+      var cs=window.getComputedStyle(body);
+      if(cs && cs.paddingTop){
+        var pt=parseFloat(cs.paddingTop);
+        if(!isNaN(pt))padTop=pt;
+      }
+    }catch(e){}
+    var panelH=window.innerHeight - padTop;
     // Reset previous zoom/transform so measurement is natural
     body.style.zoom='';
     body.style.transform='';

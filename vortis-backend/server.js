@@ -659,9 +659,15 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         break;
       }
     } catch (e) {
-      console.error(`Code-chat stream error (attempt ${attempt}):`, e.message);
-      attemptFailed = true;
-    }
+  console.error(
+    `Code-chat stream error (attempt ${attempt}):`,
+    e.name,
+    '|', e.message,
+    '| cause:', e.cause?.message || e.cause || 'none',
+    '| code:', e.cause?.code || e.code || 'none'
+  );
+  attemptFailed = true;
+}
 
     if (written > 0) {
       res.write('data: [DONE]\n\n');
