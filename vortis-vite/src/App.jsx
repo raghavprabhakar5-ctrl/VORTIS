@@ -1079,31 +1079,90 @@ const _PREVIEW_HEIGHT_SCRIPT = `
 // AI-generated games (Pac-Man, Snake, etc.). Users who want smooth rendering
 // can set `canvas { image-rendering: auto }` in their own <style>.
 const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults">
-/* ── Vortis preview defaults (HIGH specificity + !important) ──
-   Why so aggressive: AI-generated HTML (Pac-Man, Snake, etc.) almost always
-   includes its own body styling like  body{display:flex;align-items:center;
-   justify-content:center;height:100vh}  to center the canvas in a standalone
-   browser tab. Inside our split-screen preview panel that centering becomes
-   a bug — the content floats in the middle of the panel with ugly white
-   space above and below.
+/* ── Vortis preview defaults (BULLETPROOF top-alignment) ──
+   PROBLEM WE'RE SOLVING:
+   AI-generated HTML (Pac-Man, Snake, etc.) almost always includes body CSS
+   like  body{display:flex;align-items:center;justify-content:center;height:100vh}
+   to center the canvas in a standalone browser tab. Inside our split-screen
+   preview panel that centering becomes the "preview gone too down" bug —
+   the canvas floats in the middle with ugly whitespace above (and gets
+   clipped at the bottom because the panel is shorter than a full tab).
 
-   We need to WIN the cascade against the user CSS and even against inline
-   styles on <body>. Strategy:
-     1. Higher specificity:  html > body  beats the user  body  selector.
-     2. !important: beats inline  style="..."  on <body>.
-     3. Injected at the END of <head> (see getPreviewContent), so for
-        same-specificity rules we still win (later declaration wins).
+   PREVIOUS FIX (v1) — kept body as flex but forced align-items:flex-start.
+   That worked for simple  <body><canvas></body>  cases, but FAILED when the
+   user's HTML wrapped the canvas in a centering div, or used inline styles,
+   or had other flex-based centering patterns.
 
-   We do NOT force background / color / font — those are visual choices the
-   user should control. Only layout (the stuff that decides whether content
-   sits at the top vs. center) is forced. */
+   THIS FIX (v2) — kills flex on body entirely. Uses  display:block  +
+   text-align:center  for horizontal centering. This is bulletproof:
+     - No flex on body → no align-items centering possible
+     - text-align:center horizontally centers inline/inline-block children
+     - Block layout naturally flows content from the TOP
+     - Canvas/svg/img are forced to inline-block so text-align affects them
+     - Wrapper divs (only-child) are flattened too, killing nested centering
+
+   We ALSO !important everything and use  html > body  specificity so we beat
+   user CSS AND inline  style="..."  on <body>. Injected at END of <head>
+   so we win the cascade order too. */
 html, html > body{height:100% !important;margin:0 !important;padding:0 !important;}
-html > body{min-height:100vh !important;display:flex !important;align-items:flex-start !important;justify-content:center !important;overflow:hidden !important;}
-/* Inline-styled  <body style="align-items:center">  is the most common cause of
-   the "preview gone too down" bug. The !important above already covers this,
-   but we ALSO reset transform-origin so any transform: scale from the fit
-   script anchors at TOP-CENTER (not center-center, which would re-center). */
-html > body{transform-origin:top center !important;}
+html > body{
+  min-height:100vh !important;
+  display:block !important;
+  text-align:center !important;
+  overflow:hidden !important;
+  transform-origin:top center !important;
+  /* Reset every flex/grid property the user might have set — these have
+     NO effect on a block container, but if a !important user rule somewhere
+     resurrects display:flex, we want the alignment to still be top-left. */
+  align-items:flex-start !important;
+  justify-content:center !important;
+}
+/* Canvas / SVG / img / video — direct children of body — become inline-block
+   so text-align:center on body centers them horizontally. vertical-align:top
+   kills the small descent gap that inline elements normally sit in. margin:0
+   kills any user margin that would push them down. */
+html > body > canvas,
+html > body > svg,
+html > body > img,
+html > body > video{
+  display:inline-block !important;
+  margin:0 !important;
+  padding:0 !important;
+  vertical-align:top !important;
+  /* If the user set position:absolute with top:50% + translateY(-50%) to
+     center the canvas, neutralize that too. */
+  position:static !important;
+  top:auto !important;
+  left:auto !important;
+  transform:none !important;
+}
+/* WRAPPER DIV CASE:  <body><div id="game"><canvas></div></body>
+   The wrapper div often has its own  display:flex;align-items:center  that
+   re-creates the centering bug. Force it to block + text-align:center so
+   the canvas inside it is top-aligned and horizontally centered.
+   Only-child selector avoids touching multi-element layouts (navbars etc). */
+html > body > div:only-child{
+  display:block !important;
+  margin:0 !important;
+  padding:0 !important;
+  min-height:auto !important;
+  height:auto !important;
+  text-align:center !important;
+  align-items:flex-start !important;
+  justify-content:center !important;
+}
+html > body > div:only-child > canvas,
+html > body > div:only-child > svg,
+html > body > div:only-child > img,
+html > body > div:only-child > video{
+  display:inline-block !important;
+  margin:0 !important;
+  padding:0 !important;
+  vertical-align:top !important;
+  position:static !important;
+  top:auto !important;
+  transform:none !important;
+}
 canvas{image-rendering:pixelated;image-rendering:crisp-edges;}
 </style>`;
 
@@ -1120,11 +1179,13 @@ canvas{image-rendering:pixelated;image-rendering:crisp-edges;}
 //   - zoom is supported in all modern browsers as of Firefox 126 (May 2024).
 //   - Fallback: if zoom is somehow unsupported, we fall back to transform.
 //
-// Why transform-origin: center center (fallback only):
-//   - body's layout fills the viewport (height:100%, width:100% by default)
-//   - content is centered in body via flex
-//   - scaling from center keeps content centered → symmetric letterbox
-//     on the axis that doesn't fill (instead of all-space-on-one-side)
+// Why transform-origin: top center (fallback only):
+//   - body is now display:block (see _PREVIEW_BODY_DEFAULTS v2), so content
+//     flows from the TOP — there is no flex centering to preserve.
+//   - scaling from top center keeps content pinned to the top edge while
+//     growing/shrinking toward the bottom — matching what zoom does natively.
+//     (Center-center would drag content down into the middle of the panel,
+//     re-creating the "gone too down" bug we just fixed.)
 //
 // Multi-fire: runs on load, on resize, on a few timeouts (catches slow-
 // rendering canvas games), and via ResizeObserver (catches dynamic
