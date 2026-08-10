@@ -2712,7 +2712,7 @@ useEffect(() => {
 }, [isDark, uiFont]);
 
 useEffect(() => {
-  const ping = () => fetch(API.replace('/api/handler', '/api/health') || API, { method: 'GET' }).catch(() => {});
+  const ping = () => fetch(API.replace('/api/handler', '/health') || API, { method: 'GET' }).catch(() => {});
   ping();
   const interval = setInterval(ping, 4 * 60 * 1000); // every 4 min, well under Render's 15-min sleep window
   return () => clearInterval(interval);
@@ -6006,7 +6006,7 @@ return (
 </div>
 
 {/* Height spacer */}
-<div style={{ height: 360 }} />
+<div style={{ height: 300 }} />
 
     {/* State label + dots */}
     <div style={{
@@ -6049,7 +6049,7 @@ return (
  
     {/* Controls */}
 <div style={{
-  display: 'flex', gap: 24, marginTop: 48, alignItems: 'center',
+  display: 'flex', gap: 24, marginTop: 26, alignItems: 'center',
   justifyContent: 'center',
   animation: 'fadeUp .5s ease .2s both'
 }}>
@@ -6105,11 +6105,9 @@ return (
   </button>
 </div>
 
-
-
     {/* Hint */}
     <p style={{
-      marginTop: 20, fontSize: 11, color: 'rgba(255,255,255,.2)',
+      marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,.2)',
       fontFamily: "'Inter',system-ui,sans-serif", letterSpacing: '.04em',
       animation: 'fadeUp .5s ease .3s both'
     }}>
