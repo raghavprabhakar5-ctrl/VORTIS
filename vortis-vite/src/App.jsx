@@ -1078,7 +1078,34 @@ const _PREVIEW_HEIGHT_SCRIPT = `
 // (sharp pixels) instead of bilinear (blurry). This is the right default for
 // AI-generated games (Pac-Man, Snake, etc.). Users who want smooth rendering
 // can set `canvas { image-rendering: auto }` in their own <style>.
-const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;}canvas{image-rendering:pixelated;image-rendering:crisp-edges;}</style>`;
+const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults">
+/* ── Vortis preview defaults (HIGH specificity + !important) ──
+   Why so aggressive: AI-generated HTML (Pac-Man, Snake, etc.) almost always
+   includes its own body styling like  body{display:flex;align-items:center;
+   justify-content:center;height:100vh}  to center the canvas in a standalone
+   browser tab. Inside our split-screen preview panel that centering becomes
+   a bug — the content floats in the middle of the panel with ugly white
+   space above and below.
+
+   We need to WIN the cascade against the user CSS and even against inline
+   styles on <body>. Strategy:
+     1. Higher specificity:  html > body  beats the user  body  selector.
+     2. !important: beats inline  style="..."  on <body>.
+     3. Injected at the END of <head> (see getPreviewContent), so for
+        same-specificity rules we still win (later declaration wins).
+
+   We do NOT force background / color / font — those are visual choices the
+   user should control. Only layout (the stuff that decides whether content
+   sits at the top vs. center) is forced. */
+html, html > body{height:100% !important;margin:0 !important;padding:0 !important;}
+html > body{min-height:100vh !important;display:flex !important;align-items:flex-start !important;justify-content:center !important;overflow:hidden !important;}
+/* Inline-styled  <body style="align-items:center">  is the most common cause of
+   the "preview gone too down" bug. The !important above already covers this,
+   but we ALSO reset transform-origin so any transform: scale from the fit
+   script anchors at TOP-CENTER (not center-center, which would re-center). */
+html > body{transform-origin:top center !important;}
+canvas{image-rendering:pixelated;image-rendering:crisp-edges;}
+</style>`;
 
 // ── Fit-to-container script ──
 // Measures the natural size of body's children (the user's content), then
@@ -1144,7 +1171,7 @@ const _PREVIEW_FIT_SCRIPT = `
       body.style.zoom=scale;
     }else{
       body.style.transform='scale('+scale+')';
-      body.style.transformOrigin='center center';
+      body.style.transformOrigin='top center'; // top center keeps content pinned to top (was: center center, which caused the "gone too down" bug)
     }
   }
   if(document.readyState==='complete')setTimeout(fit,0);
