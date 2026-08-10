@@ -1113,6 +1113,22 @@ const CodeBlock = ({ lang, codeText }) => {
     return () => window.removeEventListener('message', handler);
   }, [output]);
 
+  // ── Auto-close the preview/output panel so the user does NOT have to click the X ──
+  // Text output (Python/JS/etc.) auto-dismisses after 12s; HTML previews after 25s
+  // (they are usually interactive and benefit from a longer dwell time).
+  // The timer resets whenever a new output is produced. The X button still works.
+  React.useEffect(() => {
+    if (!output || running) return;
+    const delay = output.type === 'html' ? 25000 : 12000;
+    const t = setTimeout(() => {
+      setOutput(null);
+      setHasError(false);
+      setExecStatus('IDLE');
+      setExecTime('');
+    }, delay);
+    return () => clearTimeout(t);
+  }, [output, running]);
+
   const runCode = async () => {
     setRunning(true);
     setOutput(null);
@@ -1217,6 +1233,13 @@ const CodeBlock = ({ lang, codeText }) => {
       border: `1px solid ${running ? 'rgba(99,102,241,.4)' : 'var(--border)'}`,
       background: 'var(--bg2)',
       transition: 'border-color .25s ease, box-shadow .25s ease',
+      /* When the preview is open, expand beyond the chat bubble width so the
+         split-view (code | preview) has real horizontal room to breathe. */
+      ...(output ? {
+        marginRight: '-40px',
+        marginLeft: '-40px',
+        minWidth: 'min(880px, 100vw - 80px)',
+      } : {}),
       boxShadow: running
         ? '0 0 0 1px rgba(99,102,241,.15), 0 8px 28px rgba(99,102,241,.10)'
         : runFlash ? '0 0 0 1px rgba(16,185,129,.3), 0 6px 22px rgba(16,185,129,.10)' : 'none',
@@ -1424,20 +1447,29 @@ const CodeBlock = ({ lang, codeText }) => {
         </div>
       )}
 
+      {/* Split-view wrapper: code on left, live preview / output on right.
+          When no output is present, this just falls back to a single column. */}
+      <div style={{
+        display: output ? 'flex' : 'block',
+        flexDirection: 'row',
+        alignItems: 'stretch',
+        minWidth: 0,
+        width: '100%',
+      }}>
       {/* Code area — collapsible for long blocks with a soft fade */}
-      <div style={{ position: 'relative', background: 'var(--bg3)' }}>
+      <div style={{ position: 'relative', background: 'var(--bg3)', flex: output ? '1 1 50%' : '1 1 auto', minWidth: 0 }}>
         <pre style={{
           margin: 0,
-          padding: '14px 16px',
+          padding: '16px 18px',
           overflowX: 'auto',
           background: 'transparent',
           fontFamily: 'JetBrains Mono, monospace',
-          fontSize: 13,
-          lineHeight: 1.7,
+          fontSize: 15.5,
+          lineHeight: 1.75,
           color: 'var(--cyan)',
           whiteSpace: 'pre',
           wordBreak: 'normal',
-          maxHeight: showFullCode ? 520 : 200,
+          maxHeight: showFullCode ? 560 : 220,
           overflowY: 'hidden',
           transition: 'max-height .3s ease',
           maskImage: !showFullCode ? 'linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%)' : 'none',
@@ -1473,12 +1505,17 @@ const CodeBlock = ({ lang, codeText }) => {
         )}
       </div>
 
-      {/* Output panel — slides in */}
+      {/* Output panel — slides in (right side in split view) */}
       {output && (
         <div style={{
-          borderTop: '1px solid var(--border)',
+          borderTop: output ? 'none' : '1px solid var(--border)',
+          borderLeft: '1px solid var(--border)',
           animation: 'runnerSlideUp .35s cubic-bezier(.22,.61,.36,1)',
           overflow: 'hidden',
+          flex: '1 1 50%',
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
         }}>
           {/* Output header with status pill */}
           <div style={{
@@ -1540,7 +1577,7 @@ const CodeBlock = ({ lang, codeText }) => {
               }}
               onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.12)'; e.currentTarget.style.color = '#ef4444'; }}
               onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
-              title="Close output"
+              title="Close output (auto-closes after 12s / 25s for previews)"
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -1583,7 +1620,7 @@ const CodeBlock = ({ lang, codeText }) => {
               backgroundImage: 'linear-gradient(rgba(99,102,241,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,.025) 1px, transparent 1px)',
               backgroundSize: '24px 24px',
               fontFamily: 'JetBrains Mono, monospace',
-              fontSize: 13,
+              fontSize: 14.5,
               lineHeight: 1.8,
               color: hasError ? '#fca5a5' : '#a5f3fc',
               whiteSpace: 'pre-wrap',
@@ -1608,6 +1645,8 @@ const CodeBlock = ({ lang, codeText }) => {
           )}
         </div>
       )}
+      {/* End of split-view wrapper */}
+      </div>
     </div>
   );
 };
