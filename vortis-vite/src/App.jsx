@@ -1233,13 +1233,6 @@ const CodeBlock = ({ lang, codeText }) => {
       border: `1px solid ${running ? 'rgba(99,102,241,.4)' : 'var(--border)'}`,
       background: 'var(--bg2)',
       transition: 'border-color .25s ease, box-shadow .25s ease',
-      /* When the preview is open, expand beyond the chat bubble width so the
-         split-view (code | preview) has real horizontal room to breathe. */
-      ...(output ? {
-        marginRight: '-40px',
-        marginLeft: '-40px',
-        minWidth: 'min(880px, 100vw - 80px)',
-      } : {}),
       boxShadow: running
         ? '0 0 0 1px rgba(99,102,241,.15), 0 8px 28px rgba(99,102,241,.10)'
         : runFlash ? '0 0 0 1px rgba(16,185,129,.3), 0 6px 22px rgba(16,185,129,.10)' : 'none',
@@ -1287,24 +1280,6 @@ const CodeBlock = ({ lang, codeText }) => {
           }}>
             {lang || 'code'}
           </span>
-          {/* Engine tag chip */}
-          {canRun && (
-            <span style={{
-              fontSize: 10,
-              fontFamily: 'JetBrains Mono, monospace',
-              color: 'var(--text4)',
-              letterSpacing: '.03em',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              padding: '1.5px 7px',
-              borderRadius: 5,
-              background: 'rgba(99,102,241,.05)',
-              border: '1px solid var(--border)',
-            }}>
-              {isPreviewable ? 'live preview' : meta ? meta.name : 'runnable'}
-            </span>
-          )}
           {/* Line / byte count chip */}
           <span style={{
             fontSize: 10,
@@ -1448,16 +1423,16 @@ const CodeBlock = ({ lang, codeText }) => {
       )}
 
       {/* Split-view wrapper: code on left, live preview / output on right.
-          When no output is present, this just falls back to a single column. */}
+          CSS Grid is used (not flex) because grid-template-columns guarantees
+          a true 2-column side-by-side layout regardless of children width. */}
       <div style={{
-        display: output ? 'flex' : 'block',
-        flexDirection: 'row',
-        alignItems: 'stretch',
+        display: 'grid',
+        gridTemplateColumns: output ? '1fr 1fr' : '1fr',
         minWidth: 0,
         width: '100%',
       }}>
       {/* Code area — collapsible for long blocks with a soft fade */}
-      <div style={{ position: 'relative', background: 'var(--bg3)', flex: output ? '1 1 50%' : '1 1 auto', minWidth: 0 }}>
+      <div style={{ position: 'relative', background: 'var(--bg3)', minWidth: 0, overflow: 'hidden' }}>
         <pre style={{
           margin: 0,
           padding: '16px 18px',
@@ -1469,8 +1444,10 @@ const CodeBlock = ({ lang, codeText }) => {
           color: 'var(--cyan)',
           whiteSpace: 'pre',
           wordBreak: 'normal',
-          maxHeight: showFullCode ? 560 : 220,
-          overflowY: 'hidden',
+          /* When "Show all" is clicked, fully remove the height cap (was 560 before, which
+             still clipped long code). When collapsed, cap at 220px with a soft fade. */
+          maxHeight: showFullCode ? 'none' : 220,
+          overflowY: showFullCode ? 'visible' : 'hidden',
           transition: 'max-height .3s ease',
           maskImage: !showFullCode ? 'linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%)' : 'none',
           WebkitMaskImage: !showFullCode ? 'linear-gradient(to bottom, #000 0%, #000 70%, transparent 100%)' : 'none',
@@ -1508,11 +1485,10 @@ const CodeBlock = ({ lang, codeText }) => {
       {/* Output panel — slides in (right side in split view) */}
       {output && (
         <div style={{
-          borderTop: output ? 'none' : '1px solid var(--border)',
+          borderTop: 'none',
           borderLeft: '1px solid var(--border)',
           animation: 'runnerSlideUp .35s cubic-bezier(.22,.61,.36,1)',
           overflow: 'hidden',
-          flex: '1 1 50%',
           minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
@@ -3093,20 +3069,111 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
   const loadMemories = () => { try { const saved = localStorage.getItem('vortis_memories'); if (saved) setMemories(JSON.parse(saved)); } catch(_) {} };
   const saveMemoriesLS = (mems) => { try { localStorage.setItem('vortis_memories', JSON.stringify(mems)); } catch(_) {} };
 
+  /* ─────────────────────────── MEMORY QUALITY ENGINE ───────────────────────────
+   * The previous extractor accepted almost anything the server returned, leading to
+   * junk memories like "User said hi", "ok", code snippets, or expiring info like
+   * "User is busy today". These helpers pre-filter, post-filter, and de-duplicate
+   * so only durable, personal facts ever make it into long-term memory.
+   */
+
+  // Phrases that, by themselves, are never memory-worthy.
+  const MEMORY_STOP_PHRASES = new Set([
+    'thank', 'thanks', 'thank you', 'thx', 'ok', 'okay', 'sure', 'yes', 'no',
+    'maybe', 'lol', 'haha', 'lmao', 'hi', 'hello', 'hey', 'bye', 'goodbye',
+    'good', 'great', 'cool', 'nice', 'wow', 'awesome', 'got it', 'understood',
+    'will do', 'sounds good', 'sounds great', 'makes sense', 'i agree',
+    'i disagree', 'sounds good to me', 'perfect', 'exactly', 'agreed'
+  ]);
+
+  // Words that signal the info is TEMPORAL and will expire — never remember these.
+  const MEMORY_TEMPORAL_WORDS = [
+    'today', 'tomorrow', 'tonight', 'yesterday', 'right now', 'currently',
+    'this week', 'this month', 'this year', 'next week', 'next month',
+    'next year', 'last week', 'last month', 'last year', 'soon', 'later',
+    'in a bit', 'in a while', 'for now', 'at the moment', 'just now'
+  ];
+
+  // Phrases that signal a DURABLE personal fact worth remembering.
+  // The extractor ONLY fires if the user's message contains at least one of these.
+  const MEMORY_TRIGGERS = [
+    'my name is', "my name's", 'i am ', "i'm ", 'i am a', "i'm a", 'i am an', "i'm an",
+    'i work', 'i live', 'i study', 'i go to', 'i attend', 'i graduated',
+    'my favorite', 'my favourite', 'i like', 'i love', 'i hate', 'i prefer',
+    'i enjoy', "i've been", 'i have been', 'i always', 'i never', 'i usually',
+    'i typically', 'i tend to', 'my goal', 'my goals', "i'm trying to",
+    'i am trying to', 'i want to', 'i wanna', "i'm planning to", 'i am planning to',
+    'i need to', 'i have to', "i'm learning", 'i am learning', 'i use', 'i use a',
+    'i use the', 'my job', 'my role', 'my team', 'my company', 'my project',
+    'my dog', 'my cat', 'my pet', 'my wife', 'my husband', 'my partner',
+    'my son', 'my daughter', 'my kid', 'my child', 'my friend', 'my boss',
+    'my birthday', 'my age', 'i speak', 'i read', 'i write', 'i play',
+    'i watch', 'i listen', 'i drive', 'i ride', 'i own', 'i have a',
+    "i've a", 'i believe', 'i decided', 'i chose', 'i picked', 'i selected',
+    'i was born', 'i grew up', 'i come from', 'i am from', "i'm from",
+    'i am based', "i'm based", 'my major', 'my degree', 'my specialty',
+    'i specialize', 'i am studying', "i'm studying", 'i code', 'i program'
+  ];
+
+  // Returns true if the user message contains at least one memory-worthy trigger phrase.
+  const isMemoryWorthyMessage = (userMsg) => {
+    if (!userMsg || typeof userMsg !== 'string') return false;
+    const text = userMsg.trim();
+    if (text.length < 10) return false;
+    const lower = ' ' + text.toLowerCase() + ' ';
+    return MEMORY_TRIGGERS.some(t => lower.includes(t));
+  };
+
+  // Returns true if a memory text is low quality and should be rejected.
+  const isLowQualityMemory = (text) => {
+    if (!text || typeof text !== 'string') return true;
+    const t = text.trim();
+    if (t.length < 8) return true;                                  // too short
+    if (t.length > 250) return true;                                // too long — likely a story, not a fact
+    const wordCount = t.split(/\s+/).filter(Boolean).length;
+    if (wordCount < 4) return true;                                 // fewer than 4 words
+    if (wordCount > 45) return true;                                // too many words — story, not fact
+    const lower = t.toLowerCase();
+    if (t.endsWith('?')) return true;                               // question, not a fact
+    if (t.includes('```') || /\bfunction\b/.test(lower) || /\bdef\b/.test(lower) || /\bclass\b/.test(lower)) return true; // code
+    if (/^https?:\/\//.test(t) || /^www\./.test(t)) return true;    // URL alone
+    if (MEMORY_STOP_PHRASES.has(lower) || MEMORY_STOP_PHRASES.has(lower.replace(/[.!]+$/, ''))) return true;
+    if (MEMORY_TEMPORAL_WORDS.some(w => lower.includes(w))) return true;       // expiring info
+    if (/^(hi|hello|hey|yo|sup|gm|good morning|good evening)\b/.test(lower)) return true; // greetings
+    // Commands directed at the AI — these are task requests, not personal facts
+    if (/^(can you|could you|please|do this|run|execute|make|create|write|generate|draw|build|fix|debug|show|tell me|explain|how do|what is|what's|why|when|where|who)\b/.test(lower)) return true;
+    return false;
+  };
+
+  // Jaccard similarity on token sets — far more accurate than the old "4 words > 4 chars" rule.
+  const tokenSimilarity = (a, b) => {
+    const ta = new Set(a.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+    const tb = new Set(b.toLowerCase().split(/\W+/).filter(w => w.length > 2));
+    if (ta.size === 0 || tb.size === 0) return 0;
+    let inter = 0;
+    for (const t of ta) if (tb.has(t)) inter++;
+    return inter / (ta.size + tb.size - inter);
+  };
+
+  // Returns true if `newText` is a duplicate of any memory in `existing`.
+  const isDuplicateMemory = (newText, existing) => {
+    const n = newText.toLowerCase().trim();
+    if (!n) return true;
+    return existing.some(m => {
+      const e = m.text.toLowerCase().trim();
+      if (e === n) return true;
+      if (e.includes(n) || n.includes(e)) return true;          // one contains the other
+      if (tokenSimilarity(e, n) >= 0.7) return true;            // high token overlap
+      return false;
+    });
+  };
+
   const addMemory = useCallback((text) => {
-    const normalized = text.trim().toLowerCase();
+    const cleaned = (text || '').trim();
+    if (!cleaned) return;
     setMemories(prev => {
-      const isDuplicate = prev.some(m => {
-        const existing = m.text.toLowerCase();
-        if (existing === normalized) return true;
-        if (existing.includes(normalized) || normalized.includes(existing)) return true;
-        const ew = existing.split(/\s+/).filter(w => w.length > 4);
-        const nw = normalized.split(/\s+/).filter(w => w.length > 4);
-        if (ew.filter(w => nw.includes(w)).length >= 4) return true;
-        return false;
-      });
-      if (isDuplicate) return prev;
-      const newMem = { id: Date.now().toString(), text: text.trim(), createdAt: Date.now() };
+      if (isLowQualityMemory(cleaned)) return prev;             // reject junk even on manual add
+      if (isDuplicateMemory(cleaned, prev)) return prev;
+      const newMem = { id: Date.now().toString(), text: cleaned, createdAt: Date.now() };
       const updated = [newMem, ...prev].slice(0, 50);
       saveMemoriesLS(updated);
       return updated;
@@ -3117,10 +3184,14 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
   const clearMemories = () => { setMemories([]); convHistory.current = []; try { localStorage.removeItem('vortis_memories'); } catch(_) {} };
 
  const extractMemories = useCallback(async (userMsg, aiReply) => {
-  if (!userMsg || userMsg.trim().split(/\s+/).length < 4) return; // fewer false triggers
+  if (!userMsg || userMsg.trim().split(/\s+/).length < 4) return;
 
-  // give the extractor real context, not a floating line
-  const recentTurns = convHistory.current.slice(-6)
+  // ── PRE-FILTER: only fire the extractor if the user message contains a durable-fact trigger.
+  // This single check eliminates the vast majority of junk memories (greetings, commands, questions).
+  if (!isMemoryWorthyMessage(userMsg)) return;
+
+  // give the extractor real context, not a floating line — bumped from 6 to 8 turns
+  const recentTurns = convHistory.current.slice(-8)
     .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
     .join('\n');
 
@@ -3130,31 +3201,52 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       headers: await getAuthHeader(),
       body: JSON.stringify({
         action: 'memory',
-        userMsg: userMsg.slice(0, 500),
-        aiReply: (aiReply || '').slice(0, 500),
-        recentContext: recentTurns.slice(0, 1500),
-        existing: memories.map((m, i) => ({ id: m.id, index: i, text: m.text })),
+        userMsg: userMsg.slice(0, 800),          // was 500 → 800 (more signal for the extractor)
+        aiReply: (aiReply || '').slice(0, 800),  // was 500 → 800
+        recentContext: recentTurns.slice(0, 2500), // was 1500 → 2500
+        existing: memories.map(m => ({ id: m.id, text: m.text })),
       })
     });
     if (!res.ok) return;
     const { ops } = await res.json();
     if (!ops?.length) return;
 
+    // ── POST-FILTER: drop low-quality ops the server might have returned.
+    // This is the safety net — even if the server proposes "User said ok", we reject it.
+    const cleanOps = ops.filter(o => {
+      if (!o || !o.op) return false;
+      if (o.op === 'ADD' || o.op === 'UPDATE') {
+        if (!o.text || isLowQualityMemory(o.text)) return false;
+      }
+      if ((o.op === 'UPDATE' || o.op === 'DELETE') && !o.id) return false;
+      return true;
+    });
+    if (!cleanOps.length) return;
+
     setMemories(prev => {
       let updated = [...prev];
 
-      // resolve by id where possible; fall back to index only for ADD
-      for (const o of ops) {
+      for (const o of cleanOps) {
         if (o.op === 'ADD') {
-          const dup = updated.some(m => m.text.toLowerCase().trim() === o.text.toLowerCase().trim());
-          if (!dup) {
-            updated = [{ id: Date.now().toString() + Math.random(), text: o.text, createdAt: Date.now() }, ...updated].slice(0, 50);
-          }
+          // Stricter dedup using Jaccard similarity — catches "I like Python" vs "User likes Python"
+          if (isDuplicateMemory(o.text, updated)) continue;
+          updated = [{
+            id: Date.now().toString() + Math.random().toString(36).slice(2, 8),
+            text: o.text.trim(),
+            createdAt: Date.now()
+          }, ...updated].slice(0, 50);
         } else if (o.op === 'UPDATE' && o.id) {
-          updated = updated.map(m => m.id === o.id ? { ...m, text: o.text } : m);
+          // Don't let UPDATE downgrade quality
+          if (isLowQualityMemory(o.text)) continue;
+          updated = updated.map(m => m.id === o.id ? { ...m, text: o.text.trim() } : m);
         } else if (o.op === 'DELETE' && o.id) {
           updated = updated.filter(m => m.id !== o.id);
         }
+      }
+
+      // Only persist if something actually changed
+      if (updated.length === prev.length && updated.every((m, i) => m.id === prev[i]?.id && m.text === prev[i]?.text)) {
+        return prev;
       }
 
       saveMemoriesLS(updated);
