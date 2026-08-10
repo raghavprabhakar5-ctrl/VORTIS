@@ -510,13 +510,10 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
    Rendered via ReactDOM.createPortal(..., document.body) so it escapes the
    cramped chat bubble (maxWidth:480 for user code / max-width:94% for AI code)
    and actually takes the right side of the SCREEN. On mobile it becomes a
-   bottom sheet so it doesn't crush the chat into a sliver.
-   Width = 62vw (true majority-split for code preview) bounded so it never
-   gets absurd on tiny or ultra-wide monitors. Bumped from 50vw after user
-   feedback that 50vw felt too narrow. */
+   bottom sheet so it doesn't crush the chat into a sliver. */
 .preview-split-panel{
   position:fixed;top:0;right:0;bottom:0;
-  width:clamp(520px,62vw,1800px);max-width:100vw;height:100vh;
+  width:min(46vw,560px);max-width:100vw;height:100vh;
   z-index:200;
   border-left:1px solid var(--border2);
   background:var(--bg2);
@@ -548,11 +545,9 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
    When a preview is open in split mode, we tag <body> with .vortis-preview-open.
    That pushes the .main container (chat + header + input) left by exactly the
    width of the preview panel — so the chat no longer sits underneath the panel,
-   it actually moves out of the way. Result: a real side-by-side split.
-   padding-right MUST mirror the .preview-split-panel width above so the chat
-   column doesn't get overlapped. */
+   it actually moves out of the way. Result: a real side-by-side split. */
 body.vortis-preview-open .main{
-  padding-right:clamp(520px,62vw,1800px);
+  padding-right:min(46vw,560px);
   transition:padding-right .3s cubic-bezier(.22,.61,.36,1);
 }
 @media(max-width:768px){
@@ -7379,28 +7374,6 @@ onChange={e => {
   </button>
 )}
               <div className="ia-right">
-  {/* Personalization indicator — shows current tone/persona, clickable to open Settings → Personalization */}
-  <button
-    onClick={() => { setSettingsTab('personalization'); setShowSettings(true); }}
-    title={`Tone: ${aiTone} · Persona: ${aiPersona} · Length: ${responseLength}${customInstructions ? ' · Custom instructions set' : ''}\nClick to customize`}
-    style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '3px 9px', borderRadius: 7, cursor: 'pointer',
-      border: '1px solid rgba(99,102,241,.28)',
-      background: 'rgba(99,102,241,.07)',
-      color: 'var(--indigo)',
-      fontSize: 10.5, fontFamily: 'JetBrains Mono,monospace',
-      fontWeight: 600, letterSpacing: '.02em',
-      transition: 'all .15s', whiteSpace: 'nowrap',
-    }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.5)'; e.currentTarget.style.background = 'rgba(99,102,241,.13)'; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.28)'; e.currentTarget.style.background = 'rgba(99,102,241,.07)'; }}
-  >
-    <Sparkles size={10}/>
-    <span style={{ textTransform: 'capitalize' }}>{aiTone}</span>
-    <span style={{ opacity: 0.4, fontWeight: 400 }}>·</span>
-    <span style={{ textTransform: 'capitalize' }}>{aiPersona}</span>
-  </button>
   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
 
