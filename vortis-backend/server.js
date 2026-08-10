@@ -31,7 +31,7 @@ const CF_CHAT_MODELS = [
 // skipping a model BEFORE hitting Groq if we know it's rate-limited
 // or would blow the per-minute token budget, instead of finding out
 // after a wasted network round trip.
-const GROQ_TPM_CAP = 6000; // matches the on_demand tier limit from the error logs
+const GROQ_TPM_CAP = 30000; // matches the on_demand tier limit from the error logs
 const groqTpmTracker = new Map(); // model -> [{ tokens, time }]
 const groqCooldowns  = new Map(); // model -> timestamp when safe to retry
 
@@ -457,7 +457,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: optimizedMessages, stream: true, max_tokens: 1200 }),
+         body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
         }
       );
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }

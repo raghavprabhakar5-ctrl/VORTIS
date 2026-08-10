@@ -3499,10 +3499,10 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
     onConfirm: async () => {
       setConfirmDialog(null); setShowSettings(false);
       setMessages([]); setMemories([]);
-      // usage intentionally NOT reset here — clearing chat data shouldn't reset daily limits
       setReactions({}); setStarred({}); setSavedChats([]); setUploadedDoc(null);
       setShowMenu(false); setImgGenMode(false); setLastImagePrompt(null);
       convHistory.current = []; setProcessingStatus(''); imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
+      setIsProcessing(false); setIsStreaming(false); setStreamText(''); abortGenRef.current = true;
       try { localStorage.removeItem('vortis_memories'); localStorage.removeItem('vortis_reactions'); localStorage.removeItem('vortis_starred'); } catch(_) {}
       if (userUidRef.current) { try { const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats')); const regularChats = snap.docs.filter(d => !d.data().isCodeChat); for (const d of regularChats) await deleteDoc(d.ref); } catch(_) {} }
       const newId = Date.now().toString(); setChatId(newId); chatIdRef.current = newId;
@@ -3649,6 +3649,7 @@ const loadChat = async (id) => {
     savingRef.current = false;
     setShowAITimeout(false);
     clearTimeout(aiTimeoutRef.current);
+    setIsProcessing(false); setIsStreaming(false); setStreamText(''); abortGenRef.current = true;
 
     // rebuild AI context memory from the loaded messages
     convHistory.current = (data.messages || [])
@@ -3818,7 +3819,7 @@ const startNewChatAfterLogin = (uid) => {
   if (userUidRef.current) {
     try {
       const snap = await getDocs(collection(db, 'users', userUidRef.current, 'chats'));
-      const regularChats = snap.docs.filter(d => !d.data().isCodeChat); // ← add this
+      const regularChats = snap.docs.filter(d => !d.data().isCodeChat);
       if (regularChats.length >= 10) {
         const oldest = regularChats.sort((a, b) => new Date(a.data().updated) - new Date(b.data().updated))[0];
         if (oldest) await deleteDoc(oldest.ref);
@@ -3829,6 +3830,7 @@ const startNewChatAfterLogin = (uid) => {
     setMessages([]); setUploadedDoc(null); setShowMenu(false); setImgGenMode(false);
     setLastImagePrompt(null); convHistory.current = []; setProcessingStatus('');
     imgGenLock.current = false; savingRef.current = false; setShowAITimeout(false); clearTimeout(aiTimeoutRef.current);
+    setIsProcessing(false); setIsStreaming(false); setStreamText(''); abortGenRef.current = true;
     setTimeout(() => { const feed = document.querySelector('.chat-feed'); if (feed) feed.scrollTop = 0; }, 50);
   };
 
