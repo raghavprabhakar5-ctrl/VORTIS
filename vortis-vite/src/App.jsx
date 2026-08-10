@@ -539,6 +539,21 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
   overflow:hidden;display:flex;flex-direction:column;min-width:0;
   animation:runnerSlideInRight .35s cubic-bezier(.22,.61,.36,1);
 }
+/* ── True split-screen layout ──
+   When a preview is open in split mode, we tag <body> with .vortis-preview-open.
+   That pushes the .main container (chat + header + input) left by exactly the
+   width of the preview panel — so the chat no longer sits underneath the panel,
+   it actually moves out of the way. Result: a real side-by-side split. */
+body.vortis-preview-open .main{
+  padding-right:min(46vw,560px);
+  transition:padding-right .3s cubic-bezier(.22,.61,.36,1);
+}
+@media(max-width:768px){
+  body.vortis-preview-open .main{
+    padding-right:0;
+    padding-bottom:55vh;
+  }
+}
 /* The labeled toolbar buttons (Split / Full / Cancel) in the preview header. */
 .preview-tool-btn{
   display:inline-flex;align-items:center;gap:5px;
@@ -989,6 +1004,21 @@ const safeExecuteCodeLocally = async (langKey, codeText, onStatus) => {
 // Injects a tiny postMessage script so the parent <iframe> can auto-size
 // to the content's measured height. Small snippets no longer float inside
 // a 360px box; tall snippets cap at 720px and scroll.
+
+// ── Persistent preview-state store (module-level) ──
+// Why this exists: when an AI message transitions from "streaming" to
+// "finalized", the streaming bubble unmounts and a fresh bubble mounts
+// inside the `messages` array. That remount would normally kill the
+// CodeBlock's `output` state and "auto-dismiss" the preview. To prevent
+// that, we stash {output, previewMode, execStatus, ...} in a Map keyed by
+// a hash of (lang + codeText). A remounted CodeBlock reads its previous
+// state back on the very first render via useState(() => store.get(...)).
+const _previewStore = new Map();
+// Tracks which CodeBlocks currently have a split-screen preview open, so
+// we can keep <body class="vortis-preview-open"> applied while ANY preview
+// is visible (and only remove it when the LAST one closes).
+const _activePreviews = new Set();
+
 const _PREVIEW_HEIGHT_SCRIPT = `
 <script>
 (function(){
@@ -1131,19 +1161,52 @@ const CodeTerminal = ({ onClose }) => {
 };
 
 const CodeBlock = ({ lang, codeText }) => {
-  const [output, setOutput] = React.useState(null);
+  // ── Persistent state across ReactMarkdown remounts ──
+  // When the AI message transitions from "streaming" to "finalized", the streaming
+  // bubble unmounts and a new bubble mounts inside the messages array. That remount
+  // would normally kill `output` and "auto-dismiss" the preview. We persist state
+  // in a module-level Map keyed by a hash of the code text, so a remounted
+  // CodeBlock wakes up with its previous output / mode / etc. intact.
+  const storeKey = React.useMemo(() => {
+    let h = 5381;
+    const s = (lang || '') + '\u0000' + (codeText || '');
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return 'cb_' + (h >>> 0).toString(36);
+  }, [lang, codeText]);
+  const _stored = _previewStore.get(storeKey) || {};
+  const [output, setOutput] = React.useState(_stored.output !== undefined ? _stored.output : null);
   const [running, setRunning] = React.useState(false);
   const [hasError, setHasError] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const [execStatus, setExecStatus] = React.useState('IDLE');
-  const [execTime, setExecTime] = React.useState('');
+  const [execStatus, setExecStatus] = React.useState(_stored.execStatus || 'IDLE');
+  const [execTime, setExecTime] = React.useState(_stored.execTime || '');
   const [bootMsg, setBootMsg] = React.useState('');
-  const [iframeHeight, setIframeHeight] = React.useState(220);
+  const [iframeHeight, setIframeHeight] = React.useState(_stored.iframeHeight || 220);
   const [codeCollapsed, setCodeCollapsed] = React.useState(true);
   const [runFlash, setRunFlash] = React.useState(false);
   // 'split' = right-side split-screen panel (default). 'full' = full-viewport overlay.
   // User controls this via the Split / Full toolbar buttons in the preview header.
-  const [previewMode, setPreviewMode] = React.useState('split');
+  const [previewMode, setPreviewMode] = React.useState(_stored.previewMode || 'split');
+
+  // Persist state to the module-level store so a remount picks up where we left off.
+  React.useEffect(() => {
+    _previewStore.set(storeKey, { output, previewMode, execStatus, execTime, iframeHeight, hasError });
+  }, [storeKey, output, previewMode, execStatus, execTime, iframeHeight, hasError]);
+
+  // Toggle <body> class so the .main container (chat + header + input) shifts left
+  // to make room for the split-screen panel. Only 'split' mode does this — 'full'
+  // overlays everything, so no shift. Multiple open previews are tracked via a Set
+  // so closing one doesn't accidentally drop the body class while another is open.
+  React.useEffect(() => {
+    if (output && previewMode === 'split') {
+      _activePreviews.add(storeKey);
+      document.body.classList.add('vortis-preview-open');
+      return () => {
+        _activePreviews.delete(storeKey);
+        if (_activePreviews.size === 0) document.body.classList.remove('vortis-preview-open');
+      };
+    }
+  }, [output, previewMode, storeKey]);
  
   const langKey = (lang || '').toLowerCase().trim();
   const engine = LANG_ENGINE[langKey];
@@ -1611,9 +1674,11 @@ const CodeBlock = ({ lang, codeText }) => {
 
           {/* Output body — adaptive iframe for HTML, terminal grid for text.
               In split/full mode the panel is tall enough that we let the iframe
-              fill the available body height (flex:1) instead of capping at 720px. */}
+              fill the available body height (flex:1) instead of capping at 720px.
+              Wrapper uses var(--bg3) so the bezel around the iframe matches the
+              theme; the iframe itself stays white so HTML renders correctly. */}
           {output.type === 'html' ? (
-            <div style={{ position: 'relative', background: '#fff', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ position: 'relative', background: 'var(--bg3)', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 6 }}>
               <iframe
                 srcDoc={output.content}
                 style={{
@@ -1621,7 +1686,8 @@ const CodeBlock = ({ lang, codeText }) => {
                   flex: 1,
                   minHeight: Math.min(iframeHeight, 360),
                   height: '100%',
-                  border: 'none',
+                  border: '1px solid var(--border)',
+                  borderRadius: 6,
                   background: '#fff',
                   display: 'block',
                   transition: 'min-height .2s ease',
@@ -1629,11 +1695,12 @@ const CodeBlock = ({ lang, codeText }) => {
                 sandbox="allow-scripts allow-same-origin"
                 title="Code preview"
               />
-              {/* Subtle "device" badge showing live measured height */}
+              {/* Subtle "device" badge showing live measured height — themed */}
               <div style={{
-                position: 'absolute', top: 6, right: 8,
-                fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: 'rgba(0,0,0,.32)',
-                background: 'rgba(255,255,255,.7)', padding: '1px 6px', borderRadius: 4,
+                position: 'absolute', top: 10, right: 12,
+                fontSize: 9, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text3)',
+                background: 'var(--bg2)', padding: '1px 6px', borderRadius: 4,
+                border: '1px solid var(--border)',
                 backdropFilter: 'blur(4px)', pointerEvents: 'none',
                 letterSpacing: '.08em', fontWeight: 600,
               }}>

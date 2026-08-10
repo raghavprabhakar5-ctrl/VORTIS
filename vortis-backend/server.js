@@ -16,7 +16,7 @@ const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/llama-3.3-nemotron-super-49b-v1.5';
+const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-super-120b-a12b';
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
 const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
