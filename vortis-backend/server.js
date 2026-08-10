@@ -16,10 +16,11 @@ const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-super-120b-a12b';
-const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
-const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
-const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
+const NVIDIA_CHAT_FAST       = 'nvidia/nemotron-3-super-120b-a12b';        // fast, smaller (A12B active params)
+const NVIDIA_CHAT_QUALITY    = 'nvidia/llama-3.1-nemotron-70b-instruct';   // distinct quality model (was duplicate of FAST)
+const NVIDIA_CHAT_CODE       = 'nvidia/llama-3.1-nemotron-70b-instruct';   // 70B default — 550B was timing out under NIM queue
+const NVIDIA_CHAT_CODE_ULTRA = 'nvidia/nemotron-3-ultra-550b-a55b';        // 550B — only for explicit "ultra/deep" asks; TTFB routinely 90s+
+const NVIDIA_VISION_MODEL    = 'minimaxai/minimax-m3';
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
@@ -170,6 +171,58 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   }
 }
 
+// ── Streaming-aware fetch ──────────────────────────────────────
+// Two separate timers on the same AbortController:
+//   ttfbMs — how long to wait for the first byte (headers). Long enough
+//            to survive NIM's queue for big models (default 120s).
+//   idleMs — max gap between streamed chunks. Reset on every chunk.
+//            Default 30s. If no chunk arrives for this long, abort.
+//
+// This is what fixes "AbortError | code: 20 | cause: none" on the
+// NVIDIA code-chat path — the old code used a single 45s timer that
+// covered the entire request lifetime, too short for the 550B model's
+// TTFB but pointlessly long once tokens were flowing.
+async function fetchStreamWithTimeout(url, options = {}, { ttfbMs = 120000, idleMs = 30000 } = {}) {
+  const controller = new AbortController();
+  let timer = setTimeout(() => controller.abort(), ttfbMs); // initial: TTFB
+
+  const resetIdle = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(), idleMs); // after first byte: idle
+  };
+
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    resetIdle(); // headers received — switch to idle-timeout mode
+
+    // Wrap the body reader so every successful read resets the idle timer.
+    const originalReader = res.body.getReader();
+    const wrappedReader = {
+      async read() {
+        const r = await originalReader.read();
+        if (!r.done) resetIdle();
+        else clearTimeout(timer);
+        return r;
+      },
+      releaseLock() { clearTimeout(timer); return originalReader.releaseLock(); },
+      cancel(...args) { clearTimeout(timer); return originalReader.cancel(...args); },
+    };
+
+    return {
+      ok: res.ok,
+      status: res.status,
+      statusText: res.statusText,
+      headers: res.headers,
+      body: { getReader: () => wrappedReader },
+      async text() { clearTimeout(timer); return res.text(); },
+      async json() { clearTimeout(timer); return res.json(); },
+    };
+  } catch (e) {
+    clearTimeout(timer);
+    throw e;
+  }
+}
+
 function isValidResponse(text) {
   if (!text || text.trim().length < 2) return false;
   return !/rate.?limit|connection.?error|too many request|try again later|quota exceeded|service unavailable/i.test(text.trim());
@@ -279,7 +332,7 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
           stream:      false,
         }),
       },
-      20000
+      60000  // was 20000 — too short for 70B+ Nemotron models under NIM queue load
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
