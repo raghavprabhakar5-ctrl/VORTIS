@@ -511,12 +511,12 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
    cramped chat bubble (maxWidth:480 for user code / max-width:94% for AI code)
    and actually takes the right side of the SCREEN. On mobile it becomes a
    bottom sheet so it doesn't crush the chat into a sliver.
-   Width = 50vw (true half-split) bounded so it never gets absurd on tiny or
-   ultra-wide monitors. Previous cap of 560px made the preview feel tiny on
-   any monitor wider than ~1200px — that's now gone. */
+   Width = 62vw (true majority-split for code preview) bounded so it never
+   gets absurd on tiny or ultra-wide monitors. Bumped from 50vw after user
+   feedback that 50vw felt too narrow. */
 .preview-split-panel{
   position:fixed;top:0;right:0;bottom:0;
-  width:clamp(420px,50vw,1400px);max-width:100vw;height:100vh;
+  width:clamp(520px,62vw,1800px);max-width:100vw;height:100vh;
   z-index:200;
   border-left:1px solid var(--border2);
   background:var(--bg2);
@@ -552,7 +552,7 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
    padding-right MUST mirror the .preview-split-panel width above so the chat
    column doesn't get overlapped. */
 body.vortis-preview-open .main{
-  padding-right:clamp(420px,50vw,1400px);
+  padding-right:clamp(520px,62vw,1800px);
   transition:padding-right .3s cubic-bezier(.22,.61,.36,1);
 }
 @media(max-width:768px){
@@ -1044,12 +1044,16 @@ const _PREVIEW_HEIGHT_SCRIPT = `
     try{
       var body=document.body;
       var h=Math.max(body.scrollHeight,document.documentElement.scrollHeight);
-      // If the fit script applied a transform: scale, the visible height
-      // is the natural height * scale. Report that so the {height}px badge
+      // If the fit script applied zoom or transform: scale, the visible height
+      // is the natural height * total scale. Report that so the {height}px badge
       // matches what the user actually sees.
+      var totalScale=1;
+      var zoom=body.style.zoom;
+      if(zoom){var z=parseFloat(zoom);if(!isNaN(z)&&z>0)totalScale*=z;}
       var transform=body.style.transform||'';
       var m=transform.match(/scale\\(([\\d.]+)\\)/);
-      if(m&&m[1]){var s=parseFloat(m[1]);if(!isNaN(s)&&s>0){h=Math.round(h*s);}}
+      if(m&&m[1]){var s=parseFloat(m[1]);if(!isNaN(s)&&s>0)totalScale*=s;}
+      h=Math.round(h*totalScale);
       parent.postMessage({type:'vortis-preview-height',height:h+8},'*');
     }catch(e){}
   };
@@ -1068,19 +1072,29 @@ const _PREVIEW_HEIGHT_SCRIPT = `
 // body is a flex container that centers its children. Combined with the
 // _PREVIEW_FIT_SCRIPT below (which scales body up to fill the iframe),
 // this produces a centered, scaled-to-fit preview — no white borders.
-const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}</style>`;
+//
+// canvas { image-rendering: pixelated } makes scaled canvas content SHARP
+// instead of blurry. When the fit script zooms the body, canvas bitmaps are
+// re-rasterized; pixelated tells the browser to use nearest-neighbor scaling
+// (sharp pixels) instead of bilinear (blurry). This is the right default for
+// AI-generated games (Pac-Man, Snake, etc.). Users who want smooth rendering
+// can set `canvas { image-rendering: auto }` in their own <style>.
+const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}canvas{image-rendering:pixelated;image-rendering:crisp-edges;}</style>`;
 
 // ── Fit-to-container script ──
 // Measures the natural size of body's children (the user's content), then
-// scales body with CSS transform so the content FILLS the iframe viewport
-// (contain behaviour — aspect ratio preserved, content fully visible).
+// scales body so the content FILLS the iframe viewport (contain behaviour —
+// aspect ratio preserved, content fully visible).
 //
-// Why transform: scale instead of zoom:
-//   - zoom is non-standard (Chrome/Safari/Edge only until FF 126)
-//   - transform: scale works everywhere and doesn't affect layout, so
-//     body's flex centering keeps the content centered after scaling
+// Why zoom instead of transform: scale:
+//   - zoom triggers re-layout at the new size, so the browser RE-RASTERSIZES
+//     content (text, SVG, canvas bitmap) at the target resolution — SHARP.
+//   - transform: scale renders content at its natural size, then stretches the
+//     resulting bitmap — BLURRY, especially for canvas games.
+//   - zoom is supported in all modern browsers as of Firefox 126 (May 2024).
+//   - Fallback: if zoom is somehow unsupported, we fall back to transform.
 //
-// Why transform-origin: center center:
+// Why transform-origin: center center (fallback only):
 //   - body's layout fills the viewport (height:100%, width:100% by default)
 //   - content is centered in body via flex
 //   - scaling from center keeps content centered → symmetric letterbox
@@ -1101,6 +1115,8 @@ const _PREVIEW_FIT_SCRIPT = `
       // offsetWidth/Height are NOT affected by CSS transforms — they
       // return the layout box, so we get the natural content size even
       // if a previous fit pass left a transform on body.
+      // NOTE: zoom DOES affect offsetWidth, so we always reset zoom before
+      // measuring (see fit() below).
       if(c.offsetWidth>maxW)maxW=c.offsetWidth;
       if(c.offsetHeight>maxH)maxH=c.offsetHeight;
     }
@@ -1111,10 +1127,11 @@ const _PREVIEW_FIT_SCRIPT = `
     if(!body)return;
     var panelW=window.innerWidth;
     var panelH=window.innerHeight;
-    // Reset previous transform so measurement is natural
+    // Reset previous zoom/transform so measurement is natural
+    body.style.zoom='';
     body.style.transform='';
     body.style.transformOrigin='';
-    // Force reflow so layout recomputes without the old transform
+    // Force reflow so layout recomputes without the old zoom/transform
     void body.offsetHeight;
     var size=getContentSize();
     if(size.w<=0||size.h<=0)return;
@@ -1122,8 +1139,14 @@ const _PREVIEW_FIT_SCRIPT = `
     var scale=Math.min(panelW/size.w,panelH/size.h);
     // Only apply if meaningfully different from 1 (avoids jitter)
     if(scale>0.97&&scale<1.03)return;
-    body.style.transform='scale('+scale+')';
-    body.style.transformOrigin='center center';
+    // Prefer zoom (re-rasterizes content sharper), fall back to transform
+    var supportsZoom=typeof body.style.zoom!=='undefined';
+    if(supportsZoom){
+      body.style.zoom=scale;
+    }else{
+      body.style.transform='scale('+scale+')';
+      body.style.transformOrigin='center center';
+    }
   }
   if(document.readyState==='complete')setTimeout(fit,0);
   else window.addEventListener('load',function(){setTimeout(fit,0);});
@@ -2312,9 +2335,11 @@ const SettingsModal = ({
   aiTone, setAiTone,
   aiPersona, setAiPersona,
   responseLength, setResponseLength,
-  customInstructions, setCustomInstructions
+  customInstructions, setCustomInstructions,
+  // ── Initial tab (e.g., set to 'personalization' when opened from the input chip) ──
+  initialTab
 }) => {
-  const [tab, setTab] = useState('account');
+  const [tab, setTab] = useState(initialTab || 'account');
 
   const usagePct = (k) => {
     const l = LIMITS[tier];
@@ -3247,6 +3272,7 @@ export default function VortisAI() {
   const [lastMethod, setLastMethod] = useState('text');
   const [showSidebar, setShowSidebar] = useState(() => window.innerWidth > 768);
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState('account');
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -3924,7 +3950,7 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       getAI, messages, isProcessing, isIncognito, isDark,
       setMessages, setIsProcessing, setIsStreaming, setStreamText,
       setIsDark, setShowSettings, setShowSidebar, setIsIncognito,
-      setShowLogin, setToast,
+      setShowLogin, setToast, setSettingsTab,
     };
   });
 
@@ -3940,7 +3966,7 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       // ⌘/Ctrl + K → new chat (always works, even mid-message)
       if (mod && !shift && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); startNewChat(); return; }
       // ⌘/Ctrl + , → open settings
-      if (mod && !shift && e.key === ',') { e.preventDefault(); s.setShowSettings(true); return; }
+      if (mod && !shift && e.key === ',') { e.preventDefault(); s.setSettingsTab?.('account'); s.setShowSettings(true); return; }
       // ⌘/Ctrl + / → toggle sidebar
       if (mod && !shift && e.key === '/') { e.preventDefault(); s.setShowSidebar(p => !p); return; }
       // ⌘/Ctrl + F12 → toggle incognito (kept on F12 because ⌘⇧N conflicts with browser private window)
@@ -6661,7 +6687,7 @@ return (
             <div style={{ margin: '0 4px 8px', background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 10, padding: '9px 11px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}><AlertTriangle size={12} color="#ef4444"/><span style={{ fontSize: 11.5, fontWeight: 700, color: '#ef4444' }}>Chat Limit Reached</span></div>
               <p style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.5, marginBottom: 7 }}>Delete some chats to stay organized.</p>
-              <button onClick={() => setShowSettings(true)} style={{ width: '100%', padding: '5px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 7, color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'Geist,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Trash2 size={10}/> Free Up Space</button>
+              <button onClick={() => { setSettingsTab('account'); setShowSettings(true); }} style={{ width: '100%', padding: '5px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 7, color: '#ef4444', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'Geist,sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Trash2 size={10}/> Free Up Space</button>
             </div>
           )}
           {savedChats.length > 0 && !isIncognito ? (
@@ -6723,7 +6749,7 @@ return (
             <button className="uc-btn" onClick={() => setShowUpgrade(true)}>✦ Upgrade Now</button>
           </div>
         )}
-        <div className="user-row" onClick={() => { setShowSettings(true); if (window.innerWidth <= 768) setShowSidebar(false); }}>
+        <div className="user-row" onClick={() => { setSettingsTab('account'); setShowSettings(true); if (window.innerWidth <= 768) setShowSidebar(false); }}>
           <UserAvatar avatar={profile.avatar} name={profile.name} size={28}/>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, color: 'var(--text1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name?.split(' ')[0] || 'User'}</div>
@@ -6754,7 +6780,7 @@ return (
             </button>
             <button className="hdr-btn" onClick={() => setIsDark(p => !p)} title="Toggle theme">{isDark ? <Sun size={15}/> : <Moon size={15}/>}</button>
             <button className="upgrade-pill" onClick={() => setShowUpgrade(true)}><Crown size={12}/> <span>{tier === 'free' ? 'Upgrade' : tier.toUpperCase()}</span></button>
-            <button className={`hdr-btn ${showSettings ? 'active-btn' : ''}`} onClick={() => setShowSettings(!showSettings)}><Settings size={15}/></button>
+            <button className={`hdr-btn ${showSettings ? 'active-btn' : ''}`} onClick={() => { setSettingsTab('account'); setShowSettings(!showSettings); }}><Settings size={15}/></button>
           </div>
         </div>
 
@@ -7353,6 +7379,28 @@ onChange={e => {
   </button>
 )}
               <div className="ia-right">
+  {/* Personalization indicator — shows current tone/persona, clickable to open Settings → Personalization */}
+  <button
+    onClick={() => { setSettingsTab('personalization'); setShowSettings(true); }}
+    title={`Tone: ${aiTone} · Persona: ${aiPersona} · Length: ${responseLength}${customInstructions ? ' · Custom instructions set' : ''}\nClick to customize`}
+    style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 9px', borderRadius: 7, cursor: 'pointer',
+      border: '1px solid rgba(99,102,241,.28)',
+      background: 'rgba(99,102,241,.07)',
+      color: 'var(--indigo)',
+      fontSize: 10.5, fontFamily: 'JetBrains Mono,monospace',
+      fontWeight: 600, letterSpacing: '.02em',
+      transition: 'all .15s', whiteSpace: 'nowrap',
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.5)'; e.currentTarget.style.background = 'rgba(99,102,241,.13)'; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(99,102,241,.28)'; e.currentTarget.style.background = 'rgba(99,102,241,.07)'; }}
+  >
+    <Sparkles size={10}/>
+    <span style={{ textTransform: 'capitalize' }}>{aiTone}</span>
+    <span style={{ opacity: 0.4, fontWeight: 400 }}>·</span>
+    <span style={{ textTransform: 'capitalize' }}>{aiPersona}</span>
+  </button>
   {wordCount > 0 && <span style={{ fontSize: 10, color: 'var(--text4)', fontFamily: 'JetBrains Mono' }}>{wordCount}w</span>}
   {isListening && <span style={{ fontSize: 10.5, color: 'var(--red)', fontFamily: 'JetBrains Mono', animation: 'blink 1s ease-in-out infinite' }}>● REC</span>}
 
@@ -7416,6 +7464,8 @@ onChange={e => {
     aiPersona={aiPersona}           setAiPersona={setAiPersona}
     responseLength={responseLength} setResponseLength={setResponseLength}
     customInstructions={customInstructions} setCustomInstructions={setCustomInstructions}
+    // ── Initial tab (opens directly to Personalization when clicked from the input chip) ──
+    initialTab={settingsTab}
   />
 )}
 
