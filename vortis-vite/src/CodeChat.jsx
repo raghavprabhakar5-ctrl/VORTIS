@@ -1579,14 +1579,6 @@ const SelectionReplyButton = ({ scrollRef, onReply }) => {
         return;
       }
 
-      useEffect(() => {
-  if (document.querySelector('link[href*="Playfair+Display"]')) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital@1&display=swap';
-  document.head.appendChild(link);
-}, []);
-
       const text = sel.toString().trim();
       if (!text || text.length < 2) {
         setPos(null);
@@ -2707,7 +2699,7 @@ Title:`,
   }, []);
 
 
-  useEffect(() => {
+ useEffect(() => {
     if (typeof document === 'undefined') return;
     const body = document.body;
     const prev = {
@@ -2734,6 +2726,15 @@ Title:`,
       body.style.width = prev.width;
       if (prev.position !== 'fixed') window.scrollTo(0, scrollY);
     };
+  }, []);
+
+  // Load Playfair Display for the incognito empty-state heading
+  useEffect(() => {
+    if (document.querySelector('link[href*="Playfair+Display"]')) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital@1&display=swap';
+    document.head.appendChild(link);
   }, []);
 
   useEffect(() => {
