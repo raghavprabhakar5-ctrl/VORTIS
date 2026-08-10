@@ -34,7 +34,8 @@ import {
   AlertTriangle, Layers,
   BookOpen, PenTool, ChevronDown,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
-  Gem, PhoneOff, Play, Pause, Code2, CornerUpLeft, Square
+  Gem, PhoneOff, Play, Pause, Code2, CornerUpLeft, Square,
+  Columns2, Maximize2
 } from 'lucide-react';
 
 const API = 'https://vortis.onrender.com/api/handler';
@@ -527,6 +528,29 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
     animation:runnerSlideUp .35s cubic-bezier(.22,.61,.36,1);
   }
 }
+/* Full-screen preview overlay — toggled via the Full button in the header.
+   Covers the entire viewport (above the chat) so the user can inspect a
+   preview without the chat column taking up half the width. */
+.preview-full-panel{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  width:100vw;max-width:100vw;height:100vh;
+  z-index:210;
+  background:var(--bg2);
+  overflow:hidden;display:flex;flex-direction:column;min-width:0;
+  animation:runnerSlideInRight .35s cubic-bezier(.22,.61,.36,1);
+}
+/* The labeled toolbar buttons (Split / Full / Cancel) in the preview header. */
+.preview-tool-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 9px;border-radius:7px;
+  border:1px solid var(--border2);background:transparent;
+  color:var(--text3);font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;font-weight:600;letter-spacing:.04em;
+  cursor:pointer;transition:all .12s;white-space:nowrap;
+}
+.preview-tool-btn:hover{color:var(--text1);border-color:rgba(99,102,241,.4);background:rgba(99,102,241,.06);}
+.preview-tool-btn.active{color:#a78bfa;border-color:rgba(167,139,250,.45);background:rgba(167,139,250,.10);box-shadow:0 0 10px rgba(167,139,250,.18);}
+.preview-tool-btn.cancel:hover{color:#ef4444;border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.10);}
 `;
 
 const md = (text, dark = true) => {
@@ -1117,6 +1141,9 @@ const CodeBlock = ({ lang, codeText }) => {
   const [iframeHeight, setIframeHeight] = React.useState(220);
   const [codeCollapsed, setCodeCollapsed] = React.useState(true);
   const [runFlash, setRunFlash] = React.useState(false);
+  // 'split' = right-side split-screen panel (default). 'full' = full-viewport overlay.
+  // User controls this via the Split / Full toolbar buttons in the preview header.
+  const [previewMode, setPreviewMode] = React.useState('split');
  
   const langKey = (lang || '').toLowerCase().trim();
   const engine = LANG_ENGINE[langKey];
@@ -1139,21 +1166,13 @@ const CodeBlock = ({ lang, codeText }) => {
     return () => window.removeEventListener('message', handler);
   }, [output]);
 
-  // ── Auto-close the preview/output panel so the user does NOT have to click the X ──
-  // Text output (Python/JS/etc.) auto-dismisses after 12s; HTML previews after 25s
-  // (they are usually interactive and benefit from a longer dwell time).
-  // The timer resets whenever a new output is produced. The X button still works.
-  React.useEffect(() => {
-    if (!output || running) return;
-    const delay = output.type === 'html' ? 25000 : 12000;
-    const t = setTimeout(() => {
-      setOutput(null);
-      setHasError(false);
-      setExecStatus('IDLE');
-      setExecTime('');
-    }, delay);
-    return () => clearTimeout(t);
-  }, [output, running]);
+  // Auto-close removed by user request: the preview was being cut off
+  // automatically, which was annoying. The user now controls dismissal
+  // via the Cancel button in the preview header.
+  //
+  // (Previous behavior: auto-dismissed after 12s for text output, 25s for
+  // HTML previews.Kept here as a comment for future reference if we ever
+  // want to re-enable with a user-visible countdown.)
 
   const runCode = async () => {
     setRunning(true);
@@ -1164,6 +1183,8 @@ const CodeBlock = ({ lang, codeText }) => {
     setBootMsg('');
     setIframeHeight(220);
     setRunFlash(true);
+    // Reset preview mode each run — user picks again if they want full-screen.
+    setPreviewMode('split');
     setTimeout(() => setRunFlash(false), 600);
 
     const startTime = performance.now();
@@ -1507,11 +1528,11 @@ const CodeBlock = ({ lang, codeText }) => {
         )}
       </div>
 
-      {/* Output panel — true split-screen on the right side of the viewport.
-          Rendered via portal to document.body so it escapes the cramped chat
-          bubble and actually takes the right side of the SCREEN. */}
+      {/* Output panel — true split-screen on the right side of the viewport
+          (or full-viewport overlay if the user clicked Full). Rendered via
+          portal to document.body so it escapes the cramped chat bubble. */}
       {output && ReactDOM.createPortal(
-        <div className="preview-split-panel">
+        <div className={previewMode === 'full' ? 'preview-full-panel' : 'preview-split-panel'}>
           <div style={{ display:'contents' }}>
           {/* Output header with status pill */}
           <div style={{
@@ -1556,43 +1577,54 @@ const CodeBlock = ({ lang, codeText }) => {
                   fontSize: 10, fontFamily: 'JetBrains Mono, monospace', color: 'var(--text4)', opacity: 0.75, marginLeft: 2, whiteSpace: 'nowrap',
                   padding: '1px 7px', borderRadius: 4, background: 'rgba(99,102,241,.06)', border: '1px solid var(--border)',
                 }}>
-                  ⏱ {execTime}
+                  {execTime}
                 </span>
               )}
             </div>
-            <button
-              onClick={() => { setOutput(null); setHasError(false); setExecStatus('IDLE'); setExecTime(''); }}
-              style={{
-                background: 'none', border: 'none',
-                color: 'var(--text3)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center',
-                width: 24, height: 24, borderRadius: 6,
-                justifyContent: 'center',
-                transition: 'all .12s',
-                flexShrink: 0,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,.12)'; e.currentTarget.style.color = '#ef4444'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text3)'; }}
-              title="Close output (auto-closes after 12s / 25s for previews)"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
+            {/* Preview toolbar — Split / Full / Cancel.
+                Auto-close was removed by user request, so the Cancel button is
+                the only way to dismiss the preview (plus the quick X icon). */}
+            <div style={{ display:'flex', alignItems:'center', gap:5, flexShrink:0 }}>
+              <button
+                className={`preview-tool-btn${previewMode==='split'?' active':''}`}
+                onClick={() => setPreviewMode('split')}
+                title="Split-screen — preview on the right side of the screen"
+              >
+                <Columns2 size={11}/> Split
+              </button>
+              <button
+                className={`preview-tool-btn${previewMode==='full'?' active':''}`}
+                onClick={() => setPreviewMode('full')}
+                title="Full-screen preview overlay"
+              >
+                <Maximize2 size={11}/> Full
+              </button>
+              <button
+                className="preview-tool-btn cancel"
+                onClick={() => { setOutput(null); setHasError(false); setExecStatus('IDLE'); setExecTime(''); }}
+                title="Cancel and close the preview"
+              >
+                <X size={11}/> Cancel
+              </button>
+            </div>
           </div>
 
-          {/* Output body — adaptive iframe for HTML, terminal grid for text */}
+          {/* Output body — adaptive iframe for HTML, terminal grid for text.
+              In split/full mode the panel is tall enough that we let the iframe
+              fill the available body height (flex:1) instead of capping at 720px. */}
           {output.type === 'html' ? (
-            <div style={{ position: 'relative', background: '#fff' }}>
+            <div style={{ position: 'relative', background: '#fff', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <iframe
                 srcDoc={output.content}
                 style={{
                   width: '100%',
-                  height: iframeHeight,
+                  flex: 1,
+                  minHeight: Math.min(iframeHeight, 360),
+                  height: '100%',
                   border: 'none',
                   background: '#fff',
                   display: 'block',
-                  transition: 'height .2s ease',
+                  transition: 'min-height .2s ease',
                 }}
                 sandbox="allow-scripts allow-same-origin"
                 title="Code preview"
@@ -1621,7 +1653,7 @@ const CodeBlock = ({ lang, codeText }) => {
               color: hasError ? '#fca5a5' : '#a5f3fc',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
-              maxHeight: 380,
+              flex: 1,
               overflowY: 'auto',
               position: 'relative',
             }}>
