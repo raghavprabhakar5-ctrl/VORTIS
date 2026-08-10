@@ -280,6 +280,7 @@ const makeStyles = (isDark, fontFamily = "'Inter', sans-serif") =>  `
 @keyframes drShimmer{0%{background-position:0% 0}100%{background-position:250% 0}}
 @keyframes runnerScan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 @keyframes runnerSlideUp{from{opacity:0;transform:translateY(8px) scale(.995);max-height:0}to{opacity:1;transform:translateY(0) scale(1);max-height:760px}}
+@keyframes runnerSlideInRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
 @keyframes runnerBorderGlow{0%,100%{box-shadow:0 0 0 1px rgba(99,102,241,.35),0 0 22px rgba(99,102,241,.18)}50%{box-shadow:0 0 0 1px rgba(99,102,241,.7),0 0 36px rgba(99,102,241,.42)}}
 @keyframes runnerPulseDot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.35);opacity:.65}}
 @keyframes runnerCursorBlink{0%,49%{opacity:1}50%,100%{opacity:0}}
@@ -500,6 +501,31 @@ code.inline-code{background:rgba(99,102,241,.12);padding:1px 5px;border-radius:4
   .upgrade-pill{padding:4px 8px;font-size:11px}
   .hdr-btn{width:28px;height:28px}
   .q-pill{font-size:11.5px;padding:7px 11px}
+}
+
+/* ── True split-screen preview panel ──
+   Rendered via ReactDOM.createPortal(..., document.body) so it escapes the
+   cramped chat bubble (maxWidth:480 for user code / max-width:94% for AI code)
+   and actually takes the right side of the SCREEN. On mobile it becomes a
+   bottom sheet so it doesn't crush the chat into a sliver. */
+.preview-split-panel{
+  position:fixed;top:0;right:0;bottom:0;
+  width:min(46vw,560px);max-width:100vw;height:100vh;
+  z-index:200;
+  border-left:1px solid var(--border2);
+  background:var(--bg2);
+  box-shadow:-12px 0 40px rgba(0,0,0,.35);
+  overflow:hidden;display:flex;flex-direction:column;min-width:0;
+  animation:runnerSlideInRight .35s cubic-bezier(.22,.61,.36,1);
+}
+@media(max-width:768px){
+  .preview-split-panel{
+    left:0;right:0;bottom:0;top:auto;
+    width:100vw;max-width:100vw;height:55vh;
+    border-left:none;border-top:1px solid var(--border2);
+    box-shadow:0 -12px 40px rgba(0,0,0,.35);
+    animation:runnerSlideUp .35s cubic-bezier(.22,.61,.36,1);
+  }
 }
 `;
 
@@ -1422,12 +1448,11 @@ const CodeBlock = ({ lang, codeText }) => {
         </div>
       )}
 
-      {/* Split-view wrapper: code on left, live preview / output on right.
-          CSS Grid is used (not flex) because grid-template-columns guarantees
-          a true 2-column side-by-side layout regardless of children width. */}
+      {/* Code panel wrapper. The output/preview panel is rendered via a portal
+          to document.body (see below) so it can take the right side of the
+          actual SCREEN — escaping the cramped chat bubble that constrains this
+          CodeBlock to ~480px / 94%-of-chat-width. */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: output ? '1fr 1fr' : '1fr',
         minWidth: 0,
         width: '100%',
       }}>
@@ -1482,17 +1507,12 @@ const CodeBlock = ({ lang, codeText }) => {
         )}
       </div>
 
-      {/* Output panel — slides in (right side in split view) */}
-      {output && (
-        <div style={{
-          borderTop: 'none',
-          borderLeft: '1px solid var(--border)',
-          animation: 'runnerSlideUp .35s cubic-bezier(.22,.61,.36,1)',
-          overflow: 'hidden',
-          minWidth: 0,
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
+      {/* Output panel — true split-screen on the right side of the viewport.
+          Rendered via portal to document.body so it escapes the cramped chat
+          bubble and actually takes the right side of the SCREEN. */}
+      {output && ReactDOM.createPortal(
+        <div className="preview-split-panel">
+          <div style={{ display:'contents' }}>
           {/* Output header with status pill */}
           <div style={{
             display: 'flex',
@@ -1619,7 +1639,9 @@ const CodeBlock = ({ lang, codeText }) => {
               )}
             </pre>
           )}
-        </div>
+          </div>
+        </div>,
+        document.body
       )}
       {/* End of split-view wrapper */}
       </div>
