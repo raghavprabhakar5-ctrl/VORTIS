@@ -1059,14 +1059,18 @@ const _PREVIEW_HEIGHT_SCRIPT = `
 })();
 <\/script>`;
 // Default body styling for HTML previews — gives the iframe a proper
-// full-height, centered layout so fixed-size user content (canvas games,
+// full-height, top-aligned layout so fixed-size user content (canvas games,
 // SVG art, etc.) no longer sits in the top-left corner with empty white
 // space around it. User-supplied <style> tags override these defaults via
 // the normal cascade (same specificity, declared later wins).
 //
-// body is a flex container that centers its children. Combined with the
-// _PREVIEW_FIT_SCRIPT below (which scales body up to fill the iframe),
-// this produces a centered, scaled-to-fit preview — no white borders.
+// body is a flex container. Horizontal centering (justify-content: center)
+// keeps content centered left/right; vertical alignment is flex-start so
+// content pins to the TOP of the panel — any extra vertical space (when
+// the content's aspect ratio is wider than the panel's) goes to the
+// bottom, where it's less noticeable. Combined with the _PREVIEW_FIT_SCRIPT
+// below (which scales body up to fill the iframe), this produces a
+// top-aligned, scaled-to-fit preview — no white borders at the top.
 //
 // canvas { image-rendering: pixelated } makes scaled canvas content SHARP
 // instead of blurry. When the fit script zooms the body, canvas bitmaps are
@@ -1074,7 +1078,7 @@ const _PREVIEW_HEIGHT_SCRIPT = `
 // (sharp pixels) instead of bilinear (blurry). This is the right default for
 // AI-generated games (Pac-Man, Snake, etc.). Users who want smooth rendering
 // can set `canvas { image-rendering: auto }` in their own <style>.
-const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;}canvas{image-rendering:pixelated;image-rendering:crisp-edges;}</style>`;
+const _PREVIEW_BODY_DEFAULTS = `<style data-vortis-defaults>html,body{height:100%;margin:0;padding:0;}body{background:#fff;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;overflow:hidden;}canvas{image-rendering:pixelated;image-rendering:crisp-edges;}</style>`;
 
 // ── Fit-to-container script ──
 // Measures the natural size of body's children (the user's content), then
