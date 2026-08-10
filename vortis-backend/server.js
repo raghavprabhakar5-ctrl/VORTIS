@@ -31,6 +31,13 @@ const CF_CHAT_MODELS = [
 // skipping a model BEFORE hitting Groq if we know it's rate-limited
 // or would blow the per-minute token budget, instead of finding out
 // after a wasted network round trip.
+//
+// IMPORTANT: the pre-flight check only counts INPUT tokens. max_tokens
+// is a *ceiling*, not a forecast — most turns use far less. Counting
+// input + max_tokens (the old logic) made every "hard" turn fail the
+// budget check (8192 > 6000) and Groq was never even tried, which is
+// exactly what the production logs showed ("Skipping … – TPM budget"
+// for both models on every code-shaped request).
 const GROQ_TPM_CAP = 6000; // matches the on_demand tier limit from the error logs
 const groqTpmTracker = new Map(); // model -> [{ tokens, time }]
 const groqCooldowns  = new Map(); // model -> timestamp when safe to retry
@@ -39,16 +46,20 @@ function estimateTokens(text) {
   return Math.ceil((text || '').length / 4); // ~4 chars/token, Groq's own rule of thumb
 }
 
-function groqTpmAvailable(model, estimatedTokens, capTpm = GROQ_TPM_CAP) {
+// Pre-flight: only count *input* tokens against the budget. Output
+// tokens are recorded after the stream actually produces them via
+// recordGroqTpm(). This matches how Groq itself metered usage.
+function groqTpmAvailable(model, estimatedInputTokens, capTpm = GROQ_TPM_CAP) {
   const now = Date.now();
   const windowMs = 60000;
   const entries = (groqTpmTracker.get(model) || []).filter(e => now - e.time < windowMs);
   groqTpmTracker.set(model, entries);
   const used = entries.reduce((sum, e) => sum + e.tokens, 0);
-  return (used + estimatedTokens) <= capTpm;
+  return (used + estimatedInputTokens) <= capTpm;
 }
 
 function recordGroqTpm(model, tokens) {
+  if (!tokens || tokens <= 0) return;
   const entries = groqTpmTracker.get(model) || [];
   entries.push({ tokens, time: Date.now() });
   groqTpmTracker.set(model, entries);
@@ -259,6 +270,13 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 }
 
 // ── NVIDIA NIM CHAT FALLBACK ────────────────────────────────────
+// Timeout was 20s, which is shorter than NVIDIA NIM cold-start time
+// on Render's free tier (~50s advertised). Every cold request was
+// aborted → null → "returned empty – trying next", which then cascaded
+// into Cloudflare and surfaced as the JSON-parse error. 45s matches
+// the timeout already used by streamNvidiaGLMOnly() below.
+const NVIDIA_CHAT_TIMEOUT_MS = 45000;
+
 async function tryNvidiaChat(modelId, messages, maxTokens) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) return null;
@@ -279,7 +297,7 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
           stream:      false,
         }),
       },
-      20000
+      NVIDIA_CHAT_TIMEOUT_MS
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
@@ -318,21 +336,29 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const MAX_CONTINUATIONS = 3;
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_CODE]) {
-    const estTokens = estimateTokens(JSON.stringify(optimizedMessages)) + maxTokens;
+    // Pre-flight budget check: count INPUT tokens only. max_tokens is a
+    // ceiling, not a forecast — counting it made every hard turn blow
+    // the 6k cap before Groq was even asked. Output is metered after
+    // the stream actually produces it (see recordGroqTpm below).
+    const estInputTokens = estimateTokens(JSON.stringify(optimizedMessages));
     if (isGroqCoolingDown(modelToTry)) { console.log(`Skipping ${modelToTry} — cooling down`); continue; }
-    if (!groqTpmAvailable(modelToTry, estTokens)) { console.log(`Skipping ${modelToTry} — TPM budget`); continue; }
+    if (!groqTpmAvailable(modelToTry, estInputTokens)) { console.log(`Skipping ${modelToTry} — TPM budget`); continue; }
 
     try {
       let convoMessages = [...optimizedMessages];
       let fullBuffer = '';
       let continuations = 0;
       let streamedAnything = false;
+      let turnInputTokens = estInputTokens; // first turn's input cost
 
       while (true) {
         const stream = await groq.chat.completions.create({
           model: modelToTry, messages: convoMessages, max_tokens: maxTokens, temperature: 0.7, stream: true,
         });
-        recordGroqTpm(modelToTry, estTokens);
+        // Record the input cost for this turn up front. Output cost is
+        // added after the stream finishes, so a partial/empty response
+        // doesn't burn the full max_tokens from the budget.
+        recordGroqTpm(modelToTry, turnInputTokens);
 
         let buffer = '';
         let finishReason = null;
@@ -396,6 +422,11 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         fullBuffer += buffer;
         const gotRealContent = stripInternalReasoning(buffer).trim().length > 0;
 
+        // Meter the output tokens we actually consumed (chars/4 ≈ tokens).
+        // This is what was missing — without it, the budget only ever saw
+        // the input cost and never learned how much output was used.
+        recordGroqTpm(modelToTry, estimateTokens(buffer));
+
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
           convoMessages = [
@@ -403,6 +434,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
             { role: 'assistant', content: buffer },
             { role: 'user', content: 'Continue exactly where you left off. Do not repeat any earlier text, do not restart, do not add any preamble.' },
           ];
+          // Continuation turn re-sends the growing convo as input.
+          turnInputTokens = estimateTokens(JSON.stringify(convoMessages));
           continue;
         }
 
@@ -452,13 +485,21 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
 
   for (const cfModel of CF_CHAT_MODELS) {
     try {
-      const cfRes = await fetch(
+      // stream:false is required here — the response is parsed with
+      // cfRes.json() below, which expects a single JSON document. With
+      // stream:true Cloudflare returns SSE chunks ("data: {...}\\n\\n"),
+      // and the JSON parser dies on the first 'd' — exactly the
+      // "Unexpected token 'd', \\"data: {\\"ch\\" ...\\" error in the logs.
+      // The sibling voice fallback (search for "stream: false") already
+      // does this correctly; this call site was missed.
+      const cfRes = await fetchWithTimeout(
         `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: optimizedMessages, stream: true, max_tokens: 1200 }),
-        }
+          body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
+        },
+        30000
       );
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
 
