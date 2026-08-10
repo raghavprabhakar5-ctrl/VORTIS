@@ -12,7 +12,7 @@ if (!admin.apps.length) {
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_CODE = 'moonshotai/kimi-k2-instruct-0905';
+const GROQ_CHAT_CODE = 'llama-3.3-70b-versatile';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
