@@ -3493,26 +3493,31 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
         padding: '0 14px', borderBottom: '1px solid #212121', background: '#0f0f0f'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginRight: 4 }}>
-    <div style={{
-      width: 32, height: 32, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: '#e6e6e6', border: '1px solid #e6e6e6'
-    }}>
-      <Terminal size={17} color="#0a0a0a"/>
-    </div>
-    <div style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', letterSpacing: '-.015em', lineHeight: 1 }}>Vertex</div>
-  </div>
-
-  {/* separated from the logo/name so it doesn't read as attached to it */}
   <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar"
     style={{
-      background: 'transparent', border: 'none', color: '#6a6a6a', cursor: 'pointer',
-      padding: 6, borderRadius: 0, display: 'flex', marginLeft: 6
-    }}>
+      width: 32, height: 32, borderRadius: 8,
+      background: 'rgba(230,230,230,.06)', border: '1px solid rgba(230,230,230,.14)',
+      cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: '#c8c8c8', transition: 'all .15s', flexShrink: 0,
+    }}
+    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(230,230,230,.12)'; e.currentTarget.style.borderColor = 'rgba(230,230,230,.28)'; e.currentTarget.style.color = '#f0f0f0'; }}
+    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(230,230,230,.06)'; e.currentTarget.style.borderColor = 'rgba(230,230,230,.14)'; e.currentTarget.style.color = '#c8c8c8'; }}
+  >
     {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
   </button>
-</div>
 
+  {!sidebarOpen && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{
+        width: 26, height: 26, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: '#e6e6e6', border: '1px solid #e6e6e6'
+      }}>
+        <Terminal size={14} color="#0a0a0a"/>
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: '#f0f0f0', letterSpacing: '-.01em' }}>Vertex</div>
+    </div>
+  )}
+</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {/* Artifacts — every code block Vertex has generated in this chat, PLUS any files
               the user adds themselves via "Add file" below. Everything here is downloadable
