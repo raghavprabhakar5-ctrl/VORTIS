@@ -12,11 +12,11 @@ if (!admin.apps.length) {
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_CODE = 'qwen/qwen3.6-27b';
+const GROQ_CHAT_CODE = 'moonshotai/kimi-k2-instruct-0905';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'meta/llama-3.1-8b-instruct';
+const NVIDIA_CHAT_FAST    = 'nvidia/llama-3.3-nemotron-super-49b-v1.5';
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
 const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
@@ -331,7 +331,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       while (true) {
         const stream = await groq.chat.completions.create({
           model: modelToTry, messages: convoMessages, max_tokens: maxTokens, temperature: 0.7, stream: true,
-          ...(modelToTry === GROQ_CHAT_CODE ? { reasoning_effort: 'default' } : {}),
         });
         recordGroqTpm(modelToTry, estTokens);
 
