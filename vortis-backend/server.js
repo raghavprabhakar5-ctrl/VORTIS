@@ -12,7 +12,7 @@ if (!admin.apps.length) {
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 const GROQ_CHAT_PRIMARY = 'openai/gpt-oss-20b';
-const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
+const GROQ_CHAT_QUALITY = 'qwen/qwen3.6-27b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
@@ -310,14 +310,14 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   // NEW: buffer mode for table-like requests — repair before sending, don't stream raw
   const bufferMode = looksLikeTableRequest(lastMsg);
 
-  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const model     = isHard ? GROQ_CHAT_CODE : GROQ_CHAT_PRIMARY;
   const maxTokens = isHard ? 8192 : 2048;
 
   console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} → model: ${model} → maxTokens: ${maxTokens}`);
 
   const MAX_CONTINUATIONS = 3;
 
-  for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
+  for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_CODE]) {
     const estTokens = estimateTokens(JSON.stringify(optimizedMessages)) + maxTokens;
     if (isGroqCoolingDown(modelToTry)) { console.log(`Skipping ${modelToTry} — cooling down`); continue; }
     if (!groqTpmAvailable(modelToTry, estTokens)) { console.log(`Skipping ${modelToTry} — TPM budget`); continue; }
@@ -331,6 +331,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       while (true) {
         const stream = await groq.chat.completions.create({
           model: modelToTry, messages: convoMessages, max_tokens: maxTokens, temperature: 0.7, stream: true,
+          ...(modelToTry === GROQ_CHAT_CODE ? { reasoning_effort: 'default' } : {}),
         });
         recordGroqTpm(modelToTry, estTokens);
 

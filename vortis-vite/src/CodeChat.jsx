@@ -3493,10 +3493,6 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
         padding: '0 14px', borderBottom: '1px solid #212121', background: '#0f0f0f'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar"
-            style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 0, display: 'flex' }}>
-            {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
-          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 32, height: 32, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3504,8 +3500,12 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
             }}>
               <Terminal size={17} color="#0a0a0a"/>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: '#f0f0f0', letterSpacing: '-.015em', lineHeight: 1 }}>Vertex</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: '#f0f0f0', letterSpacing: '-.015em', lineHeight: 1 }}>Vertex</div>
           </div>
+          <button onClick={() => setSidebarOpen(o => !o)} title="Toggle sidebar"
+            style={{ background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 6, borderRadius: 0, display: 'flex' }}>
+            {sidebarOpen ? <PanelLeftClose size={16}/> : <PanelLeftOpen size={16}/>}
+          </button>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

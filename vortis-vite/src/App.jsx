@@ -32,11 +32,10 @@ import {
   ArrowUp, Download, Sun, Moon,
   ThumbsUp, ThumbsDown, RefreshCw,
   AlertTriangle, Layers,
-  BookOpen, PenTool,
+  BookOpen, PenTool, ChevronDown,
   Shield, Lock, Cpu, Edit2, Brain, Trash2,
   Gem, PhoneOff, Play, Pause, Code2, CornerUpLeft, Square
 } from 'lucide-react';
-
 
 const API = 'https://vortis.onrender.com/api/handler';
 
@@ -2624,18 +2623,25 @@ useEffect(() => {
   return msgAudioCtxRef.current;
 };
   const [showVoiceCall, setShowVoiceCall] = useState(false);
-  const [callState, setCallState] = useState('idle'); // idle | listening | thinking | speaking
+  const [callState, setCallState] = useState('idle'); 
   const callRecogRef = useRef(null);
   const callActiveRef = useRef(false);
-  const callAudioCtxOutRef = useRef(null);      // shared output AudioContext
-  const callNextPlayTimeRef = useRef(0);          // playback cursor for gapless scheduling
-  const callActiveSourcesRef = useRef([]);        // currently scheduled/playing buffer sources
-  const callTtsQueueRef = useRef(Promise.resolve()); // serializes sentence playback order
+  const callAudioCtxOutRef = useRef(null);      
+  const callNextPlayTimeRef = useRef(0);         
+  const callActiveSourcesRef = useRef([]);        
+  const callTtsQueueRef = useRef(Promise.resolve()); 
   const callFinalTranscriptRef = useRef('');
   const callBusyRef = useRef(false);
   const callSilenceMsRef = useRef(1400);
   const callSilenceTORef = useRef(null);
   const [callPaused, setCallPaused] = useState(false);
+  const [callLanguage, setCallLanguage] = useState('auto'); 
+  const callLanguageRef = useRef('auto');
+  useEffect(() => {
+  callLanguageRef.current = callLanguage;
+  if (callLanguage !== 'auto') callDetectedLangRef.current = callLanguage;
+  }, [callLanguage]);
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const [lastImagePrompt, setLastImagePrompt] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackRating, setFeedbackRating] = useState(0);
@@ -3065,12 +3071,6 @@ if (!bubble.contains(range.startContainer) || !bubble.contains(range.endContaine
       try { const rx = localStorage.getItem('vortis_reactions'); if (rx) setReactions(JSON.parse(rx)); } catch(_) {}
       try { const st = localStorage.getItem('vortis_starred'); if (st) setStarred(JSON.parse(st)); } catch(_) {}
       startNewChat();
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SR) {
-        recogRef.current = new SR(); recogRef.current.continuous = false; recogRef.current.interimResults = false; recogRef.current.lang = 'en-IN';
-        recogRef.current.onresult = e => { setLastMethod('voice'); handleCmdRef.current?.(e.results[0][0].transcript); setIsListening(false); };
-        recogRef.current.onerror = () => setIsListening(false); recogRef.current.onend = () => setIsListening(false);
-      }
     };
     init();
     return () => { recogRef.current?.stop(); synthRef.current.cancel(); clearTimeout(aiTimeoutRef.current); clearTimeout(saveTimerRef.current); };
@@ -3933,6 +3933,39 @@ const CALL_VOICE_MAP = {
   'en-US': ['en-US-GuyNeural',      'en-US-AriaNeural'],
 };
 
+
+const CALL_LANGUAGES = [
+  { code: 'auto',  label: 'Auto-detect' },
+  { code: 'en-US', label: 'English' },
+  { code: 'hi-IN', label: 'Hindi' },
+  { code: 'es-ES', label: 'Spanish' },
+  { code: 'fr-FR', label: 'French' },
+  { code: 'de-DE', label: 'German' },
+  { code: 'pt-BR', label: 'Portuguese' },
+  { code: 'ar-SA', label: 'Arabic' },
+  { code: 'zh-CN', label: 'Chinese' },
+  { code: 'ja-JP', label: 'Japanese' },
+  { code: 'ko-KR', label: 'Korean' },
+  { code: 'ru-RU', label: 'Russian' },
+  { code: 'it-IT', label: 'Italian' },
+  { code: 'tr-TR', label: 'Turkish' },
+  { code: 'vi-VN', label: 'Vietnamese' },
+  { code: 'id-ID', label: 'Indonesian' },
+  { code: 'bn-IN', label: 'Bengali' },
+  { code: 'ta-IN', label: 'Tamil' },
+  { code: 'te-IN', label: 'Telugu' },
+  { code: 'ml-IN', label: 'Malayalam' },
+  { code: 'kn-IN', label: 'Kannada' },
+  { code: 'gu-IN', label: 'Gujarati' },
+  { code: 'nl-NL', label: 'Dutch' },
+  { code: 'pl-PL', label: 'Polish' },
+  { code: 'sv-SE', label: 'Swedish' },
+  { code: 'th-TH', label: 'Thai' },
+  { code: 'ms-MY', label: 'Malay' },
+  { code: 'el-GR', label: 'Greek' },
+  { code: 'he-IL', label: 'Hebrew' },
+];
+
 const normalizeLangCode = (lang) => {
   if (!lang) return 'en-US';
   const l = lang.toLowerCase().trim();
@@ -4098,9 +4131,10 @@ callRecogRef.current = recog;
     callFinalTranscriptRef.current = '';
     if (!transcript) { safeRestart(); return; }
 
-   const detectedLang = normalizeLangCode(detectSpokenLang(transcript));
+   const detectedLang = callLanguageRef.current !== 'auto'
+     ? callLanguageRef.current
+     : normalizeLangCode(sttLanguage || detectSpokenLang(transcript));
    callDetectedLangRef.current = detectedLang;
-
    callBusyRef.current = true;
    setCallState('thinking');
    safeRestart();
@@ -4406,7 +4440,7 @@ const startVoiceCall = async () => {
       if (!t || !callActiveRef.current) return;
       if (t.length < 4) return;
       if (/^(thank you\.?|thanks for watching\.?|bye\.?|you\.?|\.+)$/i.test(t)) return;
-      if (detectedLang) callDetectedLangRef.current = detectedLang;
+      if (detectedLang && callLanguageRef.current === 'auto') callDetectedLangRef.current = detectedLang;
       await handleVoiceCallTurn(t, detectedLang);
     },
     onStateChange: (state) => {
@@ -4415,7 +4449,7 @@ const startVoiceCall = async () => {
       else if (state === 'transcribing') setCallState('thinking');
     },
     isBusy: () => callBusyRef.current || isSpeakingRef.current,
-    getLanguageHint: () => callDetectedLangRef.current,
+    getLanguageHint: () => callLanguageRef.current !== 'auto' ? callLanguageRef.current : callDetectedLangRef.current,
   });
 } catch (pipelineError) {
   console.error('Failed to start voice pipeline:', pipelineError);
@@ -5519,6 +5553,22 @@ Improved prompt:`,
     reader.readAsDataURL(file); e.target.value = ''; setShowMenu(false);
   };
 
+  const startListening = () => {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return;
+  try { recogRef.current?.abort(); } catch (_) {}
+  const recog = new SR();
+  recog.continuous = false;
+  recog.interimResults = false;
+  recog.lang = 'en-IN';
+  recog.onstart = () => setIsListening(true);   // real listening state, not on click
+  recog.onresult = e => { setLastMethod('voice'); handleCmdRef.current?.(e.results[0][0].transcript); setIsListening(false); };
+  recog.onerror = () => setIsListening(false);
+  recog.onend = () => setIsListening(false);
+  recogRef.current = recog;
+  try { recog.start(); } catch (_) { setIsListening(false); }
+};
+
   const handleSend = () => {
    const val = pendingCode
   ? `\`\`\`\n${pendingCode.content}\n\`\`\`` + (input.trim() ? '\n' + input.trim() : '\nRun this code.')
@@ -5894,7 +5944,48 @@ return (
       @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
- 
+
+    <div style={{ position: 'absolute', top: 24, right: 28, zIndex: 10 }}>
+      <button
+        onClick={() => setShowLangMenu(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 12px', borderRadius: 20,
+          background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.14)',
+          color: 'rgba(255,255,255,.75)', fontSize: 12.5, fontWeight: 600,
+          cursor: 'pointer', fontFamily: "'Inter',system-ui,sans-serif",
+        }}
+      >
+        <Globe size={13}/>
+        {CALL_LANGUAGES.find(l => l.code === callLanguage)?.label || 'Auto-detect'}
+        <ChevronDown size={12} style={{ transform: showLangMenu ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}/>
+      </button>
+      {showLangMenu && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+          width: 190, maxHeight: 320, overflowY: 'auto',
+          background: '#161125', border: '1px solid rgba(255,255,255,.12)',
+          borderRadius: 12, boxShadow: '0 16px 48px rgba(0,0,0,.5)', padding: 6,
+        }}>
+          {CALL_LANGUAGES.map(l => (
+            <button
+              key={l.code}
+              onClick={() => { setCallLanguage(l.code); setShowLangMenu(false); }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '7px 10px', borderRadius: 7, background: callLanguage === l.code ? 'rgba(139,92,246,.15)' : 'transparent',
+                border: 'none', color: callLanguage === l.code ? '#c4b5fd' : 'rgba(255,255,255,.75)',
+                fontSize: 12.5, cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              {l.label}
+              {callLanguage === l.code && <Check size={12}/>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+
     {/* AICore Layout Container */}
 <div style={{ 
   position: 'absolute', 
@@ -5946,6 +6037,15 @@ return (
         </span>
       )}
     </div>
+
+    {callState !== 'idle' && (
+      <p style={{
+        marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,.35)',
+        fontFamily: "'JetBrains Mono',monospace", letterSpacing: '.04em',
+      }}>
+        {fmtDuration(callDuration)}
+      </p>
+    )}
  
     {/* Controls */}
 <div style={{
@@ -5999,7 +6099,9 @@ return (
     }}
     title="End call"
   >
-    <PhoneOff size={28} color="white"/>
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="white">
+      <path d="M12,9C10.4,9 8.85,9.25 7.4,9.72V12.82C7.4,13.22 7.17,13.56 6.84,13.72C5.86,14.21 4.97,14.84 4.17,15.57C4,15.75 3.75,15.86 3.5,15.86C3.2,15.86 2.95,15.74 2.77,15.56L0.29,13.08C0.11,12.9 0,12.65 0,12.38C0,12.1 0.11,11.85 0.29,11.67C3.34,8.77 7.46,7 12,7C16.54,7 20.66,8.77 23.71,11.67C23.89,11.85 24,12.1 24,12.38C24,12.65 23.89,12.9 23.71,13.08L21.23,15.56C21.05,15.74 20.8,15.86 20.5,15.86C20.25,15.86 20,15.75 19.83,15.57C19.03,14.84 18.14,14.21 17.16,13.72C16.83,13.56 16.6,13.22 16.6,12.82V9.72C15.15,9.25 13.6,9 12,9Z"/>
+    </svg>
   </button>
 </div>
 
@@ -6333,9 +6435,9 @@ onChange={e => {
     </svg>
   </button>
 
-  <button
+ <button
     className={`mic-btn ${isListening ? 'listening' : ''}`}
-    onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else if (recogRef.current) { setIsListening(true); recogRef.current.start(); } }}
+    onClick={() => { if (isListening) { recogRef.current?.stop(); setIsListening(false); } else { startListening(); } }}
     disabled={isProcessing && !isListening}
   >
     {isListening ? <MicOff size={13}/> : <Mic size={13}/>}
