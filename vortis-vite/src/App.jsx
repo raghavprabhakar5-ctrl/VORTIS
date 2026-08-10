@@ -1160,7 +1160,7 @@ const CodeTerminal = ({ onClose }) => {
   );
 };
 
-const CodeBlock = ({ lang, codeText }) => {
+const CodeBlock = React.memo(({ lang, codeText }) => {
   // ── Persistent state across ReactMarkdown remounts ──
   // When the AI message transitions from "streaming" to "finalized", the streaming
   // bubble unmounts and a new bubble mounts inside the messages array. That remount
@@ -1746,7 +1746,8 @@ const CodeBlock = ({ lang, codeText }) => {
       </div>
     </div>
   );
-};
+}, (prev, next) => prev.lang === next.lang && prev.codeText === next.codeText);
+CodeBlock.displayName = 'CodeBlock';
 
 const fixInlineBullets = (text) => {
   if (!text) return text;
