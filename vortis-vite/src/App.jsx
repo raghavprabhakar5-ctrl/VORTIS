@@ -2711,9 +2711,6 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  const clearSel = () => setSelectionReply(null);
-
-  useEffect(() => {
   if (!showMenu) return;
   const handleClickOutside = (e) => {
     if (
@@ -2726,6 +2723,9 @@ useEffect(() => {
   document.addEventListener('mousedown', handleClickOutside);
   return () => document.removeEventListener('mousedown', handleClickOutside);
 }, [showMenu]);
+
+useEffect(() => {
+  const clearSel = () => setSelectionReply(null);
 
   const handleMouseUp = (e) => {
     if (e.target.closest('[data-reply-btn]')) return;
