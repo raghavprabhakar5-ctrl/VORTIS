@@ -315,8 +315,7 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
       ],
       max_tokens: 10,
       temperature: 0,
-      signal: controller.signal,
-    });
+    }, { signal: controller.signal });
 
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
     return raw.includes('hard') ? 'hard' : 'medium';
@@ -418,11 +417,13 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
       while (true) {
         // Pass the client abort signal through to Groq so a closed
         // browser tab cancels the upstream request instead of letting
-        // it run to completion and waste TPM.
+        // it run to completion and waste TPM. NOTE: groq-sdk takes the
+        // signal in a SECOND options argument, NOT inside the body —
+        // putting it in the body causes HTTP 400
+        // "property 'signal' is unsupported".
         const stream = await groq.chat.completions.create({
           model: modelToTry, messages: convoMessages, max_tokens: maxTokens, temperature: 0.7, stream: true,
-          signal: clientSignal,
-        });
+        }, { signal: clientSignal });
         recordGroqTpm(modelToTry, estTokens);
 
         let buffer = '';
@@ -1153,8 +1154,7 @@ Respond ONLY with YES or NO. Nothing else.`,
       ],
       max_tokens: 5,
       temperature: 0,
-      signal: controller.signal,
-    });
+    }, { signal: controller.signal });
 
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
     return raw.includes('yes');
@@ -1353,8 +1353,7 @@ app.post('/api/handler', async (req, res) => {
       messages: [{ role: 'user', content: titlePrompt }],
       max_tokens: 30,                   // ← a little headroom, cheap either way
       temperature: 0.3,
-      signal: titleController.signal,
-    });
+    }, { signal: titleController.signal });
     const raw = result.choices?.[0]?.message?.content || '';
     const clean = stripInternalReasoning(raw).trim();   // <- strip <think> just in case
     return res.status(200).json({ title: clean });
