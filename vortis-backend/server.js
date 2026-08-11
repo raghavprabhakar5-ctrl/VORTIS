@@ -16,7 +16,7 @@ const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-super-120b-a12b';
+const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-nano-30b-a3b';
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
 const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
@@ -31,7 +31,7 @@ const CF_CHAT_MODELS = [
 // skipping a model BEFORE hitting Groq if we know it's rate-limited
 // or would blow the per-minute token budget, instead of finding out
 // after a wasted network round trip.
-const GROQ_TPM_CAP = 30000; // matches the on_demand tier limit from the error logs
+const GROQ_TPM_CAP = 6000; // matches the on_demand tier limit from the error logs
 const groqTpmTracker = new Map(); // model -> [{ tokens, time }]
 const groqCooldowns  = new Map(); // model -> timestamp when safe to retry
 
@@ -457,7 +457,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-         body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
+          body: JSON.stringify({ messages: optimizedMessages, stream: true, max_tokens: 1200 }),
         }
       );
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
@@ -517,32 +517,7 @@ function looksLikeTableRequest(text) {
   return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
-// ── Idle-timeout fetch for streaming NVIDIA calls ──
-// The old fetchWithTimeout set ONE abort deadline for the whole request
-// (25s), so a stream that was actively receiving data but just started
-// slow (your log: 28s to first byte) got killed anyway — even though it
-// wasn't stuck. This version only aborts on real silence: a fixed cap
-// while waiting for headers, then a rolling idle window once bytes start
-// arriving, reset on every chunk.
-async function fetchWithIdleTimeout(url, options = {}, { headerTimeoutMs = 15000, idleMs = 20000 } = {}) {
-  const controller = new AbortController();
-  let timer = setTimeout(() => controller.abort(), headerTimeoutMs);
-
-  const res = await fetch(url, { ...options, signal: controller.signal });
-
-  clearTimeout(timer);
-  timer = setTimeout(() => controller.abort(), idleMs);
-
-  const resetIdle = () => {
-    clearTimeout(timer);
-    timer = setTimeout(() => controller.abort(), idleMs);
-  };
-  const clear = () => clearTimeout(timer);
-
-  return { res, resetIdle, clear };
-}
-
-// ── Code-chat streaming (NVIDIA only, with fallback tier) ──────
+// ── Code-chat streaming (NVIDIA only) ──────────────────────
 async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
@@ -556,31 +531,19 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  const HEADER_TIMEOUT_MS = 15000; // time allowed to receive response headers
-  const IDLE_TIMEOUT_MS   = 20000; // time allowed between chunks once streaming starts
-  // Bumped 1 → 2: Ultra is your coding model and shouldn't get demoted to
-  // the smaller Super model on a single slow cold-start.
-  const MAX_ATTEMPTS = 2;
+  const REQUEST_TIMEOUT_MS = 45000; // shorter than before — fail faster so a retry has time to run
+  const MAX_ATTEMPTS = 2;           // NVIDIA only — retry same model, no other provider
 
-  // If you DO want reasoning on for a later fallback attempt, give it a
-  // budget big enough to actually finish and still leave room to answer —
-  // 3000 was getting fully consumed with nothing left to write the answer.
-  const REASONING_BUDGET = 8000;
-
-  async function attemptModel(model, convoMessagesInit, { withReasoning = false } = {}) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let written = 0;
-    let convoMessages = [...convoMessagesInit];
+    let convoMessages = [...messages];
     let continuations = 0;
     let fullRawBuffer = '';
-    let fullReasoningBuffer = ''; // kept only for diagnostics, never sent to user
     let attemptFailed = false;
-    const t0 = Date.now();
-    let gotFirstByte = false;
-    let lastFinishReason = null;
 
     try {
       while (true) {
-        const { res: nvRes, resetIdle, clear } = await fetchWithIdleTimeout(
+        const nvRes = await fetchWithTimeout(
           `${NVIDIA_BASE_URL}/chat/completions`,
           {
             method:  'POST',
@@ -589,49 +552,36 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               'Content-Type':  'application/json',
             },
             body: JSON.stringify({
-              model,
-              messages:    convoMessages,
-              max_tokens:  maxTokens,
-              temperature: 0.5,
-              top_p:       0.9,
-              stream:      true,
-              chat_template_kwargs: { enable_thinking:false },
-              ...(withReasoning ? { reasoning_budget: REASONING_BUDGET } : {}),
+              model:           NVIDIA_CHAT_CODE,
+              messages:        convoMessages,
+              max_tokens:      maxTokens,
+              temperature:     0.5,
+              top_p:           0.9,
+              stream:          true,
             }),
           },
-          { headerTimeoutMs: HEADER_TIMEOUT_MS, idleMs: IDLE_TIMEOUT_MS }
+          REQUEST_TIMEOUT_MS
         );
 
-        console.log(`Code-chat (${model}, reasoning=${withReasoning}): headers in ${Date.now() - t0}ms`);
-
         if (!nvRes.ok) {
-          clear();
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
-          console.error(`Code-chat stream: HTTP ${nvRes.status} (${model}) - ${errBody.slice(0, 300)}`);
+          console.error(`Code-chat stream: HTTP ${nvRes.status} (attempt ${attempt}) - ${errBody.slice(0, 300)}`);
           attemptFailed = true;
           break;
         }
 
         const reader  = nvRes.body.getReader();
         const decoder = new TextDecoder();
-        let buffer     = '';
-        let inThink    = false;
-        let pending    = '';
+        let buffer    = '';
+        let inThink   = false;
+        let pending   = '';
         let turnBuffer = '';
         let finishReason = null;
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) { clear(); break; }
-
-          // Data just arrived — push the abort deadline out again.
-          resetIdle();
-
-          if (!gotFirstByte) {
-            gotFirstByte = true;
-            console.log(`Code-chat (${model}): first byte in ${Date.now() - t0}ms`);
-          }
+          if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
 
@@ -648,13 +598,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
             try { payload = JSON.parse(raw); } catch (_) { continue; }
 
             finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
-
-            const reasoningToken = payload?.choices?.[0]?.delta?.reasoning_content;
-            if (reasoningToken) {
-              fullReasoningBuffer += reasoningToken;
-              continue;
-            }
-
             const token = payload?.choices?.[0]?.delta?.content;
             if (!token) continue;
 
@@ -702,11 +645,9 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
           pending = '';
         }
 
-        lastFinishReason = finishReason;
-
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
-          console.warn(`Code-chat (${model}): truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
+          console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
           convoMessages = [
             ...convoMessages,
             { role: 'assistant', content: turnBuffer },
@@ -718,32 +659,9 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         break;
       }
     } catch (e) {
-      console.error(
-        `Code-chat stream error (${model}):`,
-        e.name, '|', e.message,
-        '| cause:', e.cause?.message || e.cause || 'none',
-        '| code:', e.cause?.code || e.code || 'none',
-        '| elapsed:', Date.now() - t0, 'ms'
-      );
+      console.error(`Code-chat stream error (attempt ${attempt}):`, e.message);
       attemptFailed = true;
     }
-
-    // Diagnostics: if we ended up with nothing, log WHY so it's visible next time
-    // instead of a bare "produced nothing".
-    if (written === 0 && !attemptFailed) {
-      console.warn(
-        `Code-chat (${model}): zero content written | finish_reason=${lastFinishReason} ` +
-        `| reasoning_chars=${fullReasoningBuffer.length} | reasoning=${withReasoning}`
-      );
-    }
-
-    return { written, attemptFailed, fullRawBuffer };
-  }
-
-  // ── Primary: no reasoning — fast, direct answer, avoids the whole
-  // "burned the reasoning budget and never got to the answer" failure mode.
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const { written, attemptFailed, fullRawBuffer } = await attemptModel(NVIDIA_CHAT_CODE, messages, { withReasoning: false });
 
     if (written > 0) {
       res.write('data: [DONE]\n\n');
@@ -761,29 +679,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
-        console.log(`Code-chat stream: salvaged ${salvaged.length} chars (attempt ${attempt})`);
+        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response (attempt ${attempt})`);
         return true;
       }
     }
 
     if (attempt < MAX_ATTEMPTS) {
-      console.warn(`Code-chat: attempt ${attempt} produced nothing — retrying NVIDIA Ultra (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+      console.warn(`Code-chat: attempt ${attempt} produced nothing — retrying NVIDIA (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
       await new Promise(r => setTimeout(r, 600));
     }
   }
 
-  // ── Fallback tier: try the smaller/faster NVIDIA model ──
-  console.warn(`Code-chat: ${NVIDIA_CHAT_CODE} failed ${MAX_ATTEMPTS}x — falling back to ${NVIDIA_CHAT_QUALITY}`);
-  const fallback = await attemptModel(NVIDIA_CHAT_QUALITY, messages, { withReasoning: false });
-
-  if (fallback.written > 0) {
-    res.write('data: [DONE]\n\n');
-    res.end();
-    console.log(`Code-chat stream OK (fallback ${NVIDIA_CHAT_QUALITY}) - ${fallback.written} chars written`);
-    return true;
-  }
-
-  console.error('Code-chat stream: all NVIDIA attempts failed, including fallback');
+  console.error('Code-chat stream: all NVIDIA attempts failed');
   if (!res.writableEnded) {
     try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
   }
@@ -1626,9 +1533,10 @@ IMAGE RULE: Before GENERATE_IMAGE:<desc>, confirm a real subject exists (this ms
         // Trimmed from 10000 → 6000 chars: cuts token cost per request without losing
         // meaningful system-prompt content, which directly reduces how fast we hit the Groq TPM cap.
         const tableGuard = looksLikeTableRequest(lastUserMsg) ? `
-        TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank line before the table starts, put each row on its own separate line (never join rows with "| |"), and put the header separator row (|---|---|) on its own line too. Never compress a table into one paragraph.\n\n` : '';
+TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank line before the table starts, put each row on its own separate line (never join rows with "| |"), and put the header separator row (|---|---|) on its own line too. Never compress a table into one paragraph.\n\n` : '';
 
-        const sysContent = identityOverride + imageGuard + tableGuard + prompt.trim().slice(0, 14000) + locationNote + searchContext;
+        const sysContent = identityOverride + imageGuard + tableGuard + prompt.trim().slice(0, 6000) + locationNote + searchContext;
+
         const messages = [];
         if (sysContent) messages.push({ role: 'system', content: sysContent });
         messages.push(...history);
