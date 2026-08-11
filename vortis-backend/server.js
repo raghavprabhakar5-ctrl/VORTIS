@@ -32,16 +32,20 @@ const CF_CHAT_MODELS = [
 // or would blow the per-minute token budget, instead of finding out
 // after a wasted network round trip.
 //
-// FIX: previous value was a flat 6000 TPM, far below Groq's actual
-// on_demand tier limits. One normal chat (system prompt + history +
-// ~2k output tokens) blew the entire 60s budget and every subsequent
-// request hit "Skipping <model> — TPM budget" in a cascade. Per-model
-// caps now match Groq's real published on_demand limits.
+// REAL LIMITS (confirmed from your error log — service tier `on_demand`):
+//   openai/gpt-oss-20b  → Limit 8000 TPM  (413 error said "Limit 8000")
+//   openai/gpt-oss-120b → ~5000 TPM (heavier model, lower limit)
+//   llama-3.1-8b-instant → ~15000 TPM
+//
+// We set the caps ~1000 BELOW the real limit so a single oversized
+// request doesn't trip the 413 (Groq's TPM check is per-request, not
+// just per-minute — a 11276-token request against an 8000 cap fails
+// immediately even if you haven't sent anything else this minute).
 const GROQ_TPM_CAPS = {
-  'openai/gpt-oss-20b':   30000, // on_demand tier ~30k TPM
-  'openai/gpt-oss-120b':  5000,  // on_demand tier ~5k TPM (heavier model)
-  'llama-3.1-8b-instant': 30000,
-  _default: 6000,
+  'openai/gpt-oss-20b':   7000,  // real limit 8000, 1k safety buffer
+  'openai/gpt-oss-120b':  4000,  // real limit ~5000
+  'llama-3.1-8b-instant': 14000, // real limit ~15000
+  _default: 5000,
 };
 function groqTpmCapFor(model) {
   return GROQ_TPM_CAPS[model] ?? GROQ_TPM_CAPS._default;
@@ -635,7 +639,7 @@ function looksLikeTableRequest(text) {
 //   4. Returns false on full failure so the caller can fall back to
 //      Groq then CF instead of showing the dead-end "Vertex is
 //      temporarily unavailable" message.
-async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSignal) {
+async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
     console.error('Code-chat stream: NVIDIA_API_KEY missing');
@@ -648,8 +652,9 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSigna
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 60000;  // outer bound for the entire streaming call
-  const IDLE_TIMEOUT_MS    = 15000;  // per-read idle — abort if no bytes for 15s
+  const REQUEST_TIMEOUT_MS = 90000;  // outer bound for the entire streaming call
+  const FIRST_BYTE_TIMEOUT_MS = 45000; // generous — NVIDIA cold start on a 550b model can take 30-40s to send the first byte
+  const IDLE_TIMEOUT_MS    = 15000;  // AFTER first byte — abort if no bytes for 15s mid-stream
   const MAX_ATTEMPTS = 2;            // NVIDIA only — Groq+CF are tried by the caller
 
   // Safe write helper — never throws, returns false if the socket is closed.
@@ -718,14 +723,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSigna
         }
 
         const reader  = nvRes.body.getReader();
-        // Hook the idle timer to actually cancel the reader when it fires.
-        // (Replaces the stub above — the local `reader` only exists inside
-        // this while-iteration, so we set up the cancel here.)
+        // Use the GENEROUS first-byte timeout initially — NVIDIA cold start
+        // on a 550b model can take 30-40s to send the first byte. Once data
+        // starts flowing, we switch to the tighter inter-chunk idle timeout.
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
-          console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
-          try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
-        }, IDLE_TIMEOUT_MS);
+          console.warn(`Code-chat stream: first-byte timeout (no data for ${FIRST_BYTE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
+          try { reader.cancel('first-byte-timeout').catch(() => {}); } catch (_) {}
+        }, FIRST_BYTE_TIMEOUT_MS);
 
         const decoder = new TextDecoder();
         let buffer    = '';
@@ -734,6 +739,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSigna
         let turnBuffer = '';
         let finishReason = null;
         let clientGone = false;
+        let firstByteReceived = false;
 
         try {
           while (true) {
@@ -742,8 +748,12 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSigna
             const { done, value } = await reader.read();
             if (done) break;
 
-            // Reset the idle timer on every chunk — if NVIDIA keeps
-            // sending bytes (even think tokens) we don't abort.
+            // After the first byte arrives, switch from the generous
+            // first-byte timeout (45s) to the tighter inter-chunk idle
+            // timeout (15s). Mid-stream stalls > 15s are real stalls —
+            // by then the model has already started emitting and should
+            // keep going steadily.
+            firstByteReceived = true;
             if (idleTimer) clearTimeout(idleTimer);
             idleTimer = setTimeout(() => {
               console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
@@ -891,20 +901,22 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSigna
 async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
   // Reuse the regular streaming fallback chain by delegating straight
   // to streamAI — it already handles Groq → NVIDIA → CF with proper
-  // TPM / cooldown / abort handling. Force `isHard=true` semantics by
-  // adding a code-fence marker so streamAI picks the quality model.
-  const forcedHardMessages = [...messages];
-  // If the last user message has no code fence, prepend one in a way
-  // that doesn't change the meaning — streamAI's isObviouslyHard()
-  // check looks for ``` so we just ensure one exists in the prompt.
-  const lastUserIdx = forcedHardMessages.length - 1;
-  if (lastUserIdx >= 0 && forcedHardMessages[lastUserIdx].role === 'user') {
-    const u = forcedHardMessages[lastUserIdx];
-    if (!/```/.test(u.content)) {
-      forcedHardMessages[lastUserIdx] = { ...u, content: u.content + '\n\n```' };
-    }
-  }
-  return streamAI(groq, forcedHardMessages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal });
+  // TPM / cooldown / abort handling.
+  //
+  // DO NOT force `isHard=true` here. Previously this appended a fake
+  // code fence to the user message to make streamAI route to
+  // gpt-oss-120b (quality tier, 8192 max_tokens). That was wrong for
+  // two reasons:
+  //   1. A trivial "hi" in code mode would get 8192 max_tokens, blowing
+  //      the gpt-oss-120b TPM cap (4000) and cascading to gpt-oss-20b,
+  //      which then ALSO failed with 413 because the request was
+  //      11276 tokens against an 8000-token limit.
+  //   2. Code-chat system prompt is already rich enough — streamAI's
+  //      natural isObviouslyHard() check on the user's actual content
+  //      will pick the right tier. Forcing hard=true was overriding
+  //      that and burning budget on simple messages.
+  // Let streamAI route naturally based on the real user content.
+  return streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal });
 }
 
 // ── TAVILY (primary search provider) ────────────────────────────
@@ -1295,6 +1307,39 @@ async function warmUp() {
     await fetch(NVIDIA_BASE_URL, { method: 'HEAD' });
     console.log('NVIDIA TLS warmed');
   } catch (_) {}
+
+  // CRITICAL: warm up the actual NVIDIA code-chat model with a tiny
+  // completion. A HEAD request to NVIDIA_BASE_URL only warms the TLS
+  // handshake — it does NOT trigger the model to load. The 550b
+  // nemotron-3-ultra model takes 30-40s to cold-start on the first
+  // real request, which was causing every first code-chat to hit
+  // the first-byte timeout and abort. Sending a tiny "hi" request
+  // at startup forces the model to load NOW, so the first real user
+  // request gets a warm model.
+  try {
+    const nvKey = process.env.NVIDIA_API_KEY;
+    if (nvKey) {
+      const t0 = Date.now();
+      await fetchWithTimeout(
+        `${NVIDIA_BASE_URL}/chat/completions`,
+        {
+          method:  'POST',
+          headers: { 'Authorization': `Bearer ${nvKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model:       NVIDIA_CHAT_CODE,
+            messages:    [{ role: 'user', content: 'hi' }],
+            max_tokens:  5,
+            temperature: 0.5,
+            stream:      false,
+          }),
+        },
+        60000  // generous — cold start can take 60s on the first load
+      );
+      console.log(`NVIDIA code-chat model warmed (${Date.now() - t0}ms)`);
+    }
+  } catch (e) {
+    console.log('NVIDIA code-chat warmup skipped:', e.message);
+  }
 }
 warmUp();
 
@@ -1469,7 +1514,7 @@ app.post('/api/handler', async (req, res) => {
         // leaving the user with "Vertex is temporarily unavailable".
         // This was the root cause of "Code-chat stream: all NVIDIA
         // attempts failed" being the last word in the user's chat.
-        let ok = await streamNvidiaGLMOnly(codeMessages, res, 16000, clientSignal.signal);
+        let ok = await streamNvidiaGLMOnly(codeMessages, res, 8000, clientSignal.signal);
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           console.warn('Code-chat: NVIDIA failed — falling back to Groq+CF chain');
           const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
