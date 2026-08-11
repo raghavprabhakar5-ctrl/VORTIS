@@ -531,8 +531,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 120000;
-  const MAX_ATTEMPTS = 2;
+  const REQUEST_TIMEOUT_MS = 25000;
+  const MAX_ATTEMPTS = 1;
 
   // If you DO want reasoning on for a later fallback attempt, give it a
   // budget big enough to actually finish and still leave room to answer —
@@ -567,7 +567,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               temperature: 0.5,
               top_p:       0.9,
               stream:      true,
-              chat_template_kwargs: { enable_thinking: withReasoning },
+              chat_template_kwargs: { enable_thinking:false },
               ...(withReasoning ? { reasoning_budget: REASONING_BUDGET } : {}),
             }),
           },
