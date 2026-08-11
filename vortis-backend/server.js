@@ -24,60 +24,78 @@ const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 // CODE-CHAT MODEL CHOICE:
 //   We use THREE tiers for code-chat, picked by message content:
 //     - Trivial ("hi", "thanks", short greetings)  → 30b nano (fastest, ~2s)
-//     - Simple code Q&A ("what is X", "explain Y")  → 120b super (~5s)
-//     - Actual coding task (code fence, "debug", "implement", "refactor")
-//                                                   → 550b ultra (~15-30s warm)
-//   The 550b ultra is the BEST model for real coding but takes 60-90s to
-//   cold-start. We pre-warm it in the background at startup and keep it
-//   alive with a ping every 30s so it's ready when a real coding task
-//   arrives. Override defaults with env vars if needed.
+//     - Simple code Q&A ("what is X", "explain Y")  → 30b nano (same — fast)
+//     - Actual coding task (code fence, "make me a game", "debug", "build")
+//                                                   → 550b ultra (~10s warm)
+//
+//   IMPORTANT: the 120b super is ONLY used as a fallback when nano fails.
+//   It was too slow on NVIDIA's on_demand tier (20-30s per keep-alive
+//   ping, constantly being unloaded). Nano is fast and handles 90% of
+//   code-chat requests. Ultra is reserved for real coding tasks.
+//
+//   Chains (tried in order; circuit breaker skips blocked models):
+//     - Heavy coding task:   ultra → nano → super → [Groq+CF]
+//     - Simple code Q&A:     nano → super → [Groq+CF]
+//     - Trivial:             nano → super → [Groq+CF]
 const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;    // 550b ultra — real coding
-const NVIDIA_CODE_MODEL_STANDARD = NVIDIA_CHAT_QUALITY; // 120b super — simple code Q&A
-const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;    // 30b nano — trivial
+const NVIDIA_CODE_MODEL_STANDARD = NVIDIA_CHAT_QUALITY; // 120b super — FALLBACK ONLY
+const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;    // 30b nano — primary for everything except heavy coding
 
-// Fallback chains (tried in order; circuit breaker skips blocked models):
-//   - Heavy coding task:   ultra → super → nano → [Groq+CF]
-//   - Simple code Q&A:     super → nano → [Groq+CF]
-//   - Trivial:             nano → super → [Groq+CF]
 const NVIDIA_CODE_CHAINS = {
-  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CODE_MODEL_STANDARD, NVIDIA_CODE_MODEL_FAST],
-  standard: [NVIDIA_CODE_MODEL_STANDARD, NVIDIA_CODE_MODEL_FAST],
+  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
+  standard: [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
   trivial:  [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
 };
 
 // Detects whether a code-chat message is an actual coding task that
-// warrants the heavy 550b ultra model. Returns true for code fences,
-// debugging requests, implementation/refactor requests, algorithm
-// questions, and long technical messages. Returns false for simple
-// questions, greetings, and short conceptual queries.
+// warrants the heavy 550b ultra model.
+//
+// CRITICAL: this is checked BEFORE isTrivialCodeMessage in
+// pickCodeChatChain, so "make me a game" (short but clearly coding)
+// routes to heavy, not trivial.
 function isActualCodingTask(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase();
   // Code fence anywhere = definitely coding
   if (/```/.test(text)) return true;
+  // Creative/build verbs — "make me a game", "build a todo app",
+  // "create a function", "generate code", "write me a script", etc.
+  // In code mode, these are ALWAYS coding tasks regardless of length.
+  if (/\b(make me|build me|create me|generate me|write me|code me|develop me|make a|build a|create a|generate a|develop a|implement a|implement me)\b/i.test(text)) return true;
+  // Standalone creative verbs at start of message
+  if (/^(make|build|create|generate|develop|implement|code|write)\b/i.test(low.trim())) return true;
   // Explicit coding/debug/refactor verbs
-  if (/\b(debug|refactor|optimi[sz]e|implement|write (a |the )?(function|class|component|algorithm|script)|fix (this|the|my)? ?(code|bug|error)|stack trace|exception|compile|syntax error|unit test|integration test)\b/i.test(text)) return true;
+  if (/\b(debug|refactor|optimi[sz]e|fix (this|the|my|a)?|stack trace|exception|compile|syntax error|unit test|integration test)\b/i.test(text)) return true;
   // Actual code patterns (not just mentions of code)
   if (/\b(def |function\s*\(|class\s+\w+|import\s|from\s+\w+\s+import|const\s|let\s|var\s|=>|public\s+class|<\?php|#include|console\.log|print\(|async\s+function|await\s|return\s|if\s*\(|for\s*\(|while\s*\()\b/.test(text)) return true;
-  // Long technical message (>300 chars) likely needs deep reasoning
-  if (text.length > 300 && /\b(code|function|api|endpoint|database|query|algorithm|architecture|design pattern|class|method|variable|array|object|loop|recursion|complexity)\b/i.test(low)) return true;
+  // Long technical message (>200 chars) likely needs deep reasoning
+  if (text.length > 200 && /\b(code|function|api|endpoint|database|query|algorithm|architecture|design pattern|class|method|variable|array|object|loop|recursion|complexity|game|app|website|script|program)\b/i.test(low)) return true;
   return false;
 }
 
 // Detects trivial code-chat messages that should use the fast 30b nano.
+// CRITICAL: does NOT return true for messages with creative/build verbs —
+// "make me a game" is short but is a coding task, not trivial.
 function isTrivialCodeMessage(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase().trim();
-  if (low.length < 25) return true;
+  // If the message contains any creative/build verb, it's NOT trivial
+  // even if it's short — "make a game" (11 chars) is coding, not trivial.
+  if (/\b(make|build|create|generate|develop|implement|code|write|debug|fix|refactor)\b/i.test(low)) return false;
+  // Very short messages without build verbs = trivial
+  if (low.length < 15) return true;
+  // Common greetings / acknowledgments
   if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|cool|nice|great|awesome)\b/.test(low)) return true;
   if (/^(what (is|s) your name|who are you|how are you|good morning|good evening)\b/.test(low)) return true;
   return false;
 }
 
 // Picks the right model chain for a code-chat message.
+// ORDER MATTERS: isActualCodingTask is checked FIRST so that short
+// coding requests like "make me a game" don't get misrouted to trivial.
 function pickCodeChatChain(text) {
+  if (isActualCodingTask(text))   return 'heavy';    // CHECK FIRST
   if (isTrivialCodeMessage(text)) return 'trivial';
-  if (isActualCodingTask(text))   return 'heavy';
   return 'standard';
 }
 
@@ -466,7 +484,15 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
-      recordNvidiaFailure(modelId);
+      // Instant circuit breaker for 502/503/504 — model is unavailable,
+      // don't waste time retrying it on the next request.
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        recordNvidiaFailure(modelId);
+        recordNvidiaFailure(modelId);
+        console.warn(`NVIDIA model ${modelId} HTTP ${res.status} — instant circuit breaker trip`);
+      } else {
+        recordNvidiaFailure(modelId);
+      }
       return null;
     }
     // Clear the outer timer as soon as headers arrive — body parsing
@@ -851,6 +877,17 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
           console.error(`Code-chat stream: ${nvidiaModel} HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
+          // INSTANT CIRCUIT BREAKER for 502/503/504: these mean the model
+          // is genuinely unavailable (not just cold). Record 2 failures
+          // immediately to trip the threshold and skip this model for the
+          // next 2 minutes, instead of wasting time retrying a dead model
+          // on every request. This was the root cause of the 550b ultra
+          // burning 60-90s per coding request when it was returning 503.
+          if (nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
+            recordNvidiaFailure(nvidiaModel);
+            recordNvidiaFailure(nvidiaModel);
+            console.warn(`Code-chat: ${nvidiaModel} HTTP ${nvRes.status} — instant circuit breaker trip (2 min cooldown)`);
+          }
           attemptFailed = true;
           break;
         }
@@ -1456,43 +1493,40 @@ async function warmUp() {
     console.log('NVIDIA TLS warmed');
   } catch (_) {}
 
-  // CRITICAL: warm up the actual NVIDIA code-chat model with a tiny
-  // completion. A HEAD request to NVIDIA_BASE_URL only warms the TLS
-  // handshake — it does NOT trigger the model to load.
+  // CRITICAL: warm up the NVIDIA code-chat models with tiny completions.
+  // A HEAD request to NVIDIA_BASE_URL only warms the TLS handshake — it
+  // does NOT trigger the model to load.
   //
-  // We warm up NVIDIA_CODE_MODEL_PRIMARY (the 120b super by default).
-  // The old code warmed the 550b ultra, which takes 60-90s to cold-start
-  // and frequently timed out the warmup itself — leaving the model cold
-  // for the first real user request anyway. The 120b cold-starts in
-  // 10-20s and is what we actually use as the code-chat primary now.
+  // We warm up:
+  //   - 30b nano  (primary for trivial + standard code-chat) — ~5s cold start
+  //   - 550b ultra (primary for heavy coding tasks) — 60-90s cold start
+  // The 120b super is NOT warmed (it's only a fallback when nano fails).
   //
   // NON-BLOCKING: warmUp() is fire-and-forget — we do NOT await it.
-  // The previous version awaited, which meant the server blocked
-  // startup for 60s+ waiting on NVIDIA. Now the server starts
-  // listening immediately and the warmup runs in the background.
-  // The first user request may still hit a cold model if it arrives
-  // before warmup completes, but the circuit breaker + model fallback
-  // chain will handle that gracefully.
+  // The server starts listening immediately and warmup runs in the
+  // background. The keep-alive ping (started 5s later) keeps the models
+  // warm going forward.
   const nvKey = process.env.NVIDIA_API_KEY;
   if (nvKey) {
-    // Warm the 120b super (standard code-chat model) — cold-starts in 10-20s
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_STANDARD, 180000).then(({ ok, ms }) => {
-      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_STANDARD} ready (${ms}ms)`);
-      else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_STANDARD} not ready after ${ms}ms`);
-    });
-    // Warm the 30b nano (trivial code-chat fallback) — cold-starts in ~5s
+    // Warm the 30b nano (primary for trivial + standard code-chat) — ~5s cold start
     warmUpNvidiaModel(NVIDIA_CODE_MODEL_FAST, 60000).then(({ ok, ms }) => {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_FAST} ready (${ms}ms)`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_FAST} not ready after ${ms}ms`);
     });
-    // Warm the 550b ultra (heavy coding model) — cold-starts in 60-90s
-    // but is the BEST model for actual coding tasks. We give it a long
-    // timeout (3 min) and run it in parallel with the others. The keep-alive
-    // ping started 5s after startup will keep it warm going forward.
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 180000).then(({ ok, ms }) => {
+    // Warm the 550b ultra (heavy coding model) — 60-90s cold start.
+    // Reduced timeout from 180s → 60s: if ultra doesn't respond in 60s
+    // it's likely returning 503 (unavailable on on_demand tier), so no
+    // point waiting longer. The keep-alive ping will keep retrying every
+    // 30s in the background — once NVIDIA makes it available, the next
+    // ping will warm it and it'll be ready for the next coding request.
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 60000).then(({ ok, ms }) => {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — ultra model ready for real coding tasks`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_HEAVY} not ready after ${ms}ms — will keep trying via keep-alive`);
     });
+    // NOTE: 120b super is NOT warmed up — it's only a fallback when nano
+    // fails, and pinging it every 30s was wasting 20-30s per ping on
+    // NVIDIA's on_demand tier. If nano fails and we need super, it'll
+    // cold-start (~20s) but that's acceptable for a rare fallback.
   } else {
     console.log('NVIDIA warmup skipped: NVIDIA_API_KEY not set');
   }
@@ -1549,9 +1583,12 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
 // cold — massive net win.
 const NVIDIA_KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30s
 const NVIDIA_KEEPALIVE_MODELS = [
-  NVIDIA_CODE_MODEL_HEAVY,     // 550b ultra — for real coding
-  NVIDIA_CODE_MODEL_STANDARD,  // 120b super — for simple code Q&A
-  // 30b nano cold-starts fast (~5s) so we don't bother pinging it
+  NVIDIA_CODE_MODEL_HEAVY,     // 550b ultra — for real coding (keep warm!)
+  NVIDIA_CODE_MODEL_FAST,      // 30b nano — for fast chats (keep warm!)
+  // 120b super REMOVED from keep-alive: it was taking 20-30s per ping
+  // on NVIDIA's on_demand tier (constantly being unloaded between pings).
+  // It's now only used as a fallback when nano fails, so we don't waste
+  // RPM budget pinging a model that's rarely needed and slow to warm.
 ];
 
 function startNvidiaKeepAlive() {
