@@ -16,39 +16,54 @@ const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nvidia-nemotron-nano-9b-v2';
-const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
-const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_CHAT_FAST    = 'nvidia/nvidia-nemotron-nano-9b-v2';  // 9b nano — fast, reliable (user-confirmed working)
+const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';  // 120b super — KEPT FOR REGULAR CHAT FALLBACK ONLY (not code-chat)
+const NVIDIA_CHAT_CODE    = 'qwen/qwen2.5-coder-32b-instruct';    // 32b coder — purpose-built for code, replaces 550b ultra
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
-// CODE-CHAT MODEL CHOICE:
-//   We use THREE tiers for code-chat, picked by message content:
-//     - Trivial ("hi", "thanks", short greetings)  → 9b-v2 nano (fastest, ~2s)
-//     - Simple code Q&A ("what is X", "explain Y")  → 9b-v2 nano (same — fast)
-//     - Actual coding task (code fence, "make me a game", "debug", "build")
-//                                                   → 550b ultra (~10s warm)
+// WHY WE REPLACED THE 550b ULTRA:
+//   The nvidia/nemotron-3-ultra-550b-a55b model was consistently aborting
+//   on NVIDIA's on_demand tier — cold-start took 60-90s and frequently
+//   timed out or returned 503. Even when warm, the 20s first-byte timeout
+//   was too tight for a 550b model. qwen/qwen2.5-coder-32b-instruct is:
+//     - Purpose-built for code generation (trained on code corpus)
+//     - 17x smaller (32b vs 550b) → cold-starts in 10-15s, not 60-90s
+//     - More reliable on NVIDIA's on_demand tier
+//     - Better at code than a general-purpose 550b model
 //
-//   IMPORTANT: the 120b super is ONLY used as a fallback when nano fails.
-//   It was too slow on NVIDIA's on_demand tier (20-30s per keep-alive
-//   ping, constantly being unloaded). Nano is fast and handles 90% of
-//   code-chat requests. Ultra is reserved for real coding tasks.
+// WHY WE REMOVED THE 120b SUPER FROM CODE-CHAT:
+//   - Slow on NVIDIA on_demand (20-30s per keep-alive ping, constantly unloaded)
+//   - Not purpose-built for code
+//   - User explicitly requested removal
+//   The 9b nano is faster and handles non-coding code-chat well.
+
+// CODE-CHAT MODEL CHOICE:
+//   We use TWO NVIDIA models for code-chat, picked by message content:
+//     - Trivial / simple Q&A  → 9b nano (fastest, ~2s)
+//     - Actual coding task    → 32b coder (~5-10s warm, purpose-built for code)
+//
+//   The 120b super is NOT used in code-chat anymore — it was too slow on
+//   NVIDIA's on_demand tier. If both code models fail, we fall through to
+//   Groq + Cloudflare.
 //
 //   Chains (tried in order; circuit breaker skips blocked models):
-//     - Heavy coding task:   ultra → nano → super → [Groq+CF]
-//     - Simple code Q&A:     nano → super → [Groq+CF]
-//     - Trivial:             nano → super → [Groq+CF]
-const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;    // 550b ultra — real coding
-const NVIDIA_CODE_MODEL_STANDARD = NVIDIA_CHAT_QUALITY; // 120b super — FALLBACK ONLY
-const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;    // 9b-v2 nano — primary for everything except heavy coding
+//     - Heavy coding task:   coder-32b → nano-9b → [Groq+CF]
+//     - Simple code Q&A:     nano-9b → coder-32b → [Groq+CF]
+//     - Trivial:             nano-9b → coder-32b → [Groq+CF]
+const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;  // qwen2.5-coder-32b-instruct — real coding
+const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;  // nvidia-nemotron-nano-9b-v2 — fast chats
+// NOTE: NVIDIA_CODE_MODEL_STANDARD (120b super) is intentionally NOT used
+// in code-chat. It's still used as a regular-chat fallback (NVIDIA_CHAT_QUALITY)
+// but not referenced here.
 
 const NVIDIA_CODE_CHAINS = {
-  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
-  standard: [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
-  trivial:  [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
+  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CODE_MODEL_FAST],
+  standard: [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_HEAVY],
+  trivial:  [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_HEAVY],
 };
 
 // Coding verbs and their common typos. Used for fuzzy matching so
-// "amke me a game" (typo of "make") still routes to the 550b ultra.
+// "amke me a game" (typo of "make") still routes to the 32b coder model.
 // We use explicit typo lists for the most common verbs + Levenshtein
 // distance 2 as a safety net for anything we missed.
 const CODING_VERBS_EXACT = [
@@ -108,7 +123,7 @@ function containsCodingVerb(text) {
 }
 
 // Detects whether a code-chat message is an actual coding task that
-// warrants the heavy 550b ultra model.
+// warrants the heavy 32b coder model.
 //
 // CRITICAL: this is checked BEFORE isTrivialCodeMessage in
 // pickCodeChatChain, so "make me a game" (short but clearly coding)
@@ -867,16 +882,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   const IDLE_TIMEOUT_MS = 15000;
 
   // MODEL-DEPENDENT FIRST-BYTE TIMEOUT:
-  //   - 550b ultra: 20s — if warm, responds in 5-10s. If cold, abort at 20s
-  //     and fall back to nano immediately. DON'T wait 45s for a cold 550b.
-  //   - 120b super: 15s — if warm, responds in 3-5s.
-  //   - 30b nano: 10s — if warm, responds in 1-3s. Very fast model.
-  // This is the KEY speed fix: if ultra is cold, we find out in 20s (not 45s)
-  // and fall back to nano (~3s), so total response time is ~23s instead of 45s+.
+  //   - qwen2.5-coder-32b: 15s — if warm, responds in 3-8s. If cold, abort at 15s
+  //     and fall back to nano immediately.
+  //   - nvidia-nemotron-nano-9b: 8s — if warm, responds in 1-3s. Very fast model.
+  // This is the KEY speed fix: if coder is cold, we find out in 15s (not 45s)
+  // and fall back to nano (~3s), so total response time is ~18s instead of 45s+.
   function firstByteTimeoutFor(model) {
-    if (model === NVIDIA_CODE_MODEL_HEAVY)    return 20000;
-    if (model === NVIDIA_CODE_MODEL_STANDARD) return 15000;
-    return 10000; // nano and anything else
+    if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;  // qwen2.5-coder-32b
+    return 8000;  // nano-9b and anything else
   }
 
   // Safe write helper — never throws, returns false if the socket is closed.
@@ -894,7 +907,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   // Iterate over the model fallback chain. Each model gets one attempt.
   // Models blocked by the circuit breaker are skipped without a network call.
   // The chain is picked by the caller based on message content:
-  //   heavy (real coding → 550b ultra), standard (→ 120b super), trivial (→ 30b nano)
+  //   heavy (real coding → 32b coder), standard (→ 9b nano), trivial (→ 9b nano)
   const chain = NVIDIA_CODE_CHAINS[chainName] || NVIDIA_CODE_CHAINS.standard;
   const modelsToTry = chain.filter(m => !isNvidiaModelBlocked(m));
   if (modelsToTry.length === 0) {
@@ -1103,12 +1116,20 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
     } catch (e) {
       console.error(`Code-chat stream error on ${nvidiaModel}:`, e.message);
       attemptFailed = true;
-      // Record failure for circuit breaker — but skip if it was a
-      // client-initiated abort (browser closed) since that's not the
-      // model's fault.
-      if (e.name !== 'AbortError' && !clientSignal?.aborted) {
-        // Will be recorded below in the "produced nothing" branch —
-        // don't double-count here.
+      // CRITICAL: Detect AbortError (timeout/cold-start) and treat it as
+      // a TIMEOUT, not a real error. This prevents the circuit breaker
+      // from tripping on cold-start failures, which would block the
+      // model for 2 minutes and prevent the keep-alive from warming it.
+      //
+      // AbortError happens when:
+      //   - The first-byte timer fires (20s for coder, 10s for nano)
+      //   - The idle timer fires (15s mid-stream stall)
+      //   - The headers timer fires (120s — model didn't respond at all)
+      //   - The client closed the browser tab (clientSignal.aborted)
+      // ALL of these are "cold/slow" or "client gone" — NOT "model broken".
+      // Only HTTP 503/502/504 (handled separately above) trips the breaker.
+      if (e.name === 'AbortError' || /aborted/i.test(e.message) || clientSignal?.aborted) {
+        failureWasTimeout = true;
       }
     } finally {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
@@ -1583,9 +1604,9 @@ async function warmUp() {
   // does NOT trigger the model to load.
   //
   // We warm up:
-  //   - 30b nano  (primary for trivial + standard code-chat) — ~5s cold start
-  //   - 550b ultra (primary for heavy coding tasks) — 60-90s cold start
-  // The 120b super is NOT warmed (it's only a fallback when nano fails).
+  //   - nano-9b       (primary for trivial + standard code-chat) — ~5s cold start
+  //   - qwen2.5-coder-32b (primary for heavy coding tasks) — 10-15s cold start
+  // The 120b super is NOT warmed (not used in code-chat anymore).
   //
   // NON-BLOCKING: warmUp() is fire-and-forget — we do NOT await it.
   // The server starts listening immediately and warmup runs in the
@@ -1593,25 +1614,18 @@ async function warmUp() {
   // warm going forward.
   const nvKey = process.env.NVIDIA_API_KEY;
   if (nvKey) {
-    // Warm the 30b nano (primary for trivial + standard code-chat) — ~5s cold start
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_FAST, 60000).then(({ ok, ms }) => {
+    // Warm the 9b nano (primary for trivial + standard code-chat) — ~5s cold start
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_FAST, 30000).then(({ ok, ms }) => {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_FAST} ready (${ms}ms)`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_FAST} not ready after ${ms}ms`);
     });
-    // Warm the 550b ultra (heavy coding model) — 60-90s cold start.
-    // Reduced timeout from 180s → 60s: if ultra doesn't respond in 60s
-    // it's likely returning 503 (unavailable on on_demand tier), so no
-    // point waiting longer. The keep-alive ping will keep retrying every
-    // 30s in the background — once NVIDIA makes it available, the next
-    // ping will warm it and it'll be ready for the next coding request.
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 60000).then(({ ok, ms }) => {
-      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — ultra model ready for real coding tasks`);
+    // Warm the qwen2.5-coder-32b (heavy coding model) — 10-15s cold start.
+    // 30s timeout: if it doesn't respond in 30s, something's wrong —
+    // the keep-alive will keep retrying every 30s in the background.
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 30000).then(({ ok, ms }) => {
+      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — coder model ready for real coding tasks`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_HEAVY} not ready after ${ms}ms — will keep trying via keep-alive`);
     });
-    // NOTE: 120b super is NOT warmed up — it's only a fallback when nano
-    // fails, and pinging it every 30s was wasting 20-30s per ping on
-    // NVIDIA's on_demand tier. If nano fails and we need super, it'll
-    // cold-start (~20s) but that's acceptable for a rare fallback.
   } else {
     console.log('NVIDIA warmup skipped: NVIDIA_API_KEY not set');
   }
@@ -1662,18 +1676,17 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
 // to keep them warm. This is the single biggest speed win — without
 // it, EVERY request after 60s of silence hits a cold start.
 //
-// Cost: ~6 tiny requests per model per 5-min window. On NVIDIA's
+// Cost: ~4 tiny requests per model per 5-min window. On NVIDIA's
 // on_demand tier this is essentially free (counts against RPM, not
-// a paid quota). The 550b ultra ping takes ~3s when warm vs 60-90s
+// a paid quota). The coder-32b ping takes ~3s when warm vs 10-15s
 // cold — massive net win.
 const NVIDIA_KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30s
 const NVIDIA_KEEPALIVE_MODELS = [
-  NVIDIA_CODE_MODEL_HEAVY,     // 550b ultra — for real coding (keep warm!)
-  NVIDIA_CODE_MODEL_FAST,      // 30b nano — for fast chats (keep warm!)
-  // 120b super REMOVED from keep-alive: it was taking 20-30s per ping
-  // on NVIDIA's on_demand tier (constantly being unloaded between pings).
-  // It's now only used as a fallback when nano fails, so we don't waste
-  // RPM budget pinging a model that's rarely needed and slow to warm.
+  NVIDIA_CODE_MODEL_HEAVY,     // qwen2.5-coder-32b-instruct — for real coding (keep warm!)
+  NVIDIA_CODE_MODEL_FAST,      // nvidia-nemotron-nano-9b-v2 — for fast chats (keep warm!)
+  // 120b super is NOT pinged — it's not used in code-chat anymore.
+  // It's still available as a regular-chat fallback (via NVIDIA_CHAT_QUALITY)
+  // but we don't keep it warm since it was slow on NVIDIA's on_demand tier.
 ];
 
 function startNvidiaKeepAlive() {
@@ -1703,9 +1716,9 @@ function startNvidiaKeepAlive() {
             }),
           },
           // MODEL-DEPENDENT keep-alive timeout:
-          //   - 550b ultra: 90s — cold start can take 60-90s, need the full window
-          //   - 30b nano: 30s — cold start ~5s, 30s is plenty
-          modelId === NVIDIA_CODE_MODEL_HEAVY ? 90000 : 30000
+          //   - qwen2.5-coder-32b: 45s — cold start 10-15s, 45s is plenty
+          //   - nano-9b: 20s — cold start ~5s, 20s is plenty
+          modelId === NVIDIA_CODE_MODEL_HEAVY ? 45000 : 20000
         );
         if (res.__clearTimeout) res.__clearTimeout();
         if (res.ok) {
@@ -1921,8 +1934,8 @@ app.post('/api/handler', async (req, res) => {
         //
         // SMART ROUTING: pick the model chain based on the user's actual
         // message content. Real coding tasks (code fence, "debug",
-        // "implement", etc.) → 550b ultra. Simple Q&A → 120b super.
-        // Trivial greetings → 30b nano. This keeps the ultra model for
+        // "implement", etc.) → 32b coder. Simple Q&A → 9b nano.
+        // Trivial greetings → 9b nano. This keeps the coder model for
         // when it's actually needed and makes everything else fast.
         const lastUserContent = codeMessages[codeMessages.length - 1]?.content || prompt.trim();
         const chainName = pickCodeChatChain(lastUserContent);
