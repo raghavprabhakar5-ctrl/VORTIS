@@ -18,39 +18,39 @@ const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'nvidia/nvidia-nemotron-nano-9b-v2';  // 9b nano — fast, reliable (user-confirmed working)
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';  // 120b super — KEPT FOR REGULAR CHAT FALLBACK ONLY (not code-chat)
-const NVIDIA_CHAT_CODE    = 'qwen/qwen2.5-coder-32b-instruct';    // 32b coder — purpose-built for code, replaces 550b ultra
+const NVIDIA_CHAT_CODE    = 'z-ai/glm-5.2';                       // GLM 5.2 — Z.ai's strongest coding model, 202k context, 8192 max output
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
-// WHY WE REPLACED THE 550b ULTRA:
-//   The nvidia/nemotron-3-ultra-550b-a55b model was consistently aborting
-//   on NVIDIA's on_demand tier — cold-start took 60-90s and frequently
-//   timed out or returned 503. Even when warm, the 20s first-byte timeout
-//   was too tight for a 550b model. qwen/qwen2.5-coder-32b-instruct is:
-//     - Purpose-built for code generation (trained on code corpus)
-//     - 17x smaller (32b vs 550b) → cold-starts in 10-15s, not 60-90s
-//     - More reliable on NVIDIA's on_demand tier
-//     - Better at code than a general-purpose 550b model
+// MODEL HISTORY:
+//   - qwen/qwen2.5-coder-32b-instruct: REMOVED — reached end-of-life on
+//     NVIDIA NIM (HTTP 410 "Gone" on 2026-05-12). Replaced with GLM 5.2.
+//   - nvidia/nemotron-3-ultra-550b-a55b: REMOVED earlier — was aborting
+//     constantly on NVIDIA's on_demand tier (60-90s cold-start, frequent 503s).
+//   - nvidia/nemotron-3-super-120b-a12b: removed from code-chat (too slow
+//     on on_demand tier). Still used as a regular-chat fallback.
 //
-// WHY WE REMOVED THE 120b SUPER FROM CODE-CHAT:
-//   - Slow on NVIDIA on_demand (20-30s per keep-alive ping, constantly unloaded)
-//   - Not purpose-built for code
-//   - User explicitly requested removal
-//   The 9b nano is faster and handles non-coding code-chat well.
+// WHY GLM 5.2 (z-ai/glm-5.2):
+//   - Z.ai's flagship model, described in their docs as "our strongest coding model"
+//   - 202,752-token context window (huge — can handle large codebases)
+//   - 8,192 max output tokens (matches our max_tokens setting)
+//   - Available on NVIDIA NIM free tier at integrate.api.nvidia.com
+//   - Purpose-built for long-horizon tasks including code generation
+//   - Confirmed working via web search (multiple guides from Jul-Aug 2026)
 
 // CODE-CHAT MODEL CHOICE:
 //   We use TWO NVIDIA models for code-chat, picked by message content:
 //     - Trivial / simple Q&A  → 9b nano (fastest, ~2s)
-//     - Actual coding task    → 32b coder (~5-10s warm, purpose-built for code)
+//     - Actual coding task    → GLM 5.2 (~5-10s warm, Z.ai's strongest coding model)
 //
 //   The 120b super is NOT used in code-chat anymore — it was too slow on
 //   NVIDIA's on_demand tier. If both code models fail, we fall through to
 //   Groq + Cloudflare.
 //
 //   Chains (tried in order; circuit breaker skips blocked models):
-//     - Heavy coding task:   coder-32b → nano-9b → [Groq+CF]
-//     - Simple code Q&A:     nano-9b → coder-32b → [Groq+CF]
-//     - Trivial:             nano-9b → coder-32b → [Groq+CF]
-const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;  // qwen2.5-coder-32b-instruct — real coding
+//     - Heavy coding task:   glm-5.2 → nano-9b → [Groq+CF]
+//     - Simple code Q&A:     nano-9b → glm-5.2 → [Groq+CF]
+//     - Trivial:             nano-9b → glm-5.2 → [Groq+CF]
+const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;  // z-ai/glm-5.2 — real coding
 const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;  // nvidia-nemotron-nano-9b-v2 — fast chats
 // NOTE: NVIDIA_CODE_MODEL_STANDARD (120b super) is intentionally NOT used
 // in code-chat. It's still used as a regular-chat fallback (NVIDIA_CHAT_QUALITY)
@@ -63,7 +63,7 @@ const NVIDIA_CODE_CHAINS = {
 };
 
 // Coding verbs and their common typos. Used for fuzzy matching so
-// "amke me a game" (typo of "make") still routes to the 32b coder model.
+// "amke me a game" (typo of "make") still routes to GLM 5.2.
 // We use explicit typo lists for the most common verbs + Levenshtein
 // distance 2 as a safety net for anything we missed.
 const CODING_VERBS_EXACT = [
@@ -123,7 +123,7 @@ function containsCodingVerb(text) {
 }
 
 // Detects whether a code-chat message is an actual coding task that
-// warrants the heavy 32b coder model.
+// warrants the heavy GLM 5.2 model.
 //
 // CRITICAL: this is checked BEFORE isTrivialCodeMessage in
 // pickCodeChatChain, so "make me a game" (short but clearly coding)
@@ -560,12 +560,14 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
-      // Instant circuit breaker for 502/503/504 — model is unavailable,
-      // don't waste time retrying it on the next request.
-      if (res.status === 502 || res.status === 503 || res.status === 504) {
+      // Instant circuit breaker for 410/502/503/504:
+      //   - 410 Gone: model end-of-life (permanent)
+      //   - 502/503/504: model unavailable (2 min cooldown)
+      if (res.status === 410 || res.status === 502 || res.status === 503 || res.status === 504) {
         recordNvidiaFailure(modelId);
         recordNvidiaFailure(modelId);
-        console.warn(`NVIDIA model ${modelId} HTTP ${res.status} — instant circuit breaker trip`);
+        const reason = res.status === 410 ? 'END-OF-LIFE (permanent)' : 'unavailable (2 min cooldown)';
+        console.warn(`NVIDIA model ${modelId} HTTP ${res.status} — instant circuit breaker trip — ${reason}`);
       } else {
         recordNvidiaFailure(modelId);
       }
@@ -882,13 +884,13 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   const IDLE_TIMEOUT_MS = 15000;
 
   // MODEL-DEPENDENT FIRST-BYTE TIMEOUT:
-  //   - qwen2.5-coder-32b: 15s — if warm, responds in 3-8s. If cold, abort at 15s
-  //     and fall back to nano immediately.
+  //   - z-ai/glm-5.2: 20s — Z.ai's flagship, larger model. If warm, responds
+  //     in 5-10s. If cold, abort at 20s and fall back to nano immediately.
   //   - nvidia-nemotron-nano-9b: 8s — if warm, responds in 1-3s. Very fast model.
-  // This is the KEY speed fix: if coder is cold, we find out in 15s (not 45s)
-  // and fall back to nano (~3s), so total response time is ~18s instead of 45s+.
+  // This is the KEY speed fix: if GLM 5.2 is cold, we find out in 20s (not 45s)
+  // and fall back to nano (~3s), so total response time is ~23s instead of 45s+.
   function firstByteTimeoutFor(model) {
-    if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;  // qwen2.5-coder-32b
+    if (model === NVIDIA_CODE_MODEL_HEAVY) return 20000;  // z-ai/glm-5.2
     return 8000;  // nano-9b and anything else
   }
 
@@ -907,7 +909,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   // Iterate over the model fallback chain. Each model gets one attempt.
   // Models blocked by the circuit breaker are skipped without a network call.
   // The chain is picked by the caller based on message content:
-  //   heavy (real coding → 32b coder), standard (→ 9b nano), trivial (→ 9b nano)
+  //   heavy (real coding → GLM 5.2), standard (→ 9b nano), trivial (→ 9b nano)
   const chain = NVIDIA_CODE_CHAINS[chainName] || NVIDIA_CODE_CHAINS.standard;
   const modelsToTry = chain.filter(m => !isNvidiaModelBlocked(m));
   if (modelsToTry.length === 0) {
@@ -962,16 +964,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
           console.error(`Code-chat stream: ${nvidiaModel} HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
-          // INSTANT CIRCUIT BREAKER for 502/503/504: these mean the model
-          // is genuinely unavailable (not just cold). Record 2 failures
-          // immediately to trip the threshold and skip this model for the
-          // next 2 minutes, instead of wasting time retrying a dead model
-          // on every request. This was the root cause of the 550b ultra
-          // burning 60-90s per coding request when it was returning 503.
-          if (nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
+          // INSTANT CIRCUIT BREAKER for 410/502/503/504:
+          //   - 410 Gone: model reached end-of-life (permanent — skip forever)
+          //   - 502/503/504: model genuinely unavailable (skip for 2 min)
+          // Record 2 failures immediately to trip the threshold and skip
+          // this model instead of wasting time retrying a dead model on
+          // every request. This was the root cause of qwen2.5-coder-32b
+          // burning time per request when it returned 410 (EOL).
+          if (nvRes.status === 410 || nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
             recordNvidiaFailure(nvidiaModel);
             recordNvidiaFailure(nvidiaModel);
-            console.warn(`Code-chat: ${nvidiaModel} HTTP ${nvRes.status} — instant circuit breaker trip (2 min cooldown)`);
+            const reason = nvRes.status === 410 ? 'END-OF-LIFE (permanent)' : 'unavailable (2 min cooldown)';
+            console.warn(`Code-chat: ${nvidiaModel} HTTP ${nvRes.status} — instant circuit breaker trip — ${reason}`);
           }
           attemptFailed = true;
           break;
@@ -1605,7 +1609,7 @@ async function warmUp() {
   //
   // We warm up:
   //   - nano-9b       (primary for trivial + standard code-chat) — ~5s cold start
-  //   - qwen2.5-coder-32b (primary for heavy coding tasks) — 10-15s cold start
+  //   - z-ai/glm-5.2  (primary for heavy coding tasks) — 20-40s cold start
   // The 120b super is NOT warmed (not used in code-chat anymore).
   //
   // NON-BLOCKING: warmUp() is fire-and-forget — we do NOT await it.
@@ -1619,11 +1623,11 @@ async function warmUp() {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_FAST} ready (${ms}ms)`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_FAST} not ready after ${ms}ms`);
     });
-    // Warm the qwen2.5-coder-32b (heavy coding model) — 10-15s cold start.
-    // 30s timeout: if it doesn't respond in 30s, something's wrong —
-    // the keep-alive will keep retrying every 30s in the background.
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 30000).then(({ ok, ms }) => {
-      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — coder model ready for real coding tasks`);
+    // Warm the z-ai/glm-5.2 (heavy coding model) — 20-40s cold start.
+    // 60s timeout: GLM 5.2 is a large flagship model, give it room to warm.
+    // The keep-alive will keep retrying every 30s in the background.
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 60000).then(({ ok, ms }) => {
+      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — GLM 5.2 ready for real coding tasks`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_HEAVY} not ready after ${ms}ms — will keep trying via keep-alive`);
     });
   } else {
@@ -1678,16 +1682,21 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
 //
 // Cost: ~4 tiny requests per model per 5-min window. On NVIDIA's
 // on_demand tier this is essentially free (counts against RPM, not
-// a paid quota). The coder-32b ping takes ~3s when warm vs 10-15s
+// a paid quota). The GLM 5.2 ping takes ~3s when warm vs 20-40s
 // cold — massive net win.
 const NVIDIA_KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30s
 const NVIDIA_KEEPALIVE_MODELS = [
-  NVIDIA_CODE_MODEL_HEAVY,     // qwen2.5-coder-32b-instruct — for real coding (keep warm!)
+  NVIDIA_CODE_MODEL_HEAVY,     // z-ai/glm-5.2 — for real coding (keep warm!)
   NVIDIA_CODE_MODEL_FAST,      // nvidia-nemotron-nano-9b-v2 — for fast chats (keep warm!)
   // 120b super is NOT pinged — it's not used in code-chat anymore.
   // It's still available as a regular-chat fallback (via NVIDIA_CHAT_QUALITY)
   // but we don't keep it warm since it was slow on NVIDIA's on_demand tier.
 ];
+
+// Models that returned HTTP 410 (Gone / end-of-life). We stop pinging
+// these forever to avoid wasting RPM budget on permanently-dead models.
+// A model is added here when the keep-alive gets a 410 response.
+const nvidiaEolModels = new Set();
 
 function startNvidiaKeepAlive() {
   if (!process.env.NVIDIA_API_KEY) return;
@@ -1700,6 +1709,9 @@ function startNvidiaKeepAlive() {
       // Skip if circuit breaker has blocked this model — no point
       // pinging a model we know is broken.
       if (isNvidiaModelBlocked(modelId)) continue;
+      // Skip if this model returned HTTP 410 (end-of-life) previously —
+      // it's permanently gone, pinging it wastes RPM budget.
+      if (nvidiaEolModels.has(modelId)) continue;
       try {
         const t0 = Date.now();
         const res = await fetchWithTimeout(
@@ -1716,9 +1728,9 @@ function startNvidiaKeepAlive() {
             }),
           },
           // MODEL-DEPENDENT keep-alive timeout:
-          //   - qwen2.5-coder-32b: 45s — cold start 10-15s, 45s is plenty
+          //   - z-ai/glm-5.2: 60s — larger flagship model, cold start can be 20-40s
           //   - nano-9b: 20s — cold start ~5s, 20s is plenty
-          modelId === NVIDIA_CODE_MODEL_HEAVY ? 45000 : 20000
+          modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000 : 20000
         );
         if (res.__clearTimeout) res.__clearTimeout();
         if (res.ok) {
@@ -1729,6 +1741,12 @@ function startNvidiaKeepAlive() {
           if (ms > 5000) console.log(`NVIDIA keep-alive: ${modelId} slow (${ms}ms — was warming)`);
         } else if (res.status === 429) {
           // Rate limited — back off this cycle, no need to log loudly
+        } else if (res.status === 410) {
+          // Model reached end-of-life — STOP pinging it forever. This
+          // prevents wasting RPM budget on a permanently-dead model.
+          // We add it to a "do not ping" set so future cycles skip it.
+          console.log(`NVIDIA keep-alive: ${modelId} HTTP 410 (END-OF-LIFE — stopping keep-alive for this model)`);
+          nvidiaEolModels.add(modelId);
         } else if (res.status === 502 || res.status === 503 || res.status === 504) {
           // Model unavailable — log it but DON'T trip circuit breaker from
           // keep-alive. The keep-alive is a background ping; we don't want
@@ -1934,8 +1952,8 @@ app.post('/api/handler', async (req, res) => {
         //
         // SMART ROUTING: pick the model chain based on the user's actual
         // message content. Real coding tasks (code fence, "debug",
-        // "implement", etc.) → 32b coder. Simple Q&A → 9b nano.
-        // Trivial greetings → 9b nano. This keeps the coder model for
+        // "implement", etc.) → GLM 5.2. Simple Q&A → 9b nano.
+        // Trivial greetings → 9b nano. This keeps GLM 5.2 for
         // when it's actually needed and makes everything else fast.
         const lastUserContent = codeMessages[codeMessages.length - 1]?.content || prompt.trim();
         const chainName = pickCodeChatChain(lastUserContent);
