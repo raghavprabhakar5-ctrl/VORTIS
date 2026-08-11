@@ -21,6 +21,61 @@ const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
 const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
+// CODE-CHAT MODEL CHOICE:
+//   Previously this used NVIDIA_CHAT_CODE (the 550b ultra model).
+//   That model takes 60-90s to cold-start on NVIDIA's on_demand tier,
+//   which caused EVERY first code-chat to abort with
+//   "This operation was aborted" before any byte arrived. The 120b
+//   super model cold-starts in 10-20s and is still excellent for
+//   code — it's a much better default. Override with env var
+//   NVIDIA_CODE_MODEL if you want to switch back.
+const NVIDIA_CODE_MODEL_PRIMARY = process.env.NVIDIA_CODE_MODEL || NVIDIA_CHAT_QUALITY;
+// Fallback chain for code-chat (tried in order before falling back to Groq):
+//   primary (120b super) → fast (30b nano) → [Groq+CF chain]
+// The 30b nano is included because it cold-starts in ~5s and is
+// surprisingly decent for code — it's a much better safety net than
+// jumping straight to Groq with its 8000-TPM on_demand limit.
+const NVIDIA_CODE_MODEL_FALLBACKS = [NVIDIA_CODE_MODEL_PRIMARY, NVIDIA_CHAT_FAST];
+
+// ── NVIDIA CIRCUIT BREAKER ────────────────────────────────────
+// If a specific NVIDIA model fails N times in a row, skip it for
+// COOLDOWN_MS before trying again. This prevents the "abort, retry,
+// abort, retry" cascade that was burning 90s+ per request when
+// NVIDIA was cold-starting. After 2 consecutive failures we assume
+// the model is cold/unavailable and route around it for 2 minutes.
+const NVIDIA_FAILURE_COOLDOWN_MS = 2 * 60 * 1000;  // 2 minutes
+const NVIDIA_FAILURE_THRESHOLD   = 2;                // consecutive failures
+const nvidiaFailureTracker = new Map(); // model -> { count, lastFailTime }
+
+function isNvidiaModelBlocked(model) {
+  const entry = nvidiaFailureTracker.get(model);
+  if (!entry) return false;
+  if (entry.count < NVIDIA_FAILURE_THRESHOLD) return false;
+  const elapsed = Date.now() - entry.lastFailTime;
+  if (elapsed >= NVIDIA_FAILURE_COOLDOWN_MS) {
+    // Cooldown expired — reset and allow a fresh attempt.
+    nvidiaFailureTracker.delete(model);
+    return false;
+  }
+  return true;
+}
+
+function recordNvidiaFailure(model) {
+  const entry = nvidiaFailureTracker.get(model) || { count: 0, lastFailTime: 0 };
+  entry.count += 1;
+  entry.lastFailTime = Date.now();
+  nvidiaFailureTracker.set(model, entry);
+  console.warn(`NVIDIA circuit breaker: ${model} failed ${entry.count}/${NVIDIA_FAILURE_THRESHOLD} (cooldown ${Math.round((NVIDIA_FAILURE_COOLDOWN_MS - (Date.now() - entry.lastFailTime)) / 1000)}s remaining if threshold hit)`);
+}
+
+function recordNvidiaSuccess(model) {
+  if (nvidiaFailureTracker.has(model)) {
+    nvidiaFailureTracker.delete(model);
+    console.log(`NVIDIA circuit breaker: ${model} recovered, counter reset`);
+  }
+}
+
+
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
   '@cf/qwen/qwen3-30b-a3b-fp8',
@@ -176,26 +231,26 @@ function isImageTooLarge(base64str) {
 // ── HELPERS ───────────────────────────────────────────────────
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-// FIX: previous fetchWithTimeout cleared the timer the moment response
-// HEADERS arrived — meaning a slow/stalled streaming body would never
-// abort, leading to "This operation was aborted" thrown from inside
-// reader.read() when the upstream eventually gave up. We now keep the
-// controller alive across the streaming phase; callers that want a
-// per-read idle timeout should use readStreamWithIdleTimeout() below.
+// fetchWithTimeout: aborts the fetch if no response headers arrive within
+// timeoutMs. For streaming responses, the caller MUST call
+// `res.__clearTimeout()` once headers arrive (otherwise the timer keeps
+// running and will abort the in-progress body read). The streaming code
+// in streamNvidiaGLMOnly and streamAI both do this.
+//
+// The caller can also pass `options.signal` (e.g. an AbortController tied
+// to req.on('close')) — we forward its aborts to our internal controller
+// so a closed browser tab cancels the upstream fetch.
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    // If the caller supplied their own signal (e.g. from req.on('close'))
-    // forward aborts to our controller so both mechanisms work together.
     if (options.signal) {
       if (options.signal.aborted) controller.abort();
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
     const res = await fetch(url, { ...options, signal: controller.signal, body: options.body });
-    // NOTE: do NOT clearTimeout here — we want the timer to also bound
-    // the streaming phase. Caller must clear it via res.__clearTimeout
-    // once they're done reading (or rely on it firing naturally).
+    // Do NOT clearTimeout here — caller clears via res.__clearTimeout()
+    // once they're done with the response (or it fires naturally).
     res.__clearTimeout = () => clearTimeout(timer);
     return res;
   } catch (e) {
@@ -332,14 +387,19 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 }
 
 // ── NVIDIA NIM CHAT FALLBACK ────────────────────────────────────
-// FIX: previous 20s timeout was too short for nemotron-3-super-120b-a12b
-// which routinely takes 25-35s for non-streaming completions, causing
-// "This operation was aborted" on every quality-tier fallback. Bumped
-// to 35s and accepts an optional clientSignal so a closed browser can
-// abort the upstream request instead of letting it finish uselessly.
+// Non-streaming NVIDIA completion used as a fallback in streamAI().
+// 60s timeout — was 35s but cold-start on the 120b quality model can
+// legitimately take 30-40s on the first request after idle. We also
+// clear the timer as soon as headers arrive (before res.json()) so
+// the body-parse phase doesn't get falsely aborted.
 async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) return null;
+  // Skip if circuit breaker has blocked this model.
+  if (isNvidiaModelBlocked(modelId)) {
+    console.log(`NVIDIA model ${modelId} skipped — circuit breaker open`);
+    return null;
+  }
   try {
     const res = await fetchWithTimeout(
       `${NVIDIA_BASE_URL}/chat/completions`,
@@ -358,20 +418,37 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
         }),
         signal: clientSignal,
       },
-      35000
+      60000
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
+      recordNvidiaFailure(modelId);
       return null;
     }
-    const data = await res.json();
+    // Clear the outer timer as soon as headers arrive — body parsing
+    // (res.json) is fast and shouldn't be aborted by the headers-phase timer.
     if (res.__clearTimeout) res.__clearTimeout();
+    const data = await res.json();
     const rawText = data?.choices?.[0]?.message?.content ?? null;
-    if (typeof rawText !== 'string') return null;
+    if (typeof rawText !== 'string') {
+      recordNvidiaFailure(modelId);
+      return null;
+    }
     const text = stripInternalReasoning(rawText);
-    return isValidResponse(text) ? text : null;
+    if (isValidResponse(text)) {
+      recordNvidiaSuccess(modelId);
+      return text;
+    }
+    recordNvidiaFailure(modelId);
+    return null;
   } catch (e) {
     console.log(`NVIDIA model error (${modelId}):`, e.message);
+    // Record failure for circuit breaker — but only if it wasn't a
+    // client-initiated abort (closing the browser tab shouldn't count
+    // against the model's reliability score).
+    if (e.name !== 'AbortError' && !clientSignal?.aborted) {
+      recordNvidiaFailure(modelId);
+    }
     return null;
   }
 }
@@ -652,10 +729,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 90000;  // outer bound for the entire streaming call
-  const FIRST_BYTE_TIMEOUT_MS = 45000; // generous — NVIDIA cold start on a 550b model can take 30-40s to send the first byte
-  const IDLE_TIMEOUT_MS    = 15000;  // AFTER first byte — abort if no bytes for 15s mid-stream
-  const MAX_ATTEMPTS = 2;            // NVIDIA only — Groq+CF are tried by the caller
+  // HEADERS_TIMEOUT_MS bounds the time from request start until NVIDIA
+  // returns response headers (the cold-start phase for the model).
+  // Once headers arrive, this timer is cleared and the first-byte /
+  // idle timers take over for the streaming body phase.
+  const HEADERS_TIMEOUT_MS   = 120000; // 2 min — cold start on NVIDIA on_demand can be slow
+  const FIRST_BYTE_TIMEOUT_MS = 45000; // headers → first body byte (post-cold-start, should be fast)
+  const IDLE_TIMEOUT_MS       = 15000; // inter-chunk gap mid-stream
+  const MAX_ATTEMPTS_PER_MODEL = 1;    // one shot per model — the chain has multiple models
 
   // Safe write helper — never throws, returns false if the socket is closed.
   const safeWrite = (chunk) => {
@@ -669,25 +750,30 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
     }
   };
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  // Iterate over the model fallback chain. Each model gets one attempt.
+  // Models blocked by the circuit breaker are skipped without a network call.
+  const modelsToTry = NVIDIA_CODE_MODEL_FALLBACKS.filter(m => !isNvidiaModelBlocked(m));
+  if (modelsToTry.length === 0) {
+    console.warn(`Code-chat stream: all NVIDIA code models blocked by circuit breaker — skipping to Groq+CF`);
+    return false;
+  }
+  console.log(`Code-chat stream: will try models [${modelsToTry.join(', ')}]`);
+
+  let attemptIdx = 0;
+  for (const nvidiaModel of modelsToTry) {
+    attemptIdx++;
     if (clientSignal?.aborted) {
-      console.log('Code-chat: client disconnected before attempt', attempt);
+      console.log('Code-chat: client disconnected before model', nvidiaModel);
       return false;
     }
+
     let written = 0;
     let convoMessages = [...messages];
     let continuations = 0;
     let fullRawBuffer = '';
     let attemptFailed = false;
     let idleTimer = null;
-
-    const resetIdle = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(() => {
-        console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}`);
-        try { /* reader.cancel lives on the local reader instance below */ } catch (_) {}
-      }, IDLE_TIMEOUT_MS);
-    };
+    let headersTimerCleared = false;
 
     try {
       while (true) {
@@ -702,7 +788,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
               'Content-Type':  'application/json',
             },
             body: JSON.stringify({
-              model:           NVIDIA_CHAT_CODE,
+              model:           nvidiaModel,
               messages:        convoMessages,
               max_tokens:      maxTokens,
               temperature:     0.5,
@@ -711,24 +797,31 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
             }),
             signal: clientSignal,
           },
-          REQUEST_TIMEOUT_MS
+          HEADERS_TIMEOUT_MS
         );
 
         if (!nvRes.ok) {
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
-          console.error(`Code-chat stream: HTTP ${nvRes.status} (attempt ${attempt}) - ${errBody.slice(0, 300)}`);
+          console.error(`Code-chat stream: ${nvidiaModel} HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
           attemptFailed = true;
           break;
         }
 
+        // CRITICAL FIX: clear the outer HEADERS_TIMEOUT_MS timer as soon
+        // as headers arrive. Previously this timer kept running during the
+        // streaming body phase and would abort the read loop at 90s/
+        // 120s even though we had separate first-byte + idle timers
+        // for that. The symptom was "This operation was aborted"
+        // appearing on long-but-healthy streams.
+        if (nvRes.__clearTimeout) { nvRes.__clearTimeout(); headersTimerCleared = true; }
+
         const reader  = nvRes.body.getReader();
         // Use the GENEROUS first-byte timeout initially — NVIDIA cold start
-        // on a 550b model can take 30-40s to send the first byte. Once data
-        // starts flowing, we switch to the tighter inter-chunk idle timeout.
+        // on a 550b model can take 30-40s to send the first byte.
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
-          console.warn(`Code-chat stream: first-byte timeout (no data for ${FIRST_BYTE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
+          console.warn(`Code-chat stream: first-byte timeout (${FIRST_BYTE_TIMEOUT_MS}ms) on ${nvidiaModel}, cancelling reader`);
           try { reader.cancel('first-byte-timeout').catch(() => {}); } catch (_) {}
         }, FIRST_BYTE_TIMEOUT_MS);
 
@@ -739,7 +832,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
         let turnBuffer = '';
         let finishReason = null;
         let clientGone = false;
-        let firstByteReceived = false;
 
         try {
           while (true) {
@@ -750,13 +842,10 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 
             // After the first byte arrives, switch from the generous
             // first-byte timeout (45s) to the tighter inter-chunk idle
-            // timeout (15s). Mid-stream stalls > 15s are real stalls —
-            // by then the model has already started emitting and should
-            // keep going steadily.
-            firstByteReceived = true;
+            // timeout (15s). Mid-stream stalls > 15s are real stalls.
             if (idleTimer) clearTimeout(idleTimer);
             idleTimer = setTimeout(() => {
-              console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
+              console.warn(`Code-chat stream: idle timeout (${IDLE_TIMEOUT_MS}ms) on ${nvidiaModel}, cancelling reader`);
               try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
             }, IDLE_TIMEOUT_MS);
 
@@ -821,11 +910,13 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
         } finally {
           if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
           try { reader.cancel('cleanup').catch(() => {}); } catch (_) {}
-          if (nvRes.__clearTimeout) nvRes.__clearTimeout();
+          // If we never cleared it (early throw before headers were processed),
+          // clear now to be safe.
+          if (!headersTimerCleared && nvRes.__clearTimeout) { nvRes.__clearTimeout(); }
         }
 
         if (clientGone || clientSignal?.aborted) {
-          console.log(`Code-chat: client disconnected mid-stream (attempt ${attempt}, ${written} chars written)`);
+          console.log(`Code-chat: client disconnected mid-stream (${nvidiaModel}, ${written} chars written)`);
           if (!res.writableEnded) { try { res.end(); } catch (_) {} }
           return written > 0;
         }
@@ -838,7 +929,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
-          console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
+          console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS}) on ${nvidiaModel}`);
           convoMessages = [
             ...convoMessages,
             { role: 'assistant', content: turnBuffer },
@@ -850,8 +941,15 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
         break;
       }
     } catch (e) {
-      console.error(`Code-chat stream error (attempt ${attempt}):`, e.message);
+      console.error(`Code-chat stream error on ${nvidiaModel}:`, e.message);
       attemptFailed = true;
+      // Record failure for circuit breaker — but skip if it was a
+      // client-initiated abort (browser closed) since that's not the
+      // model's fault.
+      if (e.name !== 'AbortError' && !clientSignal?.aborted) {
+        // Will be recorded below in the "produced nothing" branch —
+        // don't double-count here.
+      }
     } finally {
       if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
     }
@@ -860,7 +958,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
       if (!res.writableEnded) {
         try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
       }
-      console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, attempt ${attempt}`);
+      console.log(`Code-chat stream OK (${nvidiaModel}) - ${written} chars written`);
+      recordNvidiaSuccess(nvidiaModel);
       return true;
     }
 
@@ -877,18 +976,20 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
             res.end();
           } catch (_) {}
         }
-        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response (attempt ${attempt})`);
+        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from ${nvidiaModel}`);
+        recordNvidiaSuccess(nvidiaModel);
         return true;
       }
     }
 
-    if (attempt < MAX_ATTEMPTS && !clientSignal?.aborted) {
-      console.warn(`Code-chat: attempt ${attempt} produced nothing — retrying NVIDIA (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
-      await new Promise(r => setTimeout(r, 600));
+    // This model failed — record it for the circuit breaker and move on.
+    if (!clientSignal?.aborted) {
+      recordNvidiaFailure(nvidiaModel);
+      console.warn(`Code-chat: ${nvidiaModel} produced nothing — trying next model`);
     }
   }
 
-  console.error('Code-chat stream: all NVIDIA attempts failed — caller should try Groq/CF fallback');
+  console.error('Code-chat stream: all NVIDIA models failed — caller should try Groq/CF fallback');
   // Do NOT end the response here — the caller owns the fallback chain.
   return false;
 }
@@ -1310,37 +1411,76 @@ async function warmUp() {
 
   // CRITICAL: warm up the actual NVIDIA code-chat model with a tiny
   // completion. A HEAD request to NVIDIA_BASE_URL only warms the TLS
-  // handshake — it does NOT trigger the model to load. The 550b
-  // nemotron-3-ultra model takes 30-40s to cold-start on the first
-  // real request, which was causing every first code-chat to hit
-  // the first-byte timeout and abort. Sending a tiny "hi" request
-  // at startup forces the model to load NOW, so the first real user
-  // request gets a warm model.
-  try {
-    const nvKey = process.env.NVIDIA_API_KEY;
-    if (nvKey) {
-      const t0 = Date.now();
-      await fetchWithTimeout(
-        `${NVIDIA_BASE_URL}/chat/completions`,
-        {
-          method:  'POST',
-          headers: { 'Authorization': `Bearer ${nvKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model:       NVIDIA_CHAT_CODE,
-            messages:    [{ role: 'user', content: 'hi' }],
-            max_tokens:  5,
-            temperature: 0.5,
-            stream:      false,
-          }),
-        },
-        60000  // generous — cold start can take 60s on the first load
-      );
-      console.log(`NVIDIA code-chat model warmed (${Date.now() - t0}ms)`);
-    }
-  } catch (e) {
-    console.log('NVIDIA code-chat warmup skipped:', e.message);
+  // handshake — it does NOT trigger the model to load.
+  //
+  // We warm up NVIDIA_CODE_MODEL_PRIMARY (the 120b super by default).
+  // The old code warmed the 550b ultra, which takes 60-90s to cold-start
+  // and frequently timed out the warmup itself — leaving the model cold
+  // for the first real user request anyway. The 120b cold-starts in
+  // 10-20s and is what we actually use as the code-chat primary now.
+  //
+  // NON-BLOCKING: warmUp() is fire-and-forget — we do NOT await it.
+  // The previous version awaited, which meant the server blocked
+  // startup for 60s+ waiting on NVIDIA. Now the server starts
+  // listening immediately and the warmup runs in the background.
+  // The first user request may still hit a cold model if it arrives
+  // before warmup completes, but the circuit breaker + model fallback
+  // chain will handle that gracefully.
+  const nvKey = process.env.NVIDIA_API_KEY;
+  if (nvKey) {
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_PRIMARY, 180000).then(({ ok, ms }) => {
+      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_PRIMARY} ready (${ms}ms)`);
+      else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_PRIMARY} not ready after ${ms}ms`);
+    });
+    // Also warm the 30b nano fallback in parallel — it's fast and
+    // ensures we have a snappy safety net ready.
+    warmUpNvidiaModel(NVIDIA_CHAT_FAST, 60000).then(({ ok, ms }) => {
+      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CHAT_FAST} ready (${ms}ms)`);
+      else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CHAT_FAST} not ready after ${ms}ms`);
+    });
+  } else {
+    console.log('NVIDIA warmup skipped: NVIDIA_API_KEY not set');
   }
 }
+
+// Helper: warms up a single NVIDIA model with a tiny completion.
+// Returns { ok, ms } once the request finishes (success or failure).
+// Never throws — warmup failures are non-fatal.
+async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
+  const nvKey = process.env.NVIDIA_API_KEY;
+  if (!nvKey) return { ok: false, ms: 0 };
+  const t0 = Date.now();
+  try {
+    const res = await fetchWithTimeout(
+      `${NVIDIA_BASE_URL}/chat/completions`,
+      {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${nvKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model:       modelId,
+          messages:    [{ role: 'user', content: 'hi' }],
+          max_tokens:  5,
+          temperature: 0.5,
+          stream:      false,
+        }),
+      },
+      timeoutMs
+    );
+    if (res.__clearTimeout) res.__clearTimeout();
+    if (res.ok) {
+      // Drain the body so the connection can be reused.
+      try { await res.text(); } catch (_) {}
+      recordNvidiaSuccess(modelId);
+      return { ok: true, ms: Date.now() - t0 };
+    }
+    console.log(`NVIDIA warmup ${modelId} HTTP ${res.status}`);
+    return { ok: false, ms: Date.now() - t0 };
+  } catch (e) {
+    console.log(`NVIDIA warmup ${modelId} failed:`, e.message);
+    return { ok: false, ms: Date.now() - t0 };
+  }
+}
+// Fire-and-forget — do NOT await. Server starts listening immediately.
 warmUp();
 
 const externalUrl = process.env.RENDER_EXTERNAL_URL; // Render sets this automatically if available
