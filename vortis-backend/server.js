@@ -16,15 +16,15 @@ const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3-nano-30b-a3b';
+const NVIDIA_CHAT_FAST    = 'nvidia/nvidia-nemotron-nano-9b-v2';
 const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
 const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
 // CODE-CHAT MODEL CHOICE:
 //   We use THREE tiers for code-chat, picked by message content:
-//     - Trivial ("hi", "thanks", short greetings)  → 30b nano (fastest, ~2s)
-//     - Simple code Q&A ("what is X", "explain Y")  → 30b nano (same — fast)
+//     - Trivial ("hi", "thanks", short greetings)  → 9b-v2 nano (fastest, ~2s)
+//     - Simple code Q&A ("what is X", "explain Y")  → 9b-v2 nano (same — fast)
 //     - Actual coding task (code fence, "make me a game", "debug", "build")
 //                                                   → 550b ultra (~10s warm)
 //
@@ -39,7 +39,7 @@ const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 //     - Trivial:             nano → super → [Groq+CF]
 const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;    // 550b ultra — real coding
 const NVIDIA_CODE_MODEL_STANDARD = NVIDIA_CHAT_QUALITY; // 120b super — FALLBACK ONLY
-const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;    // 30b nano — primary for everything except heavy coding
+const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;    // 9b-v2 nano — primary for everything except heavy coding
 
 const NVIDIA_CODE_CHAINS = {
   heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
@@ -47,25 +47,86 @@ const NVIDIA_CODE_CHAINS = {
   trivial:  [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_STANDARD],
 };
 
+// Coding verbs and their common typos. Used for fuzzy matching so
+// "amke me a game" (typo of "make") still routes to the 550b ultra.
+// We use explicit typo lists for the most common verbs + Levenshtein
+// distance 2 as a safety net for anything we missed.
+const CODING_VERBS_EXACT = [
+  'make', 'build', 'create', 'generate', 'develop', 'implement',
+  'code', 'write', 'debug', 'refactor', 'fix', 'optimi', 'optimize',
+  'optimise', 'compile', 'deploy',
+];
+const CODING_VERBS_TYPOS = [
+  // make
+  'amke', 'mkae', 'maek', 'mak', 'makke', 'mke',
+  // build
+  'bulid', 'biuld', 'buidl', 'buld', 'bild', 'builld',
+  // create
+  'craete', 'cretae', 'cerate', 'creat', 'creatte', 'crteate',
+  // generate
+  'genrate', 'generat', 'generete', 'genrate', 'genertae',
+  // write
+  'wrtie', 'wirte', 'wrie', 'writ', 'writte',
+  // debug
+  'deubg', 'debg', 'dbgug', 'deugg',
+  // fix
+  'fxi', 'fx', 'fixx',
+  // refactor
+  'refacter', 'refacotr', 'refacter', 'rfactor',
+  // implement
+  'implment', 'implement', 'implemnt', 'impliment',
+  // code
+  'cdoe', 'ocde', 'cde',
+  // develop
+  'develp', 'develoop', 'develope', 'dvlp',
+  // optimize
+  'optimze', 'optmize', 'optmize',
+  // deploy
+  'depoy', 'delpoy', 'deply',
+];
+
+// Checks if any word in the text is a coding verb (exact or typo).
+// Uses fuzzyIncludesAny (Levenshtein distance) as a safety net.
+function containsCodingVerb(text) {
+  if (!text) return false;
+  const low = text.toLowerCase();
+  // Fast path: exact match
+  for (const v of CODING_VERBS_EXACT) {
+    if (new RegExp(`\\b${v}\\b`).test(low)) return true;
+  }
+  // Fast path: known typos
+  for (const v of CODING_VERBS_TYPOS) {
+    if (new RegExp(`\\b${v}\\b`).test(low)) return true;
+  }
+  // Safety net: Levenshtein distance ≤ 2 for any coding verb.
+  // Catches typos we didn't explicitly list.
+  // fuzzyIncludesAny is defined later in the file but is hoisted.
+  try {
+    if (fuzzyIncludesAny(text, CODING_VERBS_EXACT, 2)) return true;
+  } catch (_) {}
+  return false;
+}
+
 // Detects whether a code-chat message is an actual coding task that
 // warrants the heavy 550b ultra model.
 //
 // CRITICAL: this is checked BEFORE isTrivialCodeMessage in
 // pickCodeChatChain, so "make me a game" (short but clearly coding)
-// routes to heavy, not trivial.
+// routes to heavy, not trivial. Also handles typos — "amke me a game"
+// still routes to heavy.
 function isActualCodingTask(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase();
   // Code fence anywhere = definitely coding
   if (/```/.test(text)) return true;
-  // Creative/build verbs — "make me a game", "build a todo app",
-  // "create a function", "generate code", "write me a script", etc.
-  // In code mode, these are ALWAYS coding tasks regardless of length.
-  if (/\b(make me|build me|create me|generate me|write me|code me|develop me|make a|build a|create a|generate a|develop a|implement a|implement me)\b/i.test(text)) return true;
-  // Standalone creative verbs at start of message
-  if (/^(make|build|create|generate|develop|implement|code|write)\b/i.test(low.trim())) return true;
-  // Explicit coding/debug/refactor verbs
-  if (/\b(debug|refactor|optimi[sz]e|fix (this|the|my|a)?|stack trace|exception|compile|syntax error|unit test|integration test)\b/i.test(text)) return true;
+  // Any coding verb (exact or typo) + "me"/"a"/"an"/"the" = coding task
+  // "make me a game", "amke me a game", "bulid a todo app", etc.
+  if (containsCodingVerb(text) && /\b(me|a|an|the|some|this|that)\b/i.test(text)) return true;
+  // Standalone creative verb at start of message (even without "me/a")
+  // "build something", "create website", "debug please"
+  if (containsCodingVerb(text) && low.trim().length < 100) return true;
+  // Explicit coding/debug/refactor verbs (also catches "fix my code" etc.)
+  if (/\b(stack trace|exception|compile|syntax error|unit test|integration test)\b/i.test(text)) return true;
   // Actual code patterns (not just mentions of code)
   if (/\b(def |function\s*\(|class\s+\w+|import\s|from\s+\w+\s+import|const\s|let\s|var\s|=>|public\s+class|<\?php|#include|console\.log|print\(|async\s+function|await\s|return\s|if\s*\(|for\s*\(|while\s*\()\b/.test(text)) return true;
   // Long technical message (>200 chars) likely needs deep reasoning
@@ -76,12 +137,12 @@ function isActualCodingTask(text) {
 // Detects trivial code-chat messages that should use the fast 30b nano.
 // CRITICAL: does NOT return true for messages with creative/build verbs —
 // "make me a game" is short but is a coding task, not trivial.
+// Also checks for typos so "amke" doesn't slip through.
 function isTrivialCodeMessage(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase().trim();
-  // If the message contains any creative/build verb, it's NOT trivial
-  // even if it's short — "make a game" (11 chars) is coding, not trivial.
-  if (/\b(make|build|create|generate|develop|implement|code|write|debug|fix|refactor)\b/i.test(low)) return false;
+  // If the message contains any coding verb (exact or typo), it's NOT trivial
+  if (containsCodingVerb(text)) return false;
   // Very short messages without build verbs = trivial
   if (low.length < 15) return true;
   // Common greetings / acknowledgments
@@ -801,12 +862,22 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   const MAX_CONTINUATIONS = 4;
   // HEADERS_TIMEOUT_MS bounds the time from request start until NVIDIA
   // returns response headers (the cold-start phase for the model).
-  // Once headers arrive, this timer is cleared and the first-byte /
-  // idle timers take over for the streaming body phase.
-  const HEADERS_TIMEOUT_MS   = 120000; // 2 min — cold start on NVIDIA on_demand can be slow
-  const FIRST_BYTE_TIMEOUT_MS = 45000; // headers → first body byte (post-cold-start, should be fast)
-  const IDLE_TIMEOUT_MS       = 15000; // inter-chunk gap mid-stream
-  const MAX_ATTEMPTS_PER_MODEL = 1;    // one shot per model — the chain has multiple models
+  const HEADERS_TIMEOUT_MS = 120000; // 2 min — cold start on NVIDIA on_demand can be slow
+  // IDLE_TIMEOUT_MS: inter-chunk gap mid-stream (after first byte arrives)
+  const IDLE_TIMEOUT_MS = 15000;
+
+  // MODEL-DEPENDENT FIRST-BYTE TIMEOUT:
+  //   - 550b ultra: 20s — if warm, responds in 5-10s. If cold, abort at 20s
+  //     and fall back to nano immediately. DON'T wait 45s for a cold 550b.
+  //   - 120b super: 15s — if warm, responds in 3-5s.
+  //   - 30b nano: 10s — if warm, responds in 1-3s. Very fast model.
+  // This is the KEY speed fix: if ultra is cold, we find out in 20s (not 45s)
+  // and fall back to nano (~3s), so total response time is ~23s instead of 45s+.
+  function firstByteTimeoutFor(model) {
+    if (model === NVIDIA_CODE_MODEL_HEAVY)    return 20000;
+    if (model === NVIDIA_CODE_MODEL_STANDARD) return 15000;
+    return 10000; // nano and anything else
+  }
 
   // Safe write helper — never throws, returns false if the socket is closed.
   const safeWrite = (chunk) => {
@@ -845,6 +916,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
     let continuations = 0;
     let fullRawBuffer = '';
     let attemptFailed = false;
+    let failureWasTimeout = false;  // true if the failure was a first-byte/idle timeout (not a real error)
     let idleTimer = null;
     let headersTimerCleared = false;
 
@@ -901,13 +973,16 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
         if (nvRes.__clearTimeout) { nvRes.__clearTimeout(); headersTimerCleared = true; }
 
         const reader  = nvRes.body.getReader();
-        // Use the GENEROUS first-byte timeout initially — NVIDIA cold start
-        // on a 550b model can take 30-40s to send the first byte.
+        // MODEL-DEPENDENT first-byte timeout: ultra gets 20s, nano gets 10s.
+        // If the model is warm, it'll respond well within this. If cold,
+        // we abort fast and fall back to the next model in the chain.
+        const fbTimeout = firstByteTimeoutFor(nvidiaModel);
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
-          console.warn(`Code-chat stream: first-byte timeout (${FIRST_BYTE_TIMEOUT_MS}ms) on ${nvidiaModel}, cancelling reader`);
+          failureWasTimeout = true;  // timeout, not a real error — don't trip circuit breaker
+          console.warn(`Code-chat stream: first-byte timeout (${fbTimeout}ms) on ${nvidiaModel}, cancelling reader`);
           try { reader.cancel('first-byte-timeout').catch(() => {}); } catch (_) {}
-        }, FIRST_BYTE_TIMEOUT_MS);
+        }, fbTimeout);
 
         const decoder = new TextDecoder();
         let buffer    = '';
@@ -929,6 +1004,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
             // timeout (15s). Mid-stream stalls > 15s are real stalls.
             if (idleTimer) clearTimeout(idleTimer);
             idleTimer = setTimeout(() => {
+              failureWasTimeout = true;  // timeout, not a real error
               console.warn(`Code-chat stream: idle timeout (${IDLE_TIMEOUT_MS}ms) on ${nvidiaModel}, cancelling reader`);
               try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
             }, IDLE_TIMEOUT_MS);
@@ -1067,9 +1143,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
     }
 
     // This model failed — record it for the circuit breaker and move on.
+    // BUT: only trip the circuit breaker for REAL errors (HTTP 5xx, etc.).
+    // Timeouts (first-byte timeout, idle timeout) mean the model was just
+    // cold/slow, not broken — tripping the breaker would block it for 2 min
+    // and prevent the keep-alive from warming it. The next request should
+    // still try it (it might be warm by then).
     if (!clientSignal?.aborted) {
-      recordNvidiaFailure(nvidiaModel);
-      console.warn(`Code-chat: ${nvidiaModel} produced nothing — trying next model`);
+      if (!failureWasTimeout) {
+        recordNvidiaFailure(nvidiaModel);
+        console.warn(`Code-chat: ${nvidiaModel} produced nothing (real error) — trying next model`);
+      } else {
+        console.warn(`Code-chat: ${nvidiaModel} timed out (cold/slow, not broken) — trying next model, circuit breaker NOT tripped`);
+      }
     }
   }
 
@@ -1617,7 +1702,10 @@ function startNvidiaKeepAlive() {
               stream:      false,
             }),
           },
-          45000  // generous — even a warming model should respond in 45s
+          // MODEL-DEPENDENT keep-alive timeout:
+          //   - 550b ultra: 90s — cold start can take 60-90s, need the full window
+          //   - 30b nano: 30s — cold start ~5s, 30s is plenty
+          modelId === NVIDIA_CODE_MODEL_HEAVY ? 90000 : 30000
         );
         if (res.__clearTimeout) res.__clearTimeout();
         if (res.ok) {
@@ -1628,6 +1716,12 @@ function startNvidiaKeepAlive() {
           if (ms > 5000) console.log(`NVIDIA keep-alive: ${modelId} slow (${ms}ms — was warming)`);
         } else if (res.status === 429) {
           // Rate limited — back off this cycle, no need to log loudly
+        } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+          // Model unavailable — log it but DON'T trip circuit breaker from
+          // keep-alive. The keep-alive is a background ping; we don't want
+          // it to block the model for real user requests. If the model is
+          // truly down, real user requests will trip the breaker instead.
+          console.log(`NVIDIA keep-alive: ${modelId} HTTP ${res.status} (unavailable, will retry next cycle)`);
         } else {
           console.log(`NVIDIA keep-alive: ${modelId} HTTP ${res.status}`);
         }
