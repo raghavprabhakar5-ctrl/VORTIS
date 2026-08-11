@@ -31,7 +31,21 @@ const CF_CHAT_MODELS = [
 // skipping a model BEFORE hitting Groq if we know it's rate-limited
 // or would blow the per-minute token budget, instead of finding out
 // after a wasted network round trip.
-const GROQ_TPM_CAP = 6000; // matches the on_demand tier limit from the error logs
+//
+// FIX: previous value was a flat 6000 TPM, far below Groq's actual
+// on_demand tier limits. One normal chat (system prompt + history +
+// ~2k output tokens) blew the entire 60s budget and every subsequent
+// request hit "Skipping <model> — TPM budget" in a cascade. Per-model
+// caps now match Groq's real published on_demand limits.
+const GROQ_TPM_CAPS = {
+  'openai/gpt-oss-20b':   30000, // on_demand tier ~30k TPM
+  'openai/gpt-oss-120b':  5000,  // on_demand tier ~5k TPM (heavier model)
+  'llama-3.1-8b-instant': 30000,
+  _default: 6000,
+};
+function groqTpmCapFor(model) {
+  return GROQ_TPM_CAPS[model] ?? GROQ_TPM_CAPS._default;
+}
 const groqTpmTracker = new Map(); // model -> [{ tokens, time }]
 const groqCooldowns  = new Map(); // model -> timestamp when safe to retry
 
@@ -39,7 +53,8 @@ function estimateTokens(text) {
   return Math.ceil((text || '').length / 4); // ~4 chars/token, Groq's own rule of thumb
 }
 
-function groqTpmAvailable(model, estimatedTokens, capTpm = GROQ_TPM_CAP) {
+function groqTpmAvailable(model, estimatedTokens) {
+  const capTpm = groqTpmCapFor(model);
   const now = Date.now();
   const windowMs = 60000;
   const entries = (groqTpmTracker.get(model) || []).filter(e => now - e.time < windowMs);
@@ -157,16 +172,65 @@ function isImageTooLarge(base64str) {
 // ── HELPERS ───────────────────────────────────────────────────
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+// FIX: previous fetchWithTimeout cleared the timer the moment response
+// HEADERS arrived — meaning a slow/stalled streaming body would never
+// abort, leading to "This operation was aborted" thrown from inside
+// reader.read() when the upstream eventually gave up. We now keep the
+// controller alive across the streaming phase; callers that want a
+// per-read idle timeout should use readStreamWithIdleTimeout() below.
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(timer);
+    // If the caller supplied their own signal (e.g. from req.on('close'))
+    // forward aborts to our controller so both mechanisms work together.
+    if (options.signal) {
+      if (options.signal.aborted) controller.abort();
+      else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+    const res = await fetch(url, { ...options, signal: controller.signal, body: options.body });
+    // NOTE: do NOT clearTimeout here — we want the timer to also bound
+    // the streaming phase. Caller must clear it via res.__clearTimeout
+    // once they're done reading (or rely on it firing naturally).
+    res.__clearTimeout = () => clearTimeout(timer);
     return res;
   } catch (e) {
     clearTimeout(timer);
     throw e;
+  }
+}
+
+// Reads a ReadableStream<Uint8Array> with an idle timeout — if no bytes
+// arrive for idleMs, aborts the underlying fetch and throws. Returns the
+// decoded text chunks via the onChunk callback. This is the real fix for
+// "Code-chat stream error: This operation was aborted" — previously a
+// stalled NVIDIA stream would hang until the OUTER 45s timer fired,
+// then the retry would hit the same stall. Now we abort quickly and let
+// the fallback chain (NVIDIA → Groq → CF) take over.
+async function readStreamWithIdleTimeout(reader, decoder, onChunk, idleMs = 15000) {
+  let buffer = '';
+  let idleTimer = null;
+  const resetIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
+    }, idleMs);
+  };
+  resetIdle();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      onChunk(buffer);
+      buffer = '';
+      resetIdle();
+    }
+    // Flush any trailing bytes in the decoder
+    const tail = decoder.decode();
+    if (tail) onChunk(tail);
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
   }
 }
 
@@ -230,36 +294,47 @@ async function classifyTier(groq, text) {
     return 'medium';
   }
 
+  // FIX: previous Promise.race + setTimeout didn't actually abort the
+  // underlying Groq fetch — the request kept running and burning TPM
+  // long after the race resolved. Now we pass an AbortSignal that
+  // actually cancels the HTTP request on timeout.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
   try {
-    const result = await Promise.race([
-      groq.chat.completions.create({
-        model: GROQ_CLASSIFIER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Classify the user's message into exactly one difficulty tier.
+    const result = await groq.chat.completions.create({
+      model: GROQ_CLASSIFIER_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: `Classify the user's message into exactly one difficulty tier.
 "medium" = casual conversation, simple greetings, simple Q&A, short explanations, opinions.
 "hard" = coding, debugging, formatting requests (like markdown tables), math, line-by-line breakdowns, multi-step reasoning, long-form writing.
 Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
-          },
-          { role: 'user', content: text.slice(0, 1000) },
-        ],
-        max_tokens: 10,
-        temperature: 0,
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('classifier timeout')), 2500)),
-    ]);
+        },
+        { role: 'user', content: text.slice(0, 1000) },
+      ],
+      max_tokens: 10,
+      temperature: 0,
+      signal: controller.signal,
+    });
 
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
     return raw.includes('hard') ? 'hard' : 'medium';
   } catch (e) {
     console.warn('Tier classifier failed, falling back to heuristic:', e.message);
     return isComplexMessage(text) ? 'hard' : 'medium';
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 // ── NVIDIA NIM CHAT FALLBACK ────────────────────────────────────
-async function tryNvidiaChat(modelId, messages, maxTokens) {
+// FIX: previous 20s timeout was too short for nemotron-3-super-120b-a12b
+// which routinely takes 25-35s for non-streaming completions, causing
+// "This operation was aborted" on every quality-tier fallback. Bumped
+// to 35s and accepts an optional clientSignal so a closed browser can
+// abort the upstream request instead of letting it finish uselessly.
+async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) return null;
   try {
@@ -278,14 +353,16 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
           temperature: 0.7,
           stream:      false,
         }),
+        signal: clientSignal,
       },
-      20000
+      35000
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
       return null;
     }
     const data = await res.json();
+    if (res.__clearTimeout) res.__clearTimeout();
     const rawText = data?.choices?.[0]?.message?.content ?? null;
     if (typeof rawText !== 'string') return null;
     const text = stripInternalReasoning(rawText);
@@ -297,7 +374,12 @@ async function tryNvidiaChat(modelId, messages, maxTokens) {
 }
 
 // ── STREAMING callAI ───────────────────────────────────────────
-async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
+// FIX: accepts a clientSignal (from req.on('close')) so that if the
+// browser tab is closed mid-stream, we abort the upstream Groq/
+// NVIDIA/CF request instead of letting it run to completion and
+// wasting TPM budget / NVIDIA global budget on a response no one
+// will ever read.
+async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
   const systemPrompt = messages.find(m => m.role === 'system');
   const recentConversations = messages.filter(m => m.role !== 'system').slice(-12);
   const optimizedMessages = systemPrompt ? [systemPrompt, ...recentConversations] : [...recentConversations];
@@ -311,9 +393,13 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
   const bufferMode = looksLikeTableRequest(lastMsg);
 
   const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const maxTokens = isHard ? 8192 : 2048;
+  // FIX: previous flat 2048 for trivial messages wasted TPM budget —
+  // a "hi" + system prompt was claiming 2k tokens against the 30k TPM
+  // cap, which added up fast under load. Trivial messages now use 512.
+  const trivialTier = isObviouslyTrivial(lastMsg);
+  const maxTokens = isHard ? 8192 : (trivialTier ? 512 : 2048);
 
-  console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} trivial=${trivialTier} → model: ${model} → maxTokens: ${maxTokens}`);
 
   const MAX_CONTINUATIONS = 3;
 
@@ -321,6 +407,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
     const estTokens = estimateTokens(JSON.stringify(optimizedMessages)) + maxTokens;
     if (isGroqCoolingDown(modelToTry)) { console.log(`Skipping ${modelToTry} — cooling down`); continue; }
     if (!groqTpmAvailable(modelToTry, estTokens)) { console.log(`Skipping ${modelToTry} — TPM budget`); continue; }
+    if (clientSignal?.aborted) { console.log('Client disconnected before model call'); return false; }
 
     try {
       let convoMessages = [...optimizedMessages];
@@ -329,8 +416,12 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       let streamedAnything = false;
 
       while (true) {
+        // Pass the client abort signal through to Groq so a closed
+        // browser tab cancels the upstream request instead of letting
+        // it run to completion and waste TPM.
         const stream = await groq.chat.completions.create({
           model: modelToTry, messages: convoMessages, max_tokens: maxTokens, temperature: 0.7, stream: true,
+          signal: clientSignal,
         });
         recordGroqTpm(modelToTry, estTokens);
 
@@ -436,7 +527,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
       : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
 
     for (const nvModel of nvidiaModelsToTry) {
-      const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens);
+      if (clientSignal?.aborted) { console.log('Client disconnected — skipping NVIDIA'); break; }
+      const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens, clientSignal);
       if (text) {
         console.log(`NVIDIA fallback succeeded: ${nvModel}`);
         res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
@@ -450,19 +542,29 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT }) {
     console.warn('NVIDIA global rate limit reached — skipping straight to Cloudflare');
   }
 
+  // FIX: previous CF fallback called CF with `stream: true` in the body
+  // but then `await cfRes.json()` on the response. When CF honors the
+  // stream flag it returns SSE text ("data: {...}\n\n"), which fails JSON
+  // parsing with: "Unexpected token 'd', \"data: {\"ch\"... is not valid JSON".
+  // That's exactly the error in the log. Set stream:false so CF returns
+  // a single JSON object that .json() can parse.
   for (const cfModel of CF_CHAT_MODELS) {
+    if (clientSignal?.aborted) { console.log('Client disconnected — skipping CF'); break; }
     try {
-      const cfRes = await fetch(
+      const cfRes = await fetchWithTimeout(
         `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
         {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: optimizedMessages, stream: true, max_tokens: 1200 }),
-        }
+          body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
+          signal: clientSignal,
+        },
+        20000
       );
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
 
       const data = await cfRes.json();
+      if (cfRes.__clearTimeout) cfRes.__clearTimeout();
       let rawText = data?.result?.response;
       if (typeof rawText !== 'string') {
         rawText = data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
@@ -517,8 +619,22 @@ function looksLikeTableRequest(text) {
   return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
-// ── Code-chat streaming (NVIDIA only) ──────────────────────
-async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
+// ── Code-chat streaming (NVIDIA primary, with Groq+CF fallback) ─
+// FIXES applied:
+//   1. Per-read idle timeout (15s) — if NVIDIA stalls mid-stream we
+//      abort quickly instead of waiting for the 60s outer timer, then
+//      cascade into retry which hits the same stall. This was the root
+//      cause of every "Code-chat stream error: This operation was
+//      aborted" in the log.
+//   2. Client-disconnect detection — if the browser closes the SSE
+//      connection we cancel the upstream NVIDIA fetch instead of
+//      finishing a response nobody will read.
+//   3. Safe res.write — wrapped in try/catch so a closed socket
+//      doesn't crash the loop.
+//   4. Returns false on full failure so the caller can fall back to
+//      Groq then CF instead of showing the dead-end "Vertex is
+//      temporarily unavailable" message.
+async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000, clientSignal) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
     console.error('Code-chat stream: NVIDIA_API_KEY missing');
@@ -531,18 +647,46 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 45000; // shorter than before — fail faster so a retry has time to run
-  const MAX_ATTEMPTS = 2;           // NVIDIA only — retry same model, no other provider
+  const REQUEST_TIMEOUT_MS = 60000;  // outer bound for the entire streaming call
+  const IDLE_TIMEOUT_MS    = 15000;  // per-read idle — abort if no bytes for 15s
+  const MAX_ATTEMPTS = 2;            // NVIDIA only — Groq+CF are tried by the caller
+
+  // Safe write helper — never throws, returns false if the socket is closed.
+  const safeWrite = (chunk) => {
+    if (res.writableEnded || clientSignal?.aborted) return false;
+    try {
+      res.write(chunk);
+      if (res.flush) res.flush();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  };
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (clientSignal?.aborted) {
+      console.log('Code-chat: client disconnected before attempt', attempt);
+      return false;
+    }
     let written = 0;
     let convoMessages = [...messages];
     let continuations = 0;
     let fullRawBuffer = '';
     let attemptFailed = false;
+    let idleTimer = null;
+
+    const resetIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}`);
+        try { /* reader.cancel lives on the local reader instance below */ } catch (_) {}
+      }, IDLE_TIMEOUT_MS);
+    };
 
     try {
       while (true) {
+        if (clientSignal?.aborted) break;
+
         const nvRes = await fetchWithTimeout(
           `${NVIDIA_BASE_URL}/chat/completions`,
           {
@@ -559,6 +703,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               top_p:           0.9,
               stream:          true,
             }),
+            signal: clientSignal,
           },
           REQUEST_TIMEOUT_MS
         );
@@ -572,76 +717,111 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         }
 
         const reader  = nvRes.body.getReader();
+        // Hook the idle timer to actually cancel the reader when it fires.
+        // (Replaces the stub above — the local `reader` only exists inside
+        // this while-iteration, so we set up the cancel here.)
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
+          try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
+        }, IDLE_TIMEOUT_MS);
+
         const decoder = new TextDecoder();
         let buffer    = '';
         let inThink   = false;
         let pending   = '';
         let turnBuffer = '';
         let finishReason = null;
+        let clientGone = false;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        try {
+          while (true) {
+            if (clientSignal?.aborted) { clientGone = true; break; }
 
-          buffer += decoder.decode(value, { stream: true });
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          let nlIdx;
-          while ((nlIdx = buffer.indexOf('\n')) !== -1) {
-            const line = buffer.slice(0, nlIdx).trim();
-            buffer = buffer.slice(nlIdx + 1);
+            // Reset the idle timer on every chunk — if NVIDIA keeps
+            // sending bytes (even think tokens) we don't abort.
+            if (idleTimer) clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+              console.warn(`Code-chat stream: idle timeout (no data for ${IDLE_TIMEOUT_MS}ms) on attempt ${attempt}, cancelling reader`);
+              try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
+            }, IDLE_TIMEOUT_MS);
 
-            if (!line || !line.startsWith('data: ')) continue;
-            const raw = line.slice(6).trim();
-            if (raw === '[DONE]') continue;
+            buffer += decoder.decode(value, { stream: true });
 
-            let payload;
-            try { payload = JSON.parse(raw); } catch (_) { continue; }
+            let nlIdx;
+            while ((nlIdx = buffer.indexOf('\n')) !== -1) {
+              const line = buffer.slice(0, nlIdx).trim();
+              buffer = buffer.slice(nlIdx + 1);
 
-            finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
-            const token = payload?.choices?.[0]?.delta?.content;
-            if (!token) continue;
+              if (!line || !line.startsWith('data: ')) continue;
+              const raw = line.slice(6).trim();
+              if (raw === '[DONE]') continue;
 
-            turnBuffer += token;
-            fullRawBuffer += token;
-            pending += token;
-            let safe = '';
-            while (true) {
-              if (!inThink) {
-                const openIdx = pending.indexOf('<think>');
-                if (openIdx === -1) {
-                  const holdBack = Math.min(pending.length, 8);
-                  safe += pending.slice(0, pending.length - holdBack);
-                  pending = pending.slice(pending.length - holdBack);
-                  break;
+              let payload;
+              try { payload = JSON.parse(raw); } catch (_) { continue; }
+
+              finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
+              const token = payload?.choices?.[0]?.delta?.content;
+              if (!token) continue;
+
+              turnBuffer += token;
+              fullRawBuffer += token;
+              pending += token;
+              let safe = '';
+              while (true) {
+                if (!inThink) {
+                  const openIdx = pending.indexOf('<think>');
+                  if (openIdx === -1) {
+                    const holdBack = Math.min(pending.length, 8);
+                    safe += pending.slice(0, pending.length - holdBack);
+                    pending = pending.slice(pending.length - holdBack);
+                    break;
+                  } else {
+                    safe += pending.slice(0, openIdx);
+                    pending = pending.slice(openIdx + '<think>'.length);
+                    inThink = true;
+                  }
                 } else {
-                  safe += pending.slice(0, openIdx);
-                  pending = pending.slice(openIdx + '<think>'.length);
-                  inThink = true;
+                  const closeIdx = pending.indexOf('</think>');
+                  if (closeIdx === -1) {
+                    const holdBack = Math.min(pending.length, 9);
+                    pending = pending.slice(pending.length - holdBack);
+                    break;
+                  } else {
+                    pending = pending.slice(closeIdx + '</think>'.length);
+                    inThink = false;
+                  }
                 }
-              } else {
-                const closeIdx = pending.indexOf('</think>');
-                if (closeIdx === -1) {
-                  const holdBack = Math.min(pending.length, 9);
-                  pending = pending.slice(pending.length - holdBack);
+              }
+
+              if (safe) {
+                written += safe.length;
+                if (!safeWrite(`data: ${JSON.stringify({ content: safe })}\n\n`)) {
+                  clientGone = true;
                   break;
-                } else {
-                  pending = pending.slice(closeIdx + '</think>'.length);
-                  inThink = false;
                 }
               }
             }
-
-            if (safe) {
-              written += safe.length;
-              res.write(`data: ${JSON.stringify({ content: safe })}\n\n`);
-              if (res.flush) res.flush();
-            }
+            if (clientGone) break;
           }
+        } finally {
+          if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+          try { reader.cancel('cleanup').catch(() => {}); } catch (_) {}
+          if (nvRes.__clearTimeout) nvRes.__clearTimeout();
+        }
+
+        if (clientGone || clientSignal?.aborted) {
+          console.log(`Code-chat: client disconnected mid-stream (attempt ${attempt}, ${written} chars written)`);
+          if (!res.writableEnded) { try { res.end(); } catch (_) {} }
+          return written > 0;
         }
 
         if (!inThink && pending) {
           written += pending.length;
-          res.write(`data: ${JSON.stringify({ content: pending })}\n\n`);
+          safeWrite(`data: ${JSON.stringify({ content: pending })}\n\n`);
           pending = '';
         }
 
@@ -661,40 +841,69 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     } catch (e) {
       console.error(`Code-chat stream error (attempt ${attempt}):`, e.message);
       attemptFailed = true;
+    } finally {
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
     }
 
     if (written > 0) {
-      res.write('data: [DONE]\n\n');
-      res.end();
+      if (!res.writableEnded) {
+        try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
+      }
       console.log(`Code-chat stream OK (${NVIDIA_CHAT_CODE}) - ${written} chars written, attempt ${attempt}`);
       return true;
     }
 
-    if (!attemptFailed) {
+    if (!attemptFailed && !clientSignal?.aborted) {
       const salvaged = fullRawBuffer
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
         .replace(/<think>[\s\S]*$/gi, '')
         .trim();
       if (salvaged.length > 0) {
-        res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
+        if (!res.writableEnded) {
+          try {
+            res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } catch (_) {}
+        }
         console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response (attempt ${attempt})`);
         return true;
       }
     }
 
-    if (attempt < MAX_ATTEMPTS) {
+    if (attempt < MAX_ATTEMPTS && !clientSignal?.aborted) {
       console.warn(`Code-chat: attempt ${attempt} produced nothing — retrying NVIDIA (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
       await new Promise(r => setTimeout(r, 600));
     }
   }
 
-  console.error('Code-chat stream: all NVIDIA attempts failed');
-  if (!res.writableEnded) {
-    try { res.write('data: [DONE]\n\n'); res.end(); } catch (_) {}
-  }
+  console.error('Code-chat stream: all NVIDIA attempts failed — caller should try Groq/CF fallback');
+  // Do NOT end the response here — the caller owns the fallback chain.
   return false;
+}
+
+// ── Code-chat Groq fallback ─────────────────────────────────────
+// Used when NVIDIA code-chat fails entirely. Streams via Groq using
+// gpt-oss-20b (fast, decent for code) and falls back through the same
+// NVIDIA / CF chain that regular chat uses. Mirrors streamAI() but
+// keeps the code-chat system prompt + search context intact.
+async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
+  // Reuse the regular streaming fallback chain by delegating straight
+  // to streamAI — it already handles Groq → NVIDIA → CF with proper
+  // TPM / cooldown / abort handling. Force `isHard=true` semantics by
+  // adding a code-fence marker so streamAI picks the quality model.
+  const forcedHardMessages = [...messages];
+  // If the last user message has no code fence, prepend one in a way
+  // that doesn't change the meaning — streamAI's isObviouslyHard()
+  // check looks for ``` so we just ensure one exists in the prompt.
+  const lastUserIdx = forcedHardMessages.length - 1;
+  if (lastUserIdx >= 0 && forcedHardMessages[lastUserIdx].role === 'user') {
+    const u = forcedHardMessages[lastUserIdx];
+    if (!/```/.test(u.content)) {
+      forcedHardMessages[lastUserIdx] = { ...u, content: u.content + '\n\n```' };
+    }
+  }
+  return streamAI(groq, forcedHardMessages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal });
 }
 
 // ── TAVILY (primary search provider) ────────────────────────────
@@ -911,38 +1120,49 @@ function cleanCodeResults(results, query) {
 // Instead of matching keywords (which breaks on typos, phrasing variety,
 // or anything not explicitly listed), ask a fast/cheap model to decide
 // whether this message needs live web results. Falls back to the old
-async function aiNeedsSearch(groq, text, { isCode = false } = {}) {
+// heuristic if the classifier call fails or times out.
+async function aiNeedsSearch(groq, text, { isCode = false, clientSignal } = {}) {
   const heuristicFallback = isCode ? needsCodeWebSearchHeuristic(text) : needsWebSearchHeuristic(text);
 
   // Explicit user intent ("search", "google", "lookup", "latest", etc.) always
   // wins — never let the classifier override a direct request from the user.
   if (heuristicFallback) return true;
 
+  // FIX: same AbortController pattern as classifyTier — Promise.race
+  // alone doesn't cancel the upstream fetch, so the request kept eating
+  // TPM after the 1.2s race timer fired.
+  const controller = new AbortController();
+  // If the client closed the connection, abort the classifier too.
+  if (clientSignal) {
+    if (clientSignal.aborted) controller.abort();
+    else clientSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(), 1200);
   try {
-    const result = await Promise.race([
-      groq.chat.completions.create({
-        model: GROQ_CLASSIFIER_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: `Decide if answering this message correctly REQUIRES current/live information from the internet (things that change over time: news, scores, prices, versions, releases, current events, "latest"/"today"/"right now" type facts, current status of something).
+    const result = await groq.chat.completions.create({
+      model: GROQ_CLASSIFIER_MODEL,
+      messages: [
+        {
+          role: 'system',
+          content: `Decide if answering this message correctly REQUIRES current/live information from the internet (things that change over time: news, scores, prices, versions, releases, current events, "latest"/"today"/"right now" type facts, current status of something).
 Say "NO" for anything answerable from general/stable knowledge (explanations, how-to, math, writing, opinions, code logic not tied to a specific library version).
 The user's message may contain typos or misspellings (e.g. "serch" means "search", "lattest" means "latest") — interpret their intent despite spelling errors.
 Respond ONLY with YES or NO. Nothing else.`,
-          },
-          { role: 'user', content: text.slice(0, 500) },
-        ],
-        max_tokens: 5,
-        temperature: 0,
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('search-decision timeout')), 1200)),
-    ]);
+        },
+        { role: 'user', content: text.slice(0, 500) },
+      ],
+      max_tokens: 5,
+      temperature: 0,
+      signal: controller.signal,
+    });
 
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
     return raw.includes('yes');
   } catch (e) {
     console.warn('Search-decision classifier failed:', e.message);
     return false; // heuristic already checked above and was false
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -1123,22 +1343,26 @@ app.post('/api/handler', async (req, res) => {
     if (action === 'title') {
   const titlePrompt = sanitizeString(req.body.prompt || '', 2000);
   if (!titlePrompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
+  // FIX: AbortController so the title call actually cancels on timeout
+  // instead of leaking TPM budget via a hung groq fetch.
+  const titleController = new AbortController();
+  const titleTimer = setTimeout(() => titleController.abort(), 4000);
   try {
-    const result = await Promise.race([
-      groq.chat.completions.create({
-        model: 'llama-3.1-8b-instant',   // ← use the ACTUAL non-reasoning fast model
-        messages: [{ role: 'user', content: titlePrompt }],
-        max_tokens: 30,                   // ← a little headroom, cheap either way
-        temperature: 0.3,
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('title timeout')), 4000)),
-    ]);
+    const result = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',   // ← use the ACTUAL non-reasoning fast model
+      messages: [{ role: 'user', content: titlePrompt }],
+      max_tokens: 30,                   // ← a little headroom, cheap either way
+      temperature: 0.3,
+      signal: titleController.signal,
+    });
     const raw = result.choices?.[0]?.message?.content || '';
-    const clean = stripInternalReasoning(raw).trim();   // ← strip <think> just in case
+    const clean = stripInternalReasoning(raw).trim();   // <- strip <think> just in case
     return res.status(200).json({ title: clean });
   } catch (e) {
     console.error('TITLE ERROR:', e.message);
     return res.status(200).json({ title: '' });
+  } finally {
+    clearTimeout(titleTimer);
   }
 }
 
@@ -1182,6 +1406,18 @@ app.post('/api/handler', async (req, res) => {
     const isVoiceCall = Boolean(body.isVoiceCall);
     const isCodeMode  = Boolean(body.mode === 'code' || body.isCodeChat === true);
 
+    // FIX: create one AbortController per request that fires when the
+    // browser closes the SSE connection. We forward this signal to
+    // every upstream provider (Groq, NVIDIA, CF) so a closed tab
+    // cancels the in-flight request instead of letting it burn TPM
+    // and NVIDIA global budget on a response no one will read.
+    const clientSignal = new AbortController();
+    req.on('close', () => {
+      if (!res.writableEnded) {
+        try { clientSignal.abort(); } catch (_) {}
+      }
+    });
+
     // ── ROUTE TO CODE-CHAT BEFORE the regular chat handler ──
     if (isCodeMode && action === 'chat') {
       if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
@@ -1194,7 +1430,7 @@ app.post('/api/handler', async (req, res) => {
         const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
         let codeSearchContext = '';
 
-        if (await aiNeedsSearch(groq, lastUserForSearch, { isCode: true })) {
+        if (await aiNeedsSearch(groq, lastUserForSearch, { isCode: true, clientSignal: clientSignal.signal })) {
           try {
             const sq = buildSearchQuery(lastUserForSearch.slice(0, 300));
             let results = await fetchWebResults(sq);
@@ -1219,7 +1455,7 @@ app.post('/api/handler', async (req, res) => {
         }
 
        const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
-    '\n\n---\nCODE MODE: Vertex streaming active. No Groq/Cloudflare fallback will be attempted. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.' +
+    '\n\n---\nCODE MODE: Vertex streaming active. NVIDIA is primary; Groq/Cloudflare will be used as automatic fallback if NVIDIA is unavailable. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.' +
     (codeSearchContext
     ? '\n\nLIVE SEARCH RESULTS WERE PROVIDED ABOVE. STRICT RULE: only state a specific fact (a model name, version number, endpoint, pricing, availability) as CONFIRMED if it is literally present in the search snippets above. If a specific name/version/detail is NOT in the snippets, either omit it entirely or explicitly say "not confirmed by search — may be inaccurate." NEVER invent a source (a forum post, a username, a repo) to make an unconfirmed claim sound more credible — that is worse than just saying you\'re unsure. When multiple models are close in name, do not blend/invent hybrid version numbers (e.g. do not write "GLM 5.1/5.2" unless that exact string appears in a snippet).'
     : '\n\nNo live search results were retrieved for this specific message. Never claim you lack real-time or internet access — Vertex has live web search built in via the backend, it simply wasn\'t triggered or didn\'t return results for this particular question. Just answer from your best knowledge, and only flag it as possibly outdated if the topic is genuinely version/date-sensitive.');
@@ -1229,13 +1465,26 @@ app.post('/api/handler', async (req, res) => {
           codeMessages.push({ role: 'user', content: prompt.trim() });
         }
 
-        const ok = await streamNvidiaGLMOnly(codeMessages, res, 16000);
-        if (!ok) {
-          if (!res.writableEnded) {
-            res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable. Please try again in a moment.' })}\n\n`);
+        // FIX: NVIDIA is now primary, but if it fails entirely we fall
+        // back to Groq (gpt-oss-20b/120b) then Cloudflare, instead of
+        // leaving the user with "Vertex is temporarily unavailable".
+        // This was the root cause of "Code-chat stream: all NVIDIA
+        // attempts failed" being the last word in the user's chat.
+        let ok = await streamNvidiaGLMOnly(codeMessages, res, 16000, clientSignal.signal);
+        if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
+          console.warn('Code-chat: NVIDIA failed — falling back to Groq+CF chain');
+          const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
+          const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
+          if (CF_TOKEN && CF_ACCOUNT) {
+            ok = await streamCodeChatFallback(groq, codeMessages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal: clientSignal.signal });
+          }
+        }
+        if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
+          try {
+            res.write(`data: ${JSON.stringify({ content: 'Vertex is temporarily unavailable — please try again in a moment.' })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
-          }
+          } catch (_) {}
         }
       } catch (err) {
         console.error('CODE CHAT ERROR:', err.message);
@@ -1548,9 +1797,9 @@ TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank lin
           messages.push({ role: 'user', content: userMsg });
         }
 
-        const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT });
+        const ok = await streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal: clientSignal.signal });
         if (!ok) {
-          if (!res.writableEnded) {
+          if (!res.writableEnded && !clientSignal.signal.aborted) {
             res.write(`data: ${JSON.stringify({ content: 'All AI providers are busy — please try again in a moment.' })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
