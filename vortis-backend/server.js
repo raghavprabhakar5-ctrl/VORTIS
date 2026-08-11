@@ -16,54 +16,40 @@ const GROQ_CHAT_QUALITY = 'openai/gpt-oss-120b';
 const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nvidia-nemotron-nano-9b-v2';  // 9b nano — fast, reliable (user-confirmed working)
-const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';  // 120b super — KEPT FOR REGULAR CHAT FALLBACK ONLY (not code-chat)
-const NVIDIA_CHAT_CODE    = 'z-ai/glm-5.2';                       // GLM 5.2 — Z.ai's strongest coding model, 202k context, 8192 max output
+const NVIDIA_CHAT_FAST    = 'nvidia/nvidia-nemotron-nano-9b-v2';     // 9b nano — fast, reliable, PRIMARY for ALL code-chat
+const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';     // 120b super — regular chat fallback only
+const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';   // 550b ultra — heavy coding  
 const NVIDIA_VISION_MODEL = 'minimaxai/minimax-m3';
 
-// MODEL HISTORY:
-//   - qwen/qwen2.5-coder-32b-instruct: REMOVED — reached end-of-life on
-//     NVIDIA NIM (HTTP 410 "Gone" on 2026-05-12). Replaced with GLM 5.2.
-//   - nvidia/nemotron-3-ultra-550b-a55b: REMOVED earlier — was aborting
-//     constantly on NVIDIA's on_demand tier (60-90s cold-start, frequent 503s).
-//   - nvidia/nemotron-3-super-120b-a12b: removed from code-chat (too slow
-//     on on_demand tier). Still used as a regular-chat fallback.
-//
-// WHY GLM 5.2 (z-ai/glm-5.2):
-//   - Z.ai's flagship model, described in their docs as "our strongest coding model"
-//   - 202,752-token context window (huge — can handle large codebases)
-//   - 8,192 max output tokens (matches our max_tokens setting)
-//   - Available on NVIDIA NIM free tier at integrate.api.nvidia.com
-//   - Purpose-built for long-horizon tasks including code generation
-//   - Confirmed working via web search (multiple guides from Jul-Aug 2026)
+
+// NEW STRATEGY: nano-9b is the PRIMARY for ALL code-chat (heavy, standard,
+// trivial). It's fast (1-3s warm), reliable, and handles 90% of coding
+// tasks well. For heavy coding that needs more power, 
+//   - Much faster to warm the 550b ultra 
+// If both NVIDIA models fail, we fall through to Groq (gpt-oss-120b for
+// hard, gpt-oss-20b for medium) which is also good at code.
 
 // CODE-CHAT MODEL CHOICE:
-//   We use TWO NVIDIA models for code-chat, picked by message content:
-//     - Trivial / simple Q&A  → 9b nano (fastest, ~2s)
-//     - Actual coding task    → GLM 5.2 (~5-10s warm, Z.ai's strongest coding model)
-//
-//   The 120b super is NOT used in code-chat anymore — it was too slow on
-//   NVIDIA's on_demand tier. If both code models fail, we fall through to
-//   Groq + Cloudflare.
+//   nano-9b is the PRIMARY for ALL code-chat. It's fast (1-3s warm) and
+//   handles most coding tasks well. 550b ultra is the fallback for when
+//   nano fails or returns poor results.
 //
 //   Chains (tried in order; circuit breaker skips blocked models):
-//     - Heavy coding task:   glm-5.2 → nano-9b → [Groq+CF]
-//     - Simple code Q&A:     nano-9b → glm-5.2 → [Groq+CF]
-//     - Trivial:             nano-9b → glm-5.2 → [Groq+CF]
-const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;  // z-ai/glm-5.2 — real coding
-const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;  // nvidia-nemotron-nano-9b-v2 — fast chats
-// NOTE: NVIDIA_CODE_MODEL_STANDARD (120b super) is intentionally NOT used
-// in code-chat. It's still used as a regular-chat fallback (NVIDIA_CHAT_QUALITY)
-// but not referenced here.
+//     - Heavy coding task:   nano-9b → 550b ultra  → [Groq+CF]
+//     - Simple code Q&A:     nano-9b → 550b ultra  → [Groq+CF]
+//     - Trivial:             nano-9b → 550b ultra  → [Groq+CF]
+//
+const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;   
+const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;  
 
 const NVIDIA_CODE_CHAINS = {
-  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CODE_MODEL_FAST],
+  heavy:    [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_HEAVY],
   standard: [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_HEAVY],
   trivial:  [NVIDIA_CODE_MODEL_FAST, NVIDIA_CODE_MODEL_HEAVY],
 };
 
 // Coding verbs and their common typos. Used for fuzzy matching so
-// "amke me a game" (typo of "make") still routes to GLM 5.2.
+// "amke me a game" (typo of "make") still routes correctly.
 // We use explicit typo lists for the most common verbs + Levenshtein
 // distance 2 as a safety net for anything we missed.
 const CODING_VERBS_EXACT = [
@@ -135,7 +121,7 @@ function containsCodingVerb(text) {
 }
 
 // Detects whether a code-chat message is an actual coding task that
-// warrants the heavy GLM 5.2 model.
+// warrants the heavy fallback (llama-3.3-70b).
 //
 // CRITICAL: this is checked BEFORE isTrivialCodeMessage in
 // pickCodeChatChain, so "make me a game" (short but clearly coding)
@@ -896,14 +882,13 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   const IDLE_TIMEOUT_MS = 15000;
 
   // MODEL-DEPENDENT FIRST-BYTE TIMEOUT:
-  //   - z-ai/glm-5.2: 30s — Z.ai's flagship, 202k-context model. Large model,
-  //     cold-start can take 60-90s on NVIDIA on_demand. If warm, responds in
-  //     5-15s. If cold, abort at 30s and fall back to nano immediately.
-  //   - nvidia-nemotron-nano-9b: 8s — if warm, responds in 1-3s. Very fast model.
-  // This is the KEY speed fix: if GLM 5.2 is cold, we find out in 30s (not 60s+)
-  // and fall back to nano (~3s), so total response time is ~33s instead of 60s+.
+  //   - meta/llama-3.3-70b: 15s — if warm, responds in 3-8s. If cold, abort
+  //     at 15s and the user gets nano's answer (which was already tried first).
+  //   - nvidia-nemotron-nano-9b: 8s — if warm, responds in 1-3s. Very fast.
+  // Since nano is tried FIRST, llama-70b is only reached if nano failed.
+  // A 15s timeout is fine — if llama is cold, nano already gave an answer.
   function firstByteTimeoutFor(model) {
-    if (model === NVIDIA_CODE_MODEL_HEAVY) return 30000;  // z-ai/glm-5.2
+    if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;  // meta/llama-3.3-70b
     return 8000;  // nano-9b and anything else
   }
 
@@ -922,7 +907,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   // Iterate over the model fallback chain. Each model gets one attempt.
   // Models blocked by the circuit breaker are skipped without a network call.
   // The chain is picked by the caller based on message content:
-  //   heavy (real coding → GLM 5.2), standard (→ 9b nano), trivial (→ 9b nano)
+  //   heavy (real coding → nano first, llama-70b fallback), standard (→ nano), trivial (→ nano)
   const chain = NVIDIA_CODE_CHAINS[chainName] || NVIDIA_CODE_CHAINS.standard;
   const modelsToTry = chain.filter(m => !isNvidiaModelBlocked(m));
   if (modelsToTry.length === 0) {
@@ -1621,8 +1606,8 @@ async function warmUp() {
   // does NOT trigger the model to load.
   //
   // We warm up:
-  //   - nano-9b       (primary for trivial + standard code-chat) — ~5s cold start
-  //   - z-ai/glm-5.2  (primary for heavy coding tasks) — 20-40s cold start
+  //   - nano-9b          (primary for ALL code-chat) — ~5s cold start
+  //   - llama-3.3-70b    (fallback for heavy coding) — 15-25s cold start
   // The 120b super is NOT warmed (not used in code-chat anymore).
   //
   // NON-BLOCKING: warmUp() is fire-and-forget — we do NOT await it.
@@ -1631,17 +1616,16 @@ async function warmUp() {
   // warm going forward.
   const nvKey = process.env.NVIDIA_API_KEY;
   if (nvKey) {
-    // Warm the 9b nano (primary for trivial + standard code-chat) — ~5s cold start
+    // Warm the 9b nano (primary for ALL code-chat) — ~5s cold start
     warmUpNvidiaModel(NVIDIA_CODE_MODEL_FAST, 30000).then(({ ok, ms }) => {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_FAST} ready (${ms}ms)`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_FAST} not ready after ${ms}ms`);
     });
-    // Warm the z-ai/glm-5.2 (heavy coding model) — 60-90s cold start.
-    // 150s timeout: GLM 5.2 is a 202k-context flagship model that takes a
-    // long time to cold-start on NVIDIA's on_demand tier. Give it plenty
-    // of room. The keep-alive will keep retrying every 30s in the background.
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 150000).then(({ ok, ms }) => {
-      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — GLM 5.2 ready for real coding tasks`);
+    // Warm the llama-3.3-70b (heavy coding fallback) — 15-25s cold start.
+    // 45s timeout: should be plenty for a 70b model. Much faster than
+    // GLM 5.2's 60-90s cold start.
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 45000).then(({ ok, ms }) => {
+      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — llama-70b ready for heavy coding fallback`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_HEAVY} not ready after ${ms}ms — will keep trying via keep-alive`);
     });
   } else {
@@ -1696,12 +1680,12 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
 //
 // Cost: ~4 tiny requests per model per 5-min window. On NVIDIA's
 // on_demand tier this is essentially free (counts against RPM, not
-// a paid quota). The GLM 5.2 ping takes ~3s when warm vs 20-40s
+// a paid quota). The llama-70b ping takes ~3s when warm vs 15-25s
 // cold — massive net win.
 const NVIDIA_KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30s
 const NVIDIA_KEEPALIVE_MODELS = [
-  NVIDIA_CODE_MODEL_HEAVY,     // z-ai/glm-5.2 — for real coding (keep warm!)
-  NVIDIA_CODE_MODEL_FAST,      // nvidia-nemotron-nano-9b-v2 — for fast chats (keep warm!)
+  NVIDIA_CODE_MODEL_FAST,      // nvidia-nemotron-nano-9b-v2 — primary for ALL code-chat (keep warm!)
+  NVIDIA_CODE_MODEL_HEAVY,     // meta/llama-3.3-70b-instruct — heavy coding fallback (keep warm!)
   // 120b super is NOT pinged — it's not used in code-chat anymore.
   // It's still available as a regular-chat fallback (via NVIDIA_CHAT_QUALITY)
   // but we don't keep it warm since it was slow on NVIDIA's on_demand tier.
@@ -1742,9 +1726,9 @@ function startNvidiaKeepAlive() {
             }),
           },
           // MODEL-DEPENDENT keep-alive timeout:
-          //   - z-ai/glm-5.2: 120s — 202k-context flagship model, cold start can be 60-90s
+          //   - llama-3.3-70b: 45s — cold start 15-25s, 45s is plenty
           //   - nano-9b: 20s — cold start ~5s, 20s is plenty
-          modelId === NVIDIA_CODE_MODEL_HEAVY ? 120000 : 20000
+          modelId === NVIDIA_CODE_MODEL_HEAVY ? 45000 : 20000
         );
         if (res.__clearTimeout) res.__clearTimeout();
         if (res.ok) {
@@ -1966,8 +1950,9 @@ app.post('/api/handler', async (req, res) => {
         //
         // SMART ROUTING: pick the model chain based on the user's actual
         // message content. Real coding tasks (code fence, "debug",
-        // "implement", etc.) → GLM 5.2. Simple Q&A → 9b nano.
-        // Trivial greetings → 9b nano. This keeps GLM 5.2 for
+        // "implement", etc.) → nano first (fast), llama-70b fallback.
+        // Trivial greetings → nano. Routing still matters because it
+        // affects which Groq model we fall back to if NVIDIA fails:
         // when it's actually needed and makes everything else fast.
         const lastUserContent = codeMessages[codeMessages.length - 1]?.content || prompt.trim();
         const chainName = pickCodeChatChain(lastUserContent);
