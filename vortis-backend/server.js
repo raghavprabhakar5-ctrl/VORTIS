@@ -570,10 +570,10 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               top_p:       0.9,
               stream:      true,
               ...(withReasoning
-                ? { extra_body: {
+                ? {
                     chat_template_kwargs: { enable_thinking: true },
                     reasoning_budget: REASONING_BUDGET,
-                  } }
+                  }
                 : {}),
             }),
           },
