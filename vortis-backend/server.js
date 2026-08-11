@@ -517,6 +517,31 @@ function looksLikeTableRequest(text) {
   return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
+// ── Idle-timeout fetch for streaming NVIDIA calls ──
+// The old fetchWithTimeout set ONE abort deadline for the whole request
+// (25s), so a stream that was actively receiving data but just started
+// slow (your log: 28s to first byte) got killed anyway — even though it
+// wasn't stuck. This version only aborts on real silence: a fixed cap
+// while waiting for headers, then a rolling idle window once bytes start
+// arriving, reset on every chunk.
+async function fetchWithIdleTimeout(url, options = {}, { headerTimeoutMs = 15000, idleMs = 20000 } = {}) {
+  const controller = new AbortController();
+  let timer = setTimeout(() => controller.abort(), headerTimeoutMs);
+
+  const res = await fetch(url, { ...options, signal: controller.signal });
+
+  clearTimeout(timer);
+  timer = setTimeout(() => controller.abort(), idleMs);
+
+  const resetIdle = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(), idleMs);
+  };
+  const clear = () => clearTimeout(timer);
+
+  return { res, resetIdle, clear };
+}
+
 // ── Code-chat streaming (NVIDIA only, with fallback tier) ──────
 async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   const key = process.env.NVIDIA_API_KEY;
@@ -531,8 +556,11 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  const REQUEST_TIMEOUT_MS = 25000;
-  const MAX_ATTEMPTS = 1;
+  const HEADER_TIMEOUT_MS = 15000; // time allowed to receive response headers
+  const IDLE_TIMEOUT_MS   = 20000; // time allowed between chunks once streaming starts
+  // Bumped 1 → 2: Ultra is your coding model and shouldn't get demoted to
+  // the smaller Super model on a single slow cold-start.
+  const MAX_ATTEMPTS = 2;
 
   // If you DO want reasoning on for a later fallback attempt, give it a
   // budget big enough to actually finish and still leave room to answer —
@@ -552,7 +580,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
 
     try {
       while (true) {
-        const nvRes = await fetchWithTimeout(
+        const { res: nvRes, resetIdle, clear } = await fetchWithIdleTimeout(
           `${NVIDIA_BASE_URL}/chat/completions`,
           {
             method:  'POST',
@@ -571,12 +599,13 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               ...(withReasoning ? { reasoning_budget: REASONING_BUDGET } : {}),
             }),
           },
-          REQUEST_TIMEOUT_MS
+          { headerTimeoutMs: HEADER_TIMEOUT_MS, idleMs: IDLE_TIMEOUT_MS }
         );
 
         console.log(`Code-chat (${model}, reasoning=${withReasoning}): headers in ${Date.now() - t0}ms`);
 
         if (!nvRes.ok) {
+          clear();
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
           console.error(`Code-chat stream: HTTP ${nvRes.status} (${model}) - ${errBody.slice(0, 300)}`);
@@ -594,7 +623,10 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          if (done) { clear(); break; }
+
+          // Data just arrived — push the abort deadline out again.
+          resetIdle();
 
           if (!gotFirstByte) {
             gotFirstByte = true;
