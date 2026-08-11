@@ -102,22 +102,34 @@ const CODING_VERBS_TYPOS = [
 
 // Checks if any word in the text is a coding verb (exact or typo).
 // Uses fuzzyIncludesAny (Levenshtein distance) as a safety net.
+//
+// CRITICAL FIX: we only apply fuzzy matching to words with length >= 4.
+// Previously, "hi" (2 chars) was matching "fix" with Levenshtein distance 2,
+// causing simple greetings to be routed to the heavy GLM 5.2 model.
+// Short words like "hi", "ok", "no", "hey" cannot be typos of coding verbs
+// like "fix", "make", "code" — those verbs are all 3+ chars and a 2-char
+// word matching within distance 2 is a false positive.
 function containsCodingVerb(text) {
   if (!text) return false;
   const low = text.toLowerCase();
-  // Fast path: exact match
+  // Fast path: exact match (word-boundary protected)
   for (const v of CODING_VERBS_EXACT) {
     if (new RegExp(`\\b${v}\\b`).test(low)) return true;
   }
-  // Fast path: known typos
+  // Fast path: known typos (word-boundary protected)
   for (const v of CODING_VERBS_TYPOS) {
     if (new RegExp(`\\b${v}\\b`).test(low)) return true;
   }
   // Safety net: Levenshtein distance ≤ 2 for any coding verb.
-  // Catches typos we didn't explicitly list.
-  // fuzzyIncludesAny is defined later in the file but is hoisted.
+  // ONLY apply to words with length >= 4 to avoid false positives like
+  // "hi" → "fix", "ok" → "code", "no" → "node".
   try {
-    if (fuzzyIncludesAny(text, CODING_VERBS_EXACT, 2)) return true;
+    const words = low.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
+    for (const w of words) {
+      for (const v of CODING_VERBS_EXACT) {
+        if (Math.abs(w.length - v.length) <= 2 && levenshtein(w, v) <= 2) return true;
+      }
+    }
   } catch (_) {}
   return false;
 }
@@ -884,13 +896,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   const IDLE_TIMEOUT_MS = 15000;
 
   // MODEL-DEPENDENT FIRST-BYTE TIMEOUT:
-  //   - z-ai/glm-5.2: 20s — Z.ai's flagship, larger model. If warm, responds
-  //     in 5-10s. If cold, abort at 20s and fall back to nano immediately.
+  //   - z-ai/glm-5.2: 30s — Z.ai's flagship, 202k-context model. Large model,
+  //     cold-start can take 60-90s on NVIDIA on_demand. If warm, responds in
+  //     5-15s. If cold, abort at 30s and fall back to nano immediately.
   //   - nvidia-nemotron-nano-9b: 8s — if warm, responds in 1-3s. Very fast model.
-  // This is the KEY speed fix: if GLM 5.2 is cold, we find out in 20s (not 45s)
-  // and fall back to nano (~3s), so total response time is ~23s instead of 45s+.
+  // This is the KEY speed fix: if GLM 5.2 is cold, we find out in 30s (not 60s+)
+  // and fall back to nano (~3s), so total response time is ~33s instead of 60s+.
   function firstByteTimeoutFor(model) {
-    if (model === NVIDIA_CODE_MODEL_HEAVY) return 20000;  // z-ai/glm-5.2
+    if (model === NVIDIA_CODE_MODEL_HEAVY) return 30000;  // z-ai/glm-5.2
     return 8000;  // nano-9b and anything else
   }
 
@@ -1623,10 +1636,11 @@ async function warmUp() {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_FAST} ready (${ms}ms)`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_FAST} not ready after ${ms}ms`);
     });
-    // Warm the z-ai/glm-5.2 (heavy coding model) — 20-40s cold start.
-    // 60s timeout: GLM 5.2 is a large flagship model, give it room to warm.
-    // The keep-alive will keep retrying every 30s in the background.
-    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 60000).then(({ ok, ms }) => {
+    // Warm the z-ai/glm-5.2 (heavy coding model) — 60-90s cold start.
+    // 150s timeout: GLM 5.2 is a 202k-context flagship model that takes a
+    // long time to cold-start on NVIDIA's on_demand tier. Give it plenty
+    // of room. The keep-alive will keep retrying every 30s in the background.
+    warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 150000).then(({ ok, ms }) => {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — GLM 5.2 ready for real coding tasks`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_HEAVY} not ready after ${ms}ms — will keep trying via keep-alive`);
     });
@@ -1728,9 +1742,9 @@ function startNvidiaKeepAlive() {
             }),
           },
           // MODEL-DEPENDENT keep-alive timeout:
-          //   - z-ai/glm-5.2: 60s — larger flagship model, cold start can be 20-40s
+          //   - z-ai/glm-5.2: 120s — 202k-context flagship model, cold start can be 60-90s
           //   - nano-9b: 20s — cold start ~5s, 20s is plenty
-          modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000 : 20000
+          modelId === NVIDIA_CODE_MODEL_HEAVY ? 120000 : 20000
         );
         if (res.__clearTimeout) res.__clearTimeout();
         if (res.ok) {
