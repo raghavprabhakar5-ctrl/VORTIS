@@ -531,26 +531,24 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
   }
 
   const MAX_CONTINUATIONS = 4;
-  // Render has no hard request timeout like Vercel's 60s, so we can afford
-  // to actually wait out Nemotron Ultra's reasoning phase instead of
-  // aborting mid-think. This was the root cause of the AbortErrors.
   const REQUEST_TIMEOUT_MS = 120000;
-  const MAX_ATTEMPTS = 2; // retries of the primary (Ultra) model
+  const MAX_ATTEMPTS = 2;
 
-  // Cap how long the model is allowed to reason before it must start
-  // producing content. Without this, Nemotron 3 Ultra's default reasoning
-  // budget can run long enough that no bytes arrive before ANY reasonable
-  // timeout fires — which is what was happening before.
-  const REASONING_BUDGET = 3000;
+  // If you DO want reasoning on for a later fallback attempt, give it a
+  // budget big enough to actually finish and still leave room to answer —
+  // 3000 was getting fully consumed with nothing left to write the answer.
+  const REASONING_BUDGET = 8000;
 
-  async function attemptModel(model, convoMessagesInit, { withReasoning = true } = {}) {
+  async function attemptModel(model, convoMessagesInit, { withReasoning = false } = {}) {
     let written = 0;
     let convoMessages = [...convoMessagesInit];
     let continuations = 0;
     let fullRawBuffer = '';
+    let fullReasoningBuffer = ''; // kept only for diagnostics, never sent to user
     let attemptFailed = false;
     const t0 = Date.now();
     let gotFirstByte = false;
+    let lastFinishReason = null;
 
     try {
       while (true) {
@@ -569,18 +567,14 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
               temperature: 0.5,
               top_p:       0.9,
               stream:      true,
-              ...(withReasoning
-                ? {
-                    chat_template_kwargs: { enable_thinking: true },
-                    reasoning_budget: REASONING_BUDGET,
-                  }
-                : {}),
+              chat_template_kwargs: { enable_thinking: withReasoning },
+              ...(withReasoning ? { reasoning_budget: REASONING_BUDGET } : {}),
             }),
           },
           REQUEST_TIMEOUT_MS
         );
 
-        console.log(`Code-chat (${model}): headers in ${Date.now() - t0}ms`);
+        console.log(`Code-chat (${model}, reasoning=${withReasoning}): headers in ${Date.now() - t0}ms`);
 
         if (!nvRes.ok) {
           let errBody = '';
@@ -623,11 +617,11 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
 
             finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
 
-            // Reasoning tokens arrive on `delta.reasoning_content`, not
-            // `delta.content` — skip them explicitly rather than just
-            // falling through, so it's clear this is intentional.
             const reasoningToken = payload?.choices?.[0]?.delta?.reasoning_content;
-            if (reasoningToken) continue;
+            if (reasoningToken) {
+              fullReasoningBuffer += reasoningToken;
+              continue;
+            }
 
             const token = payload?.choices?.[0]?.delta?.content;
             if (!token) continue;
@@ -676,6 +670,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
           pending = '';
         }
 
+        lastFinishReason = finishReason;
+
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
           console.warn(`Code-chat (${model}): truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS})`);
@@ -692,8 +688,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     } catch (e) {
       console.error(
         `Code-chat stream error (${model}):`,
-        e.name,
-        '|', e.message,
+        e.name, '|', e.message,
         '| cause:', e.cause?.message || e.cause || 'none',
         '| code:', e.cause?.code || e.code || 'none',
         '| elapsed:', Date.now() - t0, 'ms'
@@ -701,12 +696,22 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
       attemptFailed = true;
     }
 
+    // Diagnostics: if we ended up with nothing, log WHY so it's visible next time
+    // instead of a bare "produced nothing".
+    if (written === 0 && !attemptFailed) {
+      console.warn(
+        `Code-chat (${model}): zero content written | finish_reason=${lastFinishReason} ` +
+        `| reasoning_chars=${fullReasoningBuffer.length} | reasoning=${withReasoning}`
+      );
+    }
+
     return { written, attemptFailed, fullRawBuffer };
   }
 
-  // ── Primary model: Nemotron 3 Ultra, with bounded reasoning ──
+  // ── Primary: no reasoning — fast, direct answer, avoids the whole
+  // "burned the reasoning budget and never got to the answer" failure mode.
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const { written, attemptFailed, fullRawBuffer } = await attemptModel(NVIDIA_CHAT_CODE, messages, { withReasoning: true });
+    const { written, attemptFailed, fullRawBuffer } = await attemptModel(NVIDIA_CHAT_CODE, messages, { withReasoning: false });
 
     if (written > 0) {
       res.write('data: [DONE]\n\n');
@@ -724,7 +729,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
         res.write(`data: ${JSON.stringify({ content: salvaged })}\n\n`);
         res.write('data: [DONE]\n\n');
         res.end();
-        console.log(`Code-chat stream: salvaged ${salvaged.length} chars from a think-trapped response (attempt ${attempt})`);
+        console.log(`Code-chat stream: salvaged ${salvaged.length} chars (attempt ${attempt})`);
         return true;
       }
     }
@@ -735,8 +740,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 16000) {
     }
   }
 
-  // ── Fallback tier: both Ultra attempts failed — try a faster,
-  // non-reasoning NVIDIA model rather than giving up entirely.
+  // ── Fallback tier: try the smaller/faster NVIDIA model ──
   console.warn(`Code-chat: ${NVIDIA_CHAT_CODE} failed ${MAX_ATTEMPTS}x — falling back to ${NVIDIA_CHAT_QUALITY}`);
   const fallback = await attemptModel(NVIDIA_CHAT_QUALITY, messages, { withReasoning: false });
 
