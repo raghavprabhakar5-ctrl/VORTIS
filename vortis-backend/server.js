@@ -1923,11 +1923,14 @@ app.post('/api/handler', async (req, res) => {
 
        const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
     '\n\n---\nCODE MODE: Vertex streaming active. NVIDIA is primary; Groq/Cloudflare will be used as automatic fallback if NVIDIA is unavailable. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.' +
+    (looksLikeClarifyAnswer
+    ? '\n\nThe user just answered your clarifying questions (see conversation history). Do NOT emit another <<<ASK>>> block under any circumstances — use their answers and start building the full solution now.'
+    : '') +
     (codeSearchContext
     ? '\n\nLIVE SEARCH RESULTS WERE PROVIDED ABOVE. STRICT RULE: only state a specific fact (a model name, version number, endpoint, pricing, availability) as CONFIRMED if it is literally present in the search snippets above. If a specific name/version/detail is NOT in the snippets, either omit it entirely or explicitly say "not confirmed by search — may be inaccurate." NEVER invent a source (a forum post, a username, a repo) to make an unconfirmed claim sound more credible — that is worse than just saying you\'re unsure. When multiple models are close in name, do not blend/invent hybrid version numbers (e.g. do not write "GLM 5.1/5.2" unless that exact string appears in a snippet).'
     : '\n\nNo live search results were retrieved for this specific message. Never claim you lack real-time or internet access — Vertex has live web search built in via the backend, it simply wasn\'t triggered or didn\'t return results for this particular question. Just answer from your best knowledge, and only flag it as possibly outdated if the topic is genuinely version/date-sensitive.');
         const codeMessages = [{ role: 'system', content: codeSysContent }];
-        codeMessages.push(...sanitizeHistory(history, 12));
+        codeMessages.push(...priorHistory);
         if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
           codeMessages.push({ role: 'user', content: prompt.trim() });
         }
@@ -1944,8 +1947,25 @@ app.post('/api/handler', async (req, res) => {
         // affects which Groq model we fall back to if NVIDIA fails:
         // when it's actually needed and makes everything else fast.
         const lastUserContent = codeMessages[codeMessages.length - 1]?.content || prompt.trim();
-        const chainName = pickCodeChatChain(lastUserContent);
-        console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
+
+        // ClarifyCard answers look like "Q: A  ·  Q: A  ·  Q: A" — they rarely
+        // contain a coding verb on their own, so pickCodeChatChain() misreads them
+        // as trivial/standard and routes to nano, which can't actually build the
+        // project. This is the turn where real codegen needs to happen, so force it.
+        const looksLikeClarifyAnswer = /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserContent);
+
+        // If any earlier turn in this thread was a genuine build request, treat the
+        // whole thread as a coding task so follow-ups (edits, "also add X", etc.)
+        // stay on the heavy NVIDIA chain instead of drifting to nano mid-conversation.
+
+const priorCodingTask = codeMessages
+  .slice(0, -1)
+  .some(m => m.role === 'user' && isActualCodingTask(m.content));
+
+let chainName = pickCodeChatChain(lastUserContent);
+if (looksLikeClarifyAnswer || priorCodingTask) chainName = 'heavy';
+
+console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 8000, clientSignal.signal, chainName);
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           console.warn('Code-chat: NVIDIA failed — falling back to Groq+CF chain');
