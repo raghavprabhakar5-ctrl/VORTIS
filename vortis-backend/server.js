@@ -1786,30 +1786,79 @@ app.post('/api/handler', async (req, res) => {
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
     // ── TITLE — cheap internal housekeeping. Not a real user message:
-    // no daily-quota hit, no NVIDIA global budget spent, no web search.
     if (action === 'title') {
   const titlePrompt = sanitizeString(req.body.prompt || '', 2000);
   if (!titlePrompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
-  // FIX: AbortController so the title call actually cancels on timeout
-  // instead of leaking TPM budget via a hung groq fetch.
+
+  // Try Groq first — fast, cheap, good enough for a 3-5 word title.
   const titleController = new AbortController();
   const titleTimer = setTimeout(() => titleController.abort(), 4000);
   try {
     const result = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',   // ← use the ACTUAL non-reasoning fast model
+      model: 'llama-3.1-8b-instant',
       messages: [{ role: 'user', content: titlePrompt }],
-      max_tokens: 30,                   // ← a little headroom, cheap either way
+      max_tokens: 30,
       temperature: 0.3,
     }, { signal: titleController.signal });
-    const raw = result.choices?.[0]?.message?.content || '';
-    const clean = stripInternalReasoning(raw).trim();   // <- strip <think> just in case
-    return res.status(200).json({ title: clean });
+    const clean = stripInternalReasoning(result.choices?.[0]?.message?.content || '').trim();
+    if (clean) return res.status(200).json({ title: clean });
+    console.warn('TITLE: Groq returned empty — falling back to Cloudflare');
   } catch (e) {
-    console.error('TITLE ERROR:', e.message);
-    return res.status(200).json({ title: '' });
+    console.error('TITLE ERROR (Groq):', e.message, '— falling back to Cloudflare');
   } finally {
     clearTimeout(titleTimer);
   }
+
+  // Cloudflare fallback — reuses the same two models already proven to work
+  // as the CF chat fallback chain elsewhere in this file (CF_CHAT_MODELS),
+  // and the same response-shape parsing (result.response, or output_text,
+  // or choices[0].message.content depending on the model).
+  const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
+  const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
+  if (CF_TOKEN && CF_ACCOUNT) {
+    for (const cfModel of CF_CHAT_MODELS) {
+      try {
+        const cfRes = await fetchWithTimeout(
+          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
+          {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: [{ role: 'user', content: titlePrompt }],
+              stream: false,
+              max_tokens: 30,
+            }),
+          },
+          8000
+        );
+        if (!cfRes.ok) { console.log(`TITLE: CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
+
+        const data = await cfRes.json();
+        let rawText = data?.result?.response;
+        if (typeof rawText !== 'string') {
+          rawText = data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
+        }
+        if (typeof rawText !== 'string') {
+          console.log(`TITLE: CF model ${cfModel} unexpected shape:`, JSON.stringify(data).slice(0, 200));
+          continue;
+        }
+
+        const clean = stripInternalReasoning(rawText).trim();
+        if (clean) {
+          console.log(`TITLE: Cloudflare fallback succeeded (${cfModel})`);
+          return res.status(200).json({ title: clean });
+        }
+      } catch (e) {
+        console.log(`TITLE: CF model error (${cfModel}):`, e.message);
+      }
+    }
+  } else {
+    console.warn('TITLE: Cloudflare fallback skipped — CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID not set');
+  }
+
+  // Both providers failed — return empty; the frontend already falls back
+  // to using the first user message as the title (see generateChatTitle).
+  return res.status(200).json({ title: '' });
 }
 
     const LIMITS = {
