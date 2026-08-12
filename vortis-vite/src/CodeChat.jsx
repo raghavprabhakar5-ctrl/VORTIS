@@ -1837,68 +1837,49 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
       </div>
 
       <div ref={containerRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-        <div style={{
-          flex: showSplit ? `${splitRatio} 1 0` : '1 1 0',
-          minHeight: 0, overflowY: 'auto',
-          borderBottom: showSplit ? '1px solid #1a1a1a' : 'none',
-        }} className="vrtx-scroll">
-          <pre data-vrtx-no-reply="" style={{
-            margin: 0, padding: '16px 18px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
-            lineHeight: 1.75, color: '#dcdcdc', whiteSpace: 'pre', background: '#0a0a0a',
-          }}>{panelCode.code}</pre>
+  {/* When preview is ON, drop the code pane entirely — preview takes the full panel */}
+  {!showSplit && (
+    <div style={{ flex: '1 1 0', minHeight: 0, overflowY: 'auto' }} className="vrtx-scroll">
+      <pre data-vrtx-no-reply="" style={{
+        margin: 0, padding: '16px 18px', fontFamily: 'JetBrains Mono, monospace', fontSize: 13,
+        lineHeight: 1.75, color: '#dcdcdc', whiteSpace: 'pre', background: '#0a0a0a',
+      }}>{panelCode.code}</pre>
+    </div>
+  )}
+
+  {showSplit && (
+    <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
+        fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+        borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
+      }}>
+        <span>PREVIEW</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <button
+            onClick={() => onOpenNewTab(panelCode.code)}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
+          >
+            <ExternalLink size={10} /> Open in browser
+          </button>
+          <button
+            onClick={togglePreview}
+            title="Show code"
+            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
+          >
+            <Code2 size={10} /> Show code
+          </button>
         </div>
-
-        {showSplit && (
-          <>
-            <div
-              ref={dragRef}
-              onPointerDown={onDividerDown}
-              title="Drag to resize"
-              style={{
-                height: 10, flexShrink: 0, cursor: 'row-resize',
-                background: '#0c0c0c', borderTop: '1px solid #1a1a1a', borderBottom: '1px solid #1a1a1a',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background .12s', touchAction: 'none',
-              }}
-              onMouseEnter={e => { if (!draggingRef.current) e.currentTarget.style.background = '#1a1a1a'; }}
-              onMouseLeave={e => { if (!draggingRef.current) e.currentTarget.style.background = '#0c0c0c'; }}
-            >
-              <div style={{ width: 40, height: 2, borderRadius: 0, background: '#3a3a3a', transition: 'background .12s' }} />
-            </div>
-
-            <div style={{ flex: `${1 - splitRatio} 1 0`, minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
-                fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
-                borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
-              }}>
-                <span>PREVIEW</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <button
-                    onClick={() => onOpenNewTab(panelCode.code)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
-                  >
-                    <ExternalLink size={10} /> Open in browser
-                  </button>
-                  <button
-                    onClick={togglePreview}
-                    title="Hide preview"
-                    style={{ display: 'flex', alignItems: 'center', background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', padding: 0 }}
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              </div>
-              <iframe
-                title="Live preview"
-                srcDoc={panelCode.code}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
-                style={{ flex: 1, minHeight: 0, border: 'none', width: '100%', background: '#fff' }}
-              />
-            </div>
-          </>
-        )}
+      </div>
+      <iframe
+        title="Live preview"
+        srcDoc={panelCode.code}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"
+        style={{ flex: 1, minHeight: 0, border: 'none', width: '100%', background: '#fff' }}
+      />
+    </div>
+  )}
 
         {!previewable && (
           <>
