@@ -122,8 +122,6 @@ function containsCodingVerb(text) {
 }
 
 // Detects whether a code-chat message is an actual coding task that
-// warrants the heavy fallback (llama-3.3-70b).
-//
 // CRITICAL: this is checked BEFORE isTrivialCodeMessage in
 // pickCodeChatChain, so "make me a game" (short but clearly coding)
 // routes to heavy, not trivial. Also handles typos — "amke me a game"
@@ -882,14 +880,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   // IDLE_TIMEOUT_MS: inter-chunk gap mid-stream (after first byte arrives)
   const IDLE_TIMEOUT_MS = 15000;
 
-  // MODEL-DEPENDENT FIRST-BYTE TIMEOUT:
-  //   - meta/llama-3.3-70b: 15s — if warm, responds in 3-8s. If cold, abort
-  //     at 15s and the user gets nano's answer (which was already tried first).
-  //   - nvidia-nemotron-nano-9b: 8s — if warm, responds in 1-3s. Very fast.
-  // Since nano is tried FIRST, llama-70b is only reached if nano failed.
-  // A 15s timeout is fine — if llama is cold, nano already gave an answer.
   function firstByteTimeoutFor(model) {
-    if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;  // meta/llama-3.3-70b
+    if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;  
     return 8000;  // nano-9b and anything else
   }
 
@@ -908,7 +900,6 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   // Iterate over the model fallback chain. Each model gets one attempt.
   // Models blocked by the circuit breaker are skipped without a network call.
   // The chain is picked by the caller based on message content:
-  //   heavy (real coding → nano first, llama-70b fallback), standard (→ nano), trivial (→ nano)
   const chain = NVIDIA_CODE_CHAINS[chainName] || NVIDIA_CODE_CHAINS.standard;
   const modelsToTry = chain.filter(m => !isNvidiaModelBlocked(m));
   if (modelsToTry.length === 0) {
@@ -1608,7 +1599,7 @@ async function warmUp() {
   //
   // We warm up:
   //   - nano-9b          (primary for ALL code-chat) — ~5s cold start
-  //   - llama-3.3-70b    (fallback for heavy coding) — 15-25s cold start
+  //   - nemotron-3-ultra-550b-a55b   (fallback for heavy coding) — 15-25s cold start
   // The 120b super is NOT warmed (not used in code-chat anymore).
   //
   // NON-BLOCKING: warmUp() is fire-and-forget — we do NOT await it.
@@ -1622,11 +1613,10 @@ async function warmUp() {
       if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_FAST} ready (${ms}ms)`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_FAST} not ready after ${ms}ms`);
     });
-    // Warm the llama-3.3-70b (heavy coding fallback) — 15-25s cold start.
-    // 45s timeout: should be plenty for a 70b model. Much faster than
-    // GLM 5.2's 60-90s cold start.
+    // Warm the nemotron-3-ultra-550b-a55b (heavy coding fallback) — 15-25s cold start.
+    // 45s timeout: should be plenty for a 550b model. Much faster than
     warmUpNvidiaModel(NVIDIA_CODE_MODEL_HEAVY, 45000).then(({ ok, ms }) => {
-      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — llama-70b ready for heavy coding fallback`);
+      if (ok) console.log(`NVIDIA warmup OK: ${NVIDIA_CODE_MODEL_HEAVY} ready (${ms}ms) — nemotron-3-ultra-550b-a55b ready for heavy coding fallback`);
       else    console.log(`NVIDIA warmup skipped: ${NVIDIA_CODE_MODEL_HEAVY} not ready after ${ms}ms — will keep trying via keep-alive`);
     });
   } else {
@@ -1681,12 +1671,11 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
 //
 // Cost: ~4 tiny requests per model per 5-min window. On NVIDIA's
 // on_demand tier this is essentially free (counts against RPM, not
-// a paid quota). The llama-70b ping takes ~3s when warm vs 15-25s
 // cold — massive net win.
 const NVIDIA_KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30s
 const NVIDIA_KEEPALIVE_MODELS = [
   NVIDIA_CODE_MODEL_FAST,      // nvidia-nemotron-nano-9b-v2 — primary for ALL code-chat (keep warm!)
-  NVIDIA_CODE_MODEL_HEAVY,     // meta/llama-3.3-70b-instruct — heavy coding fallback (keep warm!)
+  NVIDIA_CODE_MODEL_HEAVY,     // nemotron-3-ultra-550b-a55b — heavy coding fallback (keep warm!)
   // 120b super is NOT pinged — it's not used in code-chat anymore.
   // It's still available as a regular-chat fallback (via NVIDIA_CHAT_QUALITY)
   // but we don't keep it warm since it was slow on NVIDIA's on_demand tier.
@@ -1951,7 +1940,6 @@ app.post('/api/handler', async (req, res) => {
         //
         // SMART ROUTING: pick the model chain based on the user's actual
         // message content. Real coding tasks (code fence, "debug",
-        // "implement", etc.) → nano first (fast), llama-70b fallback.
         // Trivial greetings → nano. Routing still matters because it
         // affects which Groq model we fall back to if NVIDIA fails:
         // when it's actually needed and makes everything else fast.
