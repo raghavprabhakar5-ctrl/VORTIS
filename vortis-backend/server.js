@@ -44,11 +44,7 @@ const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;
 const NVIDIA_CHAT_MODEL_QUALITY  = NVIDIA_CHAT_QUALITY;
 
 const NVIDIA_CODE_CHAINS = {
-  // Ultra-550b first for best quality; 120b-super second; nano-9b as a
-  // fast rescue if both bigger models are cold (per keep-alive logs,
-  // this happens often). Keeps heavy tasks from being fully starved on
-  // NVIDIA before falling all the way to Groq/CF.
-  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CHAT_MODEL_QUALITY, NVIDIA_CODE_MODEL_FAST],
+  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CHAT_MODEL_QUALITY],
   standard: [NVIDIA_CODE_MODEL_FAST, NVIDIA_CHAT_MODEL_QUALITY],
   trivial:  [NVIDIA_CODE_MODEL_FAST, NVIDIA_CHAT_MODEL_QUALITY],
 };
@@ -164,24 +160,6 @@ function isTrivialCodeMessage(text) {
   // Common greetings / acknowledgments
   if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|cool|nice|great|awesome)\b/.test(low)) return true;
   if (/^(what (is|s) your name|who are you|how are you|good morning|good evening)\b/.test(low)) return true;
-  return false;
-}
-
-// Positive-signal check for staying on the heavy chain mid-thread.
-// Used only when a PRIOR message in this conversation was a real coding
-// task — decides whether the CURRENT follow-up is still about that code,
-// or has drifted into unrelated chit-chat/meta-talk ("why you reply slow",
-// "thanks", "fair point?") which should NOT pay the heavy 550b model's
-// cold-start cost just because it rode in on a coding thread.
-function looksLikeCodingContinuation(text) {
-  if (!text) return false;
-  const low = text.toLowerCase();
-  if (/```/.test(text)) return true;
-  if (containsCodingVerb(text)) return true;
-  // "also add X", "now change Y", "next fix Z" etc.
-  if (/\b(also|now|next|then|and)\b.{0,20}\b(add|change|update|remove|fix|make|create|edit)\b/i.test(low)) return true;
-  // References to actual code artifacts
-  if (/\b(file|function|component|bug|error|feature|button|screen|page|api|endpoint|database|css|style|layout|variable|class|import)\b/i.test(low)) return true;
   return false;
 }
 
@@ -625,7 +603,8 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
 // browser tab is closed mid-stream, we abort the upstream Groq/
 // NVIDIA/CF request instead of letting it run to completion and
 // wasting TPM budget / NVIDIA global budget on a response no one
-async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, forceHard = false, skipNvidia = false }) {
+// will ever read.
+async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
   const systemPrompt = messages.find(m => m.role === 'system');
   const recentConversations = messages.filter(m => m.role !== 'system').slice(-12);
   const optimizedMessages = systemPrompt ? [systemPrompt, ...recentConversations] : [...recentConversations];
@@ -633,15 +612,20 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
 
   const hasCodeFence = /```/.test(lastMsg);
   const looksLikeCodeRequest = isObviouslyHard(lastMsg);
-  const isHard = forceHard || hasCodeFence || looksLikeCodeRequest;
+  const isHard = hasCodeFence || looksLikeCodeRequest;
 
+  // NEW: buffer mode for table-like requests — repair before sending, don't stream raw
   const bufferMode = looksLikeTableRequest(lastMsg);
 
-  const model = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  const trivialTier = !forceHard && isObviouslyTrivial(lastMsg);
+  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  // FIX: previous flat 2048 for trivial messages wasted TPM budget —
+  // a "hi" + system prompt was claiming 2k tokens against the 30k TPM
+  // cap, which added up fast under load. Trivial messages now use 512.
+  const trivialTier = isObviouslyTrivial(lastMsg);
   const maxTokens = isHard ? 8192 : (trivialTier ? 512 : 2048);
 
-  console.log(`Routing: hard=${isHard} forceHard=${forceHard} bufferMode=${bufferMode} trivial=${trivialTier} → model: ${model} → maxTokens: ${maxTokens}`);
+  console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} trivial=${trivialTier} → model: ${model} → maxTokens: ${maxTokens}`);
+
   const MAX_CONTINUATIONS = 3;
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
@@ -764,7 +748,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
     }
   }
 
-  if (!skipNvidia && checkGlobalLimit('nvidia_global')) {
+  if (checkGlobalLimit('nvidia_global')) {
     const nvidiaModelsToTry = isHard
       ? [NVIDIA_CHAT_CODE, NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
       : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
@@ -781,8 +765,6 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
       }
       console.warn(`NVIDIA model ${nvModel} returned empty — trying next`);
     }
-  } else if (skipNvidia) {
-    console.log('streamAI: skipping NVIDIA fallback (already tried upstream by code-chat)');
   } else {
     console.warn('NVIDIA global rate limit reached — skipping straight to Cloudflare');
   }
@@ -1197,32 +1179,29 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 }
 
 // ── Code-chat Groq fallback ─────────────────────────────────────
-// Groq's TPM caps (7000/4000) are far tighter than NVIDIA's context
-// limits. A full code-chat payload (12k-char system prompt + up to 12
-// full history turns at 8000 chars each) will blow the Groq cap on
-// EVERY single fallback attempt — this isn't a fluke, it's structural.
-// Build a trimmed payload just for Groq/CF so the fallback actually gets
-// a chance to run instead of being skipped every time.
-function buildFallbackMessages(codeMessages, { maxHistoryTurns = 6, maxSystemChars = 4000, maxTurnChars = 1500 } = {}) {
-  if (!codeMessages.length) return codeMessages;
-  const hasSystem = codeMessages[0].role === 'system';
-  const sys  = hasSystem ? codeMessages[0] : null;
-  const rest = hasSystem ? codeMessages.slice(1) : codeMessages;
-
-  const trimmedSys  = sys ? { ...sys, content: sys.content.slice(0, maxSystemChars) } : null;
-  const trimmedRest = rest.slice(-maxHistoryTurns).map(m => ({
-    ...m,
-    content: (m.content || '').slice(0, maxTurnChars),
-  }));
-
-  return trimmedSys ? [trimmedSys, ...trimmedRest] : trimmedRest;
-}
-
-async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, forceHard = false }) {
-  // skipNvidia:true — the caller (code-chat) already spent 25-45s failing
-  // on NVIDIA streaming for this exact request moments ago. Re-trying
-  // NVIDIA non-streaming here is pure wasted latency.
-  return streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, forceHard, skipNvidia: true });
+// Used when NVIDIA code-chat fails entirely. Streams via Groq using
+// gpt-oss-20b (fast, decent for code) and falls back through the same
+// NVIDIA / CF chain that regular chat uses. Mirrors streamAI() but
+// keeps the code-chat system prompt + search context intact.
+async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
+  // Reuse the regular streaming fallback chain by delegating straight
+  // to streamAI — it already handles Groq → NVIDIA → CF with proper
+  // TPM / cooldown / abort handling.
+  //
+  // DO NOT force `isHard=true` here. Previously this appended a fake
+  // code fence to the user message to make streamAI route to
+  // gpt-oss-120b (quality tier, 8192 max_tokens). That was wrong for
+  // two reasons:
+  //   1. A trivial "hi" in code mode would get 8192 max_tokens, blowing
+  //      the gpt-oss-120b TPM cap (4000) and cascading to gpt-oss-20b,
+  //      which then ALSO failed with 413 because the request was
+  //      11276 tokens against an 8000-token limit.
+  //   2. Code-chat system prompt is already rich enough — streamAI's
+  //      natural isObviouslyHard() check on the user's actual content
+  //      will pick the right tier. Forcing hard=true was overriding
+  //      that and burning budget on simple messages.
+  // Let streamAI route naturally based on the real user content.
+  return streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal });
 }
 
 // ── TAVILY (primary search provider) ────────────────────────────
@@ -1811,76 +1790,26 @@ app.post('/api/handler', async (req, res) => {
     if (action === 'title') {
   const titlePrompt = sanitizeString(req.body.prompt || '', 2000);
   if (!titlePrompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
-
-  // Try Groq first — fast, cheap, good enough for a 3-5 word title.
+  // FIX: AbortController so the title call actually cancels on timeout
+  // instead of leaking TPM budget via a hung groq fetch.
   const titleController = new AbortController();
   const titleTimer = setTimeout(() => titleController.abort(), 4000);
   try {
     const result = await groq.chat.completions.create({
-      model: 'llama-3.1-8b-instant',
+      model: 'llama-3.1-8b-instant',   // ← use the ACTUAL non-reasoning fast model
       messages: [{ role: 'user', content: titlePrompt }],
-      max_tokens: 30,
+      max_tokens: 30,                   // ← a little headroom, cheap either way
       temperature: 0.3,
     }, { signal: titleController.signal });
-    const clean = stripInternalReasoning(result.choices?.[0]?.message?.content || '').trim();
-    if (clean) return res.status(200).json({ title: clean });
-    console.warn('TITLE: Groq returned empty — falling back to Cloudflare');
+    const raw = result.choices?.[0]?.message?.content || '';
+    const clean = stripInternalReasoning(raw).trim();   // <- strip <think> just in case
+    return res.status(200).json({ title: clean });
   } catch (e) {
-    console.error('TITLE ERROR (Groq):', e.message, '— falling back to Cloudflare');
+    console.error('TITLE ERROR:', e.message);
+    return res.status(200).json({ title: '' });
   } finally {
     clearTimeout(titleTimer);
   }
-
-  // Cloudflare fallback — reuses the same two models already proven to work
-  // as the CF chat fallback chain elsewhere in this file (CF_CHAT_MODELS),
-  // and the same response-shape parsing (result.response, or output_text,
-  // or choices[0].message.content depending on the model).
-  const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
-  const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
-  if (CF_TOKEN && CF_ACCOUNT) {
-    for (const cfModel of CF_CHAT_MODELS) {
-      try {
-        const cfRes = await fetchWithTimeout(
-          `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${cfModel}`,
-          {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${CF_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: [{ role: 'user', content: titlePrompt }],
-              stream: false,
-              max_tokens: 30,
-            }),
-          },
-          8000
-        );
-        if (!cfRes.ok) { console.log(`TITLE: CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
-
-        const data = await cfRes.json();
-        let rawText = data?.result?.response;
-        if (typeof rawText !== 'string') {
-          rawText = data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
-        }
-        if (typeof rawText !== 'string') {
-          console.log(`TITLE: CF model ${cfModel} unexpected shape:`, JSON.stringify(data).slice(0, 200));
-          continue;
-        }
-
-        const clean = stripInternalReasoning(rawText).trim();
-        if (clean) {
-          console.log(`TITLE: Cloudflare fallback succeeded (${cfModel})`);
-          return res.status(200).json({ title: clean });
-        }
-      } catch (e) {
-        console.log(`TITLE: CF model error (${cfModel}):`, e.message);
-      }
-    }
-  } else {
-    console.warn('TITLE: Cloudflare fallback skipped — CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID not set');
-  }
-
-  // Both providers failed — return empty; the frontend already falls back
-  // to using the first user message as the title (see generateChatTitle).
-  return res.status(200).json({ title: '' });
 }
 
     const LIMITS = {
@@ -2010,18 +1939,16 @@ app.post('/api/handler', async (req, res) => {
         // are chit-chat riding on a coding thread, not codegen requests — the
         // heavy 550b model is wasted on them and adds unnecessary latency.
         // Only escalate when the current turn itself isn't clearly trivial.
-        const priorCodingTask = codeMessages
+       const priorCodingTask = codeMessages
           .slice(0, -1)
           .some(m => m.role === 'user' && isActualCodingTask(m.content));
 
         let chainName = pickCodeChatChain(lastUserContent);
         if (looksLikeClarifyAnswer) {
           chainName = 'heavy';
-        } else if (priorCodingTask && looksLikeCodingContinuation(lastUserContent)) {
+        } else if (priorCodingTask && !isTrivialCodeMessage(lastUserContent)) {
           chainName = 'heavy';
         }
-
-        console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
 
         console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 8000, clientSignal.signal, chainName);
@@ -2029,14 +1956,8 @@ app.post('/api/handler', async (req, res) => {
           console.warn('Code-chat: NVIDIA failed — falling back to Groq+CF chain');
           const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
           const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
-
-         if (CF_TOKEN && CF_ACCOUNT) {
-            const fallbackMessages = buildFallbackMessages(codeMessages);
-            ok = await streamCodeChatFallback(groq, fallbackMessages, res, {
-              CF_TOKEN, CF_ACCOUNT,
-              clientSignal: clientSignal.signal,
-              forceHard: chainName === 'heavy',
-            });
+          if (CF_TOKEN && CF_ACCOUNT) {
+            ok = await streamCodeChatFallback(groq, codeMessages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal: clientSignal.signal });
           }
         }
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
