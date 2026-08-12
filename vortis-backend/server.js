@@ -1937,8 +1937,28 @@ app.post('/api/handler', async (req, res) => {
           .slice(0, -1)
           .some(m => m.role === 'user' && isActualCodingTask(m.content));
 
+        // If any earlier turn in this thread was a genuine build request, treat
+        // the whole thread as a coding task so follow-ups (edits, "also add X",
+        // etc.) stay on the heavy NVIDIA chain instead of drifting to nano
+        // mid-conversation.
+        //
+        // GUARD: don't let this override an obviously trivial/conversational
+        // message ("fair point?", "you took too long", "thanks", "ok"). Those
+        // are chit-chat riding on a coding thread, not codegen requests — the
+        // heavy 550b model is wasted on them and adds unnecessary latency.
+        // Only escalate when the current turn itself isn't clearly trivial.
+        const priorCodingTask = codeMessages
+          .slice(0, -1)
+          .some(m => m.role === 'user' && isActualCodingTask(m.content));
+
         let chainName = pickCodeChatChain(lastUserContent);
-        if (looksLikeClarifyAnswer || priorCodingTask) chainName = 'heavy';
+        if (looksLikeClarifyAnswer) {
+          chainName = 'heavy';
+        } else if (priorCodingTask && !isTrivialCodeMessage(lastUserContent)) {
+          chainName = 'heavy';
+        }
+
+        console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
 
         console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 8000, clientSignal.signal, chainName);
