@@ -876,7 +876,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   const MAX_CONTINUATIONS = 4;
   // HEADERS_TIMEOUT_MS bounds the time from request start until NVIDIA
   // returns response headers (the cold-start phase for the model).
-  const HEADERS_TIMEOUT_MS = 120000; // 2 min — cold start on NVIDIA on_demand can be slow
+  const HEADERS_TIMEOUT_MS = 25000; 
   // IDLE_TIMEOUT_MS: inter-chunk gap mid-stream (after first byte arrives)
   const IDLE_TIMEOUT_MS = 15000;
 
@@ -1421,21 +1421,18 @@ function cleanCodeResults(results, query) {
 // heuristic if the classifier call fails or times out.
 async function aiNeedsSearch(groq, text, { isCode = false, clientSignal } = {}) {
   const heuristicFallback = isCode ? needsCodeWebSearchHeuristic(text) : needsWebSearchHeuristic(text);
-
-  // Explicit user intent ("search", "google", "lookup", "latest", etc.) always
-  // wins — never let the classifier override a direct request from the user.
   if (heuristicFallback) return true;
 
-  // FIX: same AbortController pattern as classifyTier — Promise.race
-  // alone doesn't cancel the upstream fetch, so the request kept eating
-  // TPM after the 1.2s race timer fired.
   const controller = new AbortController();
-  // If the client closed the connection, abort the classifier too.
   if (clientSignal) {
     if (clientSignal.aborted) controller.abort();
     else clientSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
-  const timer = setTimeout(() => controller.abort(), 1200);
+  // Code mode gets a tighter budget — 700ms instead of 1200ms. A missed
+  // search classification just means "answer from general knowledge",
+  // which is the safe default anyway, so there's no correctness cost
+  // to cutting this short.
+  const timer = setTimeout(() => controller.abort(), isCode ? 700 : 1200);
   try {
     const result = await groq.chat.completions.create({
       model: GROQ_CLASSIFIER_MODEL,
@@ -1457,7 +1454,7 @@ Respond ONLY with YES or NO. Nothing else.`,
     return raw.includes('yes');
   } catch (e) {
     console.warn('Search-decision classifier failed:', e.message);
-    return false; // heuristic already checked above and was false
+    return false;
   } finally {
     clearTimeout(timer);
   }
@@ -1672,7 +1669,7 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 120000) {
 // Cost: ~4 tiny requests per model per 5-min window. On NVIDIA's
 // on_demand tier this is essentially free (counts against RPM, not
 // cold — massive net win.
-const NVIDIA_KEEPALIVE_INTERVAL_MS = 30 * 1000; // 30s
+const NVIDIA_KEEPALIVE_INTERVAL_MS = 20 * 1000; 
 const NVIDIA_KEEPALIVE_MODELS = [
   NVIDIA_CODE_MODEL_FAST,      // nvidia-nemotron-nano-9b-v2 — primary for ALL code-chat (keep warm!)
   NVIDIA_CODE_MODEL_HEAVY,     // nemotron-3-ultra-550b-a55b — heavy coding fallback (keep warm!)
@@ -1692,14 +1689,10 @@ function startNvidiaKeepAlive() {
 
   // Run the ping loop in the background. Each model is pinged
   // sequentially (not in parallel) to avoid spiking NVIDIA's RPM limit.
-  const pingAll = async () => {
-    for (const modelId of NVIDIA_KEEPALIVE_MODELS) {
-      // Skip if circuit breaker has blocked this model — no point
-      // pinging a model we know is broken.
-      if (isNvidiaModelBlocked(modelId)) continue;
-      // Skip if this model returned HTTP 410 (end-of-life) previously —
-      // it's permanently gone, pinging it wastes RPM budget.
-      if (nvidiaEolModels.has(modelId)) continue;
+ const pingAll = async () => {
+    await Promise.all(NVIDIA_KEEPALIVE_MODELS.map(async (modelId) => {
+      if (isNvidiaModelBlocked(modelId)) return;
+      if (nvidiaEolModels.has(modelId)) return;
       try {
         const t0 = Date.now();
         const res = await fetchWithTimeout(
@@ -1715,44 +1708,30 @@ function startNvidiaKeepAlive() {
               stream:      false,
             }),
           },
-          // MODEL-DEPENDENT keep-alive timeout:
-          //   - llama-3.3-70b: 45s — cold start 15-25s, 45s is plenty
-          //   - nano-9b: 20s — cold start ~5s, 20s is plenty
           modelId === NVIDIA_CODE_MODEL_HEAVY ? 45000 : 20000
         );
         if (res.__clearTimeout) res.__clearTimeout();
         if (res.ok) {
           try { await res.text(); } catch (_) {}
           recordNvidiaSuccess(modelId);
-          // Quiet log — only print if it took suspiciously long (warming)
           const ms = Date.now() - t0;
           if (ms > 5000) console.log(`NVIDIA keep-alive: ${modelId} slow (${ms}ms — was warming)`);
         } else if (res.status === 429) {
-          // Rate limited — back off this cycle, no need to log loudly
+          // back off silently this cycle
         } else if (res.status === 410) {
-          // Model reached end-of-life — STOP pinging it forever. This
-          // prevents wasting RPM budget on a permanently-dead model.
-          // We add it to a "do not ping" set so future cycles skip it.
           console.log(`NVIDIA keep-alive: ${modelId} HTTP 410 (END-OF-LIFE — stopping keep-alive for this model)`);
           nvidiaEolModels.add(modelId);
         } else if (res.status === 502 || res.status === 503 || res.status === 504) {
-          // Model unavailable — log it but DON'T trip circuit breaker from
-          // keep-alive. The keep-alive is a background ping; we don't want
-          // it to block the model for real user requests. If the model is
-          // truly down, real user requests will trip the breaker instead.
           console.log(`NVIDIA keep-alive: ${modelId} HTTP ${res.status} (unavailable, will retry next cycle)`);
         } else {
           console.log(`NVIDIA keep-alive: ${modelId} HTTP ${res.status}`);
         }
       } catch (e) {
-        // Don't let one model's failure stop the others
-        if (e.message?.includes('aborted')) {
-          // Timeout — model might be cold, that's fine, the next ping will warm it
-        } else {
+        if (!e.message?.includes('aborted')) {
           console.log(`NVIDIA keep-alive: ${modelId} error:`, e.message);
         }
       }
-    }
+    }));
   };
 
   // Ping once immediately (in background, don't block startup), then on interval
@@ -1895,9 +1874,15 @@ app.post('/api/handler', async (req, res) => {
 
       try {
         const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
+
+        // Compute this FIRST, cheaply (sync regex, no network) — lets us
+        // skip the search-need classifier call entirely for clarify answers,
+        // saving a full Groq round-trip on the most common turn in a build flow.
+        const looksLikeClarifyAnswerEarly = /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserForSearch);
+
         let codeSearchContext = '';
 
-        if (await aiNeedsSearch(groq, lastUserForSearch, { isCode: true, clientSignal: clientSignal.signal })) {
+        if (!looksLikeClarifyAnswerEarly && await aiNeedsSearch(groq, lastUserForSearch, { isCode: true, clientSignal: clientSignal.signal })) {
           try {
             const sq = buildSearchQuery(lastUserForSearch.slice(0, 300));
             let results = await fetchWebResults(sq);
@@ -1921,20 +1906,14 @@ app.post('/api/handler', async (req, res) => {
           }
         }
 
-        // ── Compute priorHistory / lastUserContent / looksLikeClarifyAnswer
-        // BEFORE codeSysContent, since codeSysContent now references
-        // looksLikeClarifyAnswer and codeMessages needs priorHistory.
         const priorHistory = sanitizeHistory(history, 12);
         const lastUserContent = (priorHistory[priorHistory.length - 1]?.role === 'user')
           ? priorHistory[priorHistory.length - 1].content
           : prompt.trim();
 
-        // ClarifyCard answers look like "Q: A  ·  Q: A  ·  Q: A" — they rarely
-        // contain a coding verb on their own, so pickCodeChatChain() misreads
-        // them as trivial/standard and routes to nano, which can't actually
-        // build the project. This is the turn where real codegen needs to
-        // happen, so force it.
-        const looksLikeClarifyAnswer = /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserContent);
+        // Reuse the early check — same regex, same input in practice
+        // (lastUserForSearch and lastUserContent are the same turn).
+        const looksLikeClarifyAnswer = looksLikeClarifyAnswerEarly || /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserContent);
 
         const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
     '\n\n---\nCODE MODE: Vertex streaming active. NVIDIA is primary; Groq/Cloudflare will be used as automatic fallback if NVIDIA is unavailable. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.' +
