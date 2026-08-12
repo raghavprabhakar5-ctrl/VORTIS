@@ -750,9 +750,10 @@ const extractLeadingTodos = (text, deliveredFiles = []) => {
   if (i < lines.length && lines[i].trim() === '') i++;
   const body = lines.slice(i).join('\n');
 
-  // Ground truth: paths that have actually landed in this message so far.
-  // Works identically mid-stream and after streaming ends — no force-complete.
+  // Ground truth: which paths have landed, and which of those are STILL
+  // being written (streaming=true means the fence hasn't closed yet).
   const deliveredPaths = new Set(deliveredFiles.map(f => f.path));
+  const streamingPaths = new Set(deliveredFiles.filter(f => f.streaming).map(f => f.path));
 
   const todos = todoLines.map(l => {
     const m = l.match(/^\s*[-*]\s+\[([xX\s-])\]\s+(.+)$/);
@@ -760,10 +761,14 @@ const extractLeadingTodos = (text, deliveredFiles = []) => {
     const modelSaysDone = !!(m && (m[1] === 'x' || m[1] === 'X'));
     const pathMatch = raw.match(TODO_PATH);
     const boundPath = pathMatch ? pathMatch[1].trim() : null;
-    const pathDone = boundPath ? deliveredPaths.has(boundPath) : false;
+    const isStreamingNow = boundPath ? streamingPaths.has(boundPath) : false;
+    // Only "done" once the file has landed AND is no longer being streamed.
+    const pathDone = boundPath ? (deliveredPaths.has(boundPath) && !isStreamingNow) : false;
     return {
       done: modelSaysDone || pathDone,
-      text: raw.replace(TODO_PATH, '').trim(), // strip trailing `path` from the visible label
+      // Actively being written right now — show a spinner, not a tick.
+      loading: !modelSaysDone && !pathDone && isStreamingNow,
+      text: raw.replace(TODO_PATH, '').trim(),
     };
   });
   return { todos, text: body };
@@ -825,9 +830,11 @@ const TodosPanel = ({ todos }) => {
               textDecoration: t.done ? 'line-through' : 'none',
             }}>
               {t.done ? (
-                <CheckCircle2 size={14} style={{ marginTop: 2, flexShrink: 0, color: '#8a8a8a' }}/>
+             <CheckCircle2 size={14} style={{ marginTop: 2, flexShrink: 0, color: '#8a8a8a' }}/>
+              ) : t.loading ? (
+             <Loader size={14} style={{ marginTop: 2, flexShrink: 0, color: '#9ca3af', animation: 'vertexSpin 1s linear infinite' }}/>
               ) : (
-                <Circle size={14} style={{ marginTop: 2, flexShrink: 0, color: '#5a5a5a' }}/>
+             <Circle size={14} style={{ marginTop: 2, flexShrink: 0, color: '#5a5a5a' }}/>
               )}
               <span style={{ flex: 1 }}>{t.text}</span>
             </div>
@@ -1850,28 +1857,12 @@ const CodePanel = ({ panelCode, onClose, output, running, hasError, bootMsg, onR
   {showSplit && (
     <div style={{ flex: '1 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
-        fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
-        borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
-      }}>
-        <span>PREVIEW</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <button
-            onClick={() => onOpenNewTab(panelCode.code)}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
-          >
-            <ExternalLink size={10} /> Open in browser
-          </button>
-          <button
-            onClick={togglePreview}
-            title="Show code"
-            style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'transparent', border: 'none', color: '#8a8a8a', cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5 }}
-          >
-            <Code2 size={10} /> Show code
-          </button>
-        </div>
-      </div>
+  padding: '8px 16px', fontSize: 10.5, color: '#5a5a5a',
+  fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, letterSpacing: '.06em',
+  borderBottom: '1px solid #1a1a1a', flexShrink: 0, background: '#080808',
+}}>
+  PREVIEW
+    </div>
       <iframe
         title="Live preview"
         srcDoc={panelCode.code}
