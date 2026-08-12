@@ -1921,7 +1921,22 @@ app.post('/api/handler', async (req, res) => {
           }
         }
 
-       const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
+        // ── Compute priorHistory / lastUserContent / looksLikeClarifyAnswer
+        // BEFORE codeSysContent, since codeSysContent now references
+        // looksLikeClarifyAnswer and codeMessages needs priorHistory.
+        const priorHistory = sanitizeHistory(history, 12);
+        const lastUserContent = (priorHistory[priorHistory.length - 1]?.role === 'user')
+          ? priorHistory[priorHistory.length - 1].content
+          : prompt.trim();
+
+        // ClarifyCard answers look like "Q: A  ·  Q: A  ·  Q: A" — they rarely
+        // contain a coding verb on their own, so pickCodeChatChain() misreads
+        // them as trivial/standard and routes to nano, which can't actually
+        // build the project. This is the turn where real codegen needs to
+        // happen, so force it.
+        const looksLikeClarifyAnswer = /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserContent);
+
+        const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
     '\n\n---\nCODE MODE: Vertex streaming active. NVIDIA is primary; Groq/Cloudflare will be used as automatic fallback if NVIDIA is unavailable. Respond directly with the final answer only — do not include any internal reasoning, thinking, or step-by-step deliberation before your response.' +
     (looksLikeClarifyAnswer
     ? '\n\nThe user just answered your clarifying questions (see conversation history). Do NOT emit another <<<ASK>>> block under any circumstances — use their answers and start building the full solution now.'
@@ -1935,37 +1950,18 @@ app.post('/api/handler', async (req, res) => {
           codeMessages.push({ role: 'user', content: prompt.trim() });
         }
 
-        // FIX: NVIDIA is now primary, but if it fails entirely we fall
-        // back to Groq (gpt-oss-20b/120b) then Cloudflare, instead of
-        // leaving the user with "Vertex is temporarily unavailable".
-        // This was the root cause of "Code-chat stream: all NVIDIA
-        // attempts failed" being the last word in the user's chat.
-        //
-        // SMART ROUTING: pick the model chain based on the user's actual
-        // message content. Real coding tasks (code fence, "debug",
-        // Trivial greetings → nano. Routing still matters because it
-        // affects which Groq model we fall back to if NVIDIA fails:
-        // when it's actually needed and makes everything else fast.
-        const lastUserContent = codeMessages[codeMessages.length - 1]?.content || prompt.trim();
+        // If any earlier turn in this thread was a genuine build request, treat
+        // the whole thread as a coding task so follow-ups (edits, "also add X",
+        // etc.) stay on the heavy NVIDIA chain instead of drifting to nano
+        // mid-conversation.
+        const priorCodingTask = codeMessages
+          .slice(0, -1)
+          .some(m => m.role === 'user' && isActualCodingTask(m.content));
 
-        // ClarifyCard answers look like "Q: A  ·  Q: A  ·  Q: A" — they rarely
-        // contain a coding verb on their own, so pickCodeChatChain() misreads them
-        // as trivial/standard and routes to nano, which can't actually build the
-        // project. This is the turn where real codegen needs to happen, so force it.
-        const looksLikeClarifyAnswer = /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserContent);
+        let chainName = pickCodeChatChain(lastUserContent);
+        if (looksLikeClarifyAnswer || priorCodingTask) chainName = 'heavy';
 
-        // If any earlier turn in this thread was a genuine build request, treat the
-        // whole thread as a coding task so follow-ups (edits, "also add X", etc.)
-        // stay on the heavy NVIDIA chain instead of drifting to nano mid-conversation.
-
-const priorCodingTask = codeMessages
-  .slice(0, -1)
-  .some(m => m.role === 'user' && isActualCodingTask(m.content));
-
-let chainName = pickCodeChatChain(lastUserContent);
-if (looksLikeClarifyAnswer || priorCodingTask) chainName = 'heavy';
-
-console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
+        console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 8000, clientSignal.signal, chainName);
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           console.warn('Code-chat: NVIDIA failed — falling back to Groq+CF chain');
