@@ -603,8 +603,7 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal) {
 // browser tab is closed mid-stream, we abort the upstream Groq/
 // NVIDIA/CF request instead of letting it run to completion and
 // wasting TPM budget / NVIDIA global budget on a response no one
-// will ever read.
-async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
+async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, forceHard = false }) {
   const systemPrompt = messages.find(m => m.role === 'system');
   const recentConversations = messages.filter(m => m.role !== 'system').slice(-12);
   const optimizedMessages = systemPrompt ? [systemPrompt, ...recentConversations] : [...recentConversations];
@@ -612,20 +611,15 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
 
   const hasCodeFence = /```/.test(lastMsg);
   const looksLikeCodeRequest = isObviouslyHard(lastMsg);
-  const isHard = hasCodeFence || looksLikeCodeRequest;
+  const isHard = forceHard || hasCodeFence || looksLikeCodeRequest;
 
-  // NEW: buffer mode for table-like requests — repair before sending, don't stream raw
   const bufferMode = looksLikeTableRequest(lastMsg);
 
-  const model     = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
-  // FIX: previous flat 2048 for trivial messages wasted TPM budget —
-  // a "hi" + system prompt was claiming 2k tokens against the 30k TPM
-  // cap, which added up fast under load. Trivial messages now use 512.
-  const trivialTier = isObviouslyTrivial(lastMsg);
+  const model = isHard ? GROQ_CHAT_QUALITY : GROQ_CHAT_PRIMARY;
+  const trivialTier = !forceHard && isObviouslyTrivial(lastMsg);
   const maxTokens = isHard ? 8192 : (trivialTier ? 512 : 2048);
 
-  console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} trivial=${trivialTier} → model: ${model} → maxTokens: ${maxTokens}`);
-
+  console.log(`Routing: hard=${isHard} forceHard=${forceHard} bufferMode=${bufferMode} trivial=${trivialTier} → model: ${model} → maxTokens: ${maxTokens}`);
   const MAX_CONTINUATIONS = 3;
 
   for (const modelToTry of [model, isHard ? GROQ_CHAT_PRIMARY : GROQ_CHAT_QUALITY]) {
@@ -1183,25 +1177,8 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 // gpt-oss-20b (fast, decent for code) and falls back through the same
 // NVIDIA / CF chain that regular chat uses. Mirrors streamAI() but
 // keeps the code-chat system prompt + search context intact.
-async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal }) {
-  // Reuse the regular streaming fallback chain by delegating straight
-  // to streamAI — it already handles Groq → NVIDIA → CF with proper
-  // TPM / cooldown / abort handling.
-  //
-  // DO NOT force `isHard=true` here. Previously this appended a fake
-  // code fence to the user message to make streamAI route to
-  // gpt-oss-120b (quality tier, 8192 max_tokens). That was wrong for
-  // two reasons:
-  //   1. A trivial "hi" in code mode would get 8192 max_tokens, blowing
-  //      the gpt-oss-120b TPM cap (4000) and cascading to gpt-oss-20b,
-  //      which then ALSO failed with 413 because the request was
-  //      11276 tokens against an 8000-token limit.
-  //   2. Code-chat system prompt is already rich enough — streamAI's
-  //      natural isObviouslyHard() check on the user's actual content
-  //      will pick the right tier. Forcing hard=true was overriding
-  //      that and burning budget on simple messages.
-  // Let streamAI route naturally based on the real user content.
-  return streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal });
+async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, forceHard = false }) {
+  return streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, forceHard });
 }
 
 // ── TAVILY (primary search provider) ────────────────────────────
@@ -2009,8 +1986,12 @@ app.post('/api/handler', async (req, res) => {
           const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
           const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
           if (CF_TOKEN && CF_ACCOUNT) {
-            ok = await streamCodeChatFallback(groq, codeMessages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal: clientSignal.signal });
-          }
+          ok = await streamCodeChatFallback(groq, codeMessages, res, {
+          CF_TOKEN, CF_ACCOUNT,
+          clientSignal: clientSignal.signal,
+          forceHard: chainName === 'heavy',
+          });
+         }
         }
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           try {
