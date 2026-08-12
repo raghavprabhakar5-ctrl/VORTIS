@@ -1928,15 +1928,7 @@ app.post('/api/handler', async (req, res) => {
         if (!codeMessages.length || codeMessages[codeMessages.length - 1].role !== 'user') {
           codeMessages.push({ role: 'user', content: prompt.trim() });
         }
-
-        // If any earlier turn in this thread was a genuine build request, treat
-        // the whole thread as a coding task so follow-ups (edits, "also add X",
-        // etc.) stay on the heavy NVIDIA chain instead of drifting to nano
-        // mid-conversation.
-        const priorCodingTask = codeMessages
-          .slice(0, -1)
-          .some(m => m.role === 'user' && isActualCodingTask(m.content));
-
+        
         // If any earlier turn in this thread was a genuine build request, treat
         // the whole thread as a coding task so follow-ups (edits, "also add X",
         // etc.) stay on the heavy NVIDIA chain instead of drifting to nano
