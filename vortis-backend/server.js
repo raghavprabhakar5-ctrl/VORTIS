@@ -95,12 +95,13 @@ const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 // Raced in parallel — first valid response wins. CF is worst-case fallback.
 const NVIDIA_VISION_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
 
+// NVIDIA NIM — vision chain models
 const NVIDIA_VISION_CHAIN = [
   'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
-  'minimaxai/minimax-m3',
-  'nvidia/neva-22b',
+  'meta/muse-glimmer-30b',
+  'nvidia/nemotron-nano-12b-v2-vl',
   'meta/llama-3.2-90b-vision-instruct',
-  'microsoft/kosmos-2',
+  'meta/llama-3.2-11b-vision-instruct',
 ];
 
 const NVIDIA_VISION_CF_FALLBACK = [
@@ -3517,40 +3518,48 @@ RULES — be strict, most messages produce an EMPTY array []:
 
       // ── Helper: try an NVIDIA vision model ──
       const tryNvidiaVision = async (modelId) => {
-        try {
-          const nvKey = process.env.NVIDIA_API_KEY;
-          if (!nvKey) return null;
-          const nvRes = await fetchWithTimeout(
-            `${NVIDIA_BASE_URL}/chat/completions`,
-            {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${nvKey}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                model: modelId,
-                messages: [{
-                  role: 'user',
-                  content: [
-                    { type: 'text', text: cleanPrompt },
-                    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
-                  ],
-                }],
-                max_tokens: 2048,
-                temperature: 0.5,
-              }),
-            },
-            20000
-          );
-          if (!nvRes.ok) { console.log(`NVIDIA vision (${modelId}) HTTP ${nvRes.status}`); return null; }
-          const data = await nvRes.json();
-          const rawDesc = data?.choices?.[0]?.message?.content ?? null;
-          if (typeof rawDesc !== 'string') return null;
-          const desc = stripInternalReasoning(rawDesc);
-          return (desc && desc.trim().length > 2) ? desc : null;
-        } catch (e) {
-          console.log(`NVIDIA vision (${modelId}) failed:`, e.message);
-          return null;
-        }
-      };
+  try {
+    const nvKey = process.env.NVIDIA_API_KEY;
+    if (!nvKey) return null;
+    const nvRes = await fetchWithTimeout(
+      `${NVIDIA_BASE_URL}/chat/completions`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${nvKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelId,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: cleanPrompt },
+              { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
+            ],
+          }],
+          max_tokens: 2048,
+          temperature: 0.5,
+        }),
+      },
+      20000
+    );
+    if (!nvRes.ok) {
+      let errBody = '';
+      try { errBody = (await nvRes.text()).slice(0, 300); } catch (_) {}
+      console.log(`NVIDIA vision (${modelId}) HTTP ${nvRes.status} — ${errBody}`);
+      return null;
+    }
+    const data = await nvRes.json();
+    const rawDesc = data?.choices?.[0]?.message?.content ?? null;
+    if (typeof rawDesc !== 'string') {
+      console.log(`NVIDIA vision (${modelId}) no content field:`, JSON.stringify(data).slice(0, 200));
+      return null;
+    }
+    const desc = stripInternalReasoning(rawDesc);
+    return (desc && desc.trim().length > 2) ? desc : null;
+  } catch (e) {
+    console.log(`NVIDIA vision (${modelId}) failed:`, e.message);
+    return null;
+  }
+};
 
       // ── Vision routing ──
       // 1. Race all NIM models in parallel — first valid response wins.
