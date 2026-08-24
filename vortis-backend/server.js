@@ -11,42 +11,24 @@ if (!admin.apps.length) {
 }
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
-// GROQ FREE-TIER TPD (Tokens Per Day) LIMITS BY MODEL:
-//   qwen/qwen3.6-27b            →   200,000 TPD  (PRIMARY — user-confirmed best)
-//   openai/gpt-oss-20b          →   200,000 TPD  (reasoning, classifier)
-//   openai/gpt-oss-120b         →   100,000 TPD  (heavy, slow)
+// Groq free-tier TPD (tokens per day) limits:
+//   qwen/qwen3.6-27b    → 200,000 TPD  (primary chat)
+//   openai/gpt-oss-20b  → 200,000 TPD  (classifier / title)
+//   openai/gpt-oss-120b → 100,000 TPD  (heavy fallback)
 //
-// ⚠️  DO NOT use these models — user reports they are DEPRECATED on their
-//     Groq account (returns 404 / "model not found"):
-//       - llama-3.3-70b-versatile
-//       - llama-3.1-8b-instant
-//       - llama-3.1-70b-versatile
-//     The previous patch (round 3) added these as "higher TPD alternatives"
-//     but they don't exist on the user's account. REVERTED to qwen3.6-27b
-//     as primary, which the user confirms is the best model available.
-//
-// NEW STRATEGY (per user's instruction):
-//   PRIMARY:    qwen/qwen3.6-27b (200K TPD — the user's preferred model)
-//   FALLBACK:   openai/gpt-oss-120b (100K TPD — heavy, only when qwen fails)
-//
-// TPD EXHAUSTION FIX: multi-key rotation (below). The user was hitting
-// 196K of 200K daily tokens on a SINGLE key. By adding GROQ_API_KEY_2,
-// GROQ_API_KEY_3, etc. in .env, each key gets its own 200K TPD budget,
-// so N keys = N × 200K TPD. This is the cleanest fix that keeps the
-// user's preferred model.
+// Multi-key rotation (below) multiplies the effective TPD by the number
+// of keys configured.
 const GROQ_CHAT_PRIMARY = 'qwen/qwen3.6-27b';
 const GROQ_CHAT_QUALITY = GROQ_CHAT_PRIMARY;
 const GROQ_CHAT_FALLBACK = 'openai/gpt-oss-120b';
-const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';  // DO NOT CHANGE (user instruction — see title endpoint)
+const GROQ_CLASSIFIER_MODEL = 'openai/gpt-oss-20b';
 
-// Models that support the `reasoning_effort` parameter on Groq.
-// Passing `reasoning_effort` to a non-reasoning model returns HTTP 400.
-// We strip the parameter for models not in this list.
+// Models that accept the `reasoning_effort` parameter. Passing it to
+// other models returns HTTP 400.
 const GROQ_REASONING_CAPABLE_MODELS = new Set([
   'openai/gpt-oss-20b',
   'openai/gpt-oss-120b',
   'qwen/qwen3.6-27b',
-  'deepseek-r1-distill-llama-70b',
 ]);
 
 // ── GROQ MULTI-KEY ROTATION ───────────────────────────────────
@@ -59,13 +41,12 @@ const GROQ_API_KEYS = [
   process.env.GROQ_API_KEY_2,
   process.env.GROQ_API_KEY_3,
   process.env.GROQ_API_KEY_4,
-  process.env.GROQ_API_KEY_5,
 ].filter(Boolean);
 
 if (GROQ_API_KEYS.length === 0) {
-  console.error('⚠️  No GROQ_API_KEY set — Vortis chat will fail.');
+  console.error('No GROQ_API_KEY set — chat will fail.');
 } else {
-  console.log(`Groq: ${GROQ_API_KEYS.length} key(s) loaded — effective TPD ≈ ${GROQ_API_KEYS.length * 500000}`);
+  console.log(`Groq: ${GROQ_API_KEYS.length} key(s) loaded`);
 }
 
 // Round-robin counter + per-key "TPD exhausted" flag.
@@ -110,62 +91,20 @@ const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';
 const NVIDIA_CHAT_QUALITY = 'stepfun-ai/step-3.7-flash';         
 const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';     
 
-// ── VISION MODELS (NVIDIA NIM primary, CF fallback only) ──
-// Comprehensive list of NVIDIA NIM free-tier vision-capable models.
-// We race them ALL in parallel — the first one to return a valid
-// description wins. This guarantees vision works as long as AT LEAST
-// ONE NIM endpoint is up.
-//
-// Top-tier models (tried first because they're most likely to succeed):
-//   1. nvidia/nemotron-nano-omni-v1.5-30b   — Nemotron Nano Omni 30B
-//      (multimodal: vision + speech, best overall on NIM free tier)
-//   2. minimaxai/minimax-m3                 — MiniMax M3
-//      (very strong general vision + OCR)
-//   3. genmega/muse-glimmer-30b              — Muse-Glimmer 30B
-//      (excellent at OCR and code screenshots)
-//   4. meta/llama-4-maverick-17b-128e-instruct — Llama 4 Maverick
-//      (best Llama 4 variant for vision)
-//   5. qwen/qwen2.5-vl-72b-instruct         — Qwen 2.5 VL 72B
-//      (excellent OCR, document understanding)
-//   6. mistralai/pixtral-12b                 — Pixtral 12B
-//      (purpose-built for OCR/code transcription)
-//   7. microsoft/phi-4-multimodal-instruct  — Phi-4 Multimodal
-//      (smaller but very accurate for text extraction)
-//
-// Legacy fallbacks (still on NIM free tier, slower / weaker):
-//   8. meta/llama-4-scout-17b-16e-instruct
-//   9. nvidia/nemotron-nano-vl-8b-v2
-//  10. nvidia/neva-22b
-//  11. meta/llama-3.2-90b-vision-instruct
-//  12. microsoft/kosmos-2
-//
-// CF fallback (worst-case, only when EVERY NIM model fails):
-//   - @cf/meta/llama-4-scout-17b-16e-instruct
-//   - @cf/llava-hf/llava-1.5-7b-hf
-const NVIDIA_VISION_MODEL = 'nvidia/nemotron-nano-omni-v1.5-30b';
+// ── VISION MODELS ──
+// Raced in parallel — first valid response wins. CF is worst-case fallback.
+const NVIDIA_VISION_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
 
 const NVIDIA_VISION_CHAIN = [
-  // ── Top-tier (tried first because they're fastest + most accurate) ──
-  'nvidia/nemotron-nano-omni-v1.5-30b',         // Nemotron Nano Omni 30B
-  'minimaxai/minimax-m3',                       // MiniMax M3
-  'genmega/muse-glimmer-30b',                   // Muse-Glimmer 30B
-  'meta/llama-4-maverick-17b-128e-instruct',   // Llama 4 Maverick
-  'qwen/qwen2.5-vl-72b-instruct',              // Qwen 2.5 VL 72B
-  'mistralai/pixtral-12b',                      // Pixtral 12B
-  'microsoft/phi-4-multimodal-instruct',       // Phi-4 Multimodal
-  // ── Legacy NIM fallbacks (slower but still on free tier) ──
-  'meta/llama-4-scout-17b-16e-instruct',       // Llama 4 Scout
-  'nvidia/nemotron-nano-vl-8b-v2',             // Nemotron Nano VL 8B v2
-  'nvidia/neva-22b',                            // NeVA 22B
-  'meta/llama-3.2-90b-vision-instruct',        // Llama 3.2 90B Vision
-  'microsoft/kosmos-2',                         // Kosmos-2
+  'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+  'minimaxai/minimax-m3',
+  'nvidia/neva-22b',
+  'meta/llama-3.2-90b-vision-instruct',
+  'microsoft/kosmos-2',
 ];
 
-// Cloudflare fallback used ONLY when every NVIDIA NIM model fails.
-// Two reliable CF vision models, tried in order.
 const NVIDIA_VISION_CF_FALLBACK = [
-  ['@cf/meta/llama-4-scout-17b-16e-instruct', false],  // CF Llama 4 Scout
-  ['@cf/llava-hf/llava-1.5-7b-hf',            true],  // CF Llava (older format)
+  ['@cf/llava-hf/llava-1.5-7b-hf', true],
 ];
 
 const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;
@@ -941,20 +880,10 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
   const bufferMode = looksLikeTableRequest(lastMsg);
 
   const trivialTier = isObviouslyTrivial(lastMsg);
-  // SPEED FIX (round 2): was 8192 for hard - long responses hit the
-  // cap and triggered up to 3 auto-continuations, each adding 2-5s
-  // (re-sends entire convo + partial output). 16384 = single-pass
-  // for almost all responses = no continuation penalty.
-  // FIX round 3: was 16384 (from round 2 speed patch). Groq free-tier
-  // PER-REQUEST TPM limit is 8000. prompt + max_tokens must fit under
-  // 8000, so 6000 max_tokens leaves ~2000 for the prompt. Long
-  // responses still work via auto-continuation (MAX_CONTINUATIONS=3).
-  // Total possible output: 6000 * 4 = 24000 tokens.
+  // Groq free-tier per-request TPM is 8000; 6000 max_tokens leaves
+  // ~2000 for the prompt. Long responses continue via MAX_CONTINUATIONS.
   const maxTokens = isHard ? 6000 : (trivialTier ? 1024 : 2048);
 
-  // Model chain — 2 deep: primary (qwen3.6-27b) → fallback (gpt-oss-120b).
-  // Reverted from 3-deep (which had deprecated llama-3.3-70b and
-  // llama-3.1-8b-instant that 404'd on the user's account).
   const modelChain = [GROQ_CHAT_PRIMARY, GROQ_CHAT_FALLBACK];
 
   console.log(`Routing: hard=${isHard} bufferMode=${bufferMode} trivial=${trivialTier} → primary: ${modelChain[0]} → maxTokens: ${maxTokens}`);
@@ -980,21 +909,9 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
     }
     if (clientSignal?.aborted) { console.log('Client disconnected before model call'); return false; }
 
-    // reasoning_effort dial — but ONLY for models that support it.
-    // llama-3.3-70b-versatile and llama-3.1-8b-instant do NOT support
-    // reasoning_effort (they're standard chat models); passing it returns
-    // HTTP 400 from Groq. We omit the parameter entirely for them.
-    //
-    // Qwen (fallback path, reasoning-capable): 'none' = no thinking pass
-    //   = tokens stream immediately (1-3s TTFB). Qwen3-27b is capable
-    //   without extended thinking for most tasks.
-    // gpt-oss-120b (only reached if both primary and fallback fail): 'low'
-    //   for hard tasks so it doesn't underthink something a stronger model
-    //   already choked on.
+    // reasoning_effort only for models that support it.
     const supportsReasoning = GROQ_REASONING_CAPABLE_MODELS.has(modelToTry);
-    const reasoningEffort = supportsReasoning
-      ? (isHard ? 'none' : 'none')
-      : null;  // null = omit the parameter entirely
+    const reasoningEffort = supportsReasoning ? 'none' : null;
 
     try {
       let convoMessages = [...optimizedMessages];
@@ -1166,17 +1083,11 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
     }
   }
 
-  // ── Groq exhausted — fall back to NVIDIA → CF worst-case ──
-  // This is the Vortis chain per user spec: Groq primary → NVIDIA fallback →
-  // CF worst-case. CodeChat does NOT use this path (it has its own NIM-only
-  // streamer and never calls streamAI).
+  // Groq exhausted — fall back to NVIDIA → CF worst-case.
   return streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, skipNvidia, optimizedMessages, maxTokens, isHard });
 }
 
-// ── NVIDIA → Cloudflare fallback chain (Vortis-only) ────────────
-// Extracted from streamAI so it can be reused both after Groq fails
-// inside streamAI and (theoretically) elsewhere. CodeChat does NOT call
-// this — it uses streamNvidiaGLMOnly directly and never falls to Groq/CF.
+// NVIDIA → Cloudflare fallback chain (used by Vortis chat after Groq fails).
 async function streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, skipNvidia = false, optimizedMessages, maxTokens, isHard }) {
   // Fall back to optimizedMessages passed in, or rebuild from messages.
   if (!optimizedMessages) {
@@ -1192,13 +1103,11 @@ async function streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clie
     ? [NVIDIA_CHAT_CODE, NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
     : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
 
-  // Short timeout here on purpose: this is a FALLBACK after Groq already
-  // failed. The user already waited through Groq's attempt — don't make
-  // them wait a full 60s cold-start window per model on top of that.
-  // 12s is enough for a WARM model to respond; a cold one just gets
-  // skipped fast so we reach Cloudflare sooner.
-  
-const FALLBACK_TIMEOUT_MS = 7000; 
+  // Short timeout — this runs after Groq already failed, so don't make
+  // the user wait a full cold-start window per model. 7s is enough for a
+  // warm model; cold ones get skipped so we reach Cloudflare sooner.
+
+const FALLBACK_TIMEOUT_MS = 7000;
                                    
 for (const nvModel of nvidiaModelsToTry) {
   if (clientSignal?.aborted) { console.log('Client disconnected — skipping NVIDIA'); break; }
@@ -1215,8 +1124,6 @@ for (const nvModel of nvidiaModelsToTry) {
 }
  else if (!skipNvidia) {
     console.warn('NVIDIA global rate limit reached — skipping straight to Cloudflare');
-  } else {
-    console.log('Code-chat fallback: skipping NVIDIA (already tried in primary chain) — going straight to Cloudflare');
   }
 
   for (const cfModel of CF_CHAT_MODELS) {
@@ -2779,30 +2686,16 @@ app.post('/api/handler', async (req, res) => {
     if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe', 'memory', 'title'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
-    // ── TITLE — cheap internal housekeeping. Not a real user message:
+    // ── TITLE — cheap internal housekeeping.
    if (action === 'title') {
   const titlePrompt = sanitizeString(req.body.prompt || '', 2000);
   if (!titlePrompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
-  // Try Groq first — fast, cheap, good enough for a 3-5 word title.
-  // Uses GROQ_CLASSIFIER_MODEL (gpt-oss-20b) — the user's existing model.
-  // DO NOT change this model — the user explicitly said "don't change my
-  // model" after I tried switching to llama-3.1-8b-instant (didn't exist
-  // on their Groq account → 404 error).
-  //
-  // gpt-oss-20b is a reasoning model. The trick to making it work for
-  // short-title generation:
-  //   - reasoning_effort='low' (the LOWEST supported value; Groq rejects
-  //     'none' with a 400 error).
-  //   - max_tokens=200 (NOT 30). With max_tokens=30, the model burned all
-  //     30 tokens on reasoning_content and returned empty visible content
-  //     → "TITLE: Groq returned empty" → CF fallback on every chat.
-  //     With max_tokens=200, the model has room for ~30-50 tokens of
-  //     reasoning + ~10-20 tokens of actual title. 200 tokens per call
-  //     is well within the 7000 TPM cap for gpt-oss-20b (~35 title
-  //     calls per minute max).
-  //   - stripInternalReasoning() strips any reasoning that leaks into
-  //     the content field (defense in depth).
+  // gpt-oss-20b is a reasoning model. reasoning_effort='low' is the lowest
+  // supported value ('none' returns 400). max_tokens=200 leaves room for
+  // reasoning + actual title (max_tokens=30 returns empty content because
+  // the model burns it all on reasoning_content). stripInternalReasoning()
+  // strips any reasoning that leaks into the content field.
   const titleController = new AbortController();
   const titleTimer = setTimeout(() => titleController.abort(), 6000);
   try {
@@ -3051,20 +2944,11 @@ if (looksLikeClarifyAnswer) {
         // output tokens, so 32K is a safe cap that lets 95%+ of requests
         // complete in a single pass with no continuation needed.
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
-        // ── CodeChat is NIM-ONLY per architecture spec ──
-        // Vortis (App.jsx) uses Groq → NVIDIA → CF; CodeChat uses NVIDIA NIM
-        // only. If every NIM model failed, we show a clean error and let
-        // the user retry — we do NOT fall back to Groq/CF because:
-        //   1. CodeChat needs code-focused models (nemotron-ultra, step-3.7)
-        //      that produce dramatically better code than Groq's qwen/llama.
-        //   2. Falling to Groq would silently degrade code quality and the
-        //      user wouldn't know their code is now coming from a weaker model.
-        //   3. The user explicitly chose CodeChat for coding tasks; if NIM
-        //      is down, they need to know so they can retry or wait.
+        // CodeChat is NIM-only. If every NIM model failed, show a clean
+        // error so the user knows to retry or switch to Vortis chat.
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
-          console.warn('Code-chat: all NIM models failed — showing error (NOT falling to Groq/CF per architecture)');
           try {
-            res.write(`data: ${JSON.stringify({ content: '⚠️ The NVIDIA NIM code models are temporarily unavailable. This is the dedicated coding workspace, so I won\'t fall back to a general-purpose model. Please retry in a moment — if the issue persists, try the Vortis (general) chat which has a wider model fallback chain.' })}\n\n`);
+            res.write(`data: ${JSON.stringify({ content: 'The code models are temporarily unavailable. Please retry in a moment, or switch to Vortis chat for a wider model fallback.' })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
           } catch (_) {}
@@ -3250,7 +3134,6 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
       }
 
       try {
-        // Use rotated Groq key for voice-call fallback.
         const voiceKey = pickGroqKey();
         if (!voiceKey) {
           console.warn('No Groq key available for voice fallback — trying CF');
@@ -3274,7 +3157,7 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
             res.write(`data: ${JSON.stringify({ content: token })}\n\n`);
           }
           if (buffer.trim().length > 0) {
-            console.log('Voice → Groq ✅ (fallback 1)');
+            console.log('Voice → Groq (fallback 1)');
             res.write('data: [DONE]\n\n');
             res.end();
             return;
@@ -3283,16 +3166,6 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
         }
       } catch (e) {
         console.error('Groq voice fallback failed:', e.message, '— trying CF');
-        // If TPD exhausted on this key, mark it dead so future requests rotate.
-        if (e?.status === 429 || /tokens per day|TPD/i.test(e?.message || '')) {
-          // Best-effort: we don't know exactly which key was picked here, but
-          // markGroqKeyTpdExhausted on ANY key will at least skip it. We mark
-          // the most-recently-used key by re-querying for it (it's already
-          // rotated; we mark the NEXT key as safe-but-track). To keep this
-          // simple and avoid bookkeeping, we just rely on the TPM cooldown
-          // (setGroqCooldown) which is per-model, not per-key — the multi-key
-          // rotation will still help on subsequent requests.
-        }
       }
 
       for (const cfModel of CF_CHAT_MODELS) {
@@ -3679,83 +3552,57 @@ RULES — be strict, most messages produce an EMPTY array []:
         }
       };
 
-      // ── VISION ROUTING ──────────────────────────────────────────────
-      // Architecture (per user spec):
-      //   PRIMARY:   NVIDIA NIM free-tier vision models (parallel race,
-      //              first valid response wins, 20s budget).
-      //   RETRY:     If parallel race fails entirely, do ONE more
-      //              sequential pass through the top 3 NIM models with
-      //              a short delay — sometimes all parallel calls hit
-      //              a transient throttle spike and a 2s-later retry
-      //              succeeds.
-      //   FALLBACK:  Cloudflare vision models (sequential, last resort
-      //              only when EVERY NIM model failed twice).
-      //
-      // Vision MUST always work — if every provider genuinely fails,
-      // we return a soft-fail message but we exhaust every option first.
-
+      // ── Vision routing ──
+      // 1. Race all NIM models in parallel — first valid response wins.
+      // 2. If all fail, retry the top 3 sequentially after a 2s delay.
+      // 3. Last resort: Cloudflare llava.
       let description = null;
 
-      // Helper: race all NIM models in parallel.
       const raceNvidiaModels = async (label) => {
-        const nvidiaCandidates = NVIDIA_VISION_CHAIN.map(id => ({
+        const candidates = NVIDIA_VISION_CHAIN.map(id => ({
           name: `nvidia-${id}`,
           fn: () => tryNvidiaVision(id),
         }));
         return Promise.any(
-          nvidiaCandidates.map(async (c) => {
+          candidates.map(async (c) => {
             const result = await c.fn();
             if (result && result.trim().length > 2) {
-              console.log(`Vision [${label}] succeeded with: ${c.name}`);
+              console.log(`Vision [${label}] succeeded: ${c.name}`);
               return result;
             }
-            throw new Error(`${c.name} returned empty`);
+            throw new Error(`${c.name} empty`);
           })
-        ).catch((reason) => {
-          console.warn(`Vision [${label}]: all ${reason?.errors?.length || NVIDIA_VISION_CHAIN.length} NIM models failed`);
-          return null;
-        });
+        ).catch(() => null);
       };
 
-      // ── Attempt 1: parallel race across ALL NIM models ──
-      description = await raceNvidiaModels('attempt-1');
+      // Attempt 1: parallel race
+      description = await raceNvidiaModels('race');
 
-      // ── Attempt 2: brief delay + sequential retry of top 3 NIM models ──
-      // Why: if attempt 1 failed, it's usually because every model hit a
-      // transient rate-limit spike simultaneously. Waiting 2s and trying
-      // the top 3 sequentially (one at a time, not racing) often succeeds
-      // because the spike has passed.
+      // Attempt 2: sequential retry of top 3 after 2s
       if (!description) {
         await new Promise(r => setTimeout(r, 2000));
-        const topModels = NVIDIA_VISION_CHAIN.slice(0, 3);
-        for (const modelId of topModels) {
+        for (const modelId of NVIDIA_VISION_CHAIN.slice(0, 3)) {
           const result = await tryNvidiaVision(modelId);
           if (result && result.trim().length > 2) {
-            console.log(`Vision [attempt-2] succeeded with: nvidia-${modelId}`);
+            console.log(`Vision [retry] succeeded: nvidia-${modelId}`);
             description = result;
             break;
           }
         }
       }
 
-      // ── Attempt 3: Cloudflare fallback — only when NIM failed twice ──
+      // Attempt 3: Cloudflare fallback
       if (!description) {
         for (const [modelId, useLlavaFormat] of NVIDIA_VISION_CF_FALLBACK) {
           description = await tryCloudflareVision(modelId, useLlavaFormat);
-          if (description && description.trim().length > 2) {
-            console.log(`Vision succeeded with CF fallback: ${modelId}`);
-            break;
-          }
+          if (description && description.trim().length > 2) break;
         }
       }
 
-      // ── Return a proper response ──
       if (description && description.trim().length > 2) {
         return res.status(200).json({ success: true, description: description.trim() });
       }
 
-      // All vision models failed — return a helpful message instead of an error.
-      // The client treats this as a "soft fail" and shows it to the user.
       return res.status(200).json({
         success: true,
         description: 'I tried multiple vision models but they are all busy right now. Please try again in a moment — your image was received but I could not analyze it yet.',
