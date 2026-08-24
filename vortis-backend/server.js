@@ -214,32 +214,23 @@ const CODING_VERBS_TYPOS = [
 // Short words like "hi", "ok", "no", "hey" cannot be typos of coding verbs
 // like "fix", "make", "code" — those verbs are all 3+ chars and a 2-char
 // word matching within distance 2 is a false positive.
-// Common English words that fuzzy-match coding verbs but aren't coding verbs.
-// Without this exclusion list, "image" (Levenshtein 2 from "make") triggers
-// the coding-verb heuristic, routing vision-result text like
-// "[Attached image: foo.jpg — vision analysis failed: ...]" to the slow
-// heavy chain instead of the fast standard chain.
-const CODING_VERB_FALSE_POSITIVES = new Set([
-  'image', 'images', 'picture', 'pictures', 'photo', 'photos',
-  'vision', 'service', 'busy', 'right', 'after', 'multiple', 'retries',
-  'please', 'again', 'minute', 'attached', 'failed', 'error', 'unknown',
-  'whatsapp', 'screenshot', 'paste', 'pasted', 'content',
-]);
-
 function containsCodingVerb(text) {
   if (!text) return false;
   const low = text.toLowerCase();
+  // Fast path: exact match (word-boundary protected)
   for (const v of CODING_VERBS_EXACT) {
     if (new RegExp(`\\b${v}\\b`).test(low)) return true;
   }
+  // Fast path: known typos (word-boundary protected)
   for (const v of CODING_VERBS_TYPOS) {
     if (new RegExp(`\\b${v}\\b`).test(low)) return true;
   }
+  // Safety net: Levenshtein distance ≤ 2 for any coding verb.
+  // ONLY apply to words with length >= 4 to avoid false positives like
+  // "hi" → "fix", "ok" → "code", "no" → "node".
   try {
     const words = low.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
     for (const w of words) {
-      // Skip common false-positive words.
-      if (CODING_VERB_FALSE_POSITIVES.has(w)) continue;
       for (const v of CODING_VERBS_EXACT) {
         if (Math.abs(w.length - v.length) <= 2 && levenshtein(w, v) <= 2) return true;
       }
@@ -1282,20 +1273,16 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 // headers+first-byte combined, and added an overall chain deadline
 // below so we never wait more than ~35s total across all models before
 // falling back to Groq/CF.
-// Per-model cold-start budgets. Tightened from the old values (18s+15s
-// for ultra = 33s wasted on a cold model) — now 12s+10s = 22s max.
-// Warm models respond well within these budgets; cold ones fail fast
-// so we move to the next model in the chain.
 function headersTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 12000;
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 6000;
-  return 4000;
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 18000;   // was 60000 (shared)
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 8000;
+  return 6000;
 }
 
 function firstByteTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 10000;
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 6000;
-  return 5000;
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;   // was 50000
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 8000;  // was 20000
+  return 6000;                                            // was 15000
 }
 
 const IDLE_TIMEOUT_MS = 20000; // was 45000 — mid-stream stalls this long are genuinely dead
@@ -1343,7 +1330,7 @@ if (modelsToTry.length === 0) {
 console.log(`Code-chat stream: chain=${chainName} will try [${modelsToTry.join(', ')}]`);
 
 
-const chainDeadline = Date.now() + 25000; // hard ceiling across the WHOLE chain (was 35s)
+const chainDeadline = Date.now() + 35000; // hard ceiling across the WHOLE chain
 
 let attemptIdx = 0;
 for (const nvidiaModel of modelsToTry) {
@@ -3498,11 +3485,6 @@ RULES — be strict, most messages produce an EMPTY array []:
       if (isImageTooLarge(image))     return res.status(400).json({ error: 'Image too large (max 5MB)' });
 
       const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
-      // Detect the actual MIME type from the data URL prefix instead of
-      // hardcoding image/jpeg. Some NVIDIA NIM vision models reject PNGs
-      // sent with a jpeg MIME type.
-      const mimeMatch = image.match(/^data:(image\/[a-z+]+);base64,/i);
-      const imageMime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
       const cleanPrompt = sanitizeString(prompt || 'Describe this image in detail.', 500);
 
       // ── Helper: try a Cloudflare vision model ──
@@ -3514,11 +3496,11 @@ RULES — be strict, most messages produce an EMPTY array []:
                 messages: [{
                   role: 'user',
                   content: [
-                    { type: 'image_url', image_url: { url: `data:${imageMime};base64,${base64Data}` } },
+                    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
                     { type: 'text', text: cleanPrompt },
                   ],
                 }],
-                max_tokens: 1024,
+                max_tokens: 2048,
               };
           const cfRes = await fetch(
             `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT}/ai/run/${modelId}`,
@@ -3549,24 +3531,16 @@ RULES — be strict, most messages produce an EMPTY array []:
                   role: 'user',
                   content: [
                     { type: 'text', text: cleanPrompt },
-                    { type: 'image_url', image_url: { url: `data:${imageMime};base64,${base64Data}` } },
+                    { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64Data}` } },
                   ],
                 }],
-                max_tokens: 1024,
-                temperature: 0.4,
-                stream: false,
+                max_tokens: 2048,
+                temperature: 0.5,
               }),
             },
             20000
           );
-          if (!nvRes.ok) {
-            // Log the full error body so we can see WHY the model failed
-            // (e.g. "model not found", "invalid image format", etc.)
-            let errBody = '';
-            try { errBody = (await nvRes.text()).slice(0, 300); } catch (_) {}
-            console.log(`NVIDIA vision (${modelId}) HTTP ${nvRes.status}: ${errBody}`);
-            return null;
-          }
+          if (!nvRes.ok) { console.log(`NVIDIA vision (${modelId}) HTTP ${nvRes.status}`); return null; }
           const data = await nvRes.json();
           const rawDesc = data?.choices?.[0]?.message?.content ?? null;
           if (typeof rawDesc !== 'string') return null;
