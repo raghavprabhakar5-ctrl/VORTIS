@@ -8119,6 +8119,23 @@ Improved prompt:`,
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    // ── Reject video/audio/executable files explicitly. Some OS file
+    //    pickers show "All Files (*.*)" as an option in the dropdown
+    //    even when accept= lists specific extensions, letting users
+    //    pick anything. Block them here so we never attach an
+    //    unprocessable blob to a chat that can only handle text/images. ──
+    const mime = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    const REJECTED_MIME_PREFIXES = ['video/', 'audio/'];
+    const REJECTED_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv',
+                          '.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.m4p',
+                          '.exe', '.dll', '.so', '.bin', '.app', '.dmg', '.msi',
+                          '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'];
+    if (REJECTED_MIME_PREFIXES.some(p => mime.startsWith(p)) ||
+        REJECTED_EXTS.some(ext => name.endsWith(ext))) {
+      addMsg('vortis', `**"${file.name}"** is a video, audio, archive, or executable file — I can't read those. Try attaching a text document (PDF, DOCX, TXT, MD, CSV, JSON) or an image instead.`, false);
+      return;
+    }
     setProcessingStatus('reading');
 
     // Real extraction — PDF → pdfjs-dist, DOCX → mammoth, text → readAsText.
@@ -9109,7 +9126,7 @@ return (
             )}
 
             <input ref={fileRef} type="file" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx" onChange={handleDocUpload} style={{ display: 'none' }}/>
-            <input ref={imgRef} type="file" accept="image/*" onChange={handleImgUpload} style={{ display: 'none' }}/>
+            <input ref={imgRef} type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp" onChange={handleImgUpload} style={{ display: 'none' }}/>
 
             <div className="input-box">
               {pendingCode && (

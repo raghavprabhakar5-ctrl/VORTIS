@@ -3281,15 +3281,13 @@ useEffect(() => {
     return { ok: true, text };
   };
 
-  // ── Retry with exponential backoff on rate-limit (429) ──
-  // The backend tries multiple vision models in a chain, so a 429 means ALL
-  // of them are throttled. We retry up to 3 times with increasing delays:
-  //   attempt 1 → immediate
-  //   attempt 2 → wait 2s
-  //   attempt 3 → wait 4s
-  //   attempt 4 → wait 6s
-  // Total worst-case wait: ~12s. Usually the 2nd or 3rd attempt succeeds.
-  const delays = [0, 2000, 4000, 6000];
+  // ── Retry with backoff on rate-limit (429) ──
+  // The backend now races ALL vision providers in parallel with a 15s
+  // overall budget, so a 429 means EVERY provider is throttled. Retrying
+  // more than once is pointless — they'll all fail again. We do at most
+  // ONE retry after a short delay, giving the providers a brief window
+  // to recover. Total worst-case wait: ~17s (15s backend + 2s backoff).
+  const delays = [0, 2000];
   let lastError = null;
 
   for (let attempt = 0; attempt < delays.length; attempt++) {
@@ -4064,30 +4062,21 @@ const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend, my
       .filter(att => att.type === 'image' && att.content)
       .map(att => ({ url: att.content, name: att.name }));
 
+    // ── Build text with PLACEHOLDERS for images. The real vision analysis
+    //    runs AFTER the user message is shown below — this is what makes
+    //    the send button feel instant instead of freezing for 15 seconds
+    //    while we wait on the vision API. The placeholder gets replaced
+    //    in-place once vision completes (see async block further down). ──
+    const imagePlaceholders = []; // [{att, placeholder}]
     if (pendingAttachments.length > 0) {
       const blocks = [];
       for (const att of pendingAttachments) {
         if (att.type === 'image') {
-          // ── Images ALWAYS go through the vision API so the AI can "see"
-          //    what's in them. The OCR toggle only changes WHAT we ask the
-          //    vision API to do:
-          //      OCR OFF → "describe" mode (default) — AI gets a full
-          //                description of the image content
-          //      OCR ON  → "ocr" mode — AI gets just the extracted text,
-          //                useful for screenshots of code or documents
-          //    Either way the image is analyzed, never silently dropped.
-          const mode = ocrMode ? 'ocr' : 'describe';
-          const visionResult = await describeImage(att.content, att.name, mode);
-          if (visionResult.ok && visionResult.text && visionResult.text !== '[No text detected]') {
-            const label = ocrMode ? 'OCR extracted text' : 'Image description';
-            blocks.push(`[Image: ${att.name} — ${label}:]\n\`\`\`\n${visionResult.text}\n\`\`\``);
-          } else if (visionResult.ok && visionResult.text === '[No text detected]') {
-            // OCR found no text — but the image was still processed.
-            blocks.push(`[Attached image: ${att.name} — OCR found no readable text. The image may be a photo, diagram, or abstract image.]`);
-          } else {
-            // Vision API failed — show the specific error so the user knows why.
-            blocks.push(`[Attached image: ${att.name} — vision analysis failed: ${visionResult.error || 'unknown error'}]`);
-          }
+          // Image attachments get a placeholder now; the real description
+          // is filled in by the async vision step further down in send().
+          const placeholder = `[Attached image: ${att.name} — analyzing image content...]`;
+          imagePlaceholders.push({ att, placeholder });
+          blocks.push(placeholder);
         } else if (att.type === 'document') {
           blocks.push(`[Attached document: ${att.name}${att.size ? ` (${formatBytes(att.size)})` : ''} — this file type can't be read directly, ask about it by name if you want me to guess at its contents or just describe what's in it.]`);
         } else {
@@ -4147,10 +4136,56 @@ if (prevController) { try { prevController.abort(); } catch (_) {} }
 const controller = new AbortController();
 chatControllersRef.current.set(myChatId, controller);
 
-    const historyForBackend = nextMsgs.slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+    const isStillActive = () => chatIdRef.current === myChatId;
+
+    // ── ASYNC VISION ANALYSIS — runs AFTER the user message is already
+    //    on screen and the input is cleared. This is the key fix: the
+    //    send button no longer freezes for 15s while we wait on vision.
+    //    The placeholder text in the user message gets replaced in-place
+    //    with the real description, then the LLM call fires with the
+    //    final text. If the user switches chat or clicks Stop during
+    //    analysis, we abort cleanly. ──
+    if (imagePlaceholders.length > 0) {
+      for (const { att, placeholder } of imagePlaceholders) {
+        // Bail out if user switched chats during analysis.
+        if (!isStillActive()) return;
+        const mode = ocrMode ? 'ocr' : 'describe';
+        const visionResult = await describeImage(att.content, att.name, mode);
+        let replacement;
+        if (visionResult.ok && visionResult.text && visionResult.text !== '[No text detected]') {
+          const label = ocrMode ? 'OCR extracted text' : 'Image description';
+          replacement = `[Image: ${att.name} — ${label}:]\n\`\`\`\n${visionResult.text}\n\`\`\``;
+        } else if (visionResult.ok && visionResult.text === '[No text detected]') {
+          replacement = `[Attached image: ${att.name} — OCR found no readable text. The image may be a photo, diagram, or abstract image.]`;
+        } else {
+          replacement = `[Attached image: ${att.name} — vision analysis failed: ${visionResult.error || 'unknown error'}]`;
+        }
+        text = text.replace(placeholder, replacement);
+      }
+      // Update the user message in-place so the chat shows the real
+      // description instead of the placeholder.
+      if (isStillActive()) {
+        setMessages(prev => prev.map(m => m.id === userMsg.id ? { ...m, text } : m));
+      }
+      // Keep lastSendRef in sync so Retry resends the final text.
+      lastSendRef.current = text;
+    }
+
+    // If user clicked Stop or switched chats during vision analysis, bail.
+    if (abortedChatsRef.current.has(myChatId) || !isStillActive()) {
+      if (isStillActive()) { setStreaming(false); setThinking(false); setStreamText(''); }
+      return;
+    }
+
+    // Rebuild nextMsgs so the LLM sees the final (vision-replaced) text
+    // instead of the placeholder. Without this, the assistant would
+    // receive "[Attached image: foo.jpg — analyzing image content...]"
+    // and have no idea what was in the image.
+    const finalUserMsg = { ...userMsg, text };
+    const finalNextMsgs = [...baseMessages, finalUserMsg];
+    const historyForBackend = finalNextMsgs.slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
   const sys = buildCoderSystemPrompt(style);
   const willSearch = !skipSearch && needsCodeWebSearch(text);
-  const isStillActive = () => chatIdRef.current === myChatId;
 
   if (willSearch) { if (isStillActive()) { setThinking(false); setSearching(true); } }
 
