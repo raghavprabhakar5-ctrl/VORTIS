@@ -3379,6 +3379,38 @@ useEffect(() => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showAttachMenu]);
 
+  useEffect(() => {
+  if (!ocrMode) return;
+  const pending = attachments.filter(a => a.type === 'image' && !a._ocrProcessed);
+  if (pending.length === 0) return;
+
+  (async () => {
+    for (const att of pending) {
+      setAttachments(prev => prev.map(a =>
+        a.id === att.id ? { ...a, _ocrProcessing: true } : a
+      ));
+      const result = await describeImage(att.content, att.name, 'ocr');
+      setAttachments(prev => prev.map(a => {
+        if (a.id !== att.id) return a;
+        if (result.ok && result.text && result.text !== '[No text detected]') {
+          const lines = result.text.split('\n');
+          return {
+            ...a,
+            type: 'file',
+            preview: lines.slice(0, 6).join('\n') + (lines.length > 6 ? '\n… (truncated)' : ''),
+            content: result.text,
+            lines: lines.length,
+            _ocrProcessed: true,
+            _ocrProcessing: false,
+          };
+        }
+        return { ...a, _ocrProcessed: true, _ocrProcessing: false, _ocrFailed: !result.ok };
+      }));
+    }
+  })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [ocrMode, attachments]);
+
   /* Handles "Add file", "Add project folder", and "Add document" — routes
      images to image attachment cards, text/code files to file attachment
      cards. Nothing gets silently dumped into the raw textarea anymore. */
@@ -4184,9 +4216,10 @@ chatControllersRef.current.set(myChatId, controller);
         const visionResult = await describeImage(att.content, att.name, mode);
         let replacement;
         if (visionResult.ok && visionResult.text && visionResult.text !== '[No text detected]') {
-          const label = ocrMode ? 'OCR extracted text' : 'Image description';
-          replacement = `[Image: ${att.name} — ${label}:]\n\`\`\`\n${visionResult.text}\n\`\`\``;
-        } else if (visionResult.ok && visionResult.text === '[No text detected]') {
+        const label = ocrMode ? 'OCR extracted text' : 'Image description';
+        replacement = `[Image: ${att.name} — ${label}:]\n\n${visionResult.text}`;
+        }
+         else if (visionResult.ok && visionResult.text === '[No text detected]') {
           replacement = `[Attached image: ${att.name} — OCR found no readable text. The image may be a photo, diagram, or abstract image.]`;
         } else {
           replacement = `[Attached image: ${att.name} — vision analysis failed: ${visionResult.error || 'unknown error'}]`;
@@ -5444,10 +5477,21 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
                       background: '#171717', border: '1px solid #2a2a2a', borderRadius: 0,
                       padding: '12px 14px', maxWidth: 340,
                     }}>
-                      {att.type === 'image' ? (
-                        <img src={att.content} alt={att.name}
-                          style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 0, display: 'block', marginBottom: 10, objectFit: 'contain' }} />
-                      ) : att.type === 'document' ? (
+                   {att.type === 'image' ? (
+                <div style={{ position: 'relative' }}>
+                 <img src={att.content} alt={att.name}
+                 style={{ maxWidth: '100%', maxHeight: 180, borderRadius: 0, display: 'block', marginBottom: 10, objectFit: 'contain', opacity: att._ocrProcessing ? 0.4 : 1 }} />
+                 {att._ocrProcessing && (
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 180,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        color: '#c8c8c8', fontSize: 11.5, fontFamily: 'JetBrains Mono, monospace',
+      }}>
+        <Loader size={12} style={{ animation: 'vertexSpin 1s linear infinite' }}/> Extracting text…
+      </div>
+      )}
+    </div>
+           ) : att.type === 'document' ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                           <div style={{
                             width: 34, height: 34, borderRadius: 0, flexShrink: 0, display: 'flex',
@@ -5515,7 +5559,7 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
                     <div style={{
                       position: 'absolute', bottom: 44, left: 0, zIndex: 60,
                       background: '#141414', border: '1px solid #2a2a2a', borderRadius: 0,
-                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, minWidth: 240,
+                      boxShadow: '0 12px 36px rgba(0,0,0,.5)', padding: 6, width: 240, boxSizing: 'border-box', overflow: 'hidden',
                       animation: 'vertexScaleIn .15s ease'
                     }}>
                       <button onClick={() => fileInputRef.current?.click()}
