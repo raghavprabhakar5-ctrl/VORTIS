@@ -5591,26 +5591,26 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
 
                       <div style={{ borderTop: '1px solid #1c1c1c', marginTop: 4, paddingTop: 4 }}>
                         <button onClick={() => setOcrMode(v => !v)}
-                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 0, background: ocrMode ? 'rgba(99,102,241,.08)' : 'transparent', border: 'none', color: ocrMode ? '#a5b4fc' : '#9a9a9a', fontSize: 11.5, cursor: 'pointer' }}
-                          onMouseEnter={e => { e.currentTarget.style.background = ocrMode ? 'rgba(99,102,241,.12)' : '#1a1a1a'; }}
-                          onMouseLeave={e => { e.currentTarget.style.background = ocrMode ? 'rgba(99,102,241,.08)' : 'transparent'; }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <ScanText size={12}/> Text extraction
-                          </span>
-                          <span style={{
-                            position: 'relative', width: 28, height: 16, borderRadius: 0,
-                            background: ocrMode ? '#fff' : '#2a2a2a', transition: 'background .15s',
-                          }}>
-                            <span style={{
-                              position: 'absolute', top: 2, width: 12, height: 12, borderRadius: '50%',
-                              background: '#000', transition: 'transform .15s',
-                              transform: ocrMode ? 'translateX(14px)' : 'translateX(2px)',
-                            }}/>
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
+  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', borderRadius: 0, background: ocrMode ? 'rgba(99,102,241,.08)' : 'transparent', border: 'none', color: ocrMode ? '#a5b4fc' : '#9a9a9a', fontSize: 11.5, cursor: 'pointer' }}
+  onMouseEnter={e => { e.currentTarget.style.background = ocrMode ? 'rgba(99,102,241,.12)' : '#1a1a1a'; }}
+  onMouseLeave={e => { e.currentTarget.style.background = ocrMode ? 'rgba(99,102,241,.08)' : 'transparent'; }}>
+  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <ScanText size={12}/> Text extraction
+  </span>
+  <span style={{
+    position: 'relative', width: 28, height: 16, borderRadius: 0, flexShrink: 0,
+    background: ocrMode ? '#fff' : '#2a2a2a', transition: 'background .15s',
+  }}>
+    <span style={{
+      position: 'absolute', top: 2, left: 2, width: 12, height: 12, borderRadius: '50%',
+      background: '#000', transition: 'transform .15s',
+      transform: ocrMode ? 'translateX(12px)' : 'translateX(0)',
+    }}/>
+  </span>
+</button>
+    </div>
+      </div>
+            )}
                   <input ref={fileInputRef} type="file" multiple accept=".txt,.md,.markdown,.json,.csv,.tsv,.yaml,.yml,.toml,.ini,.env,.log,.xml,.html,.css,.scss,.sass,.less,.js,.jsx,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.sql,.graphql,.docx,.pdf,.doc,.rtf,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.odp,image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp" style={{ display: 'none' }} onChange={handleFilesSelected} />
                   <input ref={folderInputRef} type="file" multiple webkitdirectory="" directory="" style={{ display: 'none' }} onChange={handleFilesSelected} />
                   <input ref={imageFileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp" multiple style={{ display: 'none' }} onChange={handleImageFilesSelected} />
