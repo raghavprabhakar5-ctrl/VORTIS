@@ -3281,12 +3281,9 @@ useEffect(() => {
     return { ok: true, text };
   };
 
-  // ── Retry with backoff on rate-limit (429) ──
-  // The backend now races ALL vision providers in parallel with a 15s
-  // overall budget, so a 429 means EVERY provider is throttled. Retrying
-  // more than once is pointless — they'll all fail again. We do at most
-  // ONE retry after a short delay, giving the providers a brief window
-  // to recover. Total worst-case wait: ~17s (15s backend + 2s backoff).
+  // Retry once on 429 — the backend races all providers in parallel,
+  // so a 429 means every provider is throttled. One retry after a 2s
+  // delay gives them a brief window to recover.
   const delays = [0, 2000];
   let lastError = null;
 
@@ -3390,7 +3387,35 @@ useEffect(() => {
     if (!files.length) return;
     const MAX_CHARS = 20000;
 
-    for (const file of files.slice(0, 12)) {
+    // Reject video/audio/executable files — the accept attribute doesn't
+    // catch every case (OS file pickers expose "All Files" dropdown).
+    const REJECTED_MIME_PREFIXES = ['video/', 'audio/'];
+    const REJECTED_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv',
+                          '.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a',
+                          '.exe', '.dll', '.so', '.bin', '.app', '.dmg', '.msi',
+                          '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'];
+    const acceptedFiles = files.filter(f => {
+      const mime = (f.type || '').toLowerCase();
+      const name = (f.name || '').toLowerCase();
+      if (REJECTED_MIME_PREFIXES.some(p => mime.startsWith(p))) return false;
+      if (REJECTED_EXTS.some(ext => name.endsWith(ext))) return false;
+      return true;
+    });
+    if (acceptedFiles.length < files.length) {
+      const rejectedCount = files.length - acceptedFiles.length;
+      setAttachments(prev => [...prev, {
+        id: `rej-${Date.now()}`,
+        type: 'document',
+        name: `${rejectedCount} file${rejectedCount === 1 ? '' : 's'} rejected`,
+        content: '',
+        preview: `Video, audio, archive, and executable files cannot be attached. ${rejectedCount} file${rejectedCount === 1 ? ' was' : 's were'} skipped.`,
+        mime: 'text/rejected',
+        size: 0,
+      }]);
+    }
+    const finalFiles = acceptedFiles.slice(0, 12);
+
+    for (const file of finalFiles) {
       if (isImageFile(file.name, file.type)) {
         const dataUrl = await readAsDataURL(file);
         setAttachments(prev => [...prev, {
@@ -3650,33 +3675,49 @@ Title:`,
 
 useEffect(() => {
   const handleBeforeUnload = () => {
-    if (incognito || messages.length === 0) return;
+    if (incognito) return;
+    // Save the current chat so partial streaming responses aren't lost.
+    const msgsToSave = [...messages];
+    if (streaming && streamText && streamText.trim().length > 0) {
+      msgsToSave.push({
+        id: `a-partial-${Date.now()}`,
+        role: 'assistant',
+        text: streamText.trim() + '\n\n_(response was interrupted)_',
+        ts: Date.now(),
+      });
+    }
+    if (msgsToSave.length === 0) return;
     try {
       localStorage.setItem('vertex_last_chat', JSON.stringify({
         chatId: chatIdRef.current,
-        messages: messages.map(m => ({ ...m, text: (m.text || '').slice(0, 12000) })),
+        messages: msgsToSave.map(m => ({ ...m, text: (m.text || '').slice(0, 12000) })),
       }));
     } catch (_) {}
   };
   window.addEventListener('beforeunload', handleBeforeUnload);
   return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-}, [messages, incognito]);
+}, [messages, incognito, streaming, streamText]);
 
+// CodeChat always starts fresh on load — we do NOT auto-restore the
+// previous chat into the UI. But if the previous session ended
+// mid-stream, we persist the saved partial to Firestore so it's
+// recoverable from the sidebar. Then clear the localStorage entry.
 useEffect(() => {
   if (!user) return;
-  if (messages.length > 0) return;
   try {
     const saved = localStorage.getItem('vertex_last_chat');
-    if (!saved) return;
-    const { chatId: savedId, messages: savedMsgs } = JSON.parse(saved);
-    if (savedId && savedMsgs?.length > 0) {
-      setChatId(savedId);
-      chatIdRef.current = savedId;
-      setMessages(savedMsgs);
-      convHistoryRef.current = savedMsgs.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+    if (saved) {
+      const { chatId: savedId, messages: savedMsgs } = JSON.parse(saved);
+      // Persist the saved chat (including any partial streaming
+      // response) to Firestore so it's not lost. Don't load it into
+      // the UI — the user starts on the main screen and can click
+      // the chat from the sidebar to resume.
+      if (savedId && savedMsgs?.length > 0 && persistChat && !incognito) {
+        persistChat(savedMsgs, undefined, savedId);
+      }
     }
+    localStorage.removeItem('vertex_last_chat');
   } catch (_) {}
-  localStorage.removeItem('vertex_last_chat');
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [user]);
 
@@ -4062,18 +4103,14 @@ const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend, my
       .filter(att => att.type === 'image' && att.content)
       .map(att => ({ url: att.content, name: att.name }));
 
-    // ── Build text with PLACEHOLDERS for images. The real vision analysis
-    //    runs AFTER the user message is shown below — this is what makes
-    //    the send button feel instant instead of freezing for 15 seconds
-    //    while we wait on the vision API. The placeholder gets replaced
-    //    in-place once vision completes (see async block further down). ──
-    const imagePlaceholders = []; // [{att, placeholder}]
+    // Build text with placeholders for images. Vision analysis runs
+    // AFTER the user message is shown — keeps the send button responsive
+    // instead of freezing for 15s while we wait on the vision API.
+    const imagePlaceholders = [];
     if (pendingAttachments.length > 0) {
       const blocks = [];
       for (const att of pendingAttachments) {
         if (att.type === 'image') {
-          // Image attachments get a placeholder now; the real description
-          // is filled in by the async vision step further down in send().
           const placeholder = `[Attached image: ${att.name} — analyzing image content...]`;
           imagePlaceholders.push({ att, placeholder });
           blocks.push(placeholder);
@@ -4138,16 +4175,10 @@ chatControllersRef.current.set(myChatId, controller);
 
     const isStillActive = () => chatIdRef.current === myChatId;
 
-    // ── ASYNC VISION ANALYSIS — runs AFTER the user message is already
-    //    on screen and the input is cleared. This is the key fix: the
-    //    send button no longer freezes for 15s while we wait on vision.
-    //    The placeholder text in the user message gets replaced in-place
-    //    with the real description, then the LLM call fires with the
-    //    final text. If the user switches chat or clicks Stop during
-    //    analysis, we abort cleanly. ──
+    // Async vision analysis — runs after the user message is shown.
+    // Replaces placeholders with real descriptions, then fires the LLM call.
     if (imagePlaceholders.length > 0) {
       for (const { att, placeholder } of imagePlaceholders) {
-        // Bail out if user switched chats during analysis.
         if (!isStillActive()) return;
         const mode = ocrMode ? 'ocr' : 'describe';
         const visionResult = await describeImage(att.content, att.name, mode);
@@ -4162,25 +4193,19 @@ chatControllersRef.current.set(myChatId, controller);
         }
         text = text.replace(placeholder, replacement);
       }
-      // Update the user message in-place so the chat shows the real
-      // description instead of the placeholder.
       if (isStillActive()) {
         setMessages(prev => prev.map(m => m.id === userMsg.id ? { ...m, text } : m));
       }
-      // Keep lastSendRef in sync so Retry resends the final text.
       lastSendRef.current = text;
     }
 
-    // If user clicked Stop or switched chats during vision analysis, bail.
     if (abortedChatsRef.current.has(myChatId) || !isStillActive()) {
       if (isStillActive()) { setStreaming(false); setThinking(false); setStreamText(''); }
       return;
     }
 
-    // Rebuild nextMsgs so the LLM sees the final (vision-replaced) text
-    // instead of the placeholder. Without this, the assistant would
-    // receive "[Attached image: foo.jpg — analyzing image content...]"
-    // and have no idea what was in the image.
+    // Rebuild nextMsgs with vision-replaced text so the LLM sees the
+    // real description, not the placeholder.
     const finalUserMsg = { ...userMsg, text };
     const finalNextMsgs = [...baseMessages, finalUserMsg];
     const historyForBackend = finalNextMsgs.slice(-12).map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
@@ -5542,9 +5567,9 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
                       </div>
                     </div>
                   )}
-                  <input ref={fileInputRef} type="file" multiple accept=".txt,.md,.markdown,.json,.csv,.tsv,.yaml,.yml,.toml,.ini,.env,.log,.xml,.html,.css,.scss,.sass,.less,.js,.jsx,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.sql,.graphql,.docx,.pdf,.doc,.rtf,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.odp,image/*" style={{ display: 'none' }} onChange={handleFilesSelected} />
+                  <input ref={fileInputRef} type="file" multiple accept=".txt,.md,.markdown,.json,.csv,.tsv,.yaml,.yml,.toml,.ini,.env,.log,.xml,.html,.css,.scss,.sass,.less,.js,.jsx,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.hpp,.cs,.php,.sh,.bash,.sql,.graphql,.docx,.pdf,.doc,.rtf,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.odp,image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp" style={{ display: 'none' }} onChange={handleFilesSelected} />
                   <input ref={folderInputRef} type="file" multiple webkitdirectory="" directory="" style={{ display: 'none' }} onChange={handleFilesSelected} />
-                  <input ref={imageFileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImageFilesSelected} />
+                  <input ref={imageFileInputRef} type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/bmp" multiple style={{ display: 'none' }} onChange={handleImageFilesSelected} />
                   <input ref={docFileInputRef} type="file" multiple accept=".docx,.pdf,.doc,.rtf,.pptx,.ppt,.xlsx,.xls,.odt,.ods,.odp,.txt,.md,.csv" style={{ display: 'none' }} onChange={handleFilesSelected} />
                 </div>
                 <textarea
