@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel/
+
+# Build output
+dist/
+**/dist/
+
+# Logs
+*.log
+
+# Whisper ONNX model files
+vortis-vite/public/models/whisper-small/onnx/*.onnx
