@@ -3389,7 +3389,15 @@ useEffect(() => {
       setAttachments(prev => prev.map(a =>
         a.id === att.id ? { ...a, _ocrProcessing: true } : a
       ));
-      const result = await describeImage(att.content, att.name, 'ocr');
+      /* OCR→describe fallback */
+      let result = await describeImage(att.content, att.name, 'ocr');
+      // OCR found nothing readable — fall back to describe mode so the
+      // LLM still gets visual context (photo, diagram, UI mockup, etc.).
+      let fallbackToDescribe = false;
+      if (result.ok && result.text === '[No text detected]') {
+        const desc = await describeImage(att.content, att.name, 'describe');
+        if (desc.ok && desc.text) { result = desc; fallbackToDescribe = true; }
+      }
       setAttachments(prev => prev.map(a => {
         if (a.id !== att.id) return a;
         if (result.ok && result.text && result.text !== '[No text detected]') {
@@ -3397,11 +3405,12 @@ useEffect(() => {
           return {
             ...a,
             type: 'file',
-            preview: lines.slice(0, 6).join('\n') + (lines.length > 6 ? '\n… (truncated)' : ''),
+            preview: (fallbackToDescribe ? '〔image description〕\n' : '') + lines.slice(0, 6).join('\n') + (lines.length > 6 ? '\n… (truncated)' : ''),
             content: result.text,
             lines: lines.length,
             _ocrProcessed: true,
             _ocrProcessing: false,
+            _ocrFallback: fallbackToDescribe,
           };
         }
         return { ...a, _ocrProcessed: true, _ocrProcessing: false, _ocrFailed: !result.ok };
@@ -4020,6 +4029,11 @@ useEffect(() => {
 // so the full answer still gets collected and saved.
 const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend, myChatId, signal) => {
   const isStillActive = () => chatIdRef.current === myChatId;
+  /* partial-text preservation: hoisted out of try so the catch
+     path can return whatever was already streamed when the
+     connection drops mid-reply — the user keeps the partial text
+     instead of seeing their answer vanish. */
+  let full = '';
   try {
     const res = await fetch(API, {
       method: 'POST',
@@ -4047,7 +4061,7 @@ const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend, my
     if (isStillActive()) setThinking(false);
     const reader = res.body.getReader();
     const dec = new TextDecoder();
-    let buffer = '', full = '', shown = '';
+    let buffer = '', shown = '';
     let dripTimer = null, watchdogTimer = null;
     const DRIP_MS = 33, DRIP_CHARS = 60;
 
@@ -4097,14 +4111,16 @@ const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend, my
     forceFlush();
     return { text: full, errorMsg: null, status: res.status, isNetwork: false };
   } catch (e) {
-    // User clicked Stop, switched chats, or closed the tab — not an error,
-    // just stop reading. The partial `full` text was already forceFlushed
-    // by the call above isn't reachable here (it's in the try block), but
-    // stopStreaming has already saved the partial text via streamText state.
+    /* partial-text preservation: if the SSE connection drops mid-
+       stream, return whatever was already accumulated in `full` so
+       the user keeps their partial reply instead of seeing it
+       vanish. The drip loop may not have flushed everything yet,
+       so we also force-set streamText to the full accumulated text. */
+    if (full && isStillActive()) setStreamText(full);
     if (signal?.aborted || abortedChatsRef.current.has(myChatId) || e?.name === 'AbortError') {
-      return { text: '', errorMsg: null, status: null, isNetwork: false, aborted: true };
+      return { text: full, errorMsg: null, status: null, isNetwork: false, aborted: true };
     }
-    return { text: '', errorMsg: `Network error: ${e?.message || 'unknown'}`, status: null, isNetwork: true };
+    return { text: full, errorMsg: `Network error: ${e?.message || 'unknown'}`, status: null, isNetwork: true };
   }
 }, []);
 
@@ -4212,12 +4228,22 @@ chatControllersRef.current.set(myChatId, controller);
     if (imagePlaceholders.length > 0) {
       for (const { att, placeholder } of imagePlaceholders) {
         if (!isStillActive()) return;
+        /* OCR→describe fallback */
         const mode = ocrMode ? 'ocr' : 'describe';
-        const visionResult = await describeImage(att.content, att.name, mode);
+        let visionResult = await describeImage(att.content, att.name, mode);
+        let effectiveMode = mode;
+        let fallbackToDescribe = false;
+        // OCR returned no text — retry with describe mode so the LLM still
+        // gets visual context for the image (the user explicitly asked:
+        // "if there is no text extraction then normal").
+        if (ocrMode && visionResult.ok && visionResult.text === '[No text detected]') {
+          const desc = await describeImage(att.content, att.name, 'describe');
+          if (desc.ok && desc.text) { visionResult = desc; effectiveMode = 'describe'; fallbackToDescribe = true; }
+        }
         let replacement;
         if (visionResult.ok && visionResult.text && visionResult.text !== '[No text detected]') {
-        const label = ocrMode ? 'OCR extracted text' : 'Image description';
-        replacement = `[Image: ${att.name} — ${label}:]\n\n${visionResult.text}`;
+          const label = effectiveMode === 'ocr' ? 'OCR extracted text' : 'Image description';
+          replacement = `[Image: ${att.name} — ${label}:]\n\n${visionResult.text}`;
         }
          else if (visionResult.ok && visionResult.text === '[No text detected]') {
           replacement = `[Attached image: ${att.name} — OCR found no readable text. The image may be a photo, diagram, or abstract image.]`;
@@ -5779,6 +5805,48 @@ const cleanStream = (text) => {
     .trim();
 };
 
+/* stripImageMetadataFromUserText */
+/*
+ * ── Image-attachment metadata stripper — used ONLY for user-message
+ *    rendering. The user's chat bubble shows just the image thumbnail +
+ *    their typed text; the OCR / description text injected for the LLM
+ *    stays invisible to the user so it doesn't leak into the chat.
+ *
+ *  Patterns stripped (the LLM still receives them in m.text — we only
+ *  filter at the RENDER layer for user messages):
+ *    [Attached image: X — analyzing image content...]   placeholder while vision is running
+ *    [Attached image: X — OCR found no readable text...] OCR fallback path, no text extracted
+ *    [Attached image: X — vision analysis failed: Y]    already handled by visionErrors, also stripped here for safety
+ *    [Attached document: X — ...]                        document-attachment marker, internal metadata only
+ *    [Image: X — OCR extracted text:]\n\n{...}           OCR success block
+ *    [Image: X — Image description:]\n\n{...}           describe-mode success block
+ *
+ *  Why strip even the success blocks: the user already sees the image
+ *  thumbnail in their bubble. Echoing the OCR text / description back
+ *  to them is noise — they pasted the image, they know what's in it.
+ *  The whole point of the vision pipeline is to make the LLM "see"
+ *  the image, not to lecture the user about their own attachment.
+ */
+const stripImageMetadataFromUserText = (text) => {
+  if (!text) return '';
+  let t = text;
+  // 1. Strip success blocks: "[Image: X — label:]\n\n<any text up to the
+  //    next [Image: / [Attached image: marker, or end of string>".
+  //    Can't use simple .*? because OCR text can span many lines and
+  //    contain backticks, brackets, etc.
+  t = t.replace(
+    /\[Image:[^\]]*?:\]\s*(?:\n\n)?([\s\S]*?)(?=\n\[Image:|\n\[Attached image:|\[Attached image:|$)/g,
+    ''
+  );
+  // 2. Strip placeholder / failure / no-text markers
+  t = t.replace(/\[Attached image:[^\]]*\]/g, '');
+  // 3. Strip document-attachment markers (also internal metadata, not user-facing)
+  t = t.replace(/\[Attached document:[^\]]*\]/g, '');
+  // 4. Clean up leftover whitespace from the removed blocks
+  t = t.replace(/\n{3,}/g, '\n\n').trim();
+  return t;
+};
+
 const MessageContent = React.memo(({
   text,
   mdComponents,
@@ -5812,12 +5880,20 @@ const MessageContent = React.memo(({
   // Remove the vision-error placeholders from the text so they don't render
   // as raw text alongside the error card.
   const cleanedWithoutVisionErrors = useMemo(() => {
+    // For user messages (skipClarify === true), strip ALL image-attachment
+    // metadata so the user only sees the image thumbnail + their typed text.
+    // The LLM still gets the full text via m.text — this is purely a render
+    // layer filter. For assistant messages we keep the original behavior
+    // (only strip vision-failed errors so they render as nice error cards).
+    if (skipClarify) {
+      return stripImageMetadataFromUserText(cleaned);
+    }
     if (visionErrors.length === 0) return cleaned;
     return cleaned
       .replace(/\[Attached image:\s*[^\]]+?\s*—\s*vision analysis failed:\s*[^\]]+?\]/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-  }, [cleaned, visionErrors]);
+  }, [cleaned, visionErrors, skipClarify]);
 
   const parsed = useMemo(() => {
   let t = cleanedWithoutVisionErrors;
