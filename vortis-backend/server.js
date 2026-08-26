@@ -96,11 +96,27 @@ const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
 const NVIDIA_VISION_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
 
 // NVIDIA NIM — vision chain models
+// FIX (2026-08-26): pruned dead / slow models based on production logs.
+//   - 'meta/muse-glimmer-30b'              → always aborted in the parallel
+//                                           race (cold-start > 20s, never
+//                                           produced output within the
+//                                           timeout).
+//   - 'nvidia/nemotron-nano-12b-v2-vl'     → HTTP 410 — NVIDIA marked this
+//                                           model end-of-life on
+//                                           2026-08-26T09:00:00Z. Keeping
+//                                           it in the chain burned a
+//                                           network round-trip on every
+//                                           vision request and produced
+//                                           a noisy log line every time.
+//   - 'meta/llama-3.2-90b-vision-instruct' → consistently aborted in the
+//                                           parallel race (90B MoE cold-
+//                                           start >> 20s timeout).
+//
+// Only the two models that actually win the race in real traffic are kept.
+// The race still happens — if NVIDIA revives a pruned ID later we can add
+// it back to this array.
 const NVIDIA_VISION_CHAIN = [
   'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
-  'meta/muse-glimmer-30b',
-  'nvidia/nemotron-nano-12b-v2-vl',
-  'meta/llama-3.2-90b-vision-instruct',
   'meta/llama-3.2-11b-vision-instruct',
 ];
 
@@ -1275,15 +1291,25 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 // below so we never wait more than ~35s total across all models before
 // falling back to Groq/CF.
 function headersTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 18000;   // was 60000 (shared)
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 8000;
-  return 6000;
+  // FIX (2026-08-26): bumped ultra from 18s → 30s. Production keep-alive
+  // logs routinely show ultra-550b cold-start at 23-29s; the old 18s
+  // header budget aborted the request before NVIDIA even sent response
+  // headers, which surfaced as 'This operation was aborted' on EVERY
+  // heavy request after a deploy/idle gap. 30s gives ultra enough headroom
+  // to actually respond, while still bounding the worst case.
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 30000;   // was 18000
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 12000; // was 8000
+  return 10000;                                           // was 6000
 }
 
 function firstByteTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 15000;   // was 50000
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 8000;  // was 20000
-  return 6000;                                            // was 15000
+  // FIX (2026-08-26): ultra 15s → 25s (matches the new headers budget so a
+  // successful headers phase leaves enough room for the first SSE chunk).
+  // quality 8s → 12s (stepfun occasionally takes 8-10s to emit the first
+  // byte even when warm). default 6s → 10s (lightning cold-start is ~8s).
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 25000;   // was 15000
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 12000; // was 8000
+  return 10000;                                           // was 6000
 }
 
 const IDLE_TIMEOUT_MS = 20000; // was 45000 — mid-stream stalls this long are genuinely dead
@@ -1331,7 +1357,13 @@ if (modelsToTry.length === 0) {
 console.log(`Code-chat stream: chain=${chainName} will try [${modelsToTry.join(', ')}]`);
 
 
-const chainDeadline = Date.now() + 35000; // hard ceiling across the WHOLE chain
+// FIX (2026-08-26): 35s → 75s. The old 35s ceiling was the direct cause
+// of 'all NVIDIA models failed — caller should try Groq/CF fallback' firing
+// on every heavy code-chat after an idle gap. Ultra alone can burn 25-30s
+// on a cold-start timeout; with only 35s total the chain bailed before
+// stepfun or lightning even got a chance to attempt. 75s gives the chain
+// enough room to actually try every model in the heavy order at least once.
+const chainDeadline = Date.now() + 75000; // hard ceiling across the WHOLE chain
 
 let attemptIdx = 0;
 for (const nvidiaModel of modelsToTry) {
@@ -1402,6 +1434,21 @@ for (const nvidiaModel of modelsToTry) {
           // returns true forever for it.
           if (nvRes.status === 404 || nvRes.status === 401 || nvRes.status === 410) {
             markNvidiaModelInvalid(nvidiaModel, `HTTP ${nvRes.status}`);
+            attemptFailed = true;
+            break;
+          }
+          // RATE LIMIT (429) — stepfun-ai/step-3.7-flash returns this when
+          // NVIDIA's per-model TPM budget is exhausted. Don't count it as
+          // a 'real' model failure (the model is fine, we're just over
+          // quota); instead apply a single cooldown strike so the circuit
+          // breaker skips it for 2 min if it happens twice in a row.
+          // Without this, 429 was falling through to the generic single-
+          // failure path which tripped the breaker on 2 strikes regardless
+          // of cause, blocking a perfectly-good model just because we
+          // briefly over-queried it.
+          if (nvRes.status === 429) {
+            recordNvidiaFailure(nvidiaModel);
+            console.warn(`Code-chat: ${nvidiaModel} HTTP 429 (rate limited) — circuit breaker strike 1/2 (cooldown only if hit again)`);
             attemptFailed = true;
             break;
           }
@@ -2945,11 +2992,39 @@ if (looksLikeClarifyAnswer) {
         // output tokens, so 32K is a safe cap that lets 95%+ of requests
         // complete in a single pass with no continuation needed.
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
-        // CodeChat is NIM-only. If every NIM model failed, show a clean
-        // error so the user knows to retry or switch to Vortis chat.
+        // FIX (2026-08-26): the previous version printed a hardcoded
+        // 'code models are temporarily unavailable' message here and bailed
+        // — even though streamCodeChatFallback() (defined further up in this
+        // file) was DESIGNED for exactly this case. The dead-code gap meant
+        // that whenever every NVIDIA model timed out (which happens often
+        // right after a deploy or idle gap, when ultra-550b is cold-starting
+        // at 23-29s and exceeds even our 25s first-byte budget), the user
+        // saw 'temporarily unavailable' instead of getting an answer from
+        // Groq + Cloudflare. Now we actually fall through, matching the
+        // intent of streamCodeChatFallback's comment: 'Used when NVIDIA
+        // code-chat fails entirely. Streams via Groq using gpt-oss-20b
+        // (fast, decent for code) and falls back through the same
+        // NVIDIA / CF chain that regular chat uses.'
+        if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
+          console.warn('Code-chat: NVIDIA chain failed — falling through to Groq+CF (streamCodeChatFallback)');
+          try {
+            ok = await streamCodeChatFallback(groq, codeMessages, res, {
+              CF_TOKEN,
+              CF_ACCOUNT,
+              clientSignal: clientSignal.signal,
+              chainName,
+            });
+          } catch (fallbackErr) {
+            console.error('Code-chat Groq+CF fallback also failed:', fallbackErr.message);
+            ok = false;
+          }
+        }
+        // Only show the 'unavailable' message if BOTH the NVIDIA chain AND
+        // the Groq+CF fallback failed. This is now genuinely rare — it
+        // requires every provider to be down at once.
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           try {
-            res.write(`data: ${JSON.stringify({ content: 'The code models are temporarily unavailable. Please retry in a moment, or switch to Vortis chat for a wider model fallback.' })}\n\n`);
+            res.write(`data: ${JSON.stringify({ content: 'All code models are temporarily unavailable (NVIDIA + Groq + Cloudflare all failed). Please retry in a moment.' })}\n\n`);
             res.write('data: [DONE]\n\n');
             res.end();
           } catch (_) {}
@@ -3517,7 +3592,29 @@ RULES — be strict, most messages produce an EMPTY array []:
       };
 
       // ── Helper: try an NVIDIA vision model ──
+      // FIX (2026-08-26): the old helper had three problems that together
+      //   caused the vision race to fire dead/blocked models on EVERY
+      //   request and produced the recurring log spam:
+      //     1. It did NOT consult isNvidiaModelBlocked() — so models that
+      //        had returned HTTP 410 (end-of-life) or were in circuit-
+      //        breaker cooldown were retried on every single vision call.
+      //     2. It did NOT mark models invalid on 404/401/410 — so the
+      //        EOL 'nvidia/nemotron-nano-12b-v2-vl' kept getting retried
+      //        indefinitely (it took a chain prune to actually stop the
+      //        noise). Now we mark + skip, so a future EOL won't need a
+      //        code change.
+      //     3. It did NOT distinguish 429 (rate-limit, transient) from
+      //        real failures, so a brief over-quota moment could cascade
+      //        into permanent circuit-breaker cooldown for the model.
       const tryNvidiaVision = async (modelId) => {
+  // Skip blocked models up front — no wasted network round-trip on a known
+  // dead ID (HTTP 410 EOL) or a model that's in 2-min cooldown after 502s.
+  if (isNvidiaModelBlocked(modelId)) {
+    if (process.env.VERBOSE_KEEPALIVE === '1') {
+      console.log(`NVIDIA vision (${modelId}) skipped — blocked (invalid or circuit-breaker cooldown)`);
+    }
+    return null;
+  }
   try {
     const nvKey = process.env.NVIDIA_API_KEY;
     if (!nvKey) return null;
@@ -3544,6 +3641,29 @@ RULES — be strict, most messages produce an EMPTY array []:
     if (!nvRes.ok) {
       let errBody = '';
       try { errBody = (await nvRes.text()).slice(0, 300); } catch (_) {}
+      // PERMANENT errors (404/401/410) — mark invalid so we stop pinging.
+      // 'nvidia/nemotron-nano-12b-v2-vl' EOL on 2026-08-26 returns 410 and
+      // would otherwise be retried on every vision call forever.
+      if (nvRes.status === 404 || nvRes.status === 401 || nvRes.status === 410) {
+        markNvidiaModelInvalid(modelId, `HTTP ${nvRes.status} during vision`);
+        console.warn(`NVIDIA vision (${modelId}) marked INVALID — HTTP ${nvRes.status} (${errBody.slice(0, 120)})`);
+        return null;
+      }
+      // RATE LIMIT (429) — model is fine, we're over quota. Don't trip the
+      // circuit breaker instantly; one strike so we only cool down if it
+      // happens twice in a row.
+      if (nvRes.status === 429) {
+        recordNvidiaFailure(modelId);
+        console.warn(`NVIDIA vision (${modelId}) HTTP 429 (rate limited) — strike 1/2`);
+        return null;
+      }
+      // TRANSIENT (502/503/504) — instant trip, 2-min cooldown.
+      if (nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
+        recordNvidiaFailure(modelId);
+        recordNvidiaFailure(modelId);
+        console.warn(`NVIDIA vision (${modelId}) HTTP ${nvRes.status} — instant circuit breaker trip`);
+        return null;
+      }
       console.log(`NVIDIA vision (${modelId}) HTTP ${nvRes.status} — ${errBody}`);
       return null;
     }
@@ -3554,7 +3674,11 @@ RULES — be strict, most messages produce an EMPTY array []:
       return null;
     }
     const desc = stripInternalReasoning(rawDesc);
-    return (desc && desc.trim().length > 2) ? desc : null;
+    if (desc && desc.trim().length > 2) {
+      recordNvidiaSuccess(modelId);
+      return desc;
+    }
+    return null;
   } catch (e) {
     console.log(`NVIDIA vision (${modelId}) failed:`, e.message);
     return null;
@@ -3568,10 +3692,23 @@ RULES — be strict, most messages produce an EMPTY array []:
       let description = null;
 
       const raceNvidiaModels = async (label) => {
-        const candidates = NVIDIA_VISION_CHAIN.map(id => ({
-          name: `nvidia-${id}`,
-          fn: () => tryNvidiaVision(id),
-        }));
+        // FIX (2026-08-26): filter out blocked models BEFORE building the
+        // race candidate list. The old code mapped over the full chain
+        // unconditionally, so a model that returned 410 on the previous
+        // request (and was correctly marked invalid) was STILL fired again
+        // on the next request — wasting a network round-trip, producing
+        // the recurring 'NVIDIA vision (...) HTTP 410' log line, and
+        // slowing down the race for everyone.
+        const candidates = NVIDIA_VISION_CHAIN
+          .filter(id => !isNvidiaModelBlocked(id))
+          .map(id => ({
+            name: `nvidia-${id}`,
+            fn: () => tryNvidiaVision(id),
+          }));
+        if (candidates.length === 0) {
+          console.warn(`Vision [${label}] race skipped — all NVIDIA vision models currently blocked`);
+          return null;
+        }
         return Promise.any(
           candidates.map(async (c) => {
             const result = await c.fn();
@@ -3587,15 +3724,18 @@ RULES — be strict, most messages produce an EMPTY array []:
       // Attempt 1: parallel race
       description = await raceNvidiaModels('race');
 
-      // Attempt 2: sequential retry of top 3 after 2s
+      // Attempt 2: sequential retry of remaining (non-blocked) chain models after 2s
       if (!description) {
-        await new Promise(r => setTimeout(r, 2000));
-        for (const modelId of NVIDIA_VISION_CHAIN.slice(0, 3)) {
-          const result = await tryNvidiaVision(modelId);
-          if (result && result.trim().length > 2) {
-            console.log(`Vision [retry] succeeded: nvidia-${modelId}`);
-            description = result;
-            break;
+        const retryCandidates = NVIDIA_VISION_CHAIN.slice(0, 3).filter(id => !isNvidiaModelBlocked(id));
+        if (retryCandidates.length > 0) {
+          await new Promise(r => setTimeout(r, 2000));
+          for (const modelId of retryCandidates) {
+            const result = await tryNvidiaVision(modelId);
+            if (result && result.trim().length > 2) {
+              console.log(`Vision [retry] succeeded: nvidia-${modelId}`);
+              description = result;
+              break;
+            }
           }
         }
       }
