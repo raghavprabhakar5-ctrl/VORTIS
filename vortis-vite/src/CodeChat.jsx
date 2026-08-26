@@ -708,8 +708,8 @@ const extractFilePath = (code, lang) => {
   // we need to run the raw-text-leak defender below. So just skip the
   // fence-extraction loop if there are no fences, but keep going.
   if (!text.includes('```')) {
-    // No fences — go straight to the defender.
-    return _defendRawCode(text, [], isActiveStream);
+    const defended = _defendRawCode(text, isActiveStream);
+    return { project: defended.files.length > 0 ? defended.files : null, text: defended.text };
   }
   // Closed fences: ```lang\n...```
   // Closed fences: ```lang\n...``` OR ```lang<!-- file:... (no newline,
@@ -769,26 +769,14 @@ const extractFilePath = (code, lang) => {
       files.push({ path: extracted.path, lang, code: extracted.code, streaming: isActiveStream, incomplete: true });
     }
   }
-  out += text.slice(lastIdx);
-  if (files.length === 0) {
-    // ── FIX: raw-text-leak defender for SINGLE-FILE case ──
-    // When the model emits code WITHOUT any ``` fence (common for
-    // single-file requests), the code leaks as raw text. Scan `out` for
-    // unambiguous code-opener lines and wrap each contiguous code run in a
-    // synthetic ``` fence so ReactMarkdown renders it as a code block.
-    //
-    // SAFE FOR MULTI-FILE: this branch only runs when files.length === 0
-    // (no `// file:` markers found). Multi-file requests always have
-    // markers, so this code never runs for them.
-    const defended = _defendRawCode(out, isActiveStream);
-    if (defended.files.length > 0) {
-      return { project: defended.files, text: defended.text };
-    }
-    return { project: null, text: out };
+    out += text.slice(lastIdx);
+  const defended = _defendRawCode(out, isActiveStream);
+  const cleanedText = defended.text.replace(/\n{3,}/g, '\n\n');
+  const allFiles = [...files, ...defended.files];
+  if (allFiles.length === 0) {
+    return { project: null, text: cleanedText };
   }
-  // collapse the gap left by stripping (avoid triple blank lines)
-  const cleanedText = out.replace(/\n{3,}/g, '\n\n');
-  return { project: files, text: cleanedText };
+  return { project: allFiles, text: cleanedText };
 };
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -2969,7 +2957,7 @@ useEffect(() => {
   const [chatId, setChatId] = useState(() => Date.now().toString());
   const chatIdRef = useRef(chatId);
   const chatTitleStateRef = useRef(new Map());
-  const TITLE_FINALIZE_AFTER_USER_TURNS = 3;
+  const TITLE_FINALIZE_AFTER_USER_TURNS = 1;
   useEffect(() => { chatIdRef.current = chatId; }, [chatId]);
   const convHistoryRef = useRef([]);
   const [editingMsgId, setEditingMsgId] = useState(null);
