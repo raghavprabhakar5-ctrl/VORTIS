@@ -3317,6 +3317,13 @@ useEffect(() => {
 
   /* ── Paste attachments ("PASTED" cards above the input) ── */
   const [attachments, setAttachments] = useState([]);
+  /* ocr-race-fix: mirror of `attachments` that always points to the
+     latest state. send() reads this so it can see updates the
+     useEffect made AFTER send() captured its `pendingAttachments`
+     snapshot — e.g. when OCR converts an image to a file attachment,
+     or when OCR fails and sets `_ocrFailed: true`. */
+  const attachmentsRef = useRef([]);
+  useEffect(() => { attachmentsRef.current = attachments; }, [attachments]);
 
   const handlePaste = useCallback((e) => {
     const items = e.clipboardData?.items || [];
@@ -3381,7 +3388,13 @@ useEffect(() => {
 
   useEffect(() => {
   if (!ocrMode) return;
-  const pending = attachments.filter(a => a.type === 'image' && !a._ocrProcessed);
+  /* ocr-race-fix: also filter out _ocrProcessing images so the
+     useEffect doesn't re-fire on the same image when attachments
+     state changes mid-processing (the setAttachments call inside
+     the loop triggers a re-render, which re-runs the useEffect,
+     which would start ANOTHER describeImage call for the same
+     image — the classic duplicate-call race condition). */
+  const pending = attachments.filter(a => a.type === 'image' && !a._ocrProcessed && !a._ocrProcessing);
   if (pending.length === 0) return;
 
   (async () => {
@@ -3413,7 +3426,11 @@ useEffect(() => {
             _ocrFallback: fallbackToDescribe,
           };
         }
-        return { ...a, _ocrProcessed: true, _ocrProcessing: false, _ocrFailed: !result.ok };
+        /* ocr-race-fix: store the failure reason so send() can
+           construct the error card text WITHOUT firing another
+           vision API call (which would just get rate-limited
+           again with the same error). */
+        return { ...a, _ocrProcessed: true, _ocrProcessing: false, _ocrFailed: !result.ok, _ocrFailReason: !result.ok ? (result.error || 'Vision analysis failed') : null };
       }));
     }
   })();
@@ -4142,6 +4159,36 @@ const fetchAssistantReply = useCallback(async (fullPrompt, historyForBackend, my
       pendingImageRestoreRef.current = null; // clear after consuming
     }
 
+    /* ocr-race-fix: if OCR mode is ON and any image is still being
+       processed by the useEffect, wait for it to finish (max 15s).
+       This prevents firing a DUPLICATE vision API call in the
+       imagePlaceholders loop below — the most common cause of the
+       "Vision service is busy right now after multiple retries"
+       error that only appears when OCR mode is enabled.
+
+       After waiting, re-read the latest attachment state from
+       attachmentsRef so we pick up any conversions (image → file)
+       or failures (_ocrFailed: true) that the useEffect made. */
+    if (ocrMode && !overrideMessages) {
+      const hasProcessingImages = () => attachmentsRef.current.some(a =>
+        a.type === 'image' && a._ocrProcessing
+      );
+      if (hasProcessingImages()) {
+        const deadline = Date.now() + 15000;
+        while (Date.now() < deadline && hasProcessingImages()) {
+          if (abortedChatsRef.current.has(chatIdRef.current)) break;
+          await new Promise(r => setTimeout(r, 200));
+        }
+        // Re-read the latest attachment state after waiting.
+        pendingAttachments = [...attachmentsRef.current];
+        // Re-merge restored images if any (from regenerate/retry).
+        if (pendingImageRestoreRef.current && pendingImageRestoreRef.current.length > 0) {
+          pendingAttachments = [...pendingAttachments, ...pendingImageRestoreRef.current];
+          pendingImageRestoreRef.current = null;
+        }
+      }
+    }
+
     let text = rawText;
     // ── Capture image data URLs from attachments so we can show them as
     //    previews in the user's message bubble. Only images get previews;
@@ -4228,6 +4275,19 @@ chatControllersRef.current.set(myChatId, controller);
     if (imagePlaceholders.length > 0) {
       for (const { att, placeholder } of imagePlaceholders) {
         if (!isStillActive()) return;
+        /* ocr-race-fix: check if OCR was already attempted in the
+           useEffect and failed. If so, use the stored failure
+           reason to construct the error placeholder and SKIP the
+           vision API call — calling it again would just get
+           rate-limited with the same error (the user sees
+           "Vision service is busy right now after multiple
+           retries" every time they enable OCR mode). */
+        const latestAtt = attachmentsRef.current.find(a => a.id === att.id) || att;
+        if (latestAtt._ocrFailed && latestAtt._ocrFailReason) {
+          const replacement = `[Attached image: ${latestAtt.name} — vision analysis failed: ${latestAtt._ocrFailReason}]`;
+          text = text.replace(placeholder, replacement);
+          continue;
+        }
         /* OCR→describe fallback */
         const mode = ocrMode ? 'ocr' : 'describe';
         let visionResult = await describeImage(att.content, att.name, mode);
@@ -5934,7 +5994,7 @@ const MessageContent = React.memo(({
             <div style={{ color: '#b8b8b8', fontSize: 11.5, lineHeight: 1.5, wordBreak: 'break-word' }}>
               {err.reason}
             </div>
-            <div style={{ marginTop: 4, fontSize: 10.5, color: '#6a6a6a', fontFamily: 'JetBrains Mono, monospace' }}>
+            <div style={{ marginTop: 4, fontSize: 10.5, color: '#6a6a6a', fontFamily: 'JetBrains Mono, monospace', wordBreak: 'break-all', overflowWrap: 'anywhere' }}>
               {err.imageName}
             </div>
           </div>
@@ -6009,10 +6069,13 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
       <div style={{ display: 'flex', gap: 12, marginBottom: 18, justifyContent: 'flex-end' }}>
         <div
         data-vrtx-no-reply=""
+        /* overflow-fix-v2: minWidth:0 + overflowWrap:'anywhere' so long
+           unbroken strings (URLs, OCR output, base64) wrap inside the
+           bubble instead of pushing it past the screen edge. */
         style={{
-          maxWidth: '78%', background: '#1e1e1e', border: '1px solid #2a2a2a',
+          maxWidth: '78%', minWidth: 0, background: '#1e1e1e', border: '1px solid #2a2a2a',
           color: '#e6e6e6', borderRadius: 0, padding: '10px 14px',
-          fontSize: 14, lineHeight: 1.55, wordBreak: 'break-word'
+          fontSize: 14, lineHeight: 1.55, wordBreak: 'break-word', overflowWrap: 'anywhere'
         }}>
           {/* Image previews — shown above the text content. Clicking opens
               the full-size image in a new tab so the user can zoom in. */}
@@ -6083,7 +6146,11 @@ const MessageBubble = React.memo(({ role, text, ts, makeMdComponents, onSmartEdi
           VERTEX
           {ts && <span style={{ color: '#4a4a4a' }}>· {new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>}
         </div>
-        <div style={{ color: '#dcdcdc', maxWidth: '100%', overflowX: 'hidden', wordBreak: 'break-word' }}>
+        {/* overflow-fix-v2: removed overflowX:hidden (it was CLIPPING text
+           instead of wrapping it — caused the "questions/a" and
+           "**Meeting**" cut-offs in the screenshot). Added overflowWrap:
+           'anywhere' so long strings wrap at any character. */}
+        <div style={{ color: '#dcdcdc', maxWidth: '100%', minWidth: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
           <MessageContent
             text={text}
             mdComponents={mdComponents}
