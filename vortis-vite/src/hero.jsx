@@ -599,382 +599,666 @@ function TypewriterWord({ word }) {
     </span>
   );
 }
-// Interactive chat module mock up for the right side visual container
-function HeroVisual() {
+// ══════════════════════════════════════════════════════════════════
+//  VORTIS NEURAL CONSOLE — the cinematic AI interface visual
+//  for the redesigned Hero. Replaces the legacy HeroVisual chat
+//  mockup with a premium "command center" composition: a central
+//  breathing AI core, orbiting capability nodes connected by
+//  flowing data lines, ambient telemetry, and a live prompt bar
+//  with rotating typewriter placeholders.
+// ══════════════════════════════════════════════════════════════════
+
+const CONSOLE_CAPABILITIES = [
+  { Icon: Brain,         label: "Reasoning", angle: -90, status: "active" },
+  { Icon: Code2,         label: "Code",      angle: -30, status: "active" },
+  { Icon: Eye,           label: "Vision",    angle:  30, status: "active" },
+  { Icon: Globe,         label: "Web",       angle:  90, status: "idle"   },
+  { Icon: MessageSquare, label: "Chat",      angle: 150, status: "active" },
+  { Icon: Mic,           label: "Voice",     angle: 210, status: "idle"   },
+];
+
+const PROMPT_PLACEHOLDERS = [
+  "Analyze this codebase and suggest optimizations\u2026",
+  "Generate a pricing page in Next.js\u2026",
+  "Summarize the latest AI research papers\u2026",
+  "Design a logo for a fintech startup\u2026",
+  "Debug this React component\u2026",
+  "Draft a launch announcement\u2026",
+];
+
+function VortisNeuralConsole() {
   const [tick, setTick] = useState(0);
+  const [promptIdx, setPromptIdx] = useState(0);
+  const [typed, setTyped] = useState("");
+  const consoleRef = useRef(null);
+  const [glow, setGlow] = useState({ x: 50, y: 50, active: false });
+
+  // Heartbeat — drives the live telemetry numbers
   useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 1200);
+    const id = setInterval(() => setTick(t => t + 1), 1400);
     return () => clearInterval(id);
   }, []);
 
-  const messages = [
-    { role: "user", text: "Analyze competitor pricing" },
-    { role: "ai", text: "Found 12 sources. Stripe charges 2.9% + 30¢…" },
-    { role: "user", text: "Generate a comparison chart" },
-    { role: "ai", text: "Creating visualization…", typing: true },
-  ];
+  // Rotating prompt placeholder with typewriter reveal
+  useEffect(() => {
+    const full = PROMPT_PLACEHOLDERS[promptIdx];
+    let i = 0;
+    setTyped("");
+    const type = setInterval(() => {
+      if (i <= full.length) {
+        setTyped(full.slice(0, i));
+        i++;
+      } else {
+        clearInterval(type);
+        setTimeout(() => setPromptIdx(p => (p + 1) % PROMPT_PLACEHOLDERS.length), 2400);
+      }
+    }, 42);
+    return () => clearInterval(type);
+  }, [promptIdx]);
+
+  // Cursor-following soft glow inside the console
+  const handleMouseMove = (e) => {
+    if (!consoleRef.current) return;
+    const rect = consoleRef.current.getBoundingClientRect();
+    setGlow({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+      active: true,
+    });
+  };
+
+  // Node positions — used both for SVG connection lines and DOM nodes
+  // (must match the radius used by the SVG viewBox below).
+  const nodeX = (a, r = 0.34) => 50 + Math.cos((a * Math.PI) / 180) * r * 100;
+  const nodeY = (a, r = 0.34) => 50 + Math.sin((a * Math.PI) / 180) * r * 100;
 
   return (
-    <div className="hero-visual" style={{
-      width: "100%", maxWidth: 480, borderRadius: 20,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
-      overflow: "hidden", animation: "waveFloat 6s ease-in-out infinite",
-      boxShadow: "0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.1)",
-    }}>
-      {/* Window chrome */}
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid rgba(255, 123, 123, 0.06)", display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.02)" }}>
-        {["#ef4444","#f59e0b","#10b981"].map(c => (
-          <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
-        ))}
-        <div style={{ flex: 1, height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)", margin: "0 12px" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 10, color: "rgba(255,255,255,0.3)", fontFamily: "'JetBrains Mono',monospace" }}>
-          <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-          LIVE
-        </div>
-      </div>
-      
-      {/* Messages */}
-      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{
-            display: "flex", gap: 10, alignItems: "flex-start",
-            justifyContent: m.role === "user" ? "flex-end" : "flex-start",
-            opacity: tick > i * 0.5 ? 1 : 0,
-            transform: tick > i * 0.5 ? "translateY(0)" : "translateY(8px)",
-            transition: "all 0.4s ease",
-          }}>
-            {m.role === "ai" && (
-              <div style={{ width: 26, height: 26, borderRadius: 8, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {/* Ensure component is present or switch to a fallback icon/text */}
-                <VortisLogo size={14} color="#fff" />
-              </div>
-            )}
-            <div style={{
-              padding: "8px 12px", borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px",
-              background: m.role === "user" ? "linear-gradient(135deg,#7C3AED,#6366f1)" : "rgba(255,255,255,0.05)",
-              border: m.role === "ai" ? "1px solid rgba(255,255,255,0.08)" : "none",
-              fontSize: 12.5, color: m.role === "user" ? "#e0d9ff" : "rgba(255,255,255,0.8)",
-              maxWidth: "80%", lineHeight: 1.5,
-            }}>
-              {m.typing ? (
-                <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  {[0,1,2].map(d => (
-                    <span key={d} style={{ width: 6, height: 6, borderRadius: "50%", background: "#a855f7", animation: `pulse 1.2s ease-in-out ${d * 0.2}s infinite` }} />
-                  ))}
-                </span>
-              ) : m.text}
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {/* Input bar */}
-      <div style={{ padding: "10px 16px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 8, alignItems: "center" }}>
-        <div style={{ flex: 1, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", padding: "0 12px" }}>
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.25)", fontFamily: "'JetBrains Mono',monospace" }}>Ask anything…</span>
-        </div>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7C3AED,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 12px rgba(124,58,237,0.4)" }}>
-          <ArrowRight size={14} color="#fff" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function Hero({ onLogin, authLoading, authError, onOpenAuth }) {
-  const [wordIdx, setWordIdx] = useState(0);
-
-function AuthPicker({ onLogin, authLoading, onClose }) {
-  const providers = [
-    { id: 'google', label: 'Continue with Google', color: '#4285F4', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-      </svg>
-    )},
-    { id: 'github', label: 'Continue with GitHub', color: '#ffffff', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="#fff">
-        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0 1 12 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/>
-      </svg>
-    )},
-    { id: 'facebook', label: 'Continue with Facebook', color: '#1877F2', icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24">
-        <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-      </svg>
-    )},
-  ];
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 999,
-        background: "rgba(3,3,10,0.75)",
-        backdropFilter: "blur(12px)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        animation: "fadeIn 0.25s ease",
-        padding: 20,
-      }}
-    >
+    <div className="vortis-console-wrap" style={{ position: "relative", width: "100%" }}>
       <style>{`
-        @keyframes pickerIn {
-          from { opacity: 0; transform: scale(0.92) translateY(16px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
+        @keyframes vortis-orbit-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes vortis-orbit-rev  { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        @keyframes vortis-pulse-ring {
+          0%   { transform: scale(0.55); opacity: 0.55; }
+          100% { transform: scale(2.2);  opacity: 0; }
         }
-        @keyframes borderGlow {
-          0%,100% { box-shadow: 0 0 0 1px rgba(124,58,237,0.4), 0 30px 90px rgba(124,58,237,0.18), 0 0 60px rgba(124,58,237,0.12); }
-          50%     { box-shadow: 0 0 0 1px rgba(168,85,247,0.6), 0 30px 90px rgba(124,58,237,0.28), 0 0 80px rgba(168,85,247,0.2); }
+        @keyframes vortis-breathe {
+          0%,100% { transform: scale(1);    filter: brightness(1); }
+          50%     { transform: scale(1.04); filter: brightness(1.15); }
         }
-        @keyframes iconPop {
-          from { opacity: 0; transform: scale(0.5) rotate(-10deg); }
-          to   { opacity: 1; transform: scale(1) rotate(0deg); }
+        @keyframes vortis-flow { to { stroke-dashoffset: -200; } }
+        @keyframes vortis-node-pulse {
+          0%,100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 14px rgba(255,255,255,0.04); }
+          50%     { box-shadow: 0 0 0 1px rgba(255,255,255,0.22), 0 0 28px rgba(255,255,255,0.10); }
         }
-        .ap-row {
-          opacity: 0;
-          animation: pickerIn 0.4s ease forwards;
+        @keyframes vortis-scan {
+          0%   { transform: translateY(-100%); opacity: 0; }
+          8%   { opacity: 1; }
+          92%  { opacity: 1; }
+          100% { transform: translateY(2200%); opacity: 0; }
+        }
+        @keyframes vortis-float-soft {
+          0%,100% { transform: translate(-50%, -50%) translateY(0); }
+          50%     { transform: translate(-50%, -50%) translateY(-5px); }
+        }
+        @keyframes vortis-cursor-blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @media (max-width: 768px) {
+          .vortis-console-wrap .vortis-stage { height: 320px !important; }
+          .vortis-console-wrap .vortis-orb { width: 100px !important; height: 100px !important; }
+          .vortis-console-wrap .vortis-node-card { width: 38px !important; height: 38px !important; border-radius: 10px !important; }
+          .vortis-console-wrap .vortis-node-label { font-size: 8.5px !important; }
+          .vortis-console-wrap .vortis-telemetry { font-size: 9px !important; }
+        }
+        @media (max-width: 480px) {
+          .vortis-console-wrap .vortis-stage { height: 280px !important; }
+          .vortis-console-wrap .vortis-orb { width: 84px !important; height: 84px !important; }
+          .vortis-console-wrap .vortis-node-card { width: 34px !important; height: 34px !important; }
+          .vortis-console-wrap .vortis-node-label { display: none; }
+          .vortis-console-wrap .vortis-telemetry { display: none; }
         }
       `}</style>
 
+      {/* Soft halo behind the console */}
+      <div style={{
+        position: "absolute", left: "50%", top: "50%",
+        width: "80%", height: "60%",
+        transform: "translate(-50%, -50%)",
+        background: "radial-gradient(ellipse at center, rgba(139,92,246,0.10), rgba(6,182,212,0.04) 40%, transparent 70%)",
+        filter: "blur(60px)",
+        pointerEvents: "none",
+        animation: "vortis-breathe 6s ease-in-out infinite",
+      }} />
+
       <div
-        onClick={e => e.stopPropagation()}
+        ref={consoleRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => setGlow(g => ({ ...g, active: false }))}
         style={{
-          width: "100%", maxWidth: 460, borderRadius: 24, padding: 40,
-          background: "linear-gradient(165deg, rgba(20,16,40,0.97), rgba(8,8,18,0.99))",
-          border: "1px solid rgba(255,255,255,0.1)",
-          position: "relative", overflow: "hidden",
-          animation: "pickerIn 0.32s cubic-bezier(.2,.9,.3,1.3) forwards, borderGlow 4s ease-in-out infinite",
+          position: "relative",
+          width: "100%",
+          maxWidth: 940,
+          margin: "0 auto",
+          borderRadius: 22,
+          background: "linear-gradient(165deg, rgba(14,14,22,0.85), rgba(6,6,12,0.94))",
+          border: "1px solid rgba(255,255,255,0.08)",
+          overflow: "hidden",
+          boxShadow:
+            "0 60px 140px rgba(0,0,0,0.65), " +
+            "0 0 0 1px rgba(255,255,255,0.03), " +
+            "0 0 80px rgba(139,92,246,0.05), " +
+            "inset 0 1px 0 rgba(255,255,255,0.04)",
         }}
       >
-        {/* Ambient glow blob */}
+        {/* Cursor-follow glow */}
         <div style={{
-          position: "absolute", top: -80, right: -80, width: 220, height: 220,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(124,58,237,0.35), transparent 70%)",
-          filter: "blur(20px)", pointerEvents: "none",
-        }} />
-        <div style={{
-          position: "absolute", bottom: -100, left: -60, width: 200, height: 200,
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(6,182,212,0.18), transparent 70%)",
-          filter: "blur(30px)", pointerEvents: "none",
+          position: "absolute", inset: 0, pointerEvents: "none",
+          background: glow.active
+            ? `radial-gradient(420px circle at ${glow.x}% ${glow.y}%, rgba(255,255,255,0.045), transparent 60%)`
+            : "none",
+          transition: "opacity 0.4s ease",
         }} />
 
-        <div style={{ position: "relative", zIndex: 1 }}>
-         <div style={{
-  width: 52, height: 52, borderRadius: 16, margin: "0 auto 20px",
-  background: "rgba(139,92,246,0.12)",
-  border: "1px solid rgba(139,92,246,0.35)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-  boxShadow: "0 8px 24px rgba(124,58,237,0.25)",
-  animation: "iconPop 0.45s 0.05s cubic-bezier(.2,.9,.3,1.4) both",
-}}>
-  <VortisLogo size={28} color="#8b5cf6" />
-</div>
+        {/* Scan line sweep */}
+        <div style={{
+          position: "absolute", left: 0, right: 0, top: 0, height: 60,
+          background: "linear-gradient(180deg, rgba(255,255,255,0.045), transparent)",
+          pointerEvents: "none",
+          animation: "vortis-scan 7s ease-in-out infinite",
+        }} />
 
-          <h3 style={{
-            fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 26,
-            color: "#fff", margin: "0 0 8px", textAlign: "center", letterSpacing: "-0.02em",
-          }}>
-            Get started
-          </h3>
-          <p style={{ fontSize: 14.5, color: "rgba(255,255,255,0.45)", textAlign: "center", margin: "0 0 30px" }}>
-            Choose how you'd like to sign in
-          </p>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {providers.map((p, i) => (
-              <button
-                key={p.id}
-                disabled={authLoading}
-                onClick={() => onLogin(p.id)}
-                className="ap-row"
-                style={{
-                  animationDelay: `${0.08 + i * 0.07}s`,
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "16px 20px", borderRadius: 14, width: "100%",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  color: "#fff", fontSize: 15.5, fontWeight: 600,
-                  cursor: authLoading ? "not-allowed" : "pointer",
-                  opacity: authLoading ? 0.5 : undefined,
-                  transition: "background 0.2s, border-color 0.2s, transform 0.15s, box-shadow 0.2s",
-                  position: "relative",
-                }}
-                onMouseEnter={e => {
-                  if (authLoading) return;
-                  e.currentTarget.style.background = "rgba(255,255,255,0.09)";
-                  e.currentTarget.style.borderColor = `${p.color}66`;
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = `0 8px 24px ${p.color}26`;
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                {p.icon}
-                {p.label}
-                <ArrowRight size={16} style={{ marginLeft: "auto", opacity: 0.35 }} />
-              </button>
+        {/* ── Console header ─────────────────────────────────── */}
+        <div style={{
+          padding: "13px 20px",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          display: "flex", alignItems: "center", gap: 14,
+          background: "rgba(255,255,255,0.012)",
+        }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {["rgba(255,255,255,0.20)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.07)"].map((c, i) => (
+              <div key={i} style={{ width: 9, height: 9, borderRadius: "50%", background: c }} />
             ))}
           </div>
+          <div style={{
+            flex: 1, textAlign: "center",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10.5, fontWeight: 500,
+            letterSpacing: "0.22em", textTransform: "uppercase",
+            color: "rgba(255,255,255,0.38)",
+          }}>
+            VORTIS · Neural Console
+          </div>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 6,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10, fontWeight: 500, letterSpacing: "0.12em",
+            color: "rgba(255,255,255,0.5)",
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: "50%",
+              background: "#ffffff",
+              boxShadow: "0 0 8px rgba(255,255,255,0.85)",
+              animation: "pulse 2s ease-in-out infinite",
+            }} />
+            LIVE
+          </div>
+        </div>
 
-          <button onClick={onClose} style={{
-            marginTop: 22, width: "100%", padding: "12px", background: "none",
-            border: "none", color: "rgba(255,255,255,0.35)", fontSize: 14, cursor: "pointer",
-            transition: "color 0.15s",
-          }}
-          onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.65)"}
-          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}
+        {/* ── Stage: orb + nodes ─────────────────────────────── */}
+        <div className="vortis-stage" style={{
+          position: "relative",
+          height: 400,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          overflow: "hidden",
+        }}>
+          {/* Ambient glow behind orb */}
+          <div style={{
+            position: "absolute",
+            width: 340, height: 340, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(139,92,246,0.12), transparent 65%)",
+            filter: "blur(28px)",
+            animation: "vortis-breathe 5s ease-in-out infinite",
+          }} />
+
+          {/* Connection lines (SVG, in viewBox coordinates that match the DOM %) */}
+          <svg
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
           >
-            Cancel
-          </button>
+            {CONSOLE_CAPABILITIES.map((cap, i) => {
+              const nx = nodeX(cap.angle);
+              const ny = nodeY(cap.angle);
+              return (
+                <line
+                  key={i}
+                  x1={nx} y1={ny} x2={50} y2={50}
+                  stroke="rgba(255,255,255,0.18)"
+                  strokeWidth={0.15}
+                  vectorEffect="non-scaling-stroke"
+                  strokeDasharray="3 4"
+                  style={{ animation: `vortis-flow ${3 + (i % 3) * 0.6}s linear infinite` }}
+                />
+              );
+            })}
+          </svg>
+
+          {/* Central orb */}
+          <div className="vortis-orb" style={{ position: "relative", width: 132, height: 132, zIndex: 2 }}>
+            {/* Outer rotating conic ring */}
+            <div style={{
+              position: "absolute", inset: -16, borderRadius: "50%",
+              background: "conic-gradient(from 0deg, transparent 0%, rgba(255,255,255,0.28) 25%, transparent 50%, rgba(139,92,246,0.32) 75%, transparent 100%)",
+              animation: "vortis-orbit-slow 9s linear infinite",
+              WebkitMaskImage: "radial-gradient(circle, transparent 58%, black 60%, black 100%)",
+              maskImage: "radial-gradient(circle, transparent 58%, black 60%, black 100%)",
+            }} />
+            {/* Counter-rotating thin ring */}
+            <div style={{
+              position: "absolute", inset: -4, borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderTopColor: "rgba(255,255,255,0.45)",
+              animation: "vortis-orbit-rev 14s linear infinite",
+            }} />
+            {/* Pulse rings */}
+            <div style={{
+              position: "absolute", inset: 0, borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.18)",
+              animation: "vortis-pulse-ring 3.2s ease-out infinite",
+            }} />
+            <div style={{
+              position: "absolute", inset: 0, borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.12)",
+              animation: "vortis-pulse-ring 3.2s ease-out 1.6s infinite",
+            }} />
+            {/* Core */}
+            <div style={{
+              position: "absolute", inset: 16, borderRadius: "50%",
+              background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.96), rgba(190,190,210,0.45) 50%, rgba(40,40,55,0.92) 100%)",
+              boxShadow:
+                "0 0 40px rgba(255,255,255,0.18), " +
+                "0 0 80px rgba(139,92,246,0.22), " +
+                "inset 0 0 30px rgba(255,255,255,0.06), " +
+                "inset -8px -8px 24px rgba(0,0,0,0.4)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              animation: "vortis-breathe 4.5s ease-in-out infinite",
+            }}>
+              <VortisLogo size={36} color="#ffffff" />
+            </div>
+          </div>
+
+          {/* Capability nodes */}
+          {CONSOLE_CAPABILITIES.map((cap, i) => {
+            const left = nodeX(cap.angle);
+            const top = nodeY(cap.angle);
+            return (
+              <div key={cap.label} style={{
+                position: "absolute",
+                left: `${left}%`, top: `${top}%`,
+                transform: "translate(-50%, -50%)",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+                animation: `vortis-float-soft ${4.5 + i * 0.4}s ease-in-out ${i * 0.3}s infinite`,
+                zIndex: 3,
+              }}>
+                <div
+                  className="vortis-node-card"
+                  style={{
+                    width: 46, height: 46, borderRadius: 13,
+                    background: "rgba(255,255,255,0.025)",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: "rgba(255,255,255,0.82)",
+                    animation: cap.status === "active"
+                      ? `vortis-node-pulse ${3 + i * 0.3}s ease-in-out ${i * 0.2}s infinite`
+                      : "none",
+                    transition: "transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease, background 0.28s ease",
+                    cursor: "default",
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = "scale(1.14)";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.4)";
+                    e.currentTarget.style.background = "rgba(255,255,255,0.06)";
+                    e.currentTarget.style.boxShadow =
+                      "0 0 0 1px rgba(255,255,255,0.22), 0 0 28px rgba(255,255,255,0.16)";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = "scale(1)";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+                    e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+                    e.currentTarget.style.boxShadow = "";
+                  }}
+                >
+                  <cap.Icon size={18} strokeWidth={1.75} />
+                </div>
+                <span className="vortis-node-label" style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 9.5, fontWeight: 500,
+                  letterSpacing: "0.14em", textTransform: "uppercase",
+                  color: "rgba(255,255,255,0.42)",
+                  whiteSpace: "nowrap",
+                }}>{cap.label}</span>
+                <div style={{
+                  width: 4, height: 4, borderRadius: "50%",
+                  background: cap.status === "active" ? "#ffffff" : "rgba(255,255,255,0.22)",
+                  boxShadow: cap.status === "active" ? "0 0 6px rgba(255,255,255,0.85)" : "none",
+                }} />
+              </div>
+            );
+          })}
+
+          {/* Ambient telemetry — top-left */}
+          <div className="vortis-telemetry" style={{
+            position: "absolute", top: 18, left: 22,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10, color: "rgba(255,255,255,0.26)",
+            letterSpacing: "0.06em", lineHeight: 1.7,
+          }}>
+            <div>ctx: 128k tokens</div>
+            <div>model: vortis-pro</div>
+          </div>
+
+          {/* Ambient telemetry — bottom-right */}
+          <div className="vortis-telemetry" style={{
+            position: "absolute", bottom: 18, right: 22,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10, color: "rgba(255,255,255,0.26)",
+            letterSpacing: "0.06em", textAlign: "right", lineHeight: 1.7,
+          }}>
+            <div>latency: 42ms</div>
+            <div>tokens/s: {800 + (tick % 240)}</div>
+          </div>
+        </div>
+
+        {/* ── Prompt input bar ───────────────────────────────── */}
+        <div style={{
+          padding: "14px 20px 18px",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          background: "rgba(255,255,255,0.008)",
+        }}>
+          <div
+            style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: "rgba(255,255,255,0.025)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              transition: "border-color 0.3s ease, background 0.3s ease",
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)";
+              e.currentTarget.style.background = "rgba(255,255,255,0.035)";
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+              e.currentTarget.style.background = "rgba(255,255,255,0.025)";
+            }}
+          >
+            <Sparkles size={15} style={{ color: "rgba(255,255,255,0.45)", flexShrink: 0 }} />
+            <div style={{
+              flex: 1,
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 13.5,
+              color: "rgba(255,255,255,0.55)",
+              display: "flex", alignItems: "center",
+              minHeight: 18,
+              overflow: "hidden",
+            }}>
+              <span style={{
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}>{typed}</span>
+              <span style={{
+                display: "inline-block", width: 2, height: 14,
+                background: "#ffffff", marginLeft: 2,
+                animation: "vortis-cursor-blink 1.05s step-end infinite",
+                opacity: 0.85, flexShrink: 0,
+              }} />
+            </div>
+            <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+              {["\u2318", "K"].map((k, i) => (
+                <div key={i} style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 10, fontWeight: 600,
+                  color: "rgba(255,255,255,0.4)",
+                  padding: "3px 7px", borderRadius: 5,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}>{k}</div>
+              ))}
+            </div>
+            <div
+              style={{
+                width: 32, height: 32, borderRadius: 9,
+                background: "linear-gradient(135deg, rgba(255,255,255,0.96), rgba(200,200,212,0.72))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(255,255,255,0.16), inset 0 1px 0 rgba(255,255,255,0.4)",
+                cursor: "pointer", flexShrink: 0,
+                transition: "transform 0.2s ease, box-shadow 0.2s ease",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = "translateY(-1px) scale(1.06)";
+                e.currentTarget.style.boxShadow = "0 6px 18px rgba(255,255,255,0.28), inset 0 1px 0 rgba(255,255,255,0.5)";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = "translateY(0) scale(1)";
+                e.currentTarget.style.boxShadow = "0 4px 14px rgba(255,255,255,0.16), inset 0 1px 0 rgba(255,255,255,0.4)";
+              }}
+            >
+              <ArrowRight size={15} style={{ color: "#0a0a14" }} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
-  useEffect(() => {
-    const id = setInterval(() => setWordIdx(i => (i + 1) % CYCLE_WORDS.length), 3200);
-    return () => clearInterval(id);
-  }, []);
 
+// ══════════════════════════════════════════════════════════════════
+//  HERO — redesigned for VORTIS AI
+//  Centered cinematic layout · refined typography · black & white
+//  identity · premium animations · the Neural Console as the
+//  centerpiece visual. Same prop surface as the legacy Hero so
+//  all integrations (onLogin / authLoading / authError / onOpenAuth)
+//  keep working unchanged.
+// ══════════════════════════════════════════════════════════════════
+export function Hero({ onLogin, authLoading, authError, onOpenAuth }) {
   return (
-    <section className="hero-grid" style={{
-      minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr",
-      alignItems: "center", gap: 60,
-      padding: "100px 80px 80px", position: "relative", zIndex: 1,
-      maxWidth: 1300, margin: "0 auto",
+    <section className="vortis-hero" style={{
+      position: "relative",
+      zIndex: 1,
+      padding: "120px 24px 80px",
+      maxWidth: 1280,
+      margin: "0 auto",
+      textAlign: "center",
+      minHeight: "100vh",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
     }}>
-      <style>{`@media(max-width:900px){.hero-grid{grid-template-columns:1fr!important;padding:100px 24px 60px!important}.hero-visual{display:none!important}}`}</style>
+      <style>{`
+        @media (max-width: 768px) {
+          .vortis-hero { padding: 100px 18px 60px !important; }
+        }
+      `}</style>
 
-      <div className="hero-left">
-        {/* Badge */}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "6px 14px", borderRadius: 99, border: "1px solid rgba(139,92,246,0.4)", background: "rgba(139,92,246,0.08)", marginBottom: 28, animation: "fadeUp 0.6s ease both" }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#a855f7", animation: "pulse 2s ease-in-out infinite" }} />
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(168,85,247,0.9)", fontFamily: "'JetBrains Mono',monospace" }}>New · AI Platform 2026</span>
-        </div>
-
-       {/* Headline */}
-<h1 style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, lineHeight: 1.0, letterSpacing: "-0.04em", margin: "0 0 24px", fontSize: "clamp(3rem,5.5vw,5.5rem)" }}>
-  <span style={{ display: "block", color: "#fff", animation: "slideInLeft 0.7s 0.1s ease both" }}>THE</span>
-
-  <span style={{ display: "block" }}>
-    <TypewriterWord word={CYCLE_WORDS[wordIdx]} />
-  </span>
-
-  <span style={{ display: "block", color: "rgba(255,255,255,0.25)", animation: "slideInRight 0.7s 0.4s ease both" }}>YOU DESERVE.</span>
-</h1>
-        {/* Description Sub-headline */}
-        <p style={{ fontSize: 17, color: "rgba(255,255,255,0.5)", maxWidth: 480, lineHeight: 1.75, marginBottom: 40, animation: "fadeUp 0.7s 0.5s ease both" }}>
-         From conversations to creation—all in one place.
-        </p>
-        
-
-       {/* CTA */}
-<div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 52, animation: "fadeUp 0.7s 0.65s ease both" }}>
-  <GlowPillButton onClick={onOpenAuth} style={{ opacity: authLoading ? 0.85 : 1 }}>
-  {authLoading ? (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
-      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  ) : (
-    <Zap size={16} />
-  )}
-  {authLoading ? "Signing in…" : "Start Free"}
-  {!authLoading && <ArrowRight size={16} style={{ animation: "ctaArrow 1.6s ease-in-out infinite" }} />}
-</GlowPillButton>
-
-  <a href="#walkthrough" style={{
-    padding: "14px 26px", borderRadius: 99, fontSize: 15, fontWeight: 600,
-    border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)",
-    background: "rgba(255,255,255,0.04)", textDecoration: "none",
-    display: "inline-flex", alignItems: "center", gap: 8, transition: "all 0.2s",
-  }}
-  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.5)"; e.currentTarget.style.color = "#fff"; }}
-  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)"; }}
-  >Watch Demo</a>
-</div>
-
-        {/* Stats */}
-        <div style={{ display: "flex", gap: 32, animation: "fadeUp 0.7s 0.8s ease both" }}>
-          {[["50K+", "Users"], ["99.9%", "Uptime"], ["4.9★", "Rating"]].map(([n, l]) => (
-            <div key={l}>
-              <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 24, background: "linear-gradient(135deg,#a855f7,#7C3AED)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{n}</div>
-              <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>{l}</div>
-            </div>
-          ))}
-          <div style={{ width: 1, background: "rgba(255,255,255,0.08)" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#10b981", animation: "pulse 2s ease-in-out infinite" }} />
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>All systems operational</span>
-          </div>
-        </div>
-
-        {authError && (
-          <div style={{ marginTop: 16, color: "#f87171", fontSize: 13, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "8px 16px", display: "inline-block" }}>
-            {authError}
-          </div>
-        )}
+      {/* Eyebrow / status badge */}
+      <div className="vortis-eyebrow" style={{
+        display: "inline-flex", alignItems: "center", gap: 9,
+        padding: "7px 16px", borderRadius: 99,
+        border: "1px solid rgba(255,255,255,0.1)",
+        background: "rgba(255,255,255,0.02)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        marginBottom: 30,
+        animation: "fadeUp 0.7s ease both",
+      }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: "50%",
+          background: "#ffffff",
+          boxShadow: "0 0 8px rgba(255,255,255,0.75)",
+          animation: "pulse 2s ease-in-out infinite",
+        }} />
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 11, fontWeight: 500,
+          letterSpacing: "0.18em", textTransform: "uppercase",
+          color: "rgba(255,255,255,0.6)",
+        }}>Introducing VORTIS AI · v2.0</span>
       </div>
 
-      {/* Right: visual */}
-<div className="hero-visual" style={{ display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
-  <div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(124,58,237,0.15), transparent 70%)", filter: "blur(40px)" }} />
+      {/* Headline — refined weight, no heavy 900 */}
+      <h1 style={{
+        fontFamily: "'Space Grotesk', sans-serif",
+        fontWeight: 500,
+        fontSize: "clamp(2.25rem, 5.5vw, 4.25rem)",
+        lineHeight: 1.08,
+        letterSpacing: "-0.035em",
+        margin: "0 0 24px",
+        color: "#ffffff",
+        animation: "fadeUp 0.8s 0.1s ease both",
+        maxWidth: 820,
+      }}>
+        Where intelligence
+        <br />
+        meets{" "}
+        <span style={{
+          background: "linear-gradient(90deg, #ffffff 0%, rgba(255,255,255,0.55) 50%, #ffffff 100%)",
+          backgroundSize: "200% auto",
+          WebkitBackgroundClip: "text",
+          backgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          fontStyle: "italic",
+          fontWeight: 400,
+          animation: "shimmer 5s linear infinite",
+        }}>intention</span>.
+      </h1>
 
+      {/* Sub-headline */}
+      <p style={{
+        fontFamily: "'Inter', sans-serif",
+        fontSize: "clamp(15px, 1.6vw, 17.5px)",
+        color: "rgba(255,255,255,0.5)",
+        maxWidth: 560,
+        margin: "0 auto 40px",
+        lineHeight: 1.7,
+        animation: "fadeUp 0.8s 0.25s ease both",
+      }}>
+        A unified AI workspace where conversations, creation, and code
+        converge &mdash; designed for builders who think in systems, not
+        tabs.
+      </p>
 
-  <HeroVisual />
-  
-  {/* Floating badges */}
-  {[
-     { text: "Web Search", Icon: Globe, top: "5%", right: "-5%", delay: "0s", color: "6,182,212" },
-     { text: "Image Gen", Icon: ImageIcon, bottom: "15%", left: "-8%", delay: "1.2s", color: "168,85,247" },
-     { text: "Vision AI", Icon: Eye, top: "40%", right: "-12%", delay: "0.6s", color: "124,58,237" },
-  ].map((b) => (
-    <div key={b.text} style={{
-      position: "absolute", 
-      top: b.top, 
-      right: b.right, 
-      bottom: b.bottom, 
-      left: b.left,
-      display: "flex", 
-      alignItems: "center", 
-      gap: 7, 
-      padding: "8px 14px",
-      borderRadius: 99, 
-      background: "rgba(10,10,20,0.85)", 
-      backdropFilter: "blur(16px)",
-      // Added the custom color to the border with low opacity for a cool glow effect
-      border: `1px solid rgba(${b.color}, 0.3)`,
-      fontSize: 12, 
-      fontWeight: 600, 
-      color: "rgba(255,255,255,0.85)",
-      animation: `float 4s ease-in-out ${b.delay} infinite`,
-      // Added a slight glow using the custom color
-      boxShadow: `0 8px 32px rgba(${b.color}, 0.15)`,
-      whiteSpace: "nowrap",
-    }}>
-      <span style={{ display: "flex", alignItems: "center", color: `rgb(${b.color})` }}>
-        {/* If your icon library supports the color prop directly, you can do: */}
-        {/* <b.Icon size={16} color={`rgb(${b.color})`} /> */}
-        
-        {/* If the icon inherits the parent's text color, this will work automatically: */}
-        <b.Icon size={16} />
-      </span>
-      {b.text}
-    </div>
-  ))}
-</div>
+      {/* CTA row */}
+      <div style={{
+        display: "flex", gap: 14, justifyContent: "center",
+        flexWrap: "wrap", marginBottom: 44,
+        animation: "fadeUp 0.8s 0.4s ease both",
+      }}>
+        <GlowPillButton onClick={onOpenAuth} style={{ opacity: authLoading ? 0.85 : 1 }}>
+          {authLoading ? (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: "spin 0.8s linear infinite" }}>
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+          ) : (
+            <Sparkles size={15} />
+          )}
+          {authLoading ? "Signing in\u2026" : "Start Free"}
+          {!authLoading && <ArrowRight size={15} style={{ animation: "ctaArrow 1.6s ease-in-out infinite" }} />}
+        </GlowPillButton>
+
+        <a
+          href="#walkthrough"
+          style={{
+            padding: "14px 26px", borderRadius: 99, fontSize: 14.5, fontWeight: 500,
+            border: "1px solid rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.72)",
+            background: "rgba(255,255,255,0.02)", textDecoration: "none",
+            display: "inline-flex", alignItems: "center", gap: 8, transition: "all 0.25s ease",
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.32)";
+            e.currentTarget.style.color = "#ffffff";
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.72)";
+            e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+          }}
+        >
+          Watch Demo <ChevronDown size={14} />
+        </a>
+      </div>
+
+      {/* Trust line / live stats */}
+      <div style={{
+        display: "flex", gap: 28, justifyContent: "center", alignItems: "center",
+        flexWrap: "wrap", marginBottom: 64,
+        animation: "fadeUp 0.8s 0.55s ease both",
+      }}>
+        {[
+          ["50K+", "Active builders"],
+          ["99.9%", "Uptime"],
+          ["4.9\u2605", "Builder rating"],
+        ].map(([n, l]) => (
+          <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{
+              fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, fontSize: 18,
+              color: "#ffffff",
+            }}>{n}</span>
+            <span style={{
+              fontFamily: "'Inter', sans-serif", fontSize: 12, fontWeight: 400,
+              color: "rgba(255,255,255,0.38)",
+              letterSpacing: "0.02em",
+            }}>{l}</span>
+          </div>
+        ))}
+        <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.1)" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{
+            width: 7, height: 7, borderRadius: "50%", background: "#10b981",
+            boxShadow: "0 0 8px rgba(16,185,129,0.6)",
+            animation: "pulse 2s ease-in-out infinite",
+          }} />
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 500,
+            color: "rgba(255,255,255,0.4)", letterSpacing: "0.08em",
+          }}>All systems operational</span>
+        </div>
+      </div>
+
+      {/* AI Console — the centerpiece */}
+      <div style={{
+        width: "100%",
+        animation: "fadeUp 1s 0.7s ease both",
+      }}>
+        <VortisNeuralConsole />
+      </div>
+
+      {/* Auth error surface (kept for parity with legacy Hero) */}
+      {authError && (
+        <div style={{
+          marginTop: 24, color: "#f87171", fontSize: 13,
+          background: "rgba(239,68,68,0.08)",
+          border: "1px solid rgba(239,68,68,0.2)",
+          borderRadius: 10, padding: "10px 18px",
+          display: "inline-block",
+        }}>{authError}</div>
+      )}
 
       {/* Scroll indicator */}
-      <div style={{ position: "absolute", bottom: 32, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.2)", animation: "float 2.5s ease-in-out infinite" }}>
-        <span style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", fontFamily: "'JetBrains Mono',monospace" }}>Scroll</span>
-        <ChevronDown size={16} />
+      <div style={{
+        position: "absolute", bottom: 22, left: "50%", transform: "translateX(-50%)",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+        color: "rgba(255,255,255,0.25)",
+        animation: "float 2.5s ease-in-out infinite",
+      }}>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5,
+          letterSpacing: "0.18em", textTransform: "uppercase",
+        }}>Scroll</span>
+        <ChevronDown size={14} />
       </div>
     </section>
   );
