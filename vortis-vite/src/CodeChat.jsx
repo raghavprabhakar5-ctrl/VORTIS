@@ -26,6 +26,12 @@ import {
 
 const API = 'https://vortis.onrender.com/api/handler';
 
+/* sentinel-delimited vision text: unique end-marker appended after every
+   vision-analysis block injected into the user message text. The render
+   layer uses this to strip ONLY the vision block (not the user's typed
+   text that follows). The LLM sees it as an HTML comment and ignores it. */
+const SENTINEL_STR = '<!--vrtx-img-end-->';
+
 /* ────────────────────────────────────────────────────────────────────────
  *  Auth header helper (self-contained — mirrors App.js getAuthHeader)
  * ──────────────────────────────────────────────────────────────────────── */
@@ -4290,9 +4296,10 @@ chatControllersRef.current.set(myChatId, controller);
            attachment has been converted to a file with content,
            USE that text directly. */
         const latestAtt = attachmentsRef.current.find(a => a.id === att.id) || att;
+        /* sentinel-delimited vision text */
         if (latestAtt.type === 'file' && latestAtt.content) {
           const label = latestAtt._ocrFallback ? 'Image description' : 'OCR extracted text';
-          const replacement = `[Image: ${latestAtt.name} — ${label}:]\n\n${latestAtt.content}`;
+          const replacement = `[Image: ${latestAtt.name} — ${label}:]\n\n${latestAtt.content}\n\n${SENTINEL_STR}`;
           text = text.replace(placeholder, replacement);
           continue;
         }
@@ -4304,7 +4311,8 @@ chatControllersRef.current.set(myChatId, controller);
            "Vision service is busy right now after multiple
            retries" every time they enable OCR mode). */
         if (latestAtt._ocrFailed && latestAtt._ocrFailReason) {
-          const replacement = `[Attached image: ${latestAtt.name} — vision analysis failed: ${latestAtt._ocrFailReason}]`;
+          /* sentinel-delimited vision text */
+          const replacement = `[Attached image: ${latestAtt.name} — vision analysis failed: ${latestAtt._ocrFailReason}]\n\n${SENTINEL_STR}`;
           text = text.replace(placeholder, replacement);
           continue;
         }
@@ -4323,12 +4331,15 @@ chatControllersRef.current.set(myChatId, controller);
         let replacement;
         if (visionResult.ok && visionResult.text && visionResult.text !== '[No text detected]') {
           const label = effectiveMode === 'ocr' ? 'OCR extracted text' : 'Image description';
-          replacement = `[Image: ${att.name} — ${label}:]\n\n${visionResult.text}`;
+          /* sentinel-delimited vision text */
+          replacement = `[Image: ${att.name} — ${label}:]\n\n${visionResult.text}\n\n${SENTINEL_STR}`;
         }
          else if (visionResult.ok && visionResult.text === '[No text detected]') {
-          replacement = `[Attached image: ${att.name} — OCR found no readable text. The image may be a photo, diagram, or abstract image.]`;
+          /* sentinel-delimited vision text */
+          replacement = `[Attached image: ${att.name} — OCR found no readable text. The image may be a photo, diagram, or abstract image.]\n\n${SENTINEL_STR}`;
         } else {
-          replacement = `[Attached image: ${att.name} — vision analysis failed: ${visionResult.error || 'unknown error'}]`;
+          /* sentinel-delimited vision text */
+          replacement = `[Attached image: ${att.name} — vision analysis failed: ${visionResult.error || 'unknown error'}]\n\n${SENTINEL_STR}`;
         }
         text = text.replace(placeholder, replacement);
       }
@@ -4589,12 +4600,18 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
   setStreamText('');
 }, [streamText]);
 
+  /* enter-fix-v4: removed !isProcessingImages block — with Fix #6 in place,
+     send() reuses pre-extracted OCR text instead of firing a duplicate
+     vision call. So it's safe to fire send() immediately even while OCR is
+     running — send() will wait for OCR (Fix #5) then reuse the text (Fix #6).
+     Also added isProcessingImages to the deps array so the callback doesn't
+     capture a stale value. */
   const handleInputKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!streaming && !isProcessingImages && (input.trim() || attachments.length > 0)) send();
+      if (!streaming && (input.trim() || attachments.length > 0)) send();
     }
-  }, [streaming, input, attachments, send]);
+  }, [streaming, input, attachments, send, isProcessingImages]);
 
   const filteredChats = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -5751,22 +5768,15 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
                     <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
                   </button>
                 ) : (
-                  <button
-                    onClick={() => send()}
-                    disabled={(!input.trim() && attachments.length === 0) || isProcessingImages}
-                    title={isProcessingImages ? 'Extracting text from image…' : 'Send'}
+                  <button onClick={() => send()} disabled={!input.trim() && attachments.length === 0}
+                    title="Send"
                     style={{
-                      width: 36, height: 36, borderRadius: 0,
-                      border: '1px solid ' + (isProcessingImages ? '#3a3a3a' : ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a')),
-                      cursor: isProcessingImages ? 'wait' : ((input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed'),
-                      background: isProcessingImages ? '#1a1a1a' : ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#1a1a1a'),
-                      color: isProcessingImages ? '#5a5a5a' : ((input.trim() || attachments.length > 0) ? '#0a0a0a' : '#5a5a5a'),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 36, height: 36, borderRadius: 0, border: '1px solid ' + ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a'), cursor: (input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed',
+                      background: (input.trim() || attachments.length > 0) ? '#e6e6e6' : '#1a1a1a',
+                      color: (input.trim() || attachments.length > 0) ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all .15s', flexShrink: 0, lineHeight: 0
                     }}>
-                    {isProcessingImages
-                      ? <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
-                      : <ArrowUp size={15}/>}
+                    <ArrowUp size={15}/>
                   </button>
                 )}
               </div>
@@ -5921,19 +5931,29 @@ const cleanStream = (text) => {
 const stripImageMetadataFromUserText = (text) => {
   if (!text) return '';
   let t = text;
-  // 1. Strip success blocks: "[Image: X — label:]\n\n<any text up to the
-  //    next [Image: / [Attached image: marker, or end of string>".
-  //    Can't use simple .*? because OCR text can span many lines and
-  //    contain backticks, brackets, etc.
+  /* sentinel-delimited vision text: strip from `[Image:` or `[Attached image:`
+     through the SENTINEL_STR marker. This precisely delimits the vision block
+     so we don't accidentally strip the user's typed text that follows.
+     The sentinel is appended by send() in every vision-replacement path. */
+  // 1. Strip blocks delimited by the sentinel (new format)
   t = t.replace(
-    /\[Image:[^\]]*?:\]\s*(?:\n\n)?([\s\S]*?)(?=\n\[Image:|\n\[Attached image:|\[Attached image:|$)/g,
+    /\[(?:Image|Attached image):[^]*?<!--vrtx-img-end-->/g,
     ''
   );
-  // 2. Strip placeholder / failure / no-text markers
+  // 2. Fallback: strip any remaining [Image: ...] blocks WITHOUT sentinel
+  //    (old messages from before this fix, or edge cases where the sentinel
+  //    wasn't appended). Match [Image:...:] then everything up to the next
+  //    [Image: / [Attached image: marker, or end of string.
+  t = t.replace(
+    /\[Image:[^\]]*?:\][\s\S]*?(?=\n\[(?:Image|Attached image):|$)/g,
+    ''
+  );
+  // 3. Strip standalone placeholder / failure / no-text markers (no sentinel)
   t = t.replace(/\[Attached image:[^\]]*\]/g, '');
-  // 3. Strip document-attachment markers (also internal metadata, not user-facing)
+  // 4. Strip document-attachment markers
   t = t.replace(/\[Attached document:[^\]]*\]/g, '');
-  // 4. Clean up leftover whitespace from the removed blocks
+  // 5. Clean up leftover whitespace and stray sentinels
+  t = t.replace(/<!--vrtx-img-end-->/g, '');
   t = t.replace(/\n{3,}/g, '\n\n').trim();
   return t;
 };
