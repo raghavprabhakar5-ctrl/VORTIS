@@ -3324,6 +3324,11 @@ useEffect(() => {
      or when OCR fails and sets `_ocrFailed: true`. */
   const attachmentsRef = useRef([]);
   useEffect(() => { attachmentsRef.current = attachments; }, [attachments]);
+  /* disable-send-during-ocr: derived flag — true when any image
+     attachment is in the _ocrProcessing state. Used to disable the
+     Send button and Enter-to-send so the user can't fire a duplicate
+     vision API call by sending before OCR finishes. */
+  const isProcessingImages = attachments.some(a => a.type === 'image' && a._ocrProcessing);
 
   const handlePaste = useCallback((e) => {
     const items = e.clipboardData?.items || [];
@@ -4275,6 +4280,22 @@ chatControllersRef.current.set(myChatId, controller);
     if (imagePlaceholders.length > 0) {
       for (const { att, placeholder } of imagePlaceholders) {
         if (!isStillActive()) return;
+        /* pre-extracted-text reuse: when OCR mode is ON, the
+           useEffect already fired describeImage() and converted
+           the image attachment into a 'file' attachment with the
+           extracted text in .content. Re-firing the vision API
+           here would (a) waste a call, (b) possibly rate-limit,
+           and (c) produce describe-style text labeled as "OCR
+           extracted text" which confuses the LLM. So if the
+           attachment has been converted to a file with content,
+           USE that text directly. */
+        const latestAtt = attachmentsRef.current.find(a => a.id === att.id) || att;
+        if (latestAtt.type === 'file' && latestAtt.content) {
+          const label = latestAtt._ocrFallback ? 'Image description' : 'OCR extracted text';
+          const replacement = `[Image: ${latestAtt.name} — ${label}:]\n\n${latestAtt.content}`;
+          text = text.replace(placeholder, replacement);
+          continue;
+        }
         /* ocr-race-fix: check if OCR was already attempted in the
            useEffect and failed. If so, use the stored failure
            reason to construct the error placeholder and SKIP the
@@ -4282,7 +4303,6 @@ chatControllersRef.current.set(myChatId, controller);
            rate-limited with the same error (the user sees
            "Vision service is busy right now after multiple
            retries" every time they enable OCR mode). */
-        const latestAtt = attachmentsRef.current.find(a => a.id === att.id) || att;
         if (latestAtt._ocrFailed && latestAtt._ocrFailReason) {
           const replacement = `[Attached image: ${latestAtt.name} — vision analysis failed: ${latestAtt._ocrFailReason}]`;
           text = text.replace(placeholder, replacement);
@@ -4572,7 +4592,7 @@ const handleClarifyAnswer = useCallback((messageId, answer) => {
   const handleInputKeyDown = useCallback((e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!streaming && (input.trim() || attachments.length > 0)) send();
+      if (!streaming && !isProcessingImages && (input.trim() || attachments.length > 0)) send();
     }
   }, [streaming, input, attachments, send]);
 
@@ -5731,22 +5751,33 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
                     <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
                   </button>
                 ) : (
-                  <button onClick={() => send()} disabled={!input.trim() && attachments.length === 0}
-                    title="Send"
+                  <button
+                    onClick={() => send()}
+                    disabled={(!input.trim() && attachments.length === 0) || isProcessingImages}
+                    title={isProcessingImages ? 'Extracting text from image…' : 'Send'}
                     style={{
-                      width: 36, height: 36, borderRadius: 0, border: '1px solid ' + ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a'), cursor: (input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed',
-                      background: (input.trim() || attachments.length > 0) ? '#e6e6e6' : '#1a1a1a',
-                      color: (input.trim() || attachments.length > 0) ? '#0a0a0a' : '#5a5a5a', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 36, height: 36, borderRadius: 0,
+                      border: '1px solid ' + (isProcessingImages ? '#3a3a3a' : ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#2a2a2a')),
+                      cursor: isProcessingImages ? 'wait' : ((input.trim() || attachments.length > 0) ? 'pointer' : 'not-allowed'),
+                      background: isProcessingImages ? '#1a1a1a' : ((input.trim() || attachments.length > 0) ? '#e6e6e6' : '#1a1a1a'),
+                      color: isProcessingImages ? '#5a5a5a' : ((input.trim() || attachments.length > 0) ? '#0a0a0a' : '#5a5a5a'),
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
                       transition: 'all .15s', flexShrink: 0, lineHeight: 0
                     }}>
-                    <ArrowUp size={15}/>
+                    {isProcessingImages
+                      ? <Loader size={14} style={{ animation: 'vertexSpin 1s linear infinite' }}/>
+                      : <ArrowUp size={15}/>}
                   </button>
                 )}
               </div>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono'
+                marginTop: 7, fontSize: 10.5, color: '#5a5a5a', fontFamily: 'JetBrains Mono',
+                gap: 8
               }}>
+                {isProcessingImages && (
+                  <span style={{ color: '#818cf8' }}>extracting text…</span>
+                )}
                 <span>{input.length} chars</span>
               </div>
               <div style={{ textAlign: 'center', marginTop: 6, fontSize: 12, color: '#4a4a4a', fontFamily: 'JetBrains Mono', letterSpacing: '.03em' }}>
