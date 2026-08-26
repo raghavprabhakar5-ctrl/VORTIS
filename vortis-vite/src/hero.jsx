@@ -106,19 +106,34 @@ function StyleInjector() {
 //  instead of mounting ~10 heavy animated components on first paint, we
 //  only mount the Hero. Others mount as the user scrolls down.
 // ══════════════════════════════════════════════════════════════════
-function LazySection({ children, placeholderHeight = 600, rootMargin = '300px 0px' }) {
+function LazySection({ children, placeholderHeight = 600, rootMargin = '300px 0px', id }) {
   const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(
+    () => typeof window !== 'undefined' && id && window.location.hash === `#${id}`
+  );
+
   useEffect(() => {
-    if (!ref.current) return;
+    if (visible || !ref.current) return;
     const obs = new IntersectionObserver(([e]) => {
       if (e.isIntersecting) { setVisible(true); obs.disconnect(); }
     }, { rootMargin, threshold: 0 });
     obs.observe(ref.current);
     return () => obs.disconnect();
-  }, [rootMargin]);
+  }, [rootMargin, visible]);
+
+  useEffect(() => {
+    if (!id) return;
+    const onHashChange = () => {
+      if (window.location.hash === `#${id}`) setVisible(true);
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [id]);
+
   if (visible) return <>{children}</>;
-  return <div ref={ref} style={{ height: placeholderHeight, position: 'relative' }} aria-hidden="true" />;
+  return (
+    <div ref={ref} id={id} style={{ height: placeholderHeight, position: 'relative', scrollMarginTop: 90 }} aria-hidden="true" />
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -3302,14 +3317,14 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         <div style={{ maxWidth: 1440, margin: "0 auto" }}>
           <Hero onLogin={onLogin} authLoading={authLoading} authError={authError} onOpenAuth={openAuth} />
         </div>
-        <Logos />
-        <LazySection placeholderHeight={700}>
+                <Logos />
+        <LazySection placeholderHeight={700} id="capabilities">
           <BentoGrid />
         </LazySection>
-        <LazySection placeholderHeight={800}>
+        <LazySection placeholderHeight={800} id="walkthrough">
           <Showcase />
         </LazySection>
-        <LazySection placeholderHeight={700}>
+        <LazySection placeholderHeight={700} id="how">
           <HowItWorks />
         </LazySection>
         <LazySection placeholderHeight={800}>
@@ -3318,20 +3333,21 @@ export default function LandingPage({ onLogin, authLoading = false, authError = 
         <LazySection placeholderHeight={500}>
           <Testimonials />
         </LazySection>
-        <LazySection placeholderHeight={700}>
+        <LazySection placeholderHeight={700} id="pricing">
           <Pricing />
         </LazySection>
-        <LazySection placeholderHeight={600}>
+        <LazySection placeholderHeight={600} id="about">
           <About />
         </LazySection>
-        <LazySection placeholderHeight={500}>
+        <LazySection placeholderHeight={500} id="faq">
           <FAQ />
         </LazySection>
         <LazySection placeholderHeight={400}>
           <CTA onLogin={onLogin} onOpenAuth={openAuth} />
         </LazySection>
         <Footer />
-      </main>
+        </main>
+
 
       {showAuthPicker && (
         <AuthPicker
