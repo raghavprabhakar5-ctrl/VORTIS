@@ -13,7 +13,7 @@ import { exportChat as exportChatToFile } from './chatExport';
 import { startVoicePipeline } from './voicePipeline';
 import { transcribeAudio } from './whisper';
 import { franc } from 'franc-min';
-import LandingPage from './hero-1';
+import LandingPage from './hero';
 import remarkGfm from "remark-gfm";
 import AICore from './AICore';
 import { extractDocText, setupPdfWorker } from './docUtils';
