@@ -301,10 +301,108 @@ function isTrivialCodeMessage(text) {
 // Picks the right model chain for a code-chat message.
 // ORDER MATTERS: isActualCodingTask is checked FIRST so that short
 // coding requests like "make me a game" don't get misrouted to trivial.
+//
+// FIX (2026-08-26): vision-described image uploads and image-generation
+// requests are short-circuited BEFORE the heavy chain. Both were getting
+// routed to ultra-550b (a non-vision reasoning model), which then either
+// ignored the image description and wrote irrelevant code, or tried to
+// write HTML/CSS that 'draws' the requested image. Neither was what the
+// user wanted. See isVisionDescribedImageMessage / isImageGenerationRequest
+// below for the full rationale.
 function pickCodeChatChain(text) {
+  if (isImageGenerationRequest(text))   return 'trivial'; // short-circuit
+  if (isVisionDescribedImageMessage(text)) return 'trivial'; // image uploads → fast
   if (isActualCodingTask(text))   return 'heavy';    // CHECK FIRST
   if (isTrivialCodeMessage(text)) return 'trivial';
   return 'standard';
+}
+
+// ── VISION-DESCRIBED IMAGE DETECTION ────────────────────────────
+// The frontend (vertex App.js, around line 4290) wraps every uploaded image
+// with this marker before sending it to the backend:
+//
+//     [Image: friend.png — Image description:]
+//     The image shows two friends smiling outdoors...
+//     <!--vrtx-img-end-->
+//     <user's actual typed prompt, e.g. "check this my image with my friend">
+//
+// Two problems with the previous routing:
+//   1. isActualCodingTask() returned TRUE for these messages because the
+//      description text is >200 chars and frequently contains words like
+//      'code', 'function', 'app', 'image' (if there's a code screenshot
+//      in the image) — triggering the heavy chain.
+//   2. The heavy chain runs ultra-550b, which is a NON-VISION reasoning
+//      model. Ultra can't see the image — it only sees the description
+//      text — and because its training is code-heavy AND the system
+//      prompt says "you are a coding assistant", ultra would often
+//      start WRITING CODE about the described image instead of just
+//      commenting on it conversationally. The user uploaded a photo of
+//      a friend and got back a Python script.
+//
+// Fix: detect the marker and route to the trivial chain (lightning-30b).
+// Lightning is fast (~2s warm), non-reasoning, and conversational — exactly
+// what you want for 'look at this image, what do you think?'. If the user
+// actually wants code from the image (e.g. 'rebuild this UI from the
+// screenshot'), they'll include a coding verb in their typed prompt —
+// which is preserved AFTER the <!--vrtx-img-end--> marker, so
+// containsCodingVerb() still fires and overrides this back to heavy.
+function isVisionDescribedImageMessage(text) {
+  if (!text || typeof text !== 'string') return false;
+  // The sentinel-delimited block is the canonical marker.
+  if (/\[Image:[^\]]*—\s*(Image description|OCR extracted text):\]/.test(text)) return true;
+  if (/\[Attached image:[^\]]*\]/.test(text)) return true;
+  // Fallback for older frontends that don't emit the sentinel — if the
+  // text starts with [Image: ... — ...] and the user's actual typed
+  // prompt is very short, treat it as a vision-described image.
+  if (/^\s*\[Image:[^\]]*—/m.test(text)) return true;
+  return false;
+}
+
+// ── IMAGE GENERATION REQUEST DETECTION ──────────────────────────
+// When the user types 'generate me an image of a sunset' inside code-chat,
+// the old routing:
+//   1. matched 'generate' as a coding verb (CODING_VERBS_EXACT)
+//   2. escalated to the heavy chain
+//   3. ultra-550b happily wrote HTML/CSS that 'draws' a sunset, or worse,
+//      Python code that calls an image-generation API
+//
+// The user wanted an actual image — which Vertex CAN'T produce. Vortis
+// (the main chat) has the image generator (FLUX + Pollinations). The
+// correct response is to TELL the user to switch, not write fake code.
+//
+// We detect the request server-side so the redirect is consistent
+// regardless of which model would have been picked. Returns true for:
+//   'generate me an image', 'draw a picture', 'create an image of',
+//   'make me a picture of', 'render an image', 'paint a scene', etc.
+// Also catches the typo-prone variants ('genrate', 'cretae').
+function isImageGenerationRequest(text) {
+  if (!text || typeof text !== 'string') return false;
+  const low = text.toLowerCase();
+
+  // Strong signal: explicit 'image'/'picture'/'photo' noun + generation verb
+  const hasGenVerb = /\b(generate|genrate|generat|draw|paint|create|cretae|creat|make|render|produce|design|sketch|illustrate)\b/i.test(low);
+  const hasImageNoun = /\b(image|images|picture|pictures|photo|photos|artwork|art|drawing|painting|illustration|wallpaper|logo|icon)\b/i.test(low);
+  if (!hasGenVerb || !hasImageNoun) return false;
+
+  // Disambiguate 'make me a game' (coding) from 'make me an image of a game' (image gen):
+  // If the noun is 'image/picture/photo/art/illustration/etc.' we treat as image gen;
+  // 'make a game', 'build a website' have different nouns and are NOT image gen.
+  // We already required hasImageNoun, so we just need to make sure the user isn't
+  // asking the model to 'edit code' or 'debug an image-processing function' —
+  // those are real coding tasks that happen to mention 'image'.
+  const looksLikeCodingTask = /\b(debug|refactor|optimi[sz]e|fix|code|function|class|component|api|endpoint|bug|error|stack trace|unit test|compile)\b/i.test(low);
+  if (looksLikeCodingTask) {
+    // Edge case: 'write a function that generates an image' IS a coding task.
+    // Only treat as image-gen if the gen verb is the MAIN action AND there's
+    // no 'function/code/class' word nearby. The cheap heuristic: if the user
+    // wrote 'generate an image of X' early in the message and didn't mention
+    // code/functions, it's image gen.
+    const firstChars = low.slice(0, 150);
+    const isPureImageRequest = !/\b(function|code|class|script|method|api|component|endpoint|bug|error|compile|debug)\b/.test(firstChars);
+    if (!isPureImageRequest) return false;
+  }
+
+  return true;
 }
 
 // ── NVIDIA CIRCUIT BREAKER ────────────────────────────────────
@@ -1592,11 +1690,28 @@ for (const nvidiaModel of modelsToTry) {
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
           console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS}) on ${nvidiaModel}`);
-          // Improved continuation prompt: explicitly tell the model NOT to
-          // re-output any prior content and to resume from the exact last
-          // character. The old prompt was ambiguous and the model would
-          // sometimes repeat the last few lines or add a preamble like
-          //"Here's the continuation:" which broke the code.
+          // FIX (2026-08-26): the previous continuation prompt caused two
+          // visible bugs in production:
+          //
+          //   (a) DUPLICATE CODE — the model often ignored the rule and
+          //       restarted the output from the beginning, producing the
+          //       same code block twice in a row (the user's screenshot:
+          //       'it show same code 2 times'). Now we detect mid-sentence
+          //       truncation and tell the model to RESTART the broken
+          //       sentence from the last complete sentence boundary,
+          //       which prevents both mid-word pickup AND restart-from-
+          //       scratch duplication.
+          //
+          //   (b) MID-WORD PICKUP — the previous prompt said 'continue
+          //       EXACTLY where you left off', which the model took
+          //       literally: if the prior turn was truncated mid-word
+          //       ('...this code wil') the model would continue with
+          //       'l work for you', and the visible response started with
+          //       'will work for you' — looking like the first sentence
+          //       had been deleted (the user's report: 'first text mostly
+          //       removed, just starts with will'). Now we detect mid-word
+          //       truncation and tell the model to RESTART the broken
+          //       sentence from the last complete sentence boundary.
           //
           // We also trim turnBuffer to the last ~12K chars to keep the
           // continuation request under NVIDIA's context window — the model
@@ -1605,10 +1720,30 @@ for (const nvidiaModel of modelsToTry) {
           const trimmedPrior = turnBuffer.length > 12000
             ? turnBuffer.slice(-12000)
             : turnBuffer;
+          // Detect mid-word truncation: no terminal punctuation AND no
+          // closing code fence AND last char is a word character. In that
+          // case find the last sentence boundary (.
+          // ! ? newline) and tell the model to restart from there.
+          const lastChar = trimmedPrior.slice(-1);
+          const endsMidWord = /[A-Za-z0-9_]/.test(lastChar)
+            && !/```\s*$/.test(trimmedPrior)
+            && !/[.!?:;\n]\s*$/.test(trimmedPrior);
+          let resumeFromHint;
+          if (endsMidWord) {
+            // Find last sentence boundary in the trimmed prior — restart
+            // from there so the visible continuation begins with a complete
+            // sentence instead of mid-word pickup like 'will work for you'.
+            const boundaryMatch = trimmedPrior.match(/[.!?:\n][^.!?:\n]*$/);
+            const lastBoundary = boundaryMatch ? boundaryMatch.index + 1 : 0;
+            const brokenSentence = trimmedPrior.slice(lastBoundary).trim();
+            resumeFromHint = `You were cut off MID-SENTENCE. The last incomplete sentence was:\n\n<incomplete_sentence>\n${brokenSentence}\n</incomplete_sentence>\n\nRESTART that exact sentence from its beginning and continue from there. Do NOT pick up mid-word. Do NOT repeat any text from before this sentence.`;
+          } else {
+            resumeFromHint = `You were cut off mid-output. Here is the last part of what you produced:\n\n<previous_output_tail>\n${trimmedPrior}\n</previous_output_tail>\n\nContinue EXACTLY where you left off. Rules:\n- Do NOT repeat any text from above.\n- Do NOT add any preamble, explanation, or apology.\n- Do NOT restart the file or wrap in a new code fence if you were inside one.\n- Just output the next characters that would naturally follow the last character above.`;
+          }
           convoMessages = [
             ...convoMessages,
             { role: 'assistant', content: turnBuffer },
-            { role: 'user', content: `You were cut off mid-output. Here is the last part of what you produced:\n\n<previous_output_tail>\n${trimmedPrior}\n</previous_output_tail>\n\nContinue EXACTLY where you left off. Rules:\n- Do NOT repeat any text from above.\n- Do NOT add any preamble, explanation, or apology.\n- Do NOT restart the file or wrap in a new code fence if you were inside one.\n- Just output the next characters that would naturally follow the last character above.` },
+            { role: 'user', content: resumeFromHint },
           ];
           turnBuffer = '';  // reset for the next turn
           continue;
@@ -2876,6 +3011,30 @@ app.post('/api/handler', async (req, res) => {
       res.setHeader('Connection', 'keep-alive');
 
       try {
+        // FIX (2026-08-26): short-circuit IMAGE GENERATION requests with a
+        // templated redirect message instead of letting them flow into the
+        // NVIDIA heavy chain (which would write fake 'image generation'
+        // code — exactly what the user reported: 'it starting gen code of
+        // that i think he trying to gen me image with code').
+        //
+        // The redirect tells the user professionally:
+        //   - Vertex = coding side of Vortis, can't generate images
+        //   - Vortis (the main chat) has a built-in image generator
+        //   - Switch to Vortis for image generation
+        // Matches the user's explicit request: 'it should say if you want
+        // to gen image you can go to vortis it can help you better — like
+        // this it should say professionally'.
+        if (isImageGenerationRequest(prompt)) {
+          const redirectMsg = `I'm **Vertex**, the coding side of **Vortis** — I specialize in writing, debugging, and explaining code, and I don't generate images directly.\n\nFor image generation, switch to the main **Vortis** chat (use the chat switcher in the sidebar or start a new Vortis chat). Vortis has a built-in image generator powered by FLUX + Pollinations — it'll turn your prompt into a real image in a few seconds.\n\nIf you actually wanted code that *calls* an image-generation API (e.g. a Python script using OpenAI's DALL-E, or a Node.js script calling Pollinations), just say so and I'll write that for you here.`;
+          try {
+            res.write(`data: ${JSON.stringify({ content: redirectMsg })}\n\n`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+          } catch (_) {}
+          console.log('Code-chat: short-circuited image-generation request with redirect message');
+          return;
+        }
+
         const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
 
         // Compute this FIRST, cheaply (sync regex, no network) — lets us
