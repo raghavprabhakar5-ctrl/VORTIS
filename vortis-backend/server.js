@@ -3002,6 +3002,23 @@ app.post('/api/handler', async (req, res) => {
       }
     });
 
+    // ── FIX (TDZ bug): CF_TOKEN / CF_ACCOUNT must be declared BEFORE the
+    // isCodeMode branch below. Previously these were declared further down
+    // (right before the `action === 'tts'` section), which meant that when
+    // the code-chat path fell through to `streamCodeChatFallback(...,
+    // { CF_TOKEN, CF_ACCOUNT, ... })`, the reference threw:
+    //   "ReferenceError: Cannot access 'CF_TOKEN' before initialization"
+    // because `const CF_TOKEN` / `const CF_ACCOUNT` exist in the temporal
+    // dead zone for the whole function until their declaration line runs —
+    // and that line never ran before the code-chat branch returned.
+    // Moving the declarations up here fixes the Groq+CF fallback for
+    // code-chat without touching any other logic.
+    const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
+    const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
+    if (!CF_TOKEN || !CF_ACCOUNT) {
+      console.error('CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID missing — Cloudflare fallback unavailable for this request');
+    }
+
     // ── ROUTE TO CODE-CHAT BEFORE the regular chat handler ──
     if (isCodeMode && action === 'chat') {
       if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
@@ -3205,8 +3222,9 @@ if (looksLikeClarifyAnswer) {
       return;
     }
 
-    const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
-    const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
+    // NOTE: CF_TOKEN / CF_ACCOUNT are already declared above (before the
+    // isCodeMode block) — do NOT redeclare them here with `const`, that
+    // would throw "Identifier 'CF_TOKEN' has already been declared".
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
 
     // ╔══════════════════════════════════════╗
@@ -3295,7 +3313,7 @@ if (looksLikeClarifyAnswer) {
 
     // ╔══════════════════════════════════════╗
     // ║  CHAT  — true token streaming        ║
-    // ╚══════════════════════════════════════╝
+    // ╚══════════════════════════════════════╗
     
     if (action === 'chat') {
     if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
@@ -3546,7 +3564,7 @@ TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank lin
 
     // ╔══════════════════════════════════════╗
     // ║  MEMORY  — extract facts, decide op  ║
-    // ╚══════════════════════════════════════╝
+    // ╚══════════════════════════════════════╗
     if (action === 'memory') {
       const userMsg = sanitizeString(body.userMsg || '', 800);
       const existing = Array.isArray(body.existing) ? body.existing.slice(0, 30) : [];
@@ -3622,7 +3640,7 @@ RULES — be strict, most messages produce an EMPTY array []:
 
     // ╔══════════════════════════════════════╗
     // ║  SEARCH                              ║
-    // ╚══════════════════════════════════════╝
+    // ╚══════════════════════════════════════╗
     if (action === 'search') {
       const searchQuery = (query || prompt).trim();
       if (!searchQuery)             return res.status(400).json({ error: 'Missing search query' });
@@ -3713,7 +3731,7 @@ RULES — be strict, most messages produce an EMPTY array []:
 
     // ╔══════════════════════════════════════╗
     // ║  VISION                              ║
-    // ╚══════════════════════════════════════╝
+    // ╚══════════════════════════════════════╗
     if (action === 'vision') {
       if (!image)                     return res.status(400).json({ error: 'Missing image data' });
       if (!isValidBase64Image(image)) return res.status(400).json({ error: 'Invalid image format' });
@@ -3919,7 +3937,7 @@ RULES — be strict, most messages produce an EMPTY array []:
 
     // ╔══════════════════════════════════════╗
     // ║  TRANSCRIBE (Voice call STT)         ║
-    // ╚══════════════════════════════════════╝
+    // ╚══════════════════════════════════════╗
     if (action === 'transcribe') {
       const audioBase64 = body.audio || '';
       if (!audioBase64) return res.status(400).json({ error: 'Missing audio data' });
@@ -4077,4 +4095,4 @@ RULES — be strict, most messages produce an EMPTY array []:
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Vortis backend listening on port ${PORT}`);
-});   
+});
