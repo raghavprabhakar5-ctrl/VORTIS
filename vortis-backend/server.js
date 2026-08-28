@@ -89,7 +89,7 @@ function makeGroqClient(key) {
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';  
 const NVIDIA_CHAT_QUALITY = 'stepfun-ai/step-3.7-flash';         
-const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';     
+const NVIDIA_CHAT_CODE    =  'moonshotai/kimi-k3';   
 
 // ── VISION MODELS ──
 // Raced in parallel — first valid response wins. CF is worst-case fallback.
