@@ -3824,28 +3824,24 @@ useEffect(() => {
   const targetChatId = chatIdOverride || chatIdRef.current;
   try {
     let title = overrideTitle;
+    let shouldSetTitle = !!overrideTitle;
     if (!title) {
-      // Prefer a previously-tracked title (placeholder "New Conversation"
-      // or an already-finalized real title) over recomputing from the raw
-      // first message — otherwise the debounced autosave (which calls this
-      // with no overrideTitle) stomps a good title back to the truncated
-      // first-message text on every keystroke-triggered save.
       const tracked = chatTitleStateRef.current.get(targetChatId);
       if (tracked?.title) {
         title = tracked.title;
-      } else {
-        const firstUser = msgs.find(m => m.role === 'user');
-        title = firstUser
-          ? (firstUser.text.replace(/```[\s\S]*?```/g, '').replace(/[#*`]/g, '').trim().slice(0, 48) || 'New Chat')
-          : 'New Chat';
+        shouldSetTitle = true;
       }
+      // No tracked title (e.g. fresh mount after refresh) — leave the
+      // existing Firestore title alone instead of recomputing it from msgs[0].
     }
     const cleaned = msgs.map(m => ({ role: m.role, text: (m.text || '').slice(0, 12000), ts: m.ts || Date.now() }));
-    await setDoc(doc(db, 'users', userUidRef.current, 'chats', targetChatId), {
-      title, preview: title, isCodeChat: true, messages: cleaned, style,
+    const payload = {
+      isCodeChat: true, messages: cleaned, style,
       updated: new Date().toISOString(),
-      createdAt: msgs[0]?.ts ? new Date(msgs[0].ts).toISOString() : new Date().toISOString()
-    });
+      createdAt: msgs[0]?.ts ? new Date(msgs[0].ts).toISOString() : new Date().toISOString(),
+    };
+    if (shouldSetTitle) { payload.title = title; payload.preview = title; }
+    await setDoc(doc(db, 'users', userUidRef.current, 'chats', targetChatId), payload, { merge: true });
     loadChats(userUidRef.current);
   } catch (e) {
     console.error('Vertex: failed to save code chat —', e);
@@ -4444,13 +4440,18 @@ if (chatControllersRef.current.get(myChatId) === controller) chatControllersRef.
       // Enough context now — generate the real title once, using
       // everything the user has said so far, and lock it in.
       const context = userTurns.map(m => m.text).join(' | ');
-      const firstUserText = userTurns[0]?.text || '';
-      const rawFallback = GREETING_ONLY_RE.test(firstUserText.trim())
-        ? 'New Chat'
-        : (firstUserText.slice(0, 48) || 'New Chat');
-      const title = await generateChatTitle(context) || rawFallback;
-      chatTitleStateRef.current.set(myChatId, { title, finalized: true });
-      await persistChat(finalMsgs, title, myChatId);
+const title = await generateChatTitle(context);
+
+if (title) {
+  chatTitleStateRef.current.set(myChatId, { title, finalized: true });
+  await persistChat(finalMsgs, title, myChatId);
+} else {
+  // Don't finalize on failure — keep the placeholder so a later turn
+  // gets another shot at a real title instead of freezing raw text.
+  const placeholder = 'New Conversation';
+  chatTitleStateRef.current.set(myChatId, { title: placeholder, finalized: false });
+  await persistChat(finalMsgs, placeholder, myChatId);
+     }
     }, 50);
   }
 
