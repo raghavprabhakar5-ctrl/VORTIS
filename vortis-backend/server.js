@@ -88,7 +88,7 @@ function makeGroqClient(key) {
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_CHAT_QUALITY = 'deepseek-ai/deepseek-v4-flash-0731';
+const NVIDIA_CHAT_QUALITY = 'stepfun-ai/step-3.7-flash';
 const NVIDIA_CHAT_CODE    = 'nvidia/llama-3.1-nemotron-ultra-253b-v1';
 
 // ── VISION MODELS ──
