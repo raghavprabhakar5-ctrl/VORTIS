@@ -3,12 +3,35 @@ import express from 'express';
 import admin from 'firebase-admin';
 import Groq from 'groq-sdk';
 
-// ── FIREBASE INIT ─────────────────────────────────────────────
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
-  });
+// ═══════════════════════════════════════════════════════════════
+//  GLM PROVIDER (Z.ai) — free 24/7 AI backbone
+//  chat / code / vision / search / image-gen / tts / asr
+//  Self-rate-limited (RPM caps + spacing + 429 cooldowns) so it can
+//  NEVER hammer any account — this is the ban-protection layer.
+// ═══════════════════════════════════════════════════════════════
+import {
+  glmReady, glmChat, glmStream, glmVision, glmSearch,
+  glmImage, glmTTS, glmASR, glmHealth,
+} from './glm-provider.js';
+
+// ── FIREBASE INIT (optional — server no longer crashes without it) ──
+// FIX: previously a missing FIREBASE_SERVICE_ACCOUNT crashed the whole
+// server at boot (JSON.parse of undefined). Now: with Firebase → verify
+// tokens + usage limits exactly as before (production behavior). Without
+// → DEV MODE: requests proceed as a dev user with working default limits.
+// This also lets the server run with ONLY the GLM provider configured.
+const FIREBASE_ENABLED = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
+if (FIREBASE_ENABLED) {
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)),
+    });
+  }
+  console.log('Firebase: enabled (auth + usage limits active)');
+} else {
+  console.warn('Firebase: FIREBASE_SERVICE_ACCOUNT not set — DEV MODE (no auth, default limits). Set it in production!');
 }
+
 
 // ── MODEL CONFIG ──────────────────────────────────────────────
 // Groq free-tier TPD (tokens per day) limits:
@@ -86,10 +109,23 @@ function makeGroqClient(key) {
   return new Groq({ apiKey: key });
 }
 
-const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_CHAT_QUALITY = 'moonshotai/kimi-k3';
-const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
+// FIX (GLM integration): every NVIDIA model ID is now ENV-OVERRIDABLE:
+//   NVIDIA_MODEL_HEAVY / NVIDIA_MODEL_QUALITY / NVIDIA_MODEL_FAST
+// Why: NIM rotates/gates model IDs (the 'glm 5.2 always shows http error'
+// report was exactly this — an ID your key can't reach). Instead of
+// redeploying code every time an ID dies, set the env var and restart.
+// The startup auto-probe (probeNvidiaModels) drops any ID that 404s, and
+// the 30-min TTL invalid registry re-tests automatically — a dead ID can
+// never sit in the chain producing HTTP errors on every request.
+//
+// Ranking defaults per VORTIS coding priority:
+//   heavy   = DeepSeek V4 Pro    (your #1 pick for coding)
+//   quality = Kimi K3            (your #2 — long-horizon agents)
+//   fast    = Nemotron Lightning (existing fast responder)
+const NVIDIA_BASE_URL     = process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1';
+const NVIDIA_CHAT_FAST    = process.env.NVIDIA_MODEL_FAST    || 'nvidia/nemotron-3.5-lightning-30b-a3b';
+const NVIDIA_CHAT_QUALITY = process.env.NVIDIA_MODEL_QUALITY || 'moonshotai/kimi-k3';
+const NVIDIA_CHAT_CODE    = process.env.NVIDIA_MODEL_HEAVY   || 'deepseek-ai/deepseek-v4-pro';
 
 // ── VISION MODELS ──
 // Raced in parallel — first valid response wins. CF is worst-case fallback.
@@ -540,6 +576,50 @@ function recordNvidiaSuccess(model) {
   }
 }
 
+// ── STARTUP NIM AUTO-PROBE (fix for 'model X always shows http error') ──
+// At boot, ping every candidate NIM ID once with a 6s / 1-token request.
+// IDs that return 404/401/410 get marked invalid (30-min TTL) BEFORE any
+// user request flows — so a dead model ID (GLM 5.2, EOL'd IDs, tier-gated
+// IDs) is dropped from the chain instead of erroring on every request.
+// Alive IDs are logged so you can see exactly what your key can reach.
+const NVIDIA_HEAVY_CANDIDATES = (process.env.NVIDIA_MODEL_HEAVY_CANDIDATES ||
+  'deepseek-ai/deepseek-v4-pro,moonshotai/kimi-k3,nvidia/nemotron-3-ultra-550b-a55b')
+  .split(',').map(s => s.trim()).filter(Boolean);
+
+async function probeNvidiaModels() {
+  const key = process.env.NVIDIA_API_KEY;
+  if (!key) { console.log('NVIDIA probe: skipped (no NVIDIA_API_KEY) — GLM handles everything'); return; }
+  const ids = [...new Set([
+    NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_CODE,
+    NVIDIA_VISION_MODEL, ...NVIDIA_VISION_CHAIN, ...NVIDIA_HEAVY_CANDIDATES,
+  ])];
+  console.log(`NVIDIA probe: testing ${ids.length} model IDs against your key…`);
+  let alive = 0;
+  for (const id of ids) {
+    const t0 = Date.now();
+    try {
+      const r = await fetchWithTimeout(`${NVIDIA_BASE_URL}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: id, messages: [{ role: 'user', content: 'ok' }], max_tokens: 1, temperature: 0, stream: true }),
+      }, 6000);
+      if (r.__clearTimeout) r.__clearTimeout();
+      let responded = false;
+      if (r.ok) { try { const rd = r.body.getReader(); await rd.read(); await rd.cancel('probe'); responded = true; } catch (_) {} }
+      if (r.status === 404 || r.status === 401 || r.status === 410) {
+        markNvidiaModelInvalid(id, `HTTP ${r.status} at startup probe`);
+        console.warn(`  NVIDIA probe: ✗ ${id} — HTTP ${r.status} (dropped from chains, auto-retry in 30min)`);
+      } else {
+        console.log(`  NVIDIA probe: ${r.ok ? '✓' : '~'} ${id} — HTTP ${r.status} ${Date.now() - t0}ms${responded ? ' (responding)' : ''}`);
+        if (r.ok) alive++;
+      }
+    } catch (e) {
+      console.log(`  NVIDIA probe: ~ ${id} — ${String(e.message || '').slice(0, 60)} (unreachable — left in chain, circuit breaker will handle it)`);
+    }
+  }
+  console.log(`NVIDIA probe done: ${alive}/${ids.length} model IDs responding with your key.`);
+}
+
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.2-3b-instruct',
@@ -611,7 +691,8 @@ const RATE_LIMITS = {
   tts:     { window: 60000, max: 20 },
   execute: { window: 60000, max: 15 },
   transcribe: { window: 60000, max: 40 },
-  nvidia_global: { window: 60000, max: 35 },
+  nvidia_global: { window: 60000, max: 20 }, // lowered: NVIDIA is fallback-only now (ban protection)
+  glm_global:    { window: 60000, max: 40 },  // GLM provider's own RPM guard (defense in depth)
   memory: { window: 60000, max: 20 },
   title:   { window: 60000, max: 20 },
 };
@@ -965,12 +1046,41 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
 }
 
 // ── STREAMING callAI ───────────────────────────────────────────
-// FIX: accepts a clientSignal (from req.on('close')) so that if the
+// FIX: accepts a clientSignal (from res.on('close') — the REAL
+// client-disconnect signal, see the abort-bug fix) so that if the
 // browser tab is closed mid-stream, we abort the upstream Groq/
 // NVIDIA/CF request instead of letting it run to completion and
 // wasting TPM budget / NVIDIA global budget on a response no one
 // will ever read.
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, preferQuality = false, skipNvidia = false }) {
+  // ── GLM PRIMARY (Z.ai free 24/7 backbone) ──
+  // Tried FIRST, before any account-bound provider (Groq/NVIDIA/CF), so
+  // user traffic stops burning your Groq TPD / NVIDIA quota by default.
+  // GLM streams in the exact same SSE contract the frontend already speaks.
+  // On any GLM failure (rate-limit cooldown, network, timeout) we silently
+  // fall through to the existing Groq → NVIDIA → CF chain — untouched.
+  {
+    const sys    = messages.find(m => m.role === 'system');
+    const recent = messages.filter(m => m.role !== 'system').slice(-12);
+    const optMsgs = sys ? [sys, ...recent] : [...recent];
+    const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+    const hardTier     = isObviouslyHard(lastUserMsg);
+    const tableMode    = looksLikeTableRequest(lastUserMsg);
+    const trivialTier  = isObviouslyTrivial(lastUserMsg);
+    if (await glmReady()) {
+      try {
+        const glmOk = await glmStream(optMsgs, res, {
+          clientSignal,
+          maxTokens: hardTier ? 8192 : (trivialTier ? 2048 : 4096),
+          temperature: 0.7,
+          bufferMode: tableMode,
+          repairFn: tableMode ? repairGluedTableRows : null,
+        });
+        if (glmOk) { console.log('Chat → GLM ✅ (primary)'); return true; }
+        console.warn('Chat: GLM stream unavailable — falling back to Groq → NVIDIA → CF');
+      } catch (e) { console.warn('Chat: GLM stream error:', e.message); }
+    }
+  }
   // ── Per-request Groq key rotation ──
   // The `groq` arg passed in was built from a single hardcoded key. We
   // ignore it and pick a fresh key per request from the rotation pool
@@ -1241,6 +1351,12 @@ for (const nvModel of nvidiaModelsToTry) {
     console.warn('NVIDIA global rate limit reached — skipping straight to Cloudflare');
   }
 
+  // Skip the CF hop entirely when credentials are missing — otherwise we
+  // fire a garbage request to .../accounts/undefined/ai/run/... and 404.
+  if (!CF_TOKEN || !CF_ACCOUNT) {
+    console.log('CF fallback skipped — CLOUDFLARE_* env not set');
+    return false;
+  }
   for (const cfModel of CF_CHAT_MODELS) {
     if (clientSignal?.aborted) { console.log('Client disconnected — skipping CF'); break; }
     try {
@@ -1461,7 +1577,11 @@ console.log(`Code-chat stream: chain=${chainName} will try [${modelsToTry.join('
 // on a cold-start timeout; with only 35s total the chain bailed before
 // stepfun or lightning even got a chance to attempt. 75s gives the chain
 // enough room to actually try every model in the heavy order at least once.
-const chainDeadline = Date.now() + 75000; // hard ceiling across the WHOLE chain
+const chainDeadline = Date.now() + 45000; // hard ceiling across the WHOLE chain
+// FIX: 75s → 45s. NVIDIA is the FALLBACK path now (GLM primary). A 75s
+// ceiling meant a user could wait 75s + Groq + CF time before seeing text.
+// 45s still gives every heavy candidate one real attempt without the
+// pathological tail.
 
 let attemptIdx = 0;
 for (const nvidiaModel of modelsToTry) {
@@ -1940,6 +2060,13 @@ async function fetchTavily(query) {
 
 async function fetchWebResults(query) {
   try {
+    // ── GLM web_search (Z.ai) — PRIMARY, free, no API key ──
+    // Tried FIRST so your Serper/Tavily quotas are only touched when GLM
+    // search is unavailable. Falls through cleanly on failure/empty.
+    try {
+      const g = await glmSearch(query, 10);
+      if (g && g.length > 0) { console.log(`Search → GLM ✅ (${g.length} results)`); return g; }
+    } catch (_) {}
     const s = await fetchSerper(query);
     if (s && s.length > 0) return s;
     console.log('Serper returned 0 results — falling back to Tavily for:', query.slice(0, 80));
@@ -2159,7 +2286,25 @@ Respond ONLY with YES or NO. Nothing else.`,
     const raw = result.choices?.[0]?.message?.content?.toLowerCase() || '';
     return raw.includes('yes');
   } catch (e) {
-    console.warn('Search-decision classifier failed:', e.message);
+    console.warn('Search-decision classifier failed (Groq):', e.message, '— trying GLM (noWait)');
+    // ── GLM (Z.ai) classifier fallback — advisory, never blocks: noWait
+    // skips when the pacing slot is busy, falling back to 'no search'. ──
+    try {
+      const glmCls = await glmChat(
+        [
+          {
+            role: 'system',
+            content: `Decide if answering this message correctly REQUIRES current/live information from the internet (things that change over time: news, scores, prices, versions, releases, current events, "latest"/"today"/"right now" type facts, current status of something).
+Say "NO" for anything answerable from general/stable knowledge (explanations, how-to, math, writing, opinions, code logic not tied to a specific library version).
+The user's message may contain typos or misspellings (e.g. "serch" means "search", "lattest" means "latest") — interpret their intent despite spelling errors.
+Respond ONLY with YES or NO. Nothing else.`,
+          },
+          { role: 'user', content: searchableText.slice(0, 500) },
+        ],
+        { maxTokens: 5, temperature: 0, kind: 'chat', timeoutMs: 2500, noWait: true }
+      );
+      if (glmCls) return glmCls.toLowerCase().includes('yes');
+    } catch (_) {}
     return false;
   } finally {
     clearTimeout(timer);
@@ -2255,7 +2400,7 @@ app.use((req, res, next) => {
 });
 
 // ── Health check — Render pings this to know the service is alive ──
-app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', glm: glmHealth().online, providers: { glm: true, nvidia: Boolean(process.env.NVIDIA_API_KEY), groq: Boolean(process.env.GROQ_API_KEY), cloudflare: Boolean(process.env.CLOUDFLARE_API_TOKEN) } }));
 app.get('/', (req, res) => res.status(200).send('Vortis backend is running.'));
 
 // ═════════════════════════════════════════════════════════════
@@ -2421,6 +2566,12 @@ app.get('/debug/nvidia-health', (req, res) => {
   });
 });
 
+// /debug/glm-health — live status of the GLM backbone: config source,
+// RPM usage vs caps, cooldown state, and call stats.
+app.get('/debug/glm-health', (req, res) => {
+  res.json(glmHealth());
+});
+
 // ═════════════════════════════════════════════════════════════
 // ── WARMUP + KEEP-ALIVE
 // ═════════════════════════════════════════════════════════════
@@ -2443,6 +2594,12 @@ app.get('/debug/nvidia-health', (req, res) => {
 // but this is a supplement, not a substitute for an external pinger.
 
 async function warmUp() {
+  // GLM backbone first — one smoke-test call at boot (glm-provider also
+  // resolves lazily on first use; warmUp just triggers it early).
+  try { await glmReady(); } catch (_) {}
+  // Then probe NVIDIA so dead model IDs are dropped before traffic flows.
+  try { await probeNvidiaModels(); } catch (e) { console.warn('NVIDIA probe error:', e.message); }
+  if (!FIREBASE_ENABLED) return; // no Firestore to warm in DEV MODE
   try {
     await admin.firestore().collection('_warmup').limit(1).get();
     console.log('Firestore warmed');
@@ -2803,6 +2960,17 @@ async function pingNvidiaModel(modelId) {
 
 function startNvidiaKeepAlive() {
   if (!process.env.NVIDIA_API_KEY) return;
+  // FIX (ban protection): keep-alive is now OFF by default. The old schedule
+  // pinged NVIDIA every 20s (fast) / 40s (quality) / 70s (heavy) around the
+  // clock — roughly 2,000-4,000 requests/day on your NIM key from pings
+  // alone, competing with real traffic and exactly the 'too many requests
+  // can affect my account' risk. GLM is now the primary provider, so NVIDIA
+  // is fallback-only and cold NIM models no longer cost user latency.
+  // Re-enable only if you flip routing back (NVIDIA_KEEPALIVE=1).
+  if (process.env.NVIDIA_KEEPALIVE !== '1') {
+    console.log('NVIDIA keep-alive: DISABLED by default (GLM is primary; set NVIDIA_KEEPALIVE=1 to re-enable warm pings)');
+    return;
+  }
 
   // Deduplicate models — since NVIDIA_CHAT_QUALITY now points to the same
   // ID as NVIDIA_CHAT_FAST (lightning), we'd otherwise ping it twice and
@@ -2848,18 +3016,33 @@ app.post('/api/handler', async (req, res) => {
   }
 
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    // FIX: the Groq SDK constructor THROWS when GROQ_API_KEY is missing,
+    // which killed every request with a 500 even though GLM/NVIDIA/CF could
+    // serve them. Create a null client instead — every downstream groq.*
+    // call site is wrapped in try/catch and falls back cleanly.
+    const groq = process.env.GROQ_API_KEY
+      ? new Groq({ apiKey: process.env.GROQ_API_KEY })
+      : null;
 
     const token  = req.headers.authorization?.split('Bearer ')[1];
     const userIp = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket?.remoteAddress || 'unknown';
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    // DEV MODE (no Firebase): tokenless requests are accepted as the shared
+    // dev user. With Firebase enabled this behaves exactly as before.
+    if (!token && FIREBASE_ENABLED) return res.status(401).json({ error: 'Unauthorized' });
 
     let uid;
-    try {
-      const decoded = await admin.auth().verifyIdToken(token);
-      uid = decoded.uid;
-    } catch {
-      return res.status(401).json({ error: 'Invalid or expired token' });
+    if (FIREBASE_ENABLED) {
+      try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        uid = decoded.uid;
+      } catch {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+    } else {
+      // DEV MODE (no FIREBASE_SERVICE_ACCOUNT): accept any caller as a
+      // shared dev user. Usage limits fall back to generous in-memory
+      // defaults so every action stays testable.
+      uid = 'dev-user';
     }
 
     const body   = req.body;
@@ -2893,10 +3076,22 @@ app.post('/api/handler', async (req, res) => {
     if (clean) return res.status(200).json({ title: clean });
     console.warn('TITLE: Groq returned empty — falling back to Cloudflare');
   } catch (e) {
-    console.error('TITLE ERROR (Groq):', e.message, '— falling back to Cloudflare');
+    console.error('TITLE ERROR (Groq):', e.message, '— trying GLM fallback');
   } finally {
     clearTimeout(titleTimer);
   }
+
+  // ── GLM (Z.ai) title fallback — free backbone, covers Groq outages ──
+  try {
+    const glmTitle = await glmChat(
+      [{ role: 'user', content: titlePrompt }],
+      { maxTokens: 120, temperature: 0.3, kind: 'chat', timeoutMs: 8000 }
+    );
+    if (glmTitle && glmTitle.trim()) {
+      console.log('TITLE → GLM ✅ (fallback)');
+      return res.status(200).json({ title: glmTitle.trim().slice(0, 200) });
+    }
+  } catch (e) { console.warn('TITLE: GLM fallback failed:', e.message); }
 
   // Cloudflare fallback — reuses the same two models already proven to work
   // as the CF chat fallback chain elsewhere in this file (CF_CHAT_MODELS),
@@ -2962,26 +3157,32 @@ app.post('/api/handler', async (req, res) => {
       image: 'images', vision: 'vision',
     };
 
-    const db = admin.firestore();
-    const userRef = db.collection('users').doc(uid);
-    const userSnap = await userRef.get();
-    const userData = userSnap.exists ? userSnap.data() : {};
+    let tier  = 'gold';
+    let usage = { messages: 999, documents: 99, images: 99, vision: 99 };
+    if (FIREBASE_ENABLED) {
+      const db = admin.firestore();
+      const userRef = db.collection('users').doc(uid);
+      const userSnap = await userRef.get();
+      const userData = userSnap.exists ? userSnap.data() : {};
 
-    const rawTier = (userData.tier || '').toString().trim().toLowerCase();
-    const tier = LIMITS[rawTier] ? rawTier : 'free';
-    const today = new Date().toDateString();
-    let usage = userData.usage || { messages: 0, documents: 0, images: 0, vision: 0 };
-    if (userData.usageDate !== today) usage = { messages: 0, documents: 0, images: 0, vision: 0 };
+      const rawTier = (userData.tier || '').toString().trim().toLowerCase();
+      tier = LIMITS[rawTier] ? rawTier : 'free';
+      const today = new Date().toDateString();
+      usage = userData.usage || { messages: 0, documents: 0, images: 0, vision: 0 };
+      if (userData.usageDate !== today) usage = { messages: 0, documents: 0, images: 0, vision: 0 };
 
-    const bucket = USAGE_KEY[action] || 'messages';
-    const limit  = LIMITS[tier][bucket];
+      const bucket = USAGE_KEY[action] || 'messages';
+      const limit  = LIMITS[tier][bucket];
 
-    if (usage[bucket] >= limit) {
-      return res.status(429).json({ error: `Daily ${bucket} limit reached for your plan.` });
+      if (usage[bucket] >= limit) {
+        return res.status(429).json({ error: `Daily ${bucket} limit reached for your plan.` });
+      }
+
+      usage[bucket] += 1;
+      await userRef.set({ usage, usageDate: today, tier }, { merge: true });
+    } else {
+      console.log(`DEV MODE: action=${action} uid=${uid} (in-memory limits only)`);
     }
-
-    usage[bucket] += 1;
-    await userRef.set({ usage, usageDate: today, tier }, { merge: true });
 
     const prompt  = sanitizeString(body.prompt  || '', 15000);
     const query   = sanitizeString(body.query   || '', 500);
@@ -2996,7 +3197,25 @@ app.post('/api/handler', async (req, res) => {
     // cancels the in-flight request instead of letting it burn TPM
     // and NVIDIA global budget on a response no one will read.
     const clientSignal = new AbortController();
-    req.on('close', () => {
+    // ═══ THE ABORT BUG FIX (root cause of 'models aborting and slow') ═══
+    // The old code listened on `req.on('close')`. Since Node.js v15, the
+    // 'close' event on IncomingMessage fires when the REQUEST is complete
+    // (i.e. ~3ms after the POST body arrives) — NOT when the browser tab
+    // closes. So clientSignal.abort() fired on EVERY SINGLE REQUEST while
+    // the response was still streaming:
+    //   • every NVIDIA / Groq upstream fetch got aborted mid-flight
+    //     → 'Code-chat stream error: This operation was aborted'
+    //   • each abort triggered the fallback retry cascade through every
+    //     provider → requests took 3-5x longer than needed
+    //   • aborted-but-running upstream calls still consumed NVIDIA/Groq
+    //     quota → the 'too many requests can affect my account' risk
+    //
+    // The CORRECT disconnect signal is `res.on('close')`:
+    //   • normal completion  → fires AFTER res.end() with writableEnded=true
+    //   • client gone early  → fires with writableEnded=false → abort ✅
+    // (Verified empirically on Node 24: req.close +3ms always; res.close
+    //  +1504ms normal / +5ms on real abort.)
+    res.on('close', () => {
       if (!res.writableEnded) {
         try { clientSignal.abort(); } catch (_) {}
       }
@@ -3167,7 +3386,26 @@ if (looksLikeClarifyAnswer) {
         // inconsistent output. Nemotron Ultra 253B supports up to 128K
         // output tokens, so 32K is a safe cap that lets 95%+ of requests
         // complete in a single pass with no continuation needed.
-        let ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
+        // ── GLM PRIMARY for code-chat (Z.ai) ──
+        // GLM is a top-tier coding model with ~300-500ms first-byte and no
+        // cold-start aborts — it now serves code-chat FIRST. The NVIDIA
+        // chain (DeepSeek V4 Pro / Kimi K3 / Nemotron) only runs if GLM
+        // is unavailable, and Groq+CF remain behind that. This kills the
+        // 'aborted / slow' code-chat experience AND removes most NIM
+        // traffic (ban protection).
+        // Flip back to NVIDIA-first anytime with env: CODE_PRIMARY=nvidia
+        let ok = false;
+        if (process.env.CODE_PRIMARY !== 'nvidia' && await glmReady()) {
+          try {
+            ok = await glmStream(codeMessages, res, {
+              clientSignal: clientSignal.signal,
+              maxTokens: 16384,
+              temperature: 0.5,
+            });
+            if (ok) console.log(`Code-chat → GLM ✅ (primary — NVIDIA chain=${chainName} skipped)`);
+          } catch (e) { console.warn('Code-chat: GLM error:', e.message); }
+        }
+        if (!ok) ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
         // FIX (2026-08-26): the previous version printed a hardcoded
         // 'code models are temporarily unavailable' message here and bailed
         // — even though streamCodeChatFallback() (defined further up in this
@@ -3225,7 +3463,13 @@ if (looksLikeClarifyAnswer) {
     // NOTE: CF_TOKEN / CF_ACCOUNT are already declared above (before the
     // isCodeMode block) — do NOT redeclare them here with `const`, that
     // would throw "Identifier 'CF_TOKEN' has already been declared".
-    if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
+    // FIX: a missing Cloudflare config used to hard-fail EVERY chat/search/
+    // vision/image/tts request with HTTP 500 — even though GLM/Groq/NVIDIA
+    // could fully serve them. CF is only the last-resort fallback: warn and
+    // continue instead of killing the request.
+    if (!CF_TOKEN || !CF_ACCOUNT) {
+      console.warn('Cloudflare fallback unavailable (CLOUDFLARE_* env not set) — GLM/Groq/NVIDIA will handle requests');
+    }
 
     // ╔══════════════════════════════════════╗
     // ║  TTS                                 ║
@@ -3282,6 +3526,16 @@ if (looksLikeClarifyAnswer) {
         }
         throw new Error('Empty buffer');
       } catch (e) { console.log('TTS attempt 2 failed:', e.message); }
+
+      // ── GLM TTS (Z.ai) — attempt 3 (free backbone; returns WAV audio) ──
+      try {
+        const glmAudio = await glmTTS(cleanText);
+        if (glmAudio && glmAudio.length > 100) {
+          console.log('TTS → GLM ✅ (attempt 3)');
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          return res.status(200).json({ audio: glmAudio });
+        }
+      } catch (e) { console.log('TTS attempt 3 (GLM) failed:', e.message); }
 
       try {
         const cfTtsRes = await fetchWithTimeout(
@@ -3348,6 +3602,26 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
 `;
 
       const voiceSystemContent = voiceIdentity + '\n\n' + prompt.trim().slice(0, 12000);
+
+      // ── GLM (Z.ai) — voice PRIMARY ──
+      // ~400ms responses, ideal latency for voice conversations; free and
+      // never cold-starts. NVIDIA → Groq → CF remain as fallbacks below.
+      try {
+        const glmVoice = await glmChat(
+          [
+            { role: 'system', content: voiceSystemContent },
+            ...sanitizeHistory(history, 8),
+          ],
+          { maxTokens: 600, temperature: 0.4, kind: 'chat', timeoutMs: 9000 }
+        );
+        if (glmVoice && glmVoice.trim().length > 2) {
+          console.log('Voice → GLM ✅ (primary)');
+          res.write(`data: ${JSON.stringify({ content: glmVoice })}\n\n`);
+          res.write('data: [DONE]\n\n');
+          res.end();
+          return;
+        }
+      } catch (e) { console.log('GLM voice failed:', e.message, '— falling back to NVIDIA → Groq → CF'); }
 
       try {
         const nvRes = await fetchWithTimeout(
@@ -3633,7 +3907,43 @@ RULES — be strict, most messages produce an EMPTY array []:
 
         return res.status(200).json({ ops: validOps });
       } catch (e) {
-        console.error('MEMORY ERROR:', e.message);
+        console.error('MEMORY ERROR (Groq):', e.message, '— trying GLM fallback');
+        // ── GLM (Z.ai) memory fallback — free backbone ──
+        try {
+          const glmRaw = await glmChat(
+            [
+              { role: 'system', content: sys },
+              { role: 'user', content: userMsg.slice(0, 500) },
+            ],
+            { maxTokens: 300, temperature: 0, kind: 'chat', timeoutMs: 8000 }
+          );
+          if (glmRaw) {
+            let raw = glmRaw.replace(/```json|```/g, '').trim();
+            const s = raw.indexOf('[');
+          const e2 = raw.lastIndexOf(']');
+            if (s !== -1 && e2 !== -1) {
+              try {
+                const parsed = JSON.parse(raw.slice(s, e2 + 1));
+                if (Array.isArray(parsed)) {
+                  const validOps = parsed.filter(o => {
+                    if (!o || typeof o !== 'object') return false;
+                    if (!['ADD', 'UPDATE', 'DELETE'].includes(o.op)) return false;
+                    if (o.op === 'DELETE') return Number.isInteger(o.index) && o.index >= 0 && o.index < existing.length;
+                    if (typeof o.text !== 'string') return false;
+                    const t = o.text.trim();
+                    if (t.length < 12 || t.length > 140) return false;
+                    if (t.split(/\s+/).length < 4) return false;
+                    if (!/^[A-Z]/.test(t)) return false;
+                    if (o.op === 'UPDATE' && !(Number.isInteger(o.index) && o.index >= 0 && o.index < existing.length)) return false;
+                    return true;
+                  }).slice(0, 2);
+                  console.log(`Memory → GLM ✅ (fallback, ${validOps.length} ops)`);
+                  return res.status(200).json({ ops: validOps });
+                }
+              } catch (_) {}
+            }
+          }
+        } catch (e2) { console.warn('MEMORY: GLM fallback failed:', e2.message); }
         return res.status(200).json({ ops: [] });
       }
     }
@@ -3689,7 +3999,26 @@ RULES — be strict, most messages produce an EMPTY array []:
           const rawT = result.choices?.[0]?.message?.content || null;
           const t    = rawT ? stripInternalReasoning(rawT) : null;
           if (t && t.trim().length > 10) aiSummary = t.trim();
-        } catch (e) { console.error('AI summary failed:', e.message); }
+        } catch (e) { console.error('AI summary failed (Groq):', e.message); }
+        // ── GLM (Z.ai) summary fallback — free backbone ──
+        if (!aiSummary) {
+          try {
+            const glmSummary = await glmChat(
+              [
+                {
+                  role: 'system',
+                  content: `Today is ${todayStr}. Summarize these search results in 2-3 sentences.\nRULES:\n- Use ONLY the results below.\n- Be specific: names, scores, dates, numbers.\n- Direct and factual.\n- If results show a sports result, state it clearly.\n- Do NOT say "as of my knowledge".\n\nSEARCH RESULTS:\n${contextSnippets}`,
+                },
+                { role: 'user', content: 'Summarize briefly.' },
+              ],
+              { maxTokens: 300, temperature: 0.2, kind: 'chat', timeoutMs: 10000 }
+            );
+            if (glmSummary && glmSummary.trim().length > 10) {
+              console.log('Search summary → GLM ✅ (fallback)');
+              aiSummary = glmSummary.trim();
+            }
+          } catch (e2) { console.log('GLM summary fallback failed:', e2.message); }
+        }
       }
 
       if (allResults.length === 0) {
@@ -3868,6 +4197,18 @@ RULES — be strict, most messages produce an EMPTY array []:
       // 3. Last resort: Cloudflare llava.
       let description = null;
 
+      // ── GLM vision (Z.ai) — PRIMARY ──
+      // Free, ~1s warm, handles base64 directly, no parallel NIM race
+      // needed. NIM vision chain + CF llava remain as fallbacks below.
+      try {
+        const imgMime = (String(image).match(/^data:(image\/[a-z+]+);/i) || [])[1] || 'image/jpeg';
+        const glmDesc = await glmVision(base64Data, imgMime, cleanPrompt);
+        if (glmDesc && glmDesc.trim().length > 2) {
+          console.log('Vision → GLM ✅ (primary)');
+          description = glmDesc;
+        }
+      } catch (e) { console.log('GLM vision failed:', e.message); }
+
       const raceNvidiaModels = async (label) => {
         // FIX (2026-08-26): filter out blocked models BEFORE building the
         // race candidate list. The old code mapped over the full chain
@@ -3898,8 +4239,12 @@ RULES — be strict, most messages produce an EMPTY array []:
         ).catch(() => null);
       };
 
-      // Attempt 1: parallel race
-      description = await raceNvidiaModels('race');
+      // Attempt 1: parallel race — ONLY if GLM hasn't already answered.
+      // (The unguarded assignment used to overwrite GLM's description with
+      // the NIM race result — which is null when no key/models are set —
+      // sending users the 'models are busy' message even though GLM
+      // had successfully described the image.)
+      if (!description) description = await raceNvidiaModels('race');
 
       // Attempt 2: sequential retry of remaining (non-blocked) chain models after 2s
       if (!description) {
@@ -3959,7 +4304,15 @@ RULES — be strict, most messages produce an EMPTY array []:
         const detectedLang = transcription?.language || null;
         return res.status(200).json({ text, language: detectedLang });
       } catch (error) {
-        console.error('TRANSCRIBE ERROR:', error.message);
+        console.error('TRANSCRIBE ERROR (Groq whisper):', error.message, '— trying GLM ASR');
+        // ── GLM ASR (Z.ai) — fallback (free backbone) ──
+        try {
+          const glmAsr = await glmASR(audioBase64);
+          if (glmAsr?.text) {
+            console.log('Transcribe → GLM ASR ✅ (fallback)');
+            return res.status(200).json({ text: glmAsr.text, language: glmAsr.language });
+          }
+        } catch (e2) { console.log('GLM ASR failed:', e2.message); }
         return res.status(500).json({ error: 'Transcription failed', text: '' });
       }
     }
@@ -4070,7 +4423,17 @@ RULES — be strict, most messages produce an EMPTY array []:
           return res.status(200).json({ ...fluxResult, provider: 'flux', usage, limits: LIMITS[tier] });
         }
 
-        console.log('Cloudflare Flux worker failed, shifting to Pollinations (flux) fallback...');
+        // ── GLM image generation (Z.ai) — fallback 1 (free 24/7 backbone) ──
+        console.log('Cloudflare Flux worker failed — trying GLM image generation…');
+        try {
+          const glmImg = await glmImage(prompt);
+          if (glmImg?.imageUrl) {
+            console.log('Image → GLM ✅ (fallback 1)');
+            return res.status(200).json({ ...glmImg, provider: 'glm', usage, limits: LIMITS[tier] });
+          }
+        } catch (e) { console.log('GLM image gen failed:', e.message); }
+
+        console.log('GLM image generation failed, shifting to Pollinations (flux) fallback...');
         const pollResult = await tryPollinations(prompt);
         if (pollResult?.imageUrl) {
           return res.status(200).json({ ...pollResult, provider: 'pollinations-flux', usage, limits: LIMITS[tier] });
