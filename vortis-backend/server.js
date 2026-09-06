@@ -656,7 +656,9 @@ function recordNvidiaSuccess(model) {
 //     tic-tac-toe request before Groq answered).
 const NVIDIA_ACCOUNT_429_LIGHT_MS = 30 * 1000;
 const NVIDIA_ACCOUNT_429_FULL_MS  = 90 * 1000;
-const nvidiaAccount429 = { until: 0, strikes: 0, lastSource: '', loggedSkip: false };
+const NVIDIA_ACCOUNT_429_MAX_MS   = 10 * 60 * 1000; 
+const NVIDIA_ACCOUNT_429_STREAK_RESET_MS = 5 * 60 * 1000;
+const nvidiaAccount429 = { until: 0, strikes: 0, lastSource: '', loggedSkip: false, lastStrikeAt: 0 };
 
 function nvidiaAccount429RemainingMs() {
   return Math.max(0, nvidiaAccount429.until - Date.now());
@@ -672,24 +674,31 @@ function parseRetryAfterSec(res) {
     return Number.isFinite(n) && n > 0 ? n : null;
   } catch (_) { return null; }
 }
+
 function noteNvidia429(source, retryAfterSec) {
   const now = Date.now();
-  const inWindow = now < nvidiaAccount429.until;
-  nvidiaAccount429.strikes = inWindow ? nvidiaAccount429.strikes + 1 : 1;
+  const continuingStreak = (now - nvidiaAccount429.lastStrikeAt) < NVIDIA_ACCOUNT_429_STREAK_RESET_MS;
+  nvidiaAccount429.strikes = continuingStreak ? nvidiaAccount429.strikes + 1 : 1;
+  nvidiaAccount429.lastStrikeAt = now;
   nvidiaAccount429.lastSource = source;
   nvidiaAccount429.loggedSkip = false; // re-arm the one-shot "pings paused" log
-  const ms = retryAfterSec
-    ? Math.min(retryAfterSec * 1000, 5 * 60 * 1000)
-    : (nvidiaAccount429.strikes >= 2 ? NVIDIA_ACCOUNT_429_FULL_MS : NVIDIA_ACCOUNT_429_LIGHT_MS);
+
+  let ms;
+  if (retryAfterSec) {
+    ms = Math.min(retryAfterSec * 1000, NVIDIA_ACCOUNT_429_MAX_MS);
+  } else if (nvidiaAccount429.strikes <= 1) {
+    ms = NVIDIA_ACCOUNT_429_LIGHT_MS;
+  } else {
+    // Real escalation: 90s, 180s, 360s, ... capped at 10 minutes. A key
+    // that's genuinely rate-limited (not just briefly busy) needs to be
+    // left alone for real time, not re-poked every 30-45s.
+    const doublings = Math.min(nvidiaAccount429.strikes - 2, 4);
+    ms = Math.min(NVIDIA_ACCOUNT_429_FULL_MS * Math.pow(2, doublings), NVIDIA_ACCOUNT_429_MAX_MS);
+  }
   nvidiaAccount429.until = Math.max(nvidiaAccount429.until, now + ms);
   console.warn(`NVIDIA 429 backoff: account cooldown ${Math.round((nvidiaAccount429.until - now) / 1000)}s active (strike ${nvidiaAccount429.strikes}, source: ${source}${retryAfterSec ? `, Retry-After ${retryAfterSec}s` : ''}) — pings/warmups paused, code-chat falls to Groq until it clears`);
 }
 
-// Real (user-facing) NVIDIA requests currently in flight on this key.
-// pingNvidiaModel checks this counter and holds pings so background traffic
-// never competes with real requests for the per-key concurrency budget
-// (the 2026-09-06 logs show a nemotron keep-alive firing mid-chain, both
-// colliding into 429s). Single process → a plain counter is sufficient.
 let nvidiaRealRequestsInFlight = 0;
 
 // Boot warmup coordination: warmUp() assigns nvidiaBootWarmupSettle (a
