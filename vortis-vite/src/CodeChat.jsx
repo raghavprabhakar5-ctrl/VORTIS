@@ -578,6 +578,101 @@ function needsCodeWebSearch(text) {
 
 const FILE_PATH_LINE = /^(?:\/\/|#|--|;;|;|<!--|\/\*)\s*\*?\s*(?:file|path|filename)\s*[:=]\s*(\S+?)(?=\s*(?:-->|\*\/|\s|$))\s*(?:-->|\*\/)?[ \t]*(.*)$/i;
 
+/* ────────────────────────────────────────────────────────────────────────
+ *  DUPLICATE-CODE DEDUPE (FIX 2026-09-06)
+ *
+ *  The user's bug report: "when it gave me code it gave me same code two
+ *  time up and down" and "it is making the same file two time".
+ *
+ *  What happens: when a code response hits the backend's max_tokens and
+ *  auto-continues, the model often restarts the whole file instead of
+ *  continuing — so one assistant message ends up containing the SAME
+ *  code fence twice (sometimes once untagged + once tagged with
+ *  `<!-- file: ... -->`, which then renders BOTH as an inline code block
+ *  AND as a FileTreePanel artifact — code "two time up and down").
+ *
+ *  These helpers run at three layers:
+ *    1. dedupeRepeatedCode(text)  — send() strips duplicate fences from
+ *       the final assistant text before it is committed to the chat.
+ *    2. extractProjectFromMessage — absorbs an untagged fence that
+ *       duplicates a tagged file (so the panel shows the file and the
+ *       inline copy disappears).
+ *    3. extractCodeBlocksFromMessages — dedupes the Artifacts file list
+ *       by path and by content (so the panel never lists one file twice).
+ *  The backend also got a streaming-level restart guard (server.js,
+ *  makeRestartGuard) — these frontend layers are the final guarantee.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+// Normalize code for comparison: drop path comments (they differ between
+// the tagged and untagged copies of the same file) and ALL whitespace.
+const normalizeCodeForCompare = (code) =>
+  (code || '')
+    .replace(/<!--\s*file:\s*[^\s>]+\s*-->/gi, '')   // <!-- file: x -->
+    .replace(/(?:\/\/|#|--|;;|;|\/\*)\s*(?:file|path|filename)\s*[:=]\s*\S+.*$/gim, '') // // file: x etc.
+    .replace(/\s+/g, '');
+
+// True when two code blocks are the same file: identical after
+// normalization, or one is a substantial prefix/suffix of the other
+// (truncation makes copies differ at the edges).
+const codeBlocksAreDuplicates = (a, b) => {
+  const na = normalizeCodeForCompare(a);
+  const nb = normalizeCodeForCompare(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  // One contained in the other and the shorter one is substantial
+  // (>= 200 chars ≈ a real file, not a 3-line snippet).
+  const shorter = Math.min(na.length, nb.length);
+  if (shorter >= 200 && (na.includes(nb) || nb.includes(na))) return true;
+  return false;
+};
+
+// Strips duplicate fenced code blocks from a full assistant message.
+// Keeps the copy that carries a `<!-- file: path -->` tag (it renders as
+// the FileTreePanel artifact); if none is tagged, keeps the LONGER copy.
+// Only fires on near-identical blocks — two genuinely different files
+// are never touched.
+const dedupeRepeatedCode = (text) => {
+  if (!text || !text.includes('```')) return text;
+  const fenceRe = /```([\w+#.\-]*)[ \t]*\n?([\s\S]*?)```/g;
+  const blocks = [];
+  let m;
+  while ((m = fenceRe.exec(text))) {
+    let lang = (m[1] || '').trim();
+    let code = m[2] || '';
+    // unwrap nested fences (double-wrapped output) so normalization
+    // compares the real content
+    let inner = code.match(/^```([\w+#.\-]*)[ \t]*\n?([\s\S]*?)\n?```[ \t]*\n?$/);
+    while (inner) {
+      if (inner[1]) lang = inner[1];
+      code = inner[2];
+      inner = code.match(/^```([\w+#.\-]*)[ \t]*\n?([\s\S]*?)\n?```[ \t]*\n?$/);
+    }
+    blocks.push({ start: m.index, end: m.index + m[0].length, lang, code, dup: false });
+  }
+  // Mark duplicates: if block j duplicates an earlier block i, drop j
+  // (unless j is tagged and i is not — then drop i instead).
+  const hasFileTag = (code) => /(?:<!--|\/\/|#|\/\*)\s*(?:file|path|filename)\s*[:=]/i.test(code.trim().split('\n')[0] || '');
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i].dup) continue;
+    for (let j = i + 1; j < blocks.length; j++) {
+      if (blocks[j].dup) continue;
+      if (!codeBlocksAreDuplicates(blocks[i].code, blocks[j].code)) continue;
+      const iTag = hasFileTag(blocks[i].code);
+      const jTag = hasFileTag(blocks[j].code);
+      if (jTag && !iTag) blocks[i].dup = true;   // keep the tagged copy
+      else if (iTag && !jTag) blocks[j].dup = true;
+      else blocks[j].dup = true;                 // both same: keep the earlier/longer
+    }
+  }
+  if (!blocks.some(b => b.dup)) return text;
+  // Remove the marked blocks from the text (last-first so indices stay valid).
+  let out = text;
+  const toRemove = blocks.filter(b => b.dup).sort((a, b) => b.start - a.start);
+  for (const b of toRemove) out = out.slice(0, b.start) + out.slice(b.end);
+  // tidy orphan whitespace left behind by the removal
+  return out.replace(/\n{3,}/g, '\n\n').trim();
+};
+
 const extractFilePath = (code, lang) => {
   if (!code) return null;
   const nl = code.indexOf('\n');
@@ -779,12 +874,67 @@ const extractFilePath = (code, lang) => {
   }
     out += text.slice(lastIdx);
   const defended = _defendRawCode(out, isActiveStream);
-  const cleanedText = defended.text.replace(/\n{3,}/g, '\n\n');
-  const allFiles = [...files, ...defended.files];
+  let cleanedText = defended.text.replace(/\n{3,}/g, '\n\n');
+
+  // ── DEDUPE (FIX 2026-09-06) ──
+  // 1. Never list the same file twice in the FileTreePanel / Artifacts:
+  //    same path → keep the longest copy; same content under different
+  //    paths (a duplicated emission) → keep the first.
+  const allFiles = dedupeProjectFiles([...files, ...defended.files]);
   if (allFiles.length === 0) {
     return { project: null, text: cleanedText };
   }
+  // 2. Absorb any remaining PLAIN (untagged) fence whose content
+  //    duplicates one of the extracted files. Without this, the same
+  //    code renders twice — once as the file panel and once as an inline
+  //    block ("same code two time up and down"). Skipped while the
+  //    stream is still writing the file (compare would be mid-flight).
+  if (!isActiveStream) {
+    cleanedText = absorbDuplicatePlainFences(cleanedText, allFiles);
+  }
   return { project: allFiles, text: cleanedText };
+};
+
+/* Dedupes extracted project files: by normalized path (keep longest
+   code) and by normalized content (keep first). Returns a new array. */
+const dedupeProjectFiles = (files) => {
+  if (!files || files.length === 0) return [];
+  const byPath = new Map();
+  for (const f of files) {
+    const key = (f.path || '').trim().toLowerCase();
+    const prev = byPath.get(key);
+    if (!prev || (f.code || '').length > (prev.code || '').length) byPath.set(key, f);
+  }
+  const out = [];
+  for (const f of byPath.values()) {
+    if (out.some(g => g !== f && codeBlocksAreDuplicates(g.code, f.code))) continue;
+    out.push(f);
+  }
+  return out;
+};
+
+/* Removes closed, untagged fenced code blocks from `text` when their
+   content duplicates one of `files`. The FileTreePanel already renders
+   that code — the inline copy is the visual duplicate the user reported. */
+const absorbDuplicatePlainFences = (text, files) => {
+  if (!text || !text.includes('```') || !files || files.length === 0) return text;
+  const fenceRe = /```([\w+#.\-]*)[ \t]*\n?([\s\S]*?)```/g;
+  const removals = [];
+  let m;
+  while ((m = fenceRe.exec(text))) {
+    let code = m[2] || '';
+    let unwrap = unwrapNestedFence(code);
+    while (unwrap) { code = unwrap.code; unwrap = unwrapNestedFence(code); }
+    if (extractFilePath(code, m[1] || '')) continue; // tagged → handled by extraction
+    if (!files.some(f => codeBlocksAreDuplicates(f.code, code))) continue;
+    removals.push(m.index, m.index + m[0].length);
+  }
+  if (removals.length === 0) return text;
+  let out = text;
+  for (let i = removals.length - 2; i >= 0; i -= 2) {
+    out = out.slice(0, removals[i]) + out.slice(removals[i + 1]);
+  }
+  return out.replace(/\n{3,}/g, '\n\n');
 };
 
 /* ────────────────────────────────────────────────────────────────────────
@@ -2815,19 +2965,33 @@ const extractCodeBlocksFromMessages = (messages) => {
         filePath: extracted ? extracted.path : null,
       });
     }
-    if (allBlocks.length === 0) continue;
+    // FIX 2026-09-06: drop duplicate blocks WITHIN one message before they
+    // reach the Artifacts list — a duplicated emission (max_tokens
+    // auto-continuation restart) otherwise lists the same file twice
+    // ("it is making the same file two time"). Tagged copy wins over
+    // untagged; then the longer copy wins.
+    const dedupedBlocks = [];
+    for (const b of allBlocks) {
+      const dupOf = dedupedBlocks.find(g => codeBlocksAreDuplicates(g.code, b.code));
+      if (!dupOf) { dedupedBlocks.push(b); continue; }
+      const bIsTagged = !!b.filePath && !dupOf.filePath;
+      if (bIsTagged) { dedupedBlocks[dedupedBlocks.indexOf(dupOf)] = b; }
+    }
+    if (dedupedBlocks.length === 0) continue;
 
-    const fileBlocks = allBlocks.filter(b => b.filePath);
-    const plainBlocks = allBlocks.filter(b => !b.filePath);
+    const fileBlocks = dedupedBlocks.filter(b => b.filePath);
+    const plainBlocks = dedupedBlocks.filter(b => !b.filePath);
 
     if (fileBlocks.length >= 1) {
       // Tagged-file project: one expandable entry for the whole project
       // (works for 1 file too — user gets the IDE panel + zip download).
+      // FIX 2026-09-06: dedupe by path — same path twice inside one message
+      // is the duplicate emission; keep the longer copy.
       out.push({
         type: 'project',
         id: `${m.id}-proj`,
         ts: m.ts,
-        files: fileBlocks.map(b => ({ path: b.filePath, lang: b.lang, code: b.code })),
+        files: dedupeProjectFiles(fileBlocks.map(b => ({ path: b.filePath, lang: b.lang, code: b.code }))),
       });
       // Any non-file snippets in the same message still get their own rows
       for (const b of plainBlocks) {
@@ -2837,7 +3001,7 @@ const extractCodeBlocksFromMessages = (messages) => {
       }
     } else {
       // No tagged files — flat list, same as before
-      for (const b of allBlocks) {
+      for (const b of dedupedBlocks) {
         const trimmed = b.code.trim();
         const lineCount = trimmed.split('\n').length;
         if (lineCount < MIN_ARTIFACT_LINES && trimmed.length < MIN_ARTIFACT_CHARS) continue;
@@ -4398,7 +4562,12 @@ if (chatControllersRef.current.get(myChatId) === controller) chatControllersRef.
     return;
   }
 
-  const cleaned = result.text.trim();
+  // FIX 2026-09-06: strip duplicate code blocks BEFORE the reply is
+  // committed — when the backend's auto-continuation restarted the file,
+  // the message would otherwise permanently contain the same code twice
+  // ("same code two time up and down"). Only near-identical blocks are
+  // collapsed; genuinely different files are untouched.
+  const cleaned = dedupeRepeatedCode(result.text).trim();
   if (!cleaned) {
     if (isStillActive()) {
       setMessages(prev => [...prev, { id: `a-${Date.now()}`, role: 'assistant', text: '_(empty response — try rephrasing your request)_', ts: Date.now(), canRetry: true }]);

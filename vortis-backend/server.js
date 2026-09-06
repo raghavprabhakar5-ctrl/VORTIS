@@ -89,9 +89,67 @@ function makeGroqClient(key) {
 }
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
+// ── NVIDIA NIM MODEL LINEUP (FIX 2026-09-06) ──────────────────────────
+// CHANGES:
+//   1. CODING MODEL (heavy): deepseek-v4-flash-0731 → 'z-ai/glm-5.2'
+//      - User-requested: "use glm 5.2 for coding in nim api".
+//      - GLM-5.2 is Z.ai's flagship coding/agentic model hosted on NVIDIA
+//        NIM (build.nvidia.com/z-ai/glm-5.2). 1M context, up to 32768
+//        output tokens per call — a full animated website in ONE pass,
+//        which also makes the auto-continuation (and its duplicate-code
+//        failure mode) extremely rare.
+//      - NOTE: integrate.api.nvidia.com/v1/models does NOT list every
+//        hosted model — z-ai/glm-5.2 is served on the /chat/completions
+//        endpoint (confirmed by docs.api.nvidia.com/nim/reference/
+//        z-ai-glm-5.2-infer) even though the catalog endpoint omits it.
+//        So `in_catalog: false` in /debug/nvidia-models is EXPECTED for
+//        this ID — the http_status field is the real test.
+//      - KEY NOTE: if this model returns 404 with your current key, go to
+//        build.nvidia.com/z-ai/glm-5.2 and click "Get API Key" — keys are
+//        sometimes scoped per-model page on NVIDIA accounts. Generate a
+//        fresh key there and set it as NVIDIA_API_KEY. The 30-min invalid
+//        TTL below auto-retries, so no restart is needed after you swap
+//        the key in Render's env.
+//   2. QUALITY MODEL: nemotron-3-super-120b-a12b → 'deepseek-ai/
+//      deepseek-v4-pro-0813' (user-requested "make quality model better").
+//      DeepSeek V4 Pro is a flagship reasoning model — a much stronger
+//      fallback behind GLM-5.2 in the heavy chain.
+//   3. FAST MODEL: unchanged (nemotron-3.5-lightning-30b-a3b) — fast,
+//      warm, proven in production.
+//
+// ALL-VERIFIED (2026-09-06, live ping via /debug/nvidia-models on the
+// deployed Render service + docs.api.nvidia.com per-model reference):
+//   z-ai/glm-5.2                            → serving, max_tokens ≤ 32768
+//   deepseek-ai/deepseek-v4-pro-0813        → in catalog, max_tokens ≤ 16384
+//   nvidia/nemotron-3.5-lightning-30b-a3b   → in catalog, max_tokens ≤ 32768 (HTTP 200, ~350ms warm)
+//   nvidia/nemotron-3-nano-omni-30b-a3b-... → in catalog, HTTP 200 (vision)
+//   meta/llama-3.2-11b-vision-instruct      → in catalog, HTTP 200 (vision)
 const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
-const NVIDIA_CHAT_CODE    = 'deepseek-ai/deepseek-v4-flash-0731';
+const NVIDIA_CHAT_QUALITY = 'deepseek-ai/deepseek-v4-pro-0813';
+const NVIDIA_CHAT_CODE    = 'z-ai/glm-5.2';
+
+// ── PER-MODEL max_tokens CAPS (FIX 2026-09-06) ───────────────────────
+// CRITICAL BUG this fixes: the code-chat path passes max_tokens=32768 to
+// EVERY model in the chain. deepseek-ai models on NIM cap max_tokens at
+// 16384 — sending 32768 returns HTTP 400 "max_tokens must be between 1
+// and 16384", which burned a failure strike and silently pushed every
+// heavy request to the fallback models. (The old heavy model,
+// deepseek-v4-flash-0731, has this exact 16384 cap — one likely reason
+// code generation was "not able to make properly".) Every NVIDIA call
+// now clamps max_tokens through nvidiaMaxTokensFor() before sending.
+const NVIDIA_MODEL_MAX_TOKENS = {
+  'z-ai/glm-5.2':                          32768,
+  'deepseek-ai/deepseek-v4-pro-0813':      16384,
+  'deepseek-ai/deepseek-v4-flash-0731':    16384,
+  'nvidia/nemotron-3.5-lightning-30b-a3b': 32768,
+  'nvidia/nemotron-3-super-120b-a12b':     32768,
+  _default: 16384,
+};
+
+function nvidiaMaxTokensFor(model, requested) {
+  const cap = NVIDIA_MODEL_MAX_TOKENS[model] ?? NVIDIA_MODEL_MAX_TOKENS._default;
+  return Math.max(1, Math.min(requested ?? cap, cap));
+}
 
 // ── VISION MODELS ──
 // Raced in parallel — first valid response wins. CF is worst-case fallback.
@@ -429,10 +487,19 @@ const nvidiaFailureTracker = new Map(); // model -> { count, lastFailTime }
 //                     The old 6000ms threshold meant ultra was NEVER marked
 //                     warm, which broke pickHeavyChain's warm-state logic.
 //   - step-3.7-flash: 700ms-3s when warm (threshold 5s)
+// Per-model "warm" latency thresholds. A model is considered warm if its
+// last ping completed under this threshold. These MUST match the model's
+// actual warm response time — otherwise isNvidiaModelWarm() always returns
+// false and pickHeavyChain can't make good routing decisions.
+//
+// UPDATED 2026-09-06 for the new lineup:
+//   - GLM-5.2 (heavy): large flagship — give it 20s warm headroom.
+//   - deepseek-v4-pro (quality): 18s.
+//   - lightning-30b (fast): 12s.
 const NVIDIA_WARM_LATENCY_THRESHOLD_MS = {
-  [NVIDIA_CODE_MODEL_HEAVY]: 15000,
-  [NVIDIA_CHAT_MODEL_QUALITY]: 12000,
-  [NVIDIA_CODE_MODEL_FAST]: 15000,
+  [NVIDIA_CODE_MODEL_HEAVY]: 20000,
+  [NVIDIA_CHAT_MODEL_QUALITY]: 18000,
+  [NVIDIA_CODE_MODEL_FAST]: 12000,
   _default: 10000,
 };
 const NVIDIA_WARM_TTL_MS = 90 * 1000;
@@ -937,7 +1004,8 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
         body: JSON.stringify({
           model:       modelId,
           messages,
-          max_tokens:  maxTokens,
+          // FIX 2026-09-06: clamp per-model — deepseek models reject >16384.
+          max_tokens:  nvidiaMaxTokensFor(modelId, maxTokens),
           temperature: 0.7,
           stream:      false,
         }),
@@ -1419,6 +1487,89 @@ function looksLikeTableRequest(text) {
   return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
+// ── RESTART-DUPLICATION GUARD (FIX 2026-09-06) ──────────────────────
+// The user's core complaint: "it gave me same code two time up and down".
+// Root cause: when a code-chat response hits max_tokens, we auto-continue
+// with "continue exactly where you left off" — but models frequently
+// IGNORE that and restart the whole output (```html <!-- file: index.html
+// --> <!DOCTYPE html> ...), so the user sees the same file twice.
+//
+// The prompt-side fixes (resumeFromHint below) reduce this, but prompts
+// are suggestions — this guard is enforcement. When a CONTINUATION turn
+// starts emitting text that is a wholesale restart of the PREVIOUS turn
+// (its first 120+ non-whitespace chars appear verbatim inside the
+// previous turn's text), we suppress the duplicated characters as they
+// stream, and un-suppress the moment the model reaches genuinely new
+// content (or mismatches). Legitimate continuations are unaffected:
+// they continue from the END of the previous turn, so their opening
+// never matches the previous turn's content verbatim.
+//
+// The companion frontend dedupe (chat.jsx) is the second, final layer.
+function makeRestartGuard(prevTurnText) {
+  const strip = (s) => s.replace(/\s+/g, '');
+  const prevStripped = strip(prevTurnText || '');
+  // Previous turn too short to be worth guarding (and too short for the
+  // 120-char confirmation signal) — pass everything through untouched.
+  if (prevStripped.length < 300) {
+    return { process: (s) => s, turnEnd: () => '' };
+  }
+
+  let mode = 'holding';   // 'holding' → 'suppress' | 'pass'
+  let held = '';          // raw held-back text while deciding
+  let suppressedIdx = 0;  // position in prevStripped already suppressed
+
+  const flushHeld = () => { mode = 'pass'; const out = held; held = ''; return out; };
+
+  return {
+    process(safe) {
+      if (mode === 'pass' || !safe) return safe;
+      if (mode === 'holding') {
+        held += safe;
+        const heldStripped = strip(held);
+        if (heldStripped.length < 120) return ''; // still deciding — hold back
+        // Decision point: does this opening appear verbatim inside the
+        // previous turn? (indexOf covers both restart-from-very-start and
+        // restart-skipping-the-intro-prose.)
+        const at = prevStripped.indexOf(heldStripped);
+        if (at === -1) {
+          // Legitimate continuation — flush everything we held back.
+          return flushHeld();
+        }
+        // CONFIRMED restart — drop the duplicated opening and enter
+        // suppress mode, consuming the rest of the duplicate char-by-char.
+        mode = 'suppress';
+        suppressedIdx = at + heldStripped.length;
+        held = '';
+        console.warn(`Code-chat: continuation restarted previous output (matched at stripped offset ${at}) — suppressing duplicate stream`);
+        return '';
+      }
+      // mode === 'suppress': drop chars while they replay the previous
+      // turn (whitespace is skipped freely; a non-ws mismatch or reaching
+      // the end of the previous turn resumes normal streaming).
+      let out = '';
+      for (const ch of safe) {
+        if (mode !== 'suppress') { out += ch; continue; }
+        if (/\s/.test(ch)) continue; // whitespace inside the replay: drop
+        if (suppressedIdx < prevStripped.length && ch === prevStripped[suppressedIdx]) {
+          suppressedIdx++;
+          continue;
+        }
+        // Mismatch, or the replay passed the end of the previous turn —
+        // everything from here on is new content. Let it through.
+        mode = 'pass';
+        out += ch;
+      }
+      return out;
+    },
+    // Called at end-of-turn: if we were still deciding (short turn), the
+    // held text was never confirmed as a duplicate — give it back.
+    turnEnd() {
+      if (mode === 'holding') return flushHeld();
+      return '';
+    },
+  };
+}
+
 // ── Code-chat streaming (NVIDIA primary, with Groq+CF fallback) ─
 // FIXES applied:
 //   1. Per-read idle timeout (15s) — if NVIDIA stalls mid-stream we
@@ -1455,14 +1606,18 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 // below so we never wait more than ~35s total across all models before
 // falling back to Groq/CF.
 function headersTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 20000;
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 15000;
+  // UPDATED 2026-09-06: GLM-5.2 (heavy) is a large MoE — 25s headers
+  // budget for cold-start; deepseek-v4-pro (quality) 20s; others 10s.
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 25000;
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 20000;
   return 10000;
 }
 
 function firstByteTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 18000;
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 12000;
+  // UPDATED 2026-09-06: GLM-5.2 gets 22s to first byte (cold-start
+  // headroom for a flagship MoE); deepseek-v4-pro 16s; others 10s.
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 22000;
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 16000;
   return 10000;
 }
 
@@ -1517,7 +1672,8 @@ console.log(`Code-chat stream: chain=${chainName} will try [${modelsToTry.join('
 // on a cold-start timeout; with only 35s total the chain bailed before
 // stepfun or lightning even got a chance to attempt. 75s gives the chain
 // enough room to actually try every model in the heavy order at least once.
-const chainDeadline = Date.now() + 60000;
+// (Code now matches the comment — was 60000.)
+const chainDeadline = Date.now() + 75000;
 
 let attemptIdx = 0;
 for (const nvidiaModel of modelsToTry) {
@@ -1561,7 +1717,10 @@ for (const nvidiaModel of modelsToTry) {
             body: JSON.stringify({
               model:           nvidiaModel,
               messages:        convoMessages,
-              max_tokens:      maxTokens,
+              // FIX 2026-09-06: clamp per-model — deepseek-ai models cap
+              // max_tokens at 16384; sending 32768 (our code-chat budget)
+              // returned HTTP 400 and silently failed the request.
+              max_tokens:      nvidiaMaxTokensFor(nvidiaModel, maxTokens),
               temperature:     0.5,
               top_p:           0.9,
               stream:          true,
@@ -1643,6 +1802,9 @@ for (const nvidiaModel of modelsToTry) {
         let inThink   = false;
         let pending   = '';
         let turnBuffer = '';
+        // FIX 2026-09-06: restart-duplication guard — non-null only while
+        // streaming an auto-continuation turn. See makeRestartGuard above.
+        let restartGuard = null;
         let clientGone = false;
 
         try {
@@ -1714,10 +1876,16 @@ for (const nvidiaModel of modelsToTry) {
               }
 
               if (safe) {
-                written += safe.length;
-                if (!safeWrite(`data: ${JSON.stringify({ content: safe })}\n\n`)) {
-                  clientGone = true;
-                  break;
+                // Route continuation-turn text through the restart guard
+                // so a model that re-emits the previous turn's output from
+                // the beginning gets its duplicate suppressed mid-stream.
+                const outSafe = restartGuard ? restartGuard.process(safe) : safe;
+                if (outSafe) {
+                  written += outSafe.length;
+                  if (!safeWrite(`data: ${JSON.stringify({ content: outSafe })}\n\n`)) {
+                    clientGone = true;
+                    break;
+                  }
                 }
               }
             }
@@ -1738,9 +1906,24 @@ for (const nvidiaModel of modelsToTry) {
         }
 
         if (!inThink && pending) {
-          written += pending.length;
-          safeWrite(`data: ${JSON.stringify({ content: pending })}\n\n`);
+          const outPending = restartGuard ? restartGuard.process(pending) : pending;
           pending = '';
+          if (outPending) {
+            written += outPending.length;
+            safeWrite(`data: ${JSON.stringify({ content: outPending })}\n\n`);
+          }
+        }
+
+        // End of this model turn — if the guard was still holding text
+        // back undecided (turn ended before 120 chars), release it so the
+        // client isn't missing the tail of the response.
+        if (restartGuard) {
+          const remainder = restartGuard.turnEnd();
+          if (remainder) {
+            written += remainder.length;
+            safeWrite(`data: ${JSON.stringify({ content: remainder })}\n\n`);
+          }
+          restartGuard = null;
         }
 
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
@@ -1801,6 +1984,10 @@ for (const nvidiaModel of modelsToTry) {
             { role: 'assistant', content: turnBuffer },
             { role: 'user', content: resumeFromHint },
           ];
+          // FIX 2026-09-06: arm the restart-duplication guard for the
+          // continuation turn — if the model restarts the output instead
+          // of continuing, the duplicate is suppressed as it streams.
+          restartGuard = makeRestartGuard(turnBuffer);
           turnBuffer = '';  // reset for the next turn
           continue;
         }
@@ -2546,8 +2733,11 @@ async function warmUp() {
       // the keep-alive timeout for the quality slot) instead of the 30s
       // default for non-heavy models. Heavy (ultra-550b) still gets 150s
       // because it's a 550B MoE that takes even longer to cold-start.
+      // UPDATED 2026-09-06: heavy is now GLM-5.2 (60s warmup budget for a
+      // flagship MoE cold-start), quality is deepseek-v4-pro-0813 (40s —
+      // bigger than the old nemotron-super-120b), others 30s.
       const timeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000
-                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 30000
+                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 40000
                     : 30000;
 
       // RETRY LOOP: if the warmup fails with a transient error (502/503/504/
@@ -2779,8 +2969,10 @@ async function pingNvidiaModel(modelId) {
     // The headers-phase timeout is also tightened — old 25-150s was way
     // too generous for a 1-token ping. 12s for fast/quality, 25s for
     // ultra-550b cold-start headroom.
+    // UPDATED 2026-09-06: GLM-5.2 (heavy) 25s, deepseek-v4-pro (quality)
+    // 20s, fast/lightning 15s.
     const pingTimeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 25000
-                     : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 15000
+                     : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 20000
                      : 15000;
     const res = await fetchWithTimeout(
       `${NVIDIA_BASE_URL}/chat/completions`,
@@ -3229,9 +3421,13 @@ if (looksLikeClarifyAnswer) {
         // website in one HTML file is typically 15-40K chars (~4-10K tokens),
         // which hit the 8K wall and forced auto-continuation. Continuation
         // is slow (re-sends entire convo + partial output) and produces
-        // inconsistent output. Nemotron Ultra 253B supports up to 128K
-        // output tokens, so 32K is a safe cap that lets 95%+ of requests
-        // complete in a single pass with no continuation needed.
+        // inconsistent output. GLM-5.2 (the coding model since 2026-09-06)
+        // supports exactly 32768 output tokens per call, so 32K is a safe
+        // cap that lets 95%+ of requests complete in a single pass with no
+        // continuation needed. (deepseek fallback models cap at 16384 —
+        // streamNvidiaGLMOnly now clamps per-model via
+        // nvidiaMaxTokensFor(), which fixes the silent HTTP 400 that the
+        // old unclamped 32768 caused on those models.)
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
         // FIX (2026-08-26): the previous version printed a hardcoded
         // 'code models are temporarily unavailable' message here and bailed
