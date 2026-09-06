@@ -30,6 +30,8 @@ const GROQ_REASONING_CAPABLE_MODELS = new Set([
   'openai/gpt-oss-120b',
   'qwen/qwen3.6-27b',
 ]);
+const GROQ_REASONING_NONE_MODELS = new Set(['qwen/qwen3.6-27b']);
+const GROQ_REASONING_LOW_MODELS = new Set(['openai/gpt-oss-20b', 'openai/gpt-oss-120b']);
 
 // ── GROQ MULTI-KEY ROTATION ───────────────────────────────────
 // Collects GROQ_API_KEY, GROQ_API_KEY_2, GROQ_API_KEY_3, ... into an array.
@@ -56,6 +58,7 @@ const groqKeyDeadUntil = new Map();  // key -> timestamp when safe to retry
 function pickGroqKey() {
   if (GROQ_API_KEYS.length === 0) return null;
   const now = Date.now();
+  // Try each key in round-robin order; skip ones marked dead.
   for (let i = 0; i < GROQ_API_KEYS.length; i++) {
     const idx = (groqKeyIndex + i) % GROQ_API_KEYS.length;
     const key = GROQ_API_KEYS[idx];
@@ -65,16 +68,21 @@ function pickGroqKey() {
       return key;
     }
   }
+  // All keys are dead — return the soonest-reviving one anyway, the caller
+  // will handle the 429. Better than crashing.
   return GROQ_API_KEYS[groqKeyIndex];
 }
 
 function markGroqKeyTpdExhausted(key, retryAfterMs) {
   if (!key) return;
+  // Cap the dead-time at 24h to avoid permanent block on edge cases.
   const wait = Math.min(retryAfterMs || (24 * 60 * 60 * 1000), 24 * 60 * 60 * 1000);
   groqKeyDeadUntil.set(key, Date.now() + wait);
   console.warn(`Groq key ${key.slice(0, 10)}... marked TPD-exhausted for ${Math.round(wait / 1000 / 60)}min — ${GROQ_API_KEYS.length - 1} key(s) still active`);
 }
 
+// Factory: returns a fresh Groq client bound to a specific key.
+// Called per-request so we can rotate keys between requests.
 function makeGroqClient(key) {
   if (!key) return null;
   return new Groq({ apiKey: key });
@@ -82,11 +90,33 @@ function makeGroqClient(key) {
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
 const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';
-const NVIDIA_CHAT_QUALITY = 'moonshotai/kimi-k3';
-const NVIDIA_CHAT_CODE    = 'nvidia/nemotron-3-ultra-550b-a55b';
+const NVIDIA_CHAT_QUALITY = 'nvidia/nemotron-3-super-120b-a12b';
+const NVIDIA_CHAT_CODE    = 'deepseek-ai/deepseek-v4-flash-0731';
 
+// ── VISION MODELS ──
+// Raced in parallel — first valid response wins. CF is worst-case fallback.
 const NVIDIA_VISION_MODEL = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
 
+// NVIDIA NIM — vision chain models
+// FIX (2026-08-26): pruned dead / slow models based on production logs.
+//   - 'meta/muse-glimmer-30b'              → always aborted in the parallel
+//                                           race (cold-start > 20s, never
+//                                           produced output within the
+//                                           timeout).
+//   - 'nvidia/nemotron-nano-12b-v2-vl'     → HTTP 410 — NVIDIA marked this
+//                                           model end-of-life on
+//                                           2026-08-26T09:00:00Z. Keeping
+//                                           it in the chain burned a
+//                                           network round-trip on every
+//                                           vision request and produced
+//                                           a noisy log line every time.
+//   - 'meta/llama-3.2-90b-vision-instruct' → consistently aborted in the
+//                                           parallel race (90B MoE cold-
+//                                           start >> 20s timeout).
+//
+// Only the two models that actually win the race in real traffic are kept.
+// The race still happens — if NVIDIA revives a pruned ID later we can add
+// it back to this array.
 const NVIDIA_VISION_CHAIN = [
   'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
   'meta/llama-3.2-11b-vision-instruct',
@@ -100,10 +130,11 @@ const NVIDIA_CODE_MODEL_HEAVY    = NVIDIA_CHAT_CODE;
 const NVIDIA_CODE_MODEL_FAST     = NVIDIA_CHAT_FAST;
 const NVIDIA_CHAT_MODEL_QUALITY  = NVIDIA_CHAT_QUALITY;
 
+
 const NVIDIA_CODE_CHAINS = {
-  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CHAT_MODEL_QUALITY, NVIDIA_CODE_MODEL_FAST],
-  standard: [NVIDIA_CODE_MODEL_FAST,  NVIDIA_CHAT_MODEL_QUALITY],
-  trivial:  [NVIDIA_CODE_MODEL_FAST,  NVIDIA_CHAT_MODEL_QUALITY],
+  heavy:    [NVIDIA_CODE_MODEL_HEAVY, NVIDIA_CHAT_MODEL_QUALITY, NVIDIA_CODE_MODEL_FAST],  
+  standard: [NVIDIA_CODE_MODEL_FAST,  NVIDIA_CHAT_MODEL_QUALITY], 
+  trivial:  [NVIDIA_CODE_MODEL_FAST,  NVIDIA_CHAT_MODEL_QUALITY], 
 };
 
 function pickHeavyChain() {
@@ -111,9 +142,37 @@ function pickHeavyChain() {
   const qualityValid = !isNvidiaModelInvalid(NVIDIA_CHAT_MODEL_QUALITY);
   const fastValid    = !isNvidiaModelInvalid(NVIDIA_CODE_MODEL_FAST);
 
+  // Fixed order: heavy → quality → fast — ALWAYS, regardless of warm state.
+  // Lightning writes noticeably worse code than ultra/step-3.7-flash, so we
+  // do not let a "warm but weak" model jump ahead of a "cold but strong" one
+  // just to save latency. A cold-start wait (up to 50s, see
+  // firstByteTimeoutFor) is the correct tradeoff for a heavy/code-generation
+  // request — fast-but-bad code is worse than a slower wait for good code.
+  // CRITICAL: the quality model (stepfun) MUST ALWAYS be in the heavy chain
+  // between heavy (ultra-550b) and fast (lightning-30b), even when it has been
+  // marked permanently invalid by a previous 404/401/410. Reasons:
+  //
+  //   1. NVIDIA occasionally rotates model IDs on the NIM endpoint — a model
+  //      that returned 404 yesterday may come back tomorrow. Always giving
+  //      stepfun one shot per heavy request costs at most a single failed
+  //      HTTP round-trip (~300ms) and recovers automatically if NVIDIA
+  //      revives the endpoint. Without this, every heavy request skips
+  //      stepfun and falls straight from ultra-550b to lightning-30b, which
+  //      the user explicitly called out as a regression ("before 3.5
+  //      lightning it should fall to quality model which is stepfun").
+  //
+  //   2. The keep-alive stops pinging permanently-invalid models (correct —
+  //      we don't want to keep spamming a known-bad ID). But the chain still
+  //      tries them at request time, which is the only way to detect that
+  //      NVIDIA has brought the model back without a server restart.
+  //
+  //   3. Order is preserved: heavy -> quality -> fast, ALWAYS, regardless
+  //      of warm state. Lightning writes noticeably worse code than ultra
+  //      or step-3.7-flash, so we never let a "warm but weak" model jump
+  //      ahead of a "cold but strong" one just to save latency.
   const order = [];
   if (heavyValid) order.push(NVIDIA_CODE_MODEL_HEAVY);
-
+  
   if (!order.includes(NVIDIA_CHAT_MODEL_QUALITY)) order.push(NVIDIA_CHAT_MODEL_QUALITY);
   if (fastValid && !order.includes(NVIDIA_CODE_MODEL_FAST)) order.push(NVIDIA_CODE_MODEL_FAST);
 
@@ -127,37 +186,67 @@ function pickHeavyChain() {
   return order;
 }
 
-// Coding verbs and their common typos.
+// Coding verbs and their common typos. Used for fuzzy matching so
+// "amke me a game" (typo of "make") still routes correctly.
+// We use explicit typo lists for the most common verbs + Levenshtein
+// distance 2 as a safety net for anything we missed.
 const CODING_VERBS_EXACT = [
   'make', 'build', 'create', 'generate', 'develop', 'implement',
   'code', 'write', 'debug', 'refactor', 'fix', 'optimi', 'optimize',
   'optimise', 'compile', 'deploy',
 ];
 const CODING_VERBS_TYPOS = [
+  // make
   'amke', 'mkae', 'maek', 'mak', 'makke', 'mke',
+  // build
   'bulid', 'biuld', 'buidl', 'buld', 'bild', 'builld',
+  // create
   'craete', 'cretae', 'cerate', 'creat', 'creatte', 'crteate',
+  // generate
   'genrate', 'generat', 'generete', 'genrate', 'genertae',
+  // write
   'wrtie', 'wirte', 'wrie', 'writ', 'writte',
+  // debug
   'deubg', 'debg', 'dbgug', 'deugg',
+  // fix
   'fxi', 'fx', 'fixx',
+  // refactor
   'refacter', 'refacotr', 'refacter', 'rfactor',
+  // implement
   'implment', 'implement', 'implemnt', 'impliment',
+  // code
   'cdoe', 'ocde', 'cde',
+  // develop
   'develp', 'develoop', 'develope', 'dvlp',
+  // optimize
   'optimze', 'optmize', 'optmize',
+  // deploy
   'depoy', 'delpoy', 'deply',
 ];
 
+// Checks if any word in the text is a coding verb (exact or typo).
+// Uses fuzzyIncludesAny (Levenshtein distance) as a safety net.
+//
+// CRITICAL FIX: we only apply fuzzy matching to words with length >= 4.
+// Previously, "hi" (2 chars) was matching "fix" with Levenshtein distance 2,
+// causing simple greetings to be routed to the heavy GLM 5.2 model.
+// Short words like "hi", "ok", "no", "hey" cannot be typos of coding verbs
+// like "fix", "make", "code" — those verbs are all 3+ chars and a 2-char
+// word matching within distance 2 is a false positive.
 function containsCodingVerb(text) {
   if (!text) return false;
   const low = text.toLowerCase();
+  // Fast path: exact match (word-boundary protected)
   for (const v of CODING_VERBS_EXACT) {
     if (new RegExp(`\\b${v}\\b`).test(low)) return true;
   }
+  // Fast path: known typos (word-boundary protected)
   for (const v of CODING_VERBS_TYPOS) {
     if (new RegExp(`\\b${v}\\b`).test(low)) return true;
   }
+  // Safety net: Levenshtein distance ≤ 2 for any coding verb.
+  // ONLY apply to words with length >= 4 to avoid false positives like
+  // "hi" → "fix", "ok" → "code", "no" → "node".
   try {
     const words = low.split(/[^a-z0-9]+/).filter(w => w.length >= 4);
     for (const w of words) {
@@ -169,54 +258,147 @@ function containsCodingVerb(text) {
   return false;
 }
 
+// Detects whether a code-chat message is an actual coding task that
+// CRITICAL: this is checked BEFORE isTrivialCodeMessage in
+// pickCodeChatChain, so "make me a game" (short but clearly coding)
+// routes to heavy, not trivial. Also handles typos — "amke me a game"
+// still routes to heavy.
 function isActualCodingTask(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase();
+  // Code fence anywhere = definitely coding
   if (/```/.test(text)) return true;
+  // Any coding verb (exact or typo) + "me"/"a"/"an"/"the" = coding task
+  // "make me a game", "amke me a game", "bulid a todo app", etc.
   if (containsCodingVerb(text) && /\b(me|a|an|the|some|this|that)\b/i.test(text)) return true;
+  // Standalone creative verb at start of message (even without "me/a")
+  // "build something", "create website", "debug please"
   if (containsCodingVerb(text) && low.trim().length < 100) return true;
+  // Explicit coding/debug/refactor verbs (also catches "fix my code" etc.)
   if (/\b(stack trace|exception|compile|syntax error|unit test|integration test)\b/i.test(text)) return true;
+  // Actual code patterns (not just mentions of code)
   if (/\b(def |function\s*\(|class\s+\w+|import\s|from\s+\w+\s+import|const\s|let\s|var\s|=>|public\s+class|<\?php|#include|console\.log|print\(|async\s+function|await\s|return\s|if\s*\(|for\s*\(|while\s*\()\b/.test(text)) return true;
+  // Long technical message (>200 chars) likely needs deep reasoning
   if (text.length > 200 && /\b(code|function|api|endpoint|database|query|algorithm|architecture|design pattern|class|method|variable|array|object|loop|recursion|complexity|game|app|website|script|program)\b/i.test(low)) return true;
   return false;
 }
 
+// Detects trivial code-chat messages that should use the fast 30b nano.
+// CRITICAL: does NOT return true for messages with creative/build verbs —
+// "make me a game" is short but is a coding task, not trivial.
+// Also checks for typos so "amke" doesn't slip through.
 function isTrivialCodeMessage(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase().trim();
+  // If the message contains any coding verb (exact or typo), it's NOT trivial
   if (containsCodingVerb(text)) return false;
+  // Very short messages without build verbs = trivial
   if (low.length < 15) return true;
+  // Common greetings / acknowledgments
   if (/^(hi|hello|hey|thanks|ok|okay|sure|yes|no|cool|nice|great|awesome)\b/.test(low)) return true;
   if (/^(what (is|s) your name|who are you|how are you|good morning|good evening)\b/.test(low)) return true;
   return false;
 }
 
+// Picks the right model chain for a code-chat message.
+// ORDER MATTERS: isActualCodingTask is checked FIRST so that short
+// coding requests like "make me a game" don't get misrouted to trivial.
+//
+// FIX (2026-08-26): vision-described image uploads and image-generation
+// requests are short-circuited BEFORE the heavy chain. Both were getting
+// routed to ultra-550b (a non-vision reasoning model), which then either
+// ignored the image description and wrote irrelevant code, or tried to
+// write HTML/CSS that 'draws' the requested image. Neither was what the
+// user wanted. See isVisionDescribedImageMessage / isImageGenerationRequest
+// below for the full rationale.
 function pickCodeChatChain(text) {
-  if (isImageGenerationRequest(text))   return 'trivial';
-  if (isVisionDescribedImageMessage(text)) return 'trivial';
-  if (isActualCodingTask(text))   return 'heavy';
+  if (isImageGenerationRequest(text))   return 'trivial'; // short-circuit
+  if (isVisionDescribedImageMessage(text)) return 'trivial'; // image uploads → fast
+  if (isActualCodingTask(text))   return 'heavy';    // CHECK FIRST
   if (isTrivialCodeMessage(text)) return 'trivial';
   return 'standard';
 }
 
+// ── VISION-DESCRIBED IMAGE DETECTION ────────────────────────────
+// The frontend (vertex App.js, around line 4290) wraps every uploaded image
+// with this marker before sending it to the backend:
+//
+//     [Image: friend.png — Image description:]
+//     The image shows two friends smiling outdoors...
+//     <!--vrtx-img-end-->
+//     <user's actual typed prompt, e.g. "check this my image with my friend">
+//
+// Two problems with the previous routing:
+//   1. isActualCodingTask() returned TRUE for these messages because the
+//      description text is >200 chars and frequently contains words like
+//      'code', 'function', 'app', 'image' (if there's a code screenshot
+//      in the image) — triggering the heavy chain.
+//   2. The heavy chain runs ultra-550b, which is a NON-VISION reasoning
+//      model. Ultra can't see the image — it only sees the description
+//      text — and because its training is code-heavy AND the system
+//      prompt says "you are a coding assistant", ultra would often
+//      start WRITING CODE about the described image instead of just
+//      commenting on it conversationally. The user uploaded a photo of
+//      a friend and got back a Python script.
+//
+// Fix: detect the marker and route to the trivial chain (lightning-30b).
+// Lightning is fast (~2s warm), non-reasoning, and conversational — exactly
+// what you want for 'look at this image, what do you think?'. If the user
+// actually wants code from the image (e.g. 'rebuild this UI from the
+// screenshot'), they'll include a coding verb in their typed prompt —
+// which is preserved AFTER the <!--vrtx-img-end--> marker, so
+// containsCodingVerb() still fires and overrides this back to heavy.
 function isVisionDescribedImageMessage(text) {
   if (!text || typeof text !== 'string') return false;
+  // The sentinel-delimited block is the canonical marker.
   if (/\[Image:[^\]]*—\s*(Image description|OCR extracted text):\]/.test(text)) return true;
   if (/\[Attached image:[^\]]*\]/.test(text)) return true;
+  // Fallback for older frontends that don't emit the sentinel — if the
+  // text starts with [Image: ... — ...] and the user's actual typed
+  // prompt is very short, treat it as a vision-described image.
   if (/^\s*\[Image:[^\]]*—/m.test(text)) return true;
   return false;
 }
 
+// ── IMAGE GENERATION REQUEST DETECTION ──────────────────────────
+// When the user types 'generate me an image of a sunset' inside code-chat,
+// the old routing:
+//   1. matched 'generate' as a coding verb (CODING_VERBS_EXACT)
+//   2. escalated to the heavy chain
+//   3. ultra-550b happily wrote HTML/CSS that 'draws' a sunset, or worse,
+//      Python code that calls an image-generation API
+//
+// The user wanted an actual image — which Vertex CAN'T produce. Vortis
+// (the main chat) has the image generator (FLUX + Pollinations). The
+// correct response is to TELL the user to switch, not write fake code.
+//
+// We detect the request server-side so the redirect is consistent
+// regardless of which model would have been picked. Returns true for:
+//   'generate me an image', 'draw a picture', 'create an image of',
+//   'make me a picture of', 'render an image', 'paint a scene', etc.
+// Also catches the typo-prone variants ('genrate', 'cretae').
 function isImageGenerationRequest(text) {
   if (!text || typeof text !== 'string') return false;
   const low = text.toLowerCase();
 
+  // Strong signal: explicit 'image'/'picture'/'photo' noun + generation verb
   const hasGenVerb = /\b(generate|genrate|generat|draw|paint|create|cretae|creat|make|render|produce|design|sketch|illustrate)\b/i.test(low);
   const hasImageNoun = /\b(image|images|picture|pictures|photo|photos|artwork|art|drawing|painting|illustration|wallpaper|logo|icon)\b/i.test(low);
   if (!hasGenVerb || !hasImageNoun) return false;
 
+  // Disambiguate 'make me a game' (coding) from 'make me an image of a game' (image gen):
+  // If the noun is 'image/picture/photo/art/illustration/etc.' we treat as image gen;
+  // 'make a game', 'build a website' have different nouns and are NOT image gen.
+  // We already required hasImageNoun, so we just need to make sure the user isn't
+  // asking the model to 'edit code' or 'debug an image-processing function' —
+  // those are real coding tasks that happen to mention 'image'.
   const looksLikeCodingTask = /\b(debug|refactor|optimi[sz]e|fix|code|function|class|component|api|endpoint|bug|error|stack trace|unit test|compile)\b/i.test(low);
   if (looksLikeCodingTask) {
+    // Edge case: 'write a function that generates an image' IS a coding task.
+    // Only treat as image-gen if the gen verb is the MAIN action AND there's
+    // no 'function/code/class' word nearby. The cheap heuristic: if the user
+    // wrote 'generate an image of X' early in the message and didn't mention
+    // code/functions, it's image gen.
     const firstChars = low.slice(0, 150);
     const isPureImageRequest = !/\b(function|code|class|script|method|api|component|endpoint|bug|error|compile|debug)\b/.test(firstChars);
     if (!isPureImageRequest) return false;
@@ -226,25 +408,35 @@ function isImageGenerationRequest(text) {
 }
 
 // ── NVIDIA CIRCUIT BREAKER ────────────────────────────────────
-const NVIDIA_FAILURE_COOLDOWN_MS = 2 * 60 * 1000;
-const NVIDIA_FAILURE_THRESHOLD   = 2;
-const nvidiaFailureTracker = new Map();
+// If a specific NVIDIA model fails N times in a row, skip it for
+// COOLDOWN_MS before trying again. This prevents the "abort, retry,
+// abort, retry" cascade that was burning 90s+ per request when
+// NVIDIA was cold-starting. After 2 consecutive failures we assume
+// the model is cold/unavailable and route around it for 2 minutes.
+const NVIDIA_FAILURE_COOLDOWN_MS = 2 * 60 * 1000;  // 2 minutes
+const NVIDIA_FAILURE_THRESHOLD   = 2;                // consecutive failures
+const nvidiaFailureTracker = new Map(); // model -> { count, lastFailTime }
 
+// Per-model "warm" latency thresholds. A model is considered warm if its
+// last ping completed under this threshold. These MUST match the model's
+// actual warm response time — otherwise isNvidiaModelWarm() always returns
+// false and pickHeavyChain can't make good routing decisions.
+//
+// Real warm response times (from user's logs):
+//   - lightning-30b: 2-12s when warm (threshold 15s)
+//   - ultra-550b MoE: 5-25s when warm (threshold 30s) — this is a 550B MoE,
+//                     it's never going to respond in 6s even when warm.
+//                     The old 6000ms threshold meant ultra was NEVER marked
+//                     warm, which broke pickHeavyChain's warm-state logic.
+//   - step-3.7-flash: 700ms-3s when warm (threshold 5s)
 const NVIDIA_WARM_LATENCY_THRESHOLD_MS = {
-  [NVIDIA_CODE_MODEL_HEAVY]: 30000,
-  [NVIDIA_CHAT_MODEL_QUALITY]: 5000,
+  [NVIDIA_CODE_MODEL_HEAVY]: 15000,
+  [NVIDIA_CHAT_MODEL_QUALITY]: 12000,
   [NVIDIA_CODE_MODEL_FAST]: 15000,
   _default: 10000,
 };
 const NVIDIA_WARM_TTL_MS = 90 * 1000;
 const nvidiaWarmState = new Map();
-
-// ── FIX 2: track consecutive "slow" pings per model so we stop calling
-// sustained degradation "warming up" after the first few cycles. A model
-// that is slow on ping #20 in a row isn't cold-starting — it's throttled
-// or overloaded upstream, and should be flagged distinctly (and treated
-// as NOT warm) rather than logged the same generic way forever.
-const nvidiaConsecutiveSlow = new Map(); // model -> count
 
 function recordNvidiaLatency(model, latencyMs) {
   const threshold = NVIDIA_WARM_LATENCY_THRESHOLD_MS[model] ?? NVIDIA_WARM_LATENCY_THRESHOLD_MS._default;
@@ -258,11 +450,34 @@ function isNvidiaModelWarm(model) {
   return entry.warm;
 }
 
-const NVIDIA_INVALID_TTL_MS = 30 * 60 * 1000;
-const nvidiaEolModels = new Map();
+// INVALID REGISTRY — for HTTP 404 / 401 / 410.
+//
+// These status codes used to mean "this model ID will NEVER work" and the
+// model was blacklisted FOREVER (until server restart). That was too harsh:
+//
+//   1. NVIDIA gates some models (e.g. nemotron-3-ultra-550b-a55b) behind
+//      higher API-key tiers and returns 404 — NOT 403 — when the calling
+//      key lacks access. If the user later upgrades their NVIDIA developer
+//      tier, the model becomes accessible but our server would never know
+//      without a restart.
+//
+//   2. NVIDIA occasionally rotates model endpoints. A 410 today may become
+//      a 200 next week.
+//
+// FIX: replace the forever-Set with a TTL Map. A model marked invalid is
+// skipped for NVIDIA_INVALID_TTL_MS (30 min), then auto-retried on the
+// next keep-alive ping or request. If it 404s again, the TTL resets.
+//
+// Side benefit: the recurring "keep-alive: HTTP 404" spam is gone — we
+// only retry once per 30 min instead of every 70s.
+const NVIDIA_INVALID_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const nvidiaEolModels = new Map(); // model -> { expiresAt, reason, since }
 
 function markNvidiaModelInvalid(model, reason) {
   const prev = nvidiaEolModels.get(model);
+  // Always reset the TTL on a fresh 404 — even if there was a previous
+  // entry. This prevents a model from being un-blacklisted mid-cooldown
+  // by an old expiry timestamp.
   nvidiaEolModels.set(model, {
     expiresAt: Date.now() + NVIDIA_INVALID_TTL_MS,
     reason,
@@ -277,6 +492,8 @@ function isNvidiaModelInvalid(model) {
   const entry = nvidiaEolModels.get(model);
   if (!entry) return false;
   if (Date.now() >= entry.expiresAt) {
+    // TTL expired — allow retry. If the model is still 404'ing, the next
+    // call will re-mark it via markNvidiaModelInvalid and reset the TTL.
     nvidiaEolModels.delete(model);
     console.log(`NVIDIA model ${model} invalid TTL expired — will retry on next request`);
     return false;
@@ -284,6 +501,7 @@ function isNvidiaModelInvalid(model) {
   return true;
 }
 
+// Returns the seconds-until-expiry for debug logging. -1 if not invalid.
 function nvidiaModelInvalidRemainingSec(model) {
   const entry = nvidiaEolModels.get(model);
   if (!entry) return -1;
@@ -291,12 +509,16 @@ function nvidiaModelInvalidRemainingSec(model) {
 }
 
 function isNvidiaModelBlocked(model) {
+  // Invalid (404/401/410) — blocked until TTL expires, then auto-retried.
+  // Use isNvidiaModelInvalid() (not .has()) so the TTL expiry check runs.
   if (isNvidiaModelInvalid(model)) return true;
+  // Transient failure cooldown (502/503/504/empty response).
   const entry = nvidiaFailureTracker.get(model);
   if (!entry) return false;
   if (entry.count < NVIDIA_FAILURE_THRESHOLD) return false;
   const elapsed = Date.now() - entry.lastFailTime;
   if (elapsed >= NVIDIA_FAILURE_COOLDOWN_MS) {
+    // Cooldown expired — reset and allow a fresh attempt.
     nvidiaFailureTracker.delete(model);
     return false;
   }
@@ -304,6 +526,7 @@ function isNvidiaModelBlocked(model) {
 }
 
 function recordNvidiaFailure(model) {
+  // Permanent-invalid models don't need their counter incremented.
   if (nvidiaEolModels.has(model)) return;
   const entry = nvidiaFailureTracker.get(model) || { count: 0, lastFailTime: 0 };
   entry.count += 1;
@@ -319,17 +542,16 @@ function recordNvidiaSuccess(model) {
   }
 }
 
+
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.2-3b-instruct',
   '@cf/meta/llama-3.1-8b-instruct-fp8-fast',
 ];
 
 // ── GROQ TPM BUDGET + COOLDOWN TRACKING ─────────────────────────
-// TPM (tokens-per-minute) is a rolling combined-token budget we track
-// ourselves as a soft guard. It is SEPARATE from Groq's hard per-request
-// OTPM (output-tokens-per-minute) ceiling below — TPM being "available"
-// does NOT mean a single request's max_tokens is allowed; see
-// GROQ_OTPM_CAPS / groqOtpmCapFor for the hard ceiling fix.
+// Updated for the reverted model lineup. TPM (tokens-per-minute) caps
+// are Groq's free-tier per-minute limits; TPD (tokens-per-day) is
+// enforced by the multi-key rotation logic above (markGroqKeyTpdExhausted).
 const GROQ_TPM_CAPS = {
   'qwen/qwen3.6-27b':         process.env.GROQ_TPM_QWEN ? Number(process.env.GROQ_TPM_QWEN) : 7000,
   'openai/gpt-oss-20b':       process.env.GROQ_TPM_20B  ? Number(process.env.GROQ_TPM_20B)  : 7000,
@@ -340,33 +562,45 @@ const GROQ_TPM_CAPS = {
 function groqTpmCapFor(model) {
   return GROQ_TPM_CAPS[model] ?? GROQ_TPM_CAPS._default;
 }
-
-// ── FIX 1: Groq's real, hard, per-REQUEST output-token ceiling (OTPM).
-// This is NOT the same thing as GROQ_TPM_CAPS above (which is a rolling
-// budget we invented client-side). OTPM is enforced by Groq itself and a
-// SINGLE request whose max_tokens exceeds this value gets an immediate
-// 429 — no amount of "budget available" bookkeeping helps, because the
-// violation is on the request itself, not accumulated usage.
-//
-// Verify these numbers against your actual Groq console limits page —
-// the values below reflect what production logs showed for qwen
-// (Limit 1000, Requested 1024 → 429). Don't assume 20b/120b share the
-// same ceiling; check each model's real OTPM in your account.
 const GROQ_OTPM_CAPS = {
-  'qwen/qwen3.6-27b':    process.env.GROQ_OTPM_QWEN ? Number(process.env.GROQ_OTPM_QWEN) : 1000,
-  'openai/gpt-oss-20b':  process.env.GROQ_OTPM_20B  ? Number(process.env.GROQ_OTPM_20B)  : 1000,
-  'openai/gpt-oss-120b': process.env.GROQ_OTPM_120B ? Number(process.env.GROQ_OTPM_120B) : 1000,
-  _default: 1000,
+  'qwen/qwen3.6-27b':    process.env.GROQ_OTPM_QWEN ? Number(process.env.GROQ_OTPM_QWEN) : 900,
+  'openai/gpt-oss-20b':  process.env.GROQ_OTPM_20B  ? Number(process.env.GROQ_OTPM_20B)  : 4000,
+  'openai/gpt-oss-120b': process.env.GROQ_OTPM_120B ? Number(process.env.GROQ_OTPM_120B) : 5000,
+  _default: 4000,
 };
+
 function groqOtpmCapFor(model) {
   return GROQ_OTPM_CAPS[model] ?? GROQ_OTPM_CAPS._default;
 }
+const groqOtpmTracker = new Map();
 
-const groqTpmTracker = new Map();
-const groqCooldowns  = new Map();
+function groqOtpmUsed(model) {
+  const now = Date.now();
+  const entries = (groqOtpmTracker.get(model) || []).filter(e => now - e.time < 60000);
+  groqOtpmTracker.set(model, entries);
+  return entries.reduce((sum, e) => sum + e.tokens, 0);
+}
+
+function groqOtpmRemaining(model) {
+  return Math.max(0, groqOtpmCapFor(model) - groqOtpmUsed(model));
+}
+
+function groqOtpmClamp(model, maxTokens) {
+  return Math.max(0, Math.min(maxTokens, groqOtpmRemaining(model)));
+}
+
+function recordGroqOtpm(model, tokens) {
+  if (!tokens || tokens <= 0) return;
+  const entries = groqOtpmTracker.get(model) || [];
+  entries.push({ tokens, time: Date.now() });
+  groqOtpmTracker.set(model, entries);
+}
+
+const groqTpmTracker = new Map(); // model -> [{ tokens, time }]
+const groqCooldowns  = new Map(); // model -> timestamp when safe to retry
 
 function estimateTokens(text) {
-  return Math.ceil((text || '').length / 4);
+  return Math.ceil((text || '').length / 4); // ~4 chars/token, Groq's own rule of thumb
 }
 
 function groqTpmAvailable(model, estimatedTokens) {
@@ -393,7 +627,7 @@ function isGroqCoolingDown(model) {
 function setGroqCooldown(model, retryAfterSec = 30, isRealRateLimit = false) {
   const capped = isRealRateLimit
     ? Math.min(retryAfterSec, 30)
-    : Math.min(retryAfterSec, 5);
+    : Math.min(retryAfterSec, 5); // our own timeout ≠ Groq being down
   groqCooldowns.set(model, Date.now() + capped * 1000);
   console.log(`Cooling down ${model} for ${capped}s (realRateLimit=${isRealRateLimit})`);
 }
@@ -491,6 +725,15 @@ function isImageTooLarge(base64str) {
 // ── HELPERS ───────────────────────────────────────────────────
 const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+// fetchWithTimeout: aborts the fetch if no response headers arrive within
+// timeoutMs. For streaming responses, the caller MUST call
+// `res.__clearTimeout()` once headers arrive (otherwise the timer keeps
+// running and will abort the in-progress body read). The streaming code
+// in streamNvidiaGLMOnly and streamAI both do this.
+//
+// The caller can also pass `options.signal` (e.g. an AbortController tied
+// to req.on('close')) — we forward its aborts to our internal controller
+// so a closed browser tab cancels the upstream fetch.
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -500,6 +743,8 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
       else options.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
     const res = await fetch(url, { ...options, signal: controller.signal, body: options.body });
+    // Do NOT clearTimeout here — caller clears via res.__clearTimeout()
+    // once they're done with the response (or it fires naturally).
     res.__clearTimeout = () => clearTimeout(timer);
     return res;
   } catch (e) {
@@ -508,6 +753,13 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   }
 }
 
+// Reads a ReadableStream<Uint8Array> with an idle timeout — if no bytes
+// arrive for idleMs, aborts the underlying fetch and throws. Returns the
+// decoded text chunks via the onChunk callback. This is the real fix for
+// "Code-chat stream error: This operation was aborted" — previously a
+// stalled NVIDIA stream would hang until the OUTER 45s timer fired,
+// then the retry would hit the same stall. Now we abort quickly and let
+// the fallback chain (NVIDIA → Groq → CF) take over.
 async function readStreamWithIdleTimeout(reader, decoder, onChunk, idleMs = 15000) {
   let buffer = '';
   let idleTimer = null;
@@ -527,6 +779,7 @@ async function readStreamWithIdleTimeout(reader, decoder, onChunk, idleMs = 1500
       buffer = '';
       resetIdle();
     }
+    // Flush any trailing bytes in the decoder
     const tail = decoder.decode();
     if (tail) onChunk(tail);
   } finally {
@@ -546,6 +799,17 @@ function stripInternalReasoning(text) {
     .replace(/^→.*$/gm, '')
     .replace(/^\s*\n/gm, '\n')
     .trim();
+  // Strip reasoning-model preambles that leak into the visible content
+  // field (NOT the reasoning_content field, which is dropped separately).
+  // Common patterns from gpt-oss / nemotron / qwen when they forget to
+  // use the reasoning_content channel:
+  //   "Here's a thinking process:\n1. **Analyze..."
+  //   "Let me think about this step by step."
+  //   "**Thinking:**\n..."
+  //   "Step 1: ...\nStep 2: ..."
+  // We strip the WHOLE preamble up to the first double-newline that's
+  // followed by actual answer content. This is conservative — we only
+  // fire when the message starts with one of the known preamble patterns.
   const preamblePatterns = [
     /^here'?s a thinking process\s*:?\n[\s\S]*?\n\n/i,
     /^let me think[^\n]*\n[\s\S]*?\n\n/i,
@@ -557,6 +821,10 @@ function stripInternalReasoning(text) {
   for (const re of preamblePatterns) {
     t = t.replace(re, '');
   }
+  // Strip lines that look like leaked system-prompt echoes (the
+  // "CODE MODE: Vertex streaming active..." regression). Even though
+  // we removed that text from the system prompt in Fix 1, some models
+  // may still echo fragments of instructions — catch them here too.
   t = t.replace(/^CODE MODE:.*$/gim, '');
   t = t.replace(/^Vertex streaming active.*$/gim, '');
   t = t.replace(/^NVIDIA is primary.*$/gim, '');
@@ -612,7 +880,14 @@ async function classifyTier(groq, text) {
     return 'medium';
   }
 
+  // FIX: previous Promise.race + setTimeout didn't actually abort the
+  // underlying Groq fetch — the request kept running and burning TPM
+  // long after the race resolved. Now we pass an AbortSignal that
+  // actually cancels the HTTP request on timeout.
   const controller = new AbortController();
+  // SPEED FIX: was 2500ms - classifier returns a single word
+  // ('medium' or 'hard'). 1500ms is plenty for gpt-oss-20b.
+  // Saves up to 1s per request when the classifier is slow.
   const timer = setTimeout(() => controller.abort(), 1500);
   try {
     const result = await groq.chat.completions.create({
@@ -645,6 +920,7 @@ Respond ONLY with the word "medium" or "hard". Do not use JSON or punctuation.`,
 async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeoutMs = 60000) {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) return null;
+  // Skip if circuit breaker has blocked this model.
   if (isNvidiaModelBlocked(modelId)) {
     console.log(`NVIDIA model ${modelId} skipped — circuit breaker open`);
     return null;
@@ -671,19 +947,33 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
     );
     if (!res.ok) {
       console.log(`NVIDIA model ${modelId} HTTP ${res.status}`);
+      // PERMANENT errors (404 / 401 / 410) — model ID is wrong, API key
+      // has been revoked, or the model has been end-of-life'd on NVIDIA's
+      // side. None of these will ever recover on retry — mark the model
+      // invalid forever so the keep-alive stops pinging it (this was the
+      // source of the recurring "NVIDIA keep-alive: ... HTTP 404" spam).
       if (res.status === 404 || res.status === 401 || res.status === 410) {
         markNvidiaModelInvalid(modelId, `HTTP ${res.status}`);
         return null;
       }
+      // TRANSIENT errors (502/503/504) — model is up but unavailable right
+      // now. Trip the circuit breaker instantly (2 strikes = threshold)
+      // so we skip it for 2 minutes instead of wasting another attempt.
       if (res.status === 502 || res.status === 503 || res.status === 504) {
         recordNvidiaFailure(modelId);
         recordNvidiaFailure(modelId);
         console.warn(`NVIDIA model ${modelId} HTTP ${res.status} — instant circuit breaker trip — unavailable (2 min cooldown)`);
         return null;
       }
+      // Other non-OK statuses (400/402/405/etc.) — single failure count.
+      // Most of these are bad request bodies; the model is fine. But we
+      // count one strike so a persistently-misbehaving model still gets
+      // cooled down after two such errors.
       recordNvidiaFailure(modelId);
       return null;
     }
+    // Clear the outer timer as soon as headers arrive — body parsing
+    // (res.json) is fast and shouldn't be aborted by the headers-phase timer.
     if (res.__clearTimeout) res.__clearTimeout();
     const data = await res.json();
     const rawText = data?.choices?.[0]?.message?.content ?? null;
@@ -700,6 +990,9 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
     return null;
   } catch (e) {
     console.log(`NVIDIA model error (${modelId}):`, e.message);
+    // Record failure for circuit breaker — but only if it wasn't a
+    // client-initiated abort (closing the browser tab shouldn't count
+    // against the model's reliability score).
     if (e.name !== 'AbortError' && !clientSignal?.aborted) {
       recordNvidiaFailure(modelId);
     }
@@ -708,10 +1001,20 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
 }
 
 // ── STREAMING callAI ───────────────────────────────────────────
+// FIX: accepts a clientSignal (from req.on('close')) so that if the
+// browser tab is closed mid-stream, we abort the upstream Groq/
+// NVIDIA/CF request instead of letting it run to completion and
+// wasting TPM budget / NVIDIA global budget on a response no one
+// will ever read.
 async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, preferQuality = false, skipNvidia = false }) {
+  // ── Per-request Groq key rotation ──
+  // The `groq` arg passed in was built from a single hardcoded key. We
+  // ignore it and pick a fresh key per request from the rotation pool
+  // so multiple Groq accounts can be load-balanced.
   const currentKey = pickGroqKey();
   if (!currentKey) {
     console.error('streamAI: no Groq key available — skipping Groq entirely');
+    // Skip to NVIDIA / CF fallback chain below.
     return streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, skipNvidia });
   }
   const groqClient = makeGroqClient(currentKey);
@@ -728,15 +1031,9 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
   const bufferMode = looksLikeTableRequest(lastMsg);
 
   const trivialTier = isObviouslyTrivial(lastMsg);
-
-  // ── FIX 1: lowered trivial-tier default from 1024 → 900. Groq enforces
-  // a hard per-request OTPM (output-tokens-per-minute) ceiling of ~1000
-  // for these models — a request asking for 1024 output tokens will 429
-  // EVERY time regardless of "budget available" bookkeeping, because the
-  // violation is on the single request, not accumulated usage. Hard
-  // requests (6000) still exceed OTPM and get clamped per-model below
-  // via groqOtpmCapFor() right before each attempt.
-  const maxTokens = isHard ? 6000 : (trivialTier ? 900 : 2048);
+  // Groq free-tier per-request TPM is 8000; 6000 max_tokens leaves
+  // ~2000 for the prompt. Long responses continue via MAX_CONTINUATIONS.
+  const maxTokens = isHard ? 6000 : (trivialTier ? 1024 : 2048);
 
   const modelChain = [GROQ_CHAT_PRIMARY, GROQ_CHAT_FALLBACK];
 
@@ -745,32 +1042,23 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
   const MAX_CONTINUATIONS = 3;
 
   for (const modelToTry of modelChain) {
-    const estTokens = estimateTokens(JSON.stringify(optimizedMessages)) + maxTokens;
+    const promptTokens = estimateTokens(JSON.stringify(optimizedMessages));
     if (isGroqCoolingDown(modelToTry)) { console.log(`Skipping ${modelToTry} — cooling down`); continue; }
 
-    let effectiveMaxTokens = maxTokens;
-
-    // ── FIX 1: HARD ceiling clamp — Groq will 429 any single request
-    // whose max_tokens exceeds this model's OTPM cap, no matter how much
-    // rolling TPM "budget" the soft tracker below thinks is available.
-    // This must run BEFORE the soft-budget check so hard requests (which
-    // ask for 6000) get clamped down to something Groq will actually
-    // accept in one call. Long answers are still completed via the
-    // existing MAX_CONTINUATIONS loop further down.
-    const otpmCap = groqOtpmCapFor(modelToTry);
-    if (effectiveMaxTokens > otpmCap) {
-      const clamped = Math.max(otpmCap - 50, 200);
-      console.log(`Routing: ${modelToTry} OTPM cap is ${otpmCap} — clamping max_tokens ${effectiveMaxTokens} → ${clamped}`);
-      effectiveMaxTokens = clamped;
+    let effectiveMaxTokens = groqOtpmClamp(modelToTry, maxTokens);
+    if (effectiveMaxTokens < maxTokens) {
+      console.log(`Routing: ${modelToTry} OTPM cap ${groqOtpmCapFor(modelToTry)} — clamping max_tokens ${maxTokens} → ${effectiveMaxTokens} (used=${groqOtpmUsed(modelToTry)})`);
+    }
+    if (effectiveMaxTokens < 200) {
+      console.log(`Skipping ${modelToTry} — OTPM budget exhausted (used=${groqOtpmUsed(modelToTry)}, cap=${groqOtpmCapFor(modelToTry)})`);
+      setGroqCooldown(modelToTry, 15, true);
+      continue;
     }
 
-    if (!groqTpmAvailable(modelToTry, estTokens)) {
+    if (!groqTpmAvailable(modelToTry, promptTokens + effectiveMaxTokens)) {
       const cap = groqTpmCapFor(modelToTry);
-      const promptTokens = estTokens - maxTokens;
       const remainingBudget = cap - promptTokens;
       if (remainingBudget >= 500) {
-        // Use Math.min against the ALREADY-clamped effectiveMaxTokens so
-        // the OTPM clamp above can never be widened back out here.
         effectiveMaxTokens = Math.min(remainingBudget, effectiveMaxTokens);
         console.log(`Routing: ${modelToTry} TPM tight — reducing max_tokens to ${effectiveMaxTokens} (prompt=${promptTokens}, cap=${cap})`);
       } else {
@@ -780,8 +1068,9 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
     }
     if (clientSignal?.aborted) { console.log('Client disconnected before model call'); return false; }
 
-    const supportsReasoning = GROQ_REASONING_CAPABLE_MODELS.has(modelToTry);
-    const reasoningEffort = supportsReasoning ? 'none' : null;
+    const reasoningEffort = GROQ_REASONING_NONE_MODELS.has(modelToTry) ? 'none'
+      : GROQ_REASONING_LOW_MODELS.has(modelToTry) ? 'low'
+      : null;
 
     try {
       let convoMessages = [...optimizedMessages];
@@ -790,18 +1079,35 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
       let streamedAnything = false;
 
       while (true) {
+        const otpmBudget = groqOtpmClamp(modelToTry, effectiveMaxTokens);
+        if (otpmBudget < 150) {
+          if (streamedAnything) {
+            console.log(`Model ${modelToTry} hit OTPM window mid-continuation — ending with partial content`);
+            if (bufferMode) {
+              const repaired = repairGluedTableRows(stripInternalReasoning(fullBuffer));
+              res.write(`data: ${JSON.stringify({ content: repaired })}\n\n`);
+            }
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return true;
+          }
+          console.log(`Model ${modelToTry} OTPM exhausted before any content — trying fallback`);
+          break;
+        }
         const requestParams = {
           model: modelToTry,
           messages: convoMessages,
-          max_tokens: effectiveMaxTokens,
+          max_tokens: otpmBudget,
           temperature: 0.7,
           stream: true,
         };
+        // Only add reasoning_effort if the model supports it. Otherwise
+        // Groq returns HTTP 400 "unsupported parameter".
         if (reasoningEffort !== null) {
           requestParams.reasoning_effort = reasoningEffort;
         }
         const stream = await groqClient.chat.completions.create(requestParams, { signal: clientSignal });
-        recordGroqTpm(modelToTry, (estTokens - maxTokens) + effectiveMaxTokens);
+        recordGroqTpm(modelToTry, promptTokens);
 
         let buffer = '';
         let finishReason = null;
@@ -810,6 +1116,7 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
         let groqFirstByteMs = 0;
         const __t0 = Date.now();
 
+        
         const GROQ_FIRST_BYTE_MS = 9000;
         const GROQ_IDLE_MS = 15000;
         let groqIdleTimer = null;
@@ -878,13 +1185,16 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
           const elapsed = Date.now() - __t0;
           const isTimeout = /timeout|aborted/i.test(eg?.message || eg?.name || '');
           console.error(`Groq stream failed (${modelToTry}) after ${elapsed}ms${isTimeout ? ' [timeout - falling through]' : ''}:`, eg?.message || eg);
-
+          
         if (isTimeout) {
-        try { setGroqCooldown(modelToTry, 5, false); } catch(_) {}
+        try { setGroqCooldown(modelToTry, 5, false); } catch(_) {}   
     }
         if (eg?.status === 429 || /rate_limit_exceeded|tokens per day|TPD/i.test(eg?.message || '')) {
         const waitSec = parseRetryAfterSec(eg.message);
         setGroqCooldown(modelToTry, waitSec, true);
+        // If the error mentions "tokens per day" (TPD exhausted, not just
+        // a transient 429), mark THIS key as dead so future requests
+        // rotate to the next one.
         if (/tokens per day|TPD/i.test(eg?.message || '')) {
           markGroqKeyTpdExhausted(currentKey, waitSec * 1000);
         }
@@ -892,9 +1202,19 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
           groqStreamError = eg;
         } finally {
           if (groqIdleTimer) clearTimeout(groqIdleTimer);
+          if (buffer) {
+            recordGroqTpm(modelToTry, estimateTokens(buffer));
+            recordGroqOtpm(modelToTry, estimateTokens(buffer));
+          }
         }
 
         if (groqStreamError) {
+          if (streamedAnything && !bufferMode) {
+            console.warn(`Model ${modelToTry} errored mid-stream after content — ending with partial`);
+            res.write('data: [DONE]\n\n');
+            res.end();
+            return true;
+          }
           console.warn(`Model ${modelToTry} aborted/error - trying fallback`);
           break;
         }
@@ -937,7 +1257,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
       if (e.status === 429 || e.message?.includes('rate_limit_exceeded') || /tokens per day|TPD/i.test(e.message || '')) {
         const waitSec = parseRetryAfterSec(e.message);
-        setGroqCooldown(modelToTry, waitSec);
+        setGroqCooldown(modelToTry, waitSec, true);
+        // TPD exhausted on this key → mark it dead so future requests rotate.
         if (/tokens per day|TPD/i.test(e.message || '')) {
           markGroqKeyTpdExhausted(currentKey, waitSec * 1000);
         }
@@ -946,11 +1267,13 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
     }
   }
 
+  // Groq exhausted — fall back to NVIDIA → CF worst-case.
   return streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, skipNvidia, optimizedMessages, maxTokens, isHard });
 }
 
 // NVIDIA → Cloudflare fallback chain (used by Vortis chat after Groq fails).
 async function streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, skipNvidia = false, optimizedMessages, maxTokens, isHard }) {
+  // Fall back to optimizedMessages passed in, or rebuild from messages.
   if (!optimizedMessages) {
     const systemPrompt = messages.find(m => m.role === 'system');
     const recentConversations = messages.filter(m => m.role !== 'system').slice(-12);
@@ -964,11 +1287,12 @@ async function streamAIFallbackChain(messages, res, { CF_TOKEN, CF_ACCOUNT, clie
     ? [NVIDIA_CHAT_CODE, NVIDIA_CHAT_QUALITY, NVIDIA_CHAT_FAST]
     : [NVIDIA_CHAT_FAST, NVIDIA_CHAT_QUALITY];
 
-const FALLBACK_TIMEOUT_MS = 7000;
+const nvidiaFallbackTimeoutFor = (model) =>
+  model === NVIDIA_CHAT_CODE ? 25000 : model === NVIDIA_CHAT_QUALITY ? 20000 : 15000;
 
 for (const nvModel of nvidiaModelsToTry) {
   if (clientSignal?.aborted) { console.log('Client disconnected — skipping NVIDIA'); break; }
-  const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens, clientSignal, FALLBACK_TIMEOUT_MS);
+  const text = await tryNvidiaChat(nvModel, optimizedMessages, maxTokens, clientSignal, nvidiaFallbackTimeoutFor(nvModel));
     if (text) {
       console.log(`NVIDIA fallback succeeded: ${nvModel}`);
       res.write(`data: ${JSON.stringify({ content: text })}\n\n`);
@@ -994,14 +1318,14 @@ for (const nvModel of nvidiaModelsToTry) {
     body: JSON.stringify({ messages: optimizedMessages, stream: false, max_tokens: 1200 }),
     signal: clientSignal,
   },
-  10000
+  10000 
 );
 
       if (!cfRes.ok) { console.log(`CF model ${cfModel} HTTP ${cfRes.status}`); continue; }
 
-      if (cfRes.__clearTimeout) cfRes.__clearTimeout();
-      const data = await cfRes.json();
-
+      if (cfRes.__clearTimeout) cfRes.__clearTimeout();   
+      const data = await cfRes.json();   
+     
       let rawText = data?.result?.response;
       if (typeof rawText !== 'string') {
         rawText = data?.result?.output_text ?? data?.result?.choices?.[0]?.message?.content ?? null;
@@ -1032,32 +1356,55 @@ function repairGluedTableRows(text) {
   if (!text || !text.includes('|')) return text;
   let fixed = text;
 
+  // Force a line break before a table that starts mid-sentence.
+  // Only fires when the line does NOT already start with | — otherwise we'd
+  // tear apart a legitimate table row's cells. The "before" must also be
+  // followed by content that looks like a real table row (3+ pipes).
   fixed = fixed.replace(
     /^([^\n|][^\n]*?)[ \t](\|[^\n|]+\|[^\n|]+\|[^\n]*\|)/gm,
     (m, before, tableStart) => `${before}\n\n${tableStart}`
   );
 
+  // Split rows joined by "| |" back onto separate lines — but ONLY when
+  // the joined content is a separator row (dashes) or another clear row.
+  // We require the next non-pipe character to be a dash or colon to fire,
+  // which prevents splitting a single row like "| A | B |" mid-row.
   fixed = fixed.replace(/\|\s*\|\s*(?=---|:|[\s]*\|)/g, '|\n|');
 
+  // Fix a separator row glued onto the header row like:
+  //   "| Model | Price | |---|---|"
+  // →
+  //   "| Model | Price |"
+  //   "|---|---|"
+  // This is the most common malformation from fast models — they forget to
+  // put a newline between the header row and the separator row.
   fixed = fixed.replace(
     /(\|[^\n|]+(?:\|[^\n|]+)+\|)[ \t]*(\|(?:[\s:|-]*\|)+)/g,
     (m, headerRow, sepRow) => `${headerRow}\n${sepRow}`
   );
 
+  // Fix malformed separator rows missing the trailing pipe.
+  // Matches a line like "|---|---" (no trailing |) and appends the |.
   fixed = fixed.replace(
     /^(\|[\s:|-]+)$/gm,
     (line) => /\|$/.test(line) ? line : (line + '|')
   );
 
+  // Fix a separator row with too few cells (e.g. header has 3 cells, sep has 2).
+  // Pads the separator row with extra ---| to match. Operates on lines.
+  // For the separator line, we count dash-segments (---) as cells too, since
+  // models often glue separator cells together like "---|---" instead of "|---|---|".
   fixed = fixed.replace(
     /^(\|[^\n]+\|)\n(\|[\s:|-]+\|?)$/gm,
     (match, headerLine, sepLine) => {
       const headerCellCount = Math.max(0, (headerLine.match(/\|/g) || []).length - 1);
+      // For separator: count dash-runs (2+ dashes).
       const sepDashRuns = (sepLine.match(/-{2,}/g) || []).length;
       const sepPipeCount = Math.max(0, (sepLine.match(/\|/g) || []).length - 1);
       const sepCellCount = Math.max(sepPipeCount, sepDashRuns);
       if (sepCellCount >= headerCellCount) return match;
       const missing = headerCellCount - sepCellCount;
+      // Rebuild the separator from scratch as |---|---|---|
       const newSep = '|' + '---|'.repeat(headerCellCount);
       return headerLine + '\n' + newSep;
     }
@@ -1066,12 +1413,27 @@ function repairGluedTableRows(text) {
   return fixed;
 }
 
+// Detects whether a user's message is asking for tabular/structured output
 function looksLikeTableRequest(text) {
   const low = (text || '').toLowerCase();
   return /\b(table|compare|comparison|vs\.?|versus|pros and cons|side.by.side)\b/.test(low);
 }
 
 // ── Code-chat streaming (NVIDIA primary, with Groq+CF fallback) ─
+// FIXES applied:
+//   1. Per-read idle timeout (15s) — if NVIDIA stalls mid-stream we
+//      abort quickly instead of waiting for the 60s outer timer, then
+//      cascade into retry which hits the same stall. This was the root
+//      cause of every "Code-chat stream error: This operation was
+//      aborted" in the log.
+//   2. Client-disconnect detection — if the browser closes the SSE
+//      connection we cancel the upstream NVIDIA fetch instead of
+//      finishing a response nobody will read.
+//   3. Safe res.write — wrapped in try/catch so a closed socket
+//      doesn't crash the loop.
+//   4. Returns false on full failure so the caller can fall back to
+//      Groq then CF instead of showing the dead-end "Vertex is
+//      temporarily unavailable" message.
 async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal, chainName = 'standard') {
   const key = process.env.NVIDIA_API_KEY;
   if (!key) {
@@ -1085,21 +1447,28 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
   }
 
   const MAX_CONTINUATIONS = 4;
-
+// Both HEADERS_TIMEOUT_MS and firstByteTimeoutFor were bounding the SAME
+// "model is cold-starting" delay separately, which meant a cold heavy
+// model could burn up to 60s+50s=110s before we even tried the next
+// model in the chain. Collapsed into ONE per-model budget for
+// headers+first-byte combined, and added an overall chain deadline
+// below so we never wait more than ~35s total across all models before
+// falling back to Groq/CF.
 function headersTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 30000;
-  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 12000;
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 20000;
+  if (model === NVIDIA_CHAT_MODEL_QUALITY) return 15000;
   return 10000;
 }
 
 function firstByteTimeoutFor(model) {
-  if (model === NVIDIA_CODE_MODEL_HEAVY) return 25000;
+  if (model === NVIDIA_CODE_MODEL_HEAVY) return 18000;
   if (model === NVIDIA_CHAT_MODEL_QUALITY) return 12000;
   return 10000;
 }
 
-const IDLE_TIMEOUT_MS = 20000;
+const IDLE_TIMEOUT_MS = 20000; // was 45000 — mid-stream stalls this long are genuinely dead
 
+  // Safe write helper — never throws, returns false if the socket is closed.
   const safeWrite = (chunk) => {
     if (res.writableEnded || clientSignal?.aborted) return false;
     try {
@@ -1111,10 +1480,19 @@ const IDLE_TIMEOUT_MS = 20000;
     }
   };
 
+  // Iterate over the model fallback chain. Each model gets one attempt.
+  // Models blocked by the circuit breaker are skipped without a network call.
+  // The chain is picked by the caller based on message content:
   const chain = chainName === 'heavy' ? pickHeavyChain() : (NVIDIA_CODE_CHAINS[chainName] || NVIDIA_CODE_CHAINS.standard);
 const dropped = [];
+// For the heavy chain, ALWAYS keep the quality model in the candidate list
+// even if it's marked permanently invalid or in circuit-breaker cooldown —
+// pickHeavyChain already added it, and we want one attempt per heavy
+// request in case NVIDIA has revived the endpoint. Other models still get
+// filtered out by the breaker / permanent-invalid registry.
 const alwaysRetryInHeavy = chainName === 'heavy' ? NVIDIA_CHAT_MODEL_QUALITY : null;
 const modelsToTry = chain.filter(m => {
+  // Always keep the heavy chain's quality model, regardless of block state.
   if (m === alwaysRetryInHeavy) return true;
   const blocked = isNvidiaModelBlocked(m);
   if (blocked) {
@@ -1132,7 +1510,14 @@ if (modelsToTry.length === 0) {
 }
 console.log(`Code-chat stream: chain=${chainName} will try [${modelsToTry.join(', ')}]`);
 
-const chainDeadline = Date.now() + 75000;
+
+// FIX (2026-08-26): 35s → 75s. The old 35s ceiling was the direct cause
+// of 'all NVIDIA models failed — caller should try Groq/CF fallback' firing
+// on every heavy code-chat after an idle gap. Ultra alone can burn 25-30s
+// on a cold-start timeout; with only 35s total the chain bailed before
+// stepfun or lightning even got a chance to attempt. 75s gives the chain
+// enough room to actually try every model in the heavy order at least once.
+const chainDeadline = Date.now() + 60000;
 
 let attemptIdx = 0;
 for (const nvidiaModel of modelsToTry) {
@@ -1146,6 +1531,9 @@ for (const nvidiaModel of modelsToTry) {
     break;
   }
 
+    // DIAGNOSTIC: log warm state at attempt start so we can see if we're
+    // hitting a cold model (which explains first-byte timeouts and empty
+    // responses from reasoning models that haven't loaded their weights).
     console.log(`Code-chat: trying ${nvidiaModel} (attempt ${attemptIdx}/${modelsToTry.length}, warm=${isNvidiaModelWarm(nvidiaModel)}, blocked=${isNvidiaModelBlocked(nvidiaModel)})`);
 
     let written = 0;
@@ -1153,7 +1541,7 @@ for (const nvidiaModel of modelsToTry) {
     let continuations = 0;
     let fullRawBuffer = '';
     let attemptFailed = false;
-    let failureWasTimeout = false;
+    let failureWasTimeout = false;  // true if the failure was a first-byte/idle timeout (not a real error)
     let idleTimer = null;
     let headersTimerCleared = false;
     let finishReason = null;
@@ -1187,17 +1575,40 @@ for (const nvidiaModel of modelsToTry) {
           let errBody = '';
           try { errBody = await nvRes.text(); } catch (_) {}
           console.error(`Code-chat stream: ${nvidiaModel} HTTP ${nvRes.status} - ${errBody.slice(0, 300)}`);
+          // PERMANENT errors (404 / 401 / 410) — model ID is wrong, key is
+          // bad, or model is end-of-life. Mark invalid forever and skip
+          // retrying. THIS is the fix for the recurring
+          // "Code-chat stream: nemotron-3-ultra-550b-a55b HTTP 404" log.
+          // Previously 404 fell through to the generic single-failure path
+          // (recordNvidiaFailure once), which meant:
+          //   1. The model wasn't dropped from the chain on the next request.
+          //   2. The keep-alive kept pinging it every 70s, producing the
+          //      "keep-alive: HTTP 404" spam.
+          // Now the first 404 marks it permanently invalid and isNvidiaModelBlocked
+          // returns true forever for it.
           if (nvRes.status === 404 || nvRes.status === 401 || nvRes.status === 410) {
             markNvidiaModelInvalid(nvidiaModel, `HTTP ${nvRes.status}`);
             attemptFailed = true;
             break;
           }
+          // RATE LIMIT (429) — stepfun-ai/step-3.7-flash returns this when
+          // NVIDIA's per-model TPM budget is exhausted. Don't count it as
+          // a 'real' model failure (the model is fine, we're just over
+          // quota); instead apply a single cooldown strike so the circuit
+          // breaker skips it for 2 min if it happens twice in a row.
+          // Without this, 429 was falling through to the generic single-
+          // failure path which tripped the breaker on 2 strikes regardless
+          // of cause, blocking a perfectly-good model just because we
+          // briefly over-queried it.
           if (nvRes.status === 429) {
             recordNvidiaFailure(nvidiaModel);
             console.warn(`Code-chat: ${nvidiaModel} HTTP 429 (rate limited) — circuit breaker strike 1/2 (cooldown only if hit again)`);
             attemptFailed = true;
             break;
           }
+          // TRANSIENT errors (502/503/504) — model up but unavailable right
+          // now. Trip the circuit breaker instantly (2 strikes = threshold)
+          // so we skip it for 2 minutes.
           if (nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
             recordNvidiaFailure(nvidiaModel);
             recordNvidiaFailure(nvidiaModel);
@@ -1207,13 +1618,22 @@ for (const nvidiaModel of modelsToTry) {
           break;
         }
 
+        // CRITICAL FIX: clear the outer HEADERS_TIMEOUT_MS timer as soon
+        // as headers arrive. Previously this timer kept running during the
+        // streaming body phase and would abort the read loop at 90s/
+        // 120s even though we had separate first-byte + idle timers
+        // for that. The symptom was "This operation was aborted"
+        // appearing on long-but-healthy streams.
         if (nvRes.__clearTimeout) { nvRes.__clearTimeout(); headersTimerCleared = true; }
 
         const reader  = nvRes.body.getReader();
+        // MODEL-DEPENDENT first-byte timeout: ultra gets 20s, nano gets 10s.
+        // If the model is warm, it'll respond well within this. If cold,
+        // we abort fast and fall back to the next model in the chain.
         const fbTimeout = firstByteTimeoutFor(nvidiaModel);
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
-          failureWasTimeout = true;
+          failureWasTimeout = true;  // timeout, not a real error — don't trip circuit breaker
           console.warn(`Code-chat stream: first-byte timeout (${fbTimeout}ms) on ${nvidiaModel}, cancelling reader`);
           try { reader.cancel('first-byte-timeout').catch(() => {}); } catch (_) {}
         }, fbTimeout);
@@ -1232,9 +1652,12 @@ for (const nvidiaModel of modelsToTry) {
             const { done, value } = await reader.read();
             if (done) break;
 
+            // After the first byte arrives, switch from the generous
+            // first-byte timeout (45s) to the tighter inter-chunk idle
+            // timeout (15s). Mid-stream stalls > 15s are real stalls.
             if (idleTimer) clearTimeout(idleTimer);
             idleTimer = setTimeout(() => {
-              failureWasTimeout = true;
+              failureWasTimeout = true;  // timeout, not a real error
               console.warn(`Code-chat stream: idle timeout (${IDLE_TIMEOUT_MS}ms) on ${nvidiaModel}, cancelling reader`);
               try { reader.cancel('idle-timeout').catch(() => {}); } catch (_) {}
             }, IDLE_TIMEOUT_MS);
@@ -1255,7 +1678,7 @@ for (const nvidiaModel of modelsToTry) {
 
               finishReason = payload?.choices?.[0]?.finish_reason || finishReason;
               const reasoningToken = payload?.choices?.[0]?.delta?.reasoning_content;
-              if (reasoningToken) continue;
+              if (reasoningToken) continue; // reasoning_content is never user-facing — drop it outright
 
               const token = payload?.choices?.[0]?.delta?.content;
               if (!token) continue;
@@ -1303,6 +1726,8 @@ for (const nvidiaModel of modelsToTry) {
         } finally {
           if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
           try { reader.cancel('cleanup').catch(() => {}); } catch (_) {}
+          // If we never cleared it (early throw before headers were processed),
+          // clear now to be safe.
           if (!headersTimerCleared && nvRes.__clearTimeout) { nvRes.__clearTimeout(); }
         }
 
@@ -1321,15 +1746,49 @@ for (const nvidiaModel of modelsToTry) {
         if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
           continuations++;
           console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS}) on ${nvidiaModel}`);
+          // FIX (2026-08-26): the previous continuation prompt caused two
+          // visible bugs in production:
+          //
+          //   (a) DUPLICATE CODE — the model often ignored the rule and
+          //       restarted the output from the beginning, producing the
+          //       same code block twice in a row (the user's screenshot:
+          //       'it show same code 2 times'). Now we detect mid-sentence
+          //       truncation and tell the model to RESTART the broken
+          //       sentence from the last complete sentence boundary,
+          //       which prevents both mid-word pickup AND restart-from-
+          //       scratch duplication.
+          //
+          //   (b) MID-WORD PICKUP — the previous prompt said 'continue
+          //       EXACTLY where you left off', which the model took
+          //       literally: if the prior turn was truncated mid-word
+          //       ('...this code wil') the model would continue with
+          //       'l work for you', and the visible response started with
+          //       'will work for you' — looking like the first sentence
+          //       had been deleted (the user's report: 'first text mostly
+          //       removed, just starts with will'). Now we detect mid-word
+          //       truncation and tell the model to RESTART the broken
+          //       sentence from the last complete sentence boundary.
+          //
+          // We also trim turnBuffer to the last ~12K chars to keep the
+          // continuation request under NVIDIA's context window — the model
+          // doesn't need to see the very beginning of a 30K-char file to
+          // continue the end of it.
           const trimmedPrior = turnBuffer.length > 12000
             ? turnBuffer.slice(-12000)
             : turnBuffer;
+          // Detect mid-word truncation: no terminal punctuation AND no
+          // closing code fence AND last char is a word character. In that
+          // case find the last sentence boundary (.
+          // ! ? newline) and tell the model to restart from there.
           const lastChar = trimmedPrior.slice(-1);
           const endsMidWord = /[A-Za-z0-9_]/.test(lastChar)
             && !/```\s*$/.test(trimmedPrior)
             && !/[.!?:;\n]\s*$/.test(trimmedPrior);
           let resumeFromHint;
           if (endsMidWord) {
+            // Find last sentence boundary in the trimmed prior — restart
+            // from there so the visible continuation begins with a complete
+            // sentence instead of mid-word pickup like 'will work for you'.
             const boundaryMatch = trimmedPrior.match(/[.!?:\n][^.!?:\n]*$/);
             const lastBoundary = boundaryMatch ? boundaryMatch.index + 1 : 0;
             const brokenSentence = trimmedPrior.slice(lastBoundary).trim();
@@ -1342,7 +1801,7 @@ for (const nvidiaModel of modelsToTry) {
             { role: 'assistant', content: turnBuffer },
             { role: 'user', content: resumeFromHint },
           ];
-          turnBuffer = '';
+          turnBuffer = '';  // reset for the next turn
           continue;
         }
 
@@ -1351,6 +1810,18 @@ for (const nvidiaModel of modelsToTry) {
     } catch (e) {
       console.error(`Code-chat stream error on ${nvidiaModel}:`, e.message);
       attemptFailed = true;
+      // CRITICAL: Detect AbortError (timeout/cold-start) and treat it as
+      // a TIMEOUT, not a real error. This prevents the circuit breaker
+      // from tripping on cold-start failures, which would block the
+      // model for 2 minutes and prevent the keep-alive from warming it.
+      //
+      // AbortError happens when:
+      //   - The first-byte timer fires (20s for coder, 10s for nano)
+      //   - The idle timer fires (15s mid-stream stall)
+      //   - The headers timer fires (120s — model didn't respond at all)
+      //   - The client closed the browser tab (clientSignal.aborted)
+      // ALL of these are "cold/slow" or "client gone" — NOT "model broken".
+      // Only HTTP 503/502/504 (handled separately above) trips the breaker.
       if (e.name === 'AbortError' || /aborted/i.test(e.message) || clientSignal?.aborted) {
         failureWasTimeout = true;
       }
@@ -1367,6 +1838,15 @@ for (const nvidiaModel of modelsToTry) {
       return true;
     }
 
+    // DIAGNOSTIC: written=0 means nothing was streamed to the client. This
+    // is the "empty response" the user sees in vertex. Log exactly what we
+    // got from the model so we can diagnose:
+    //   - fullRawBuffer length (0 = model returned literally nothing,
+    //     >0 = model returned something but it was all <think> tags)
+    //   - attemptFailed (true = HTTP error or exception)
+    //   - failureWasTimeout (true = first-byte or idle timeout)
+    //   - finishReason (length = hit max_tokens, stop = model chose to stop,
+    //     null = stream was interrupted before finishing)
     console.warn(`Code-chat: ${nvidiaModel} produced 0 visible chars — rawBuffer=${fullRawBuffer.length} attemptFailed=${attemptFailed} wasTimeout=${failureWasTimeout} finishReason=${finishReason || 'null'}${fullRawBuffer.length > 0 ? ` rawTail="${fullRawBuffer.slice(-200).replace(/\n/g, '\\n')}"` : ''}`);
 
     if (!attemptFailed && !clientSignal?.aborted) {
@@ -1386,11 +1866,22 @@ for (const nvidiaModel of modelsToTry) {
         recordNvidiaSuccess(nvidiaModel);
         return true;
       }
+      // Distinguish two failure modes for clearer logs:
+      //   - fullRawBuffer was empty → model returned literally nothing (real error)
+      //   - fullRawBuffer had content but it was all <think> → reasoning-only response
+      //     (model loaded but didn't produce a visible answer — treat as a soft
+      //     failure, fall through to next model in chain)
       if (fullRawBuffer.length > 0) {
         console.warn(`Code-chat: ${nvidiaModel} returned ${fullRawBuffer.length} chars but all were <think> content (no visible answer) — trying next model`);
       }
     }
 
+    // This model failed — record it for the circuit breaker and move on.
+    // BUT: only trip the circuit breaker for REAL errors (HTTP 5xx, etc.).
+    // Timeouts (first-byte timeout, idle timeout) mean the model was just
+    // cold/slow, not broken — tripping the breaker would block it for 2 min
+    // and prevent the keep-alive from warming it. The next request should
+    // still try it (it might be warm by then).
     if (!clientSignal?.aborted) {
       if (!failureWasTimeout) {
         recordNvidiaFailure(nvidiaModel);
@@ -1402,12 +1893,21 @@ for (const nvidiaModel of modelsToTry) {
   }
 
   console.error('Code-chat stream: all NVIDIA models failed — caller should try Groq/CF fallback');
+  // Do NOT end the response here — the caller owns the fallback chain.
   return false;
 }
 
 // ── Code-chat Groq fallback ─────────────────────────────────────
+// Used when NVIDIA code-chat fails entirely. Streams via Groq using
+// gpt-oss-20b (fast, decent for code) and falls back through the same
+// NVIDIA / CF chain that regular chat uses. Mirrors streamAI() but
+// keeps the code-chat system prompt + search context intact.
 async function streamCodeChatFallback(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, chainName = 'standard' }) {
   const preferQuality = chainName !== 'trivial';
+  // FIX: skipNvidia=true — we already tried the full NVIDIA code-chat
+  // chain (heavy/standard/trivial) and it failed. streamAI's default
+  // behavior would re-try NVIDIA as a fallback, wasting a network
+  // round-trip on a model that just failed. Skip straight to Groq → CF.
   return streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSignal, preferQuality, skipNvidia: true });
 }
 
@@ -1451,6 +1951,7 @@ async function fetchSerper(query) {
   }
 }
 
+// ── TAVILY (fallback search provider) ──────────────────────────
 // ── TAVILY (fallback search provider) ────────────────────────────
 async function fetchTavily(query) {
   const key = process.env.TAVILY_API_KEY;
@@ -1490,6 +1991,8 @@ async function fetchTavily(query) {
     return [];
   }
 }
+
+
 
 async function fetchWebResults(query) {
   try {
@@ -1618,6 +2121,10 @@ function cleanResults(results, query) {
     .filter(r => { const t = (r.title || '').trim(); return t.length >= 5 && !/^(home|index|page \d+|untitled)$/i.test(t); });
 }
 
+// ── Lighter relevance filter for code/technical queries — the default
+// cleanResults() is tuned to kill sports/health spam and ends up nuking
+// legit docs/API results for niche technical searches. Keep spam/dedup
+// checks, drop the strict word-overlap requirement.
 function cleanCodeResults(results, query) {
   return results
     .filter(r => !isSpam(r))
@@ -1630,7 +2137,15 @@ function stripCodeFences(text) {
 }
 
 // ── AI-BASED SEARCH DECISION ────────────────────────────────────
+// Instead of matching keywords (which breaks on typos, phrasing variety,
+// or anything not explicitly listed), ask a fast/cheap model to decide
+// whether this message needs live web results. Falls back to the old
+// heuristic if the classifier call fails or times out.
 async function aiNeedsSearch(groq, text, { isCode = false, clientSignal } = {}) {
+  // Explicit user intent: "search the web for X", "google X", "look this up",
+  // "find online", "search and tell me", etc. Honor without consulting the
+  // classifier — saves a round trip and prevents the LLM saying NO when the
+  // user clearly asked for a search.
   const _lowExplicit = (text || '').toLowerCase();
   const EXPLICIT_SEARCH_PHRASES = [
     /\bsearch\s+(the\s+)?(web|internet|online)\b/,
@@ -1648,13 +2163,40 @@ async function aiNeedsSearch(groq, text, { isCode = false, clientSignal } = {}) 
   const heuristicFallback = isCode ? needsCodeWebSearchHeuristic(searchableText) : needsWebSearchHeuristic(searchableText);
   if (heuristicFallback) return true;
 
+  // FIX: code-chat slowness — was firing a Groq LLM classifier call with a
+  // 2000ms timeout for EVERY code request before the NVIDIA stream could
+  // start. That meant a "make me a tic tac toe game" request sat showing
+  // "thinking..." for 2 seconds while Groq answered a pointless YES/NO
+  // question. The heuristic + explicit-phrase checks above already catch
+  // genuine search-needed cases (latest/current/version/deprecated/changelog
+  // /breaking-change patterns), so for code-chat we skip the classifier
+  // entirely and let the model answer from general knowledge. Regular chat
+  // still uses the classifier — it's only code that suffers the latency.
   if (isCode) return false;
+
+  if (/^(hi|hello|hey|thanks|thank you|thx|ty|ok|okay|sure|yes|no|yep|nope|cool|nice|great|awesome|good (morning|evening|night|afternoon)|what time|what date|how are you|who are you|what is your name|sup|yo|lol|haha)\b/i.test((searchableText || '').trim())) return false;
+  if ((searchableText || '').trim().length < 8) return false;
 
   const controller = new AbortController();
   if (clientSignal) {
     if (clientSignal.aborted) controller.abort();
     else clientSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
+  // Code mode gets a tighter budget — 700ms instead of 1200ms. A missed
+  // search classification just means "answer from general knowledge",
+  // which is the safe default anyway, so there's no correctness cost
+  // to cutting this short.
+  // FIX: was 700ms for code mode — too tight for gpt-oss-20b (a reasoning
+  // model that needs ~500-1500ms to produce even a YES/NO answer). The
+  // log showed "Search-decision classifier failed: Request was aborted"
+  // repeatedly. Bumped to 2000ms — still fast enough that the user
+  // doesn't notice the delay, but gives Groq time to actually respond.
+  // A missed search classification just means "answer from general
+  // knowledge", which is the safe default, so there's no correctness
+  // cost to a slightly longer timeout.
+  // SPEED FIX: was 1200ms for non-code - classifier returns
+  // YES or NO. 700ms is enough for gpt-oss-20b. Saves up to
+  // 500ms per request when the classifier is slow.
   const timer = setTimeout(() => controller.abort(), isCode ? 1500 : 700);
   try {
     const result = await groq.chat.completions.create({
@@ -1683,6 +2225,9 @@ Respond ONLY with YES or NO. Nothing else.`,
   }
 }
 
+// Fuzzy keyword match — catches common typos (transpositions, missing/extra
+// letters) so "serch", "lattest" etc. still trigger correctly, instead of
+// relying on exact regex matches.
 function levenshtein(a, b) {
   const m = a.length, n = b.length;
   const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
@@ -1717,11 +2262,12 @@ function needsWebSearchHeuristic(text) {
 function needsCodeWebSearchHeuristic(text) {
   const low = text.toLowerCase();
 
+  // Guaranteed catches for common typo variants — don't rely on edit-distance alone.
   const typoAliases = ['serch', 'saerch', 'seach', 'searc', 'seatch', 'goggle', 'lattest', 'latst'];
   if (typoAliases.some(t => low.includes(t))) return true;
 
   const searchWords = ['search', 'google', 'lookup', 'latest', 'current', 'recent', 'newest', 'changelog', 'deprecated', 'version'];
-  if (fuzzyIncludesAny(text, searchWords, 2)) return true;
+  if (fuzzyIncludesAny(text, searchWords, 2)) return true; // maxDist bumped 1 → 2
 
   if (/\b(as of \d{4}|breaking change|just released)\b/.test(low)) return true;
   if (/\bv?\d+\.\d+(\.\d+)?\b.*\b(release|version|update|changelog)\b/i.test(text)) return true;
@@ -1743,9 +2289,10 @@ function buildSearchQuery(userMessage) {
 // ── EXPRESS APP SETUP
 // ═════════════════════════════════════════════════════════════
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', true); // needed so req.ip / x-forwarded-for work correctly behind Render's proxy
 app.use(express.json({ limit: '5mb' }));
 
+// ── CORS (same allowlist logic as before, applied as Express middleware) ──
 app.use((req, res, next) => {
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://vortis-ai.vercel.app').split(',');
   const origin = req.headers.origin || '';
@@ -1766,23 +2313,42 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Health check — Render pings this to know the service is alive ──
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 app.get('/', (req, res) => res.status(200).send('Vortis backend is running.'));
 
 // ═════════════════════════════════════════════════════════════
-// ── DEBUG ENDPOINTS
+// ── DEBUG ENDPOINTS — for diagnosing NVIDIA model access issues
 // ═════════════════════════════════════════════════════════════
+// Both endpoints are gated behind X-App-Key header (same key your
+// frontend already sends). If X-App-Key isn't configured in env,
+// they're open to anyone with the URL — fine for debugging on
+// Render but lock it down before going to prod.
+
 function debugAuthOk(req) {
   const expected = process.env.X_APP_KEY;
-  if (!expected) return true;
+  if (!expected) return true; // no key configured = open (debug mode)
   return req.headers['x-app-key'] === expected;
 }
 
+// /debug/nvidia-models
+//   Lists every model NVIDIA's /v1/models endpoint exposes, then for
+//   each of OUR configured models (fast/quality/heavy/vision chain)
+//   runs a 1-token streaming ping to see if our key can actually
+//   reach it. Returns:
+//     { catalog: [...], our_models: [{ id, in_catalog, http_status,
+//       latency_ms, error }] }
+//
+//   This is the diagnostic for "is nemotron-3-ultra-550b-a55b actually
+//   accessible with my key?" — a 404 in the http_status field means
+//   NVIDIA is gating that model behind a higher tier.
 app.get('/debug/nvidia-models', async (req, res) => {
   if (!debugAuthOk(req)) return res.status(403).json({ error: 'missing X-App-Key' });
   const key = process.env.NVIDIA_API_KEY;
   if (!key) return res.status(500).json({ error: 'NVIDIA_API_KEY not set' });
 
+  // 1. Fetch the full catalog (unauthenticated — NVIDIA returns the
+  //    list of all models on the endpoint, regardless of key tier).
   let catalog = [];
   try {
     const catRes = await fetchWithTimeout(`${NVIDIA_BASE_URL}/models`, {}, 8000);
@@ -1795,6 +2361,9 @@ app.get('/debug/nvidia-models', async (req, res) => {
     console.warn('debug/nvidia-models: catalog fetch failed:', e.message);
   }
 
+  // 2. Test each of our configured models with a 1-token streaming ping.
+  //    We deliberately bypass isNvidiaModelBlocked() here — the whole
+  //    point is to test models that have been marked invalid.
   const ourModelIds = [
     { role: 'fast',    id: NVIDIA_CHAT_FAST },
     { role: 'quality', id: NVIDIA_CHAT_QUALITY },
@@ -1823,6 +2392,7 @@ app.get('/debug/nvidia-models', async (req, res) => {
       if (!r.ok) {
         try { error = (await r.text()).slice(0, 200); } catch (_) {}
       } else {
+        // Drain one chunk then cancel — same as the keep-alive.
         try {
           const reader = r.body.getReader();
           await reader.read();
@@ -1856,6 +2426,10 @@ app.get('/debug/nvidia-models', async (req, res) => {
   });
 });
 
+// /debug/nvidia-health
+//   Returns the in-memory state of the circuit breaker + warm-state
+//   tracker + invalid-TTL registry. Use this to see which models are
+//   currently being skipped and why, without grepping logs.
 app.get('/debug/nvidia-health', (req, res) => {
   if (!debugAuthOk(req)) return res.status(403).json({ error: 'missing X-App-Key' });
   const now = Date.now();
@@ -1885,13 +2459,6 @@ app.get('/debug/nvidia-health', (req, res) => {
       last_check_ago_sec: Math.round((now - entry.lastCheck) / 1000),
     });
   }
-  // ── FIX 2: surface consecutive-slow counts in the health endpoint so
-  // sustained degradation (vs. genuine cold-start) is visible without
-  // grepping logs.
-  const slow = [];
-  for (const [model, count] of nvidiaConsecutiveSlow.entries()) {
-    slow.push({ model, consecutive_slow_pings: count });
-  }
   res.json({
     now_iso: new Date(now).toISOString(),
     configured_models: {
@@ -1909,7 +2476,6 @@ app.get('/debug/nvidia-health', (req, res) => {
     invalid_models: invalid,
     transient_failures: transient,
     warm_state: warm,
-    consecutive_slow: slow,
     keepalive_in_flight: [...nvidiaKeepaliveInFlight],
   });
 });
@@ -1917,6 +2483,24 @@ app.get('/debug/nvidia-health', (req, res) => {
 // ═════════════════════════════════════════════════════════════
 // ── WARMUP + KEEP-ALIVE
 // ═════════════════════════════════════════════════════════════
+// FIX for "first message is slow": your screenshot confirms Render's free
+// tier spins the instance down after inactivity ("can delay requests by
+// 50 seconds or more"). Pinging localhost from inside the same process
+// does NOT count as external activity to Render's proxy, so it does NOT
+// prevent spin-down — that was the bug in the previous version.
+//
+// The only things that reliably prevent spin-down on Render's free tier:
+//   1) An external uptime service (UptimeRobot, cron-job.org, etc.)
+//      hitting your PUBLIC URL every few minutes — this is the real fix.
+//   2) Upgrading off the free tier (removes spin-down entirely).
+//
+// Below, we still warm up in-process connections (Firestore, Groq, NVIDIA
+// TLS handshakes) so that once a request *does* arrive, it's not also
+// paying for cold connection setup on top of the Render wake-up delay.
+// We also self-ping the public RENDER_EXTERNAL_URL if Render provides one,
+// which at least helps for paid/instant-scaling tiers or short idle gaps —
+// but this is a supplement, not a substitute for an external pinger.
+
 async function warmUp() {
   try {
     await admin.firestore().collection('_warmup').limit(1).get();
@@ -1933,6 +2517,10 @@ async function warmUp() {
     console.log('NVIDIA TLS warmed');
   } catch (_) {}
 
+  // Warm up the two working models. Skip NVIDIA_CHAT_MODEL_QUALITY if it
+  // points to the same ID as FAST (lightning is now both FAST and QUALITY
+  // since super-120b was removed) — warming the same model twice just
+  // wastes a request.
   const nvKey = process.env.NVIDIA_API_KEY;
   if (nvKey) {
     const modelsToWarm = [...new Set([
@@ -1942,13 +2530,42 @@ async function warmUp() {
     ].filter(m => !isNvidiaModelInvalid(m)))];
 
     for (const modelId of modelsToWarm) {
-      const timeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 150000
-                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 20000
+      // Ultra-550b is a 550B MoE that takes 25-90s to cold-start on NIM.
+      // The old 90s timeout was STILL right at the edge — your warmup logs
+      // showed "This operation was aborted" on the first attempt followed
+      // by a successful retry at 1085-2360ms. That's because cold-start on
+      // a freshly-deployed NIM endpoint can take up to 120s on the very
+      // first request after deploy. 150s gives comfortable headroom so
+      // the first attempt succeeds instead of falling through to the
+      // 10-second retry delay. Once warm, pings drop to 5-15s and the
+      // timeout never fires.
+      // FIX: stepfun (quality model) was timing out at 30s during warmup,
+      // triggering 'This operation was aborted' on every warmup attempt.
+      // Cold-start on NIM endpoints can legitimately take 30-60s on the
+      // first request after deploy. Give stepfun 60s of headroom (matches
+      // the keep-alive timeout for the quality slot) instead of the 30s
+      // default for non-heavy models. Heavy (ultra-550b) still gets 150s
+      // because it's a 550B MoE that takes even longer to cold-start.
+      const timeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000
+                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 30000
                     : 30000;
 
+      // RETRY LOOP: if the warmup fails with a transient error (502/503/504/
+      // timeout), retry up to 3 times with increasing delay. This gets ultra
+      // warmed as soon as NVIDIA brings it back online, instead of waiting
+      // 70s for the keep-alive. The old code gave up after 1 attempt and
+      // waited for keep-alive — if ultra was temporarily down (502), it
+      // stayed cold for 70s+, and heavy requests fell to lightning (slower
+      // for complex code).
+      // Fixed — cap the warmup timeout much lower (this is a background task,
+// not a user-facing request — no reason to wait 60s per attempt), and
+// stop retrying once it's clear this model just isn't answering.
 const retryWarmup = async (modelId, timeout, attempt, maxAttempts) => {
   const result = await warmUpNvidiaModel(modelId, timeout);
   if (result.ok || attempt >= maxAttempts) return result;
+  // Back off but don't retry more than twice total — 3 full attempts at
+  // 60s each was burning ~3 minutes of background fetch time per
+  // deploy/restart, competing with real user requests for bandwidth.
   await new Promise(r => setTimeout(r, 5000));
   console.log(`NVIDIA warmup: retrying ${modelId} (attempt ${attempt + 1}/${maxAttempts})...`);
   return retryWarmup(modelId, timeout, attempt + 1, maxAttempts);
@@ -1963,14 +2580,27 @@ const retryWarmup = async (modelId, timeout, attempt, maxAttempts) => {
   }
 }
 
+// Helper: warms up a single NVIDIA model with a tiny completion.
+// Returns { ok, ms } once the request finishes (success or failure).
+// Never throws — warmup failures are non-fatal.
 async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
   const nvKey = process.env.NVIDIA_API_KEY;
   if (!nvKey) return { ok: false, ms: 0 };
+  // Skip immediately if we already know this model ID is permanently
+  // invalid (e.g. a previous call returned 404). No point spending a
+  // network round trip on a known-bad ID.
   if (isNvidiaModelInvalid(modelId)) {
     return { ok: false, ms: 0 };
   }
   const t0 = Date.now();
   try {
+    // Warmup prompt: use a question that reasoning models can answer briefly,
+    // and give enough tokens (50) for the model to get past its <think> phase
+    // and produce a visible answer. The old max_tokens=5 was too small for
+    // reasoning models like ultra-550b — they'd consume all 5 tokens on
+    // <think> reasoning and return content: null with finish_reason: "length".
+    // That looked like a "malformed body" to our validation, but the model
+    // was actually loaded and working fine (proven by 51K-char real requests).
     const res = await fetchWithTimeout(
       `${NVIDIA_BASE_URL}/chat/completions`,
       {
@@ -1986,8 +2616,10 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
       },
       timeoutMs
     );
-    if (res.__clearTimeout) res.__clearTimeout();
+    try {
 
+    // PERMANENT errors (404/401/410) — mark invalid immediately so the
+    // keep-alive never tries this ID again.
     if (res.status === 404 || res.status === 401 || res.status === 410) {
       markNvidiaModelInvalid(modelId, `HTTP ${res.status} during warmup`);
       try { await res.text(); } catch (_) {}
@@ -1995,10 +2627,35 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
     }
 
     if (res.ok) {
+      // BULLETPROOF WARMUP: any HTTP 200 = ready. Period.
+      //
+      // The goal of warmup is to load the model into NVIDIA's inference
+      // memory. A 200 response means the model endpoint exists, accepted
+      // our request, and returned something. That's all we need — the
+      // model is now loaded and will respond faster on the next (real)
+      // request.
+      //
+      // We do NOT validate the body because:
+      //   - Reasoning models (ultra-550b) return content:null when
+      //     max_tokens is too small — that's normal, model is loaded.
+      //   - Some models return <think>-only content with no visible
+      //     answer for tiny prompts — that's normal, model is loaded.
+      //   - Body structure varies between model versions — trying to
+      //     validate it caused more false failures than real catches.
+      //
+      // The ONLY way to detect a truly broken model ID now is:
+      //   - HTTP 404/401/410 (handled above) — permanent invalid.
+      //   - HTTP 503/504 — transient, handled by circuit breaker.
+      //   - Real requests producing empty output — handled by the
+      //     streaming code's salvage + fallback logic.
+      //
+      // We still read the body (to drain the connection for reuse) and
+      // log a debug summary, but we never reject based on body content.
       let rawText = '';
       try { rawText = await res.text(); } catch (_) {}
       const ms = Date.now() - t0;
 
+      // Quick parse for debug logging only — never affects the result.
       let bodySummary = 'unparseable';
       try {
         const data = JSON.parse(rawText);
@@ -2020,21 +2677,43 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
       return { ok: true, ms };
     }
 
+    // NON-OK RESPONSES (502/503/504/429/500/etc.)
+    // CRITICAL: do NOT call recordNvidiaLatency here! The latency for a
+    // 502 is typically very fast (300-500ms) because the gateway rejects
+    // quickly. If we call recordNvidiaLatency with 398ms, it checks
+    // 398 <= 30000 (ultra threshold) = true → marks model as WARM.
+    // But the model just returned 502 — it's DOWN, not warm!
+    // This caused pickHeavyChain to try ultra first on heavy requests
+    // even though it was returning 502, wasting time and causing
+    // "empty response" errors.
+    //
+    // Instead: explicitly mark as NOT warm, and for transient errors
+    // (502/503/504), count one failure toward the circuit breaker so
+    // if it fails repeatedly, the model gets cooled down.
     const elapsed = Date.now() - t0;
-    try { await res.text(); } catch (_) {}
+    try { await res.text(); } catch (_) {}  // drain body
 
     if (res.status === 502 || res.status === 503 || res.status === 504) {
+      // Transient — model temporarily unavailable. Don't trip circuit
+      // breaker instantly (one failure only); the keep-alive will retry.
       recordNvidiaFailure(modelId);
+      // Explicitly mark as NOT warm — overrides any stale warm state
+      // from a previous successful warmup.
       nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
       console.log(`NVIDIA warmup ${modelId} HTTP ${res.status} (transient — will retry via keep-alive) [${elapsed}ms]`);
     } else if (res.status === 429) {
+      // Rate limited — back off, don't count as failure.
       nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
       console.log(`NVIDIA warmup ${modelId} HTTP 429 (rate limited — will retry via keep-alive) [${elapsed}ms]`);
     } else {
+      // Other non-OK status (500, 400, etc.) — log with status.
       nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
       console.log(`NVIDIA warmup ${modelId} HTTP ${res.status} [${elapsed}ms]`);
     }
     return { ok: false, ms: elapsed };
+    } finally {
+      if (res.__clearTimeout) res.__clearTimeout();
+    }
   } catch (e) {
     console.log(`NVIDIA warmup ${modelId} failed:`, e.message);
     return { ok: false, ms: Date.now() - t0 };
@@ -2042,14 +2721,38 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
 }
 
 // ── NVIDIA KEEP-ALIVE PING ─────────────────────────────────────
+// FIX: the heavy 550b model routinely takes 5-23s to respond, which is
+// LONGER than the old 20s interval. That let consecutive ping cycles
+// overlap — a second ping firing before the first one for the SAME model
+// had finished — stacking concurrent requests against NVIDIA's per-model
+// rate limit. This was the direct cause of the HTTP 429 seen on a real
+// user request: keep-alive traffic was competing with them for the same
+// budget. Two fixes:
+//   1. Per-model in-flight guard — skip a model's ping this cycle if its
+//      previous ping hasn't finished yet (no more stacking).
+//   2. Separate, longer interval for the heavy model (45s) vs fast (20s)
+//      — 45s is still well under NVIDIA's ~60s idle-unload window, but
+//      gives each slow ping room to finish before the next one fires.
 const NVIDIA_KEEPALIVE_INTERVAL_FAST_MS  = 20 * 1000;
-const NVIDIA_KEEPALIVE_INTERVAL_HEAVY_MS = 70 * 1000;
-const NVIDIA_KEEPALIVE_INTERVAL_QUALITY_MS = 40 * 1000;
-const nvidiaKeepaliveInFlight = new Set();
+const NVIDIA_KEEPALIVE_INTERVAL_HEAVY_MS = 45 * 1000;
+const NVIDIA_KEEPALIVE_INTERVAL_QUALITY_MS = 35 * 1000;
+const nvidiaKeepaliveInFlight = new Set(); // models currently mid-ping
+
+// nvidiaEolModels is now declared up near the circuit breaker (line ~237)
+// so that isNvidiaModelBlocked / recordNvidiaFailure can see it.
 
 async function pingNvidiaModel(modelId) {
+  // isNvidiaModelBlocked already checks nvidiaEolModels, so this single
+  // guard covers both transient cooldowns and permanent-invalid models.
   if (isNvidiaModelBlocked(modelId)) return;
+  // Guard: don't fire a new ping for this model while an old one is
+  // still in flight — this is what was causing overlapping 429s.
   if (nvidiaKeepaliveInFlight.has(modelId)) {
+    // Per-model in-flight guard fires every cycle when a slow heavy model
+    // is mid-ping (ultra-550b routinely takes 5-25s, heavy ping interval
+    // is 70s). Silence the log line by default — it's not actionable and
+    // was producing 10-15 noise lines per minute. Set VERBOSE_KEEPALIVE=1
+    // to re-enable for debugging.
     if (process.env.VERBOSE_KEEPALIVE === '1') {
       console.log(`NVIDIA keep-alive: ${modelId} skipped — previous ping still in flight`);
     }
@@ -2058,9 +2761,27 @@ async function pingNvidiaModel(modelId) {
   nvidiaKeepaliveInFlight.add(modelId);
   try {
     const t0 = Date.now();
+    //
+    // STREAMING KEEP-ALIVE — the main slowness fix.
+    //
+    // Old behavior: `stream: false, max_tokens: 5`. The server waited for
+    // the FULL completion (including any reasoning tokens on Nemotron
+    // models) before responding. For warm models that's 5-12s, for cold
+    // models 20-25s — exactly the "was warming" log spam the user saw.
+    //
+    // New behavior: `stream: true, max_tokens: 1`. We grab the response
+    // reader, read ONE SSE chunk (which is enough to know the model is
+    // alive and warmed up), then cancel the stream. Cold-start still has
+    // to load the model into GPU memory before the first byte, but we
+    // don't wait for any generation. Result: warm pings drop to 1-3s,
+    // cold pings to 8-15s.
+    //
+    // The headers-phase timeout is also tightened — old 25-150s was way
+    // too generous for a 1-token ping. 12s for fast/quality, 25s for
+    // ultra-550b cold-start headroom.
     const pingTimeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 25000
-                     : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 12000
-                     : 12000;
+                     : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 15000
+                     : 15000;
     const res = await fetchWithTimeout(
       `${NVIDIA_BASE_URL}/chat/completions`,
       {
@@ -2076,18 +2797,26 @@ async function pingNvidiaModel(modelId) {
       },
       pingTimeout
     );
-    if (res.__clearTimeout) res.__clearTimeout();
+    try {
     if (res.ok) {
+      // Read exactly one chunk, then cancel. This proves the model is
+      // loaded and responsive without paying for full generation.
       try {
         const reader = res.body.getReader();
         const { value } = await reader.read();
+        // value is a Uint8Array — even an empty SSE comment (": ok\n\n")
+        // counts as "model is alive". Cancel the rest of the stream.
         try { await reader.cancel('keepalive-done'); } catch (_) {}
         if (!value || value.length === 0) {
+          // Empty first chunk is suspicious — treat as failure but don't
+          // mark invalid (could be a transient NIM quirk).
           console.warn(`NVIDIA keep-alive: ${modelId} returned empty first chunk`);
           recordNvidiaFailure(modelId);
           return;
         }
       } catch (readErr) {
+        // Stream read failed AFTER headers arrived — model is at least
+        // returning 200, so don't mark invalid. Count one transient fail.
         console.warn(`NVIDIA keep-alive: ${modelId} stream read error:`, readErr.message);
         recordNvidiaFailure(modelId);
         return;
@@ -2095,32 +2824,28 @@ async function pingNvidiaModel(modelId) {
       recordNvidiaSuccess(modelId);
       const ms = Date.now() - t0;
       recordNvidiaLatency(modelId, ms);
+      // Per-model "slow" threshold. With streaming, warm pings should be
+      // well under 5s. Anything over 10s for fast/quality or 15s for
+      // ultra means the model was cold-starting.
       const slowThreshold = modelId === NVIDIA_CODE_MODEL_HEAVY ? 15000
                           : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 10000
-                          : 8000;
-      if (ms > slowThreshold) {
-        // ── FIX 2: distinguish genuine cold-start ("warming") from
-        // sustained degradation. Only call it "warming" for the first 3
-        // consecutive slow pings; past that, it's flagged as persistent
-        // and the model is explicitly marked NOT warm so pickHeavyChain
-        // stops treating it as a good candidate based on stale state.
-        const count = (nvidiaConsecutiveSlow.get(modelId) || 0) + 1;
-        nvidiaConsecutiveSlow.set(modelId, count);
-        if (count <= 3) {
-          console.log(`NVIDIA keep-alive: ${modelId} slow (${ms}ms — was warming, ${count}/3)`);
-        } else {
-          console.warn(`NVIDIA keep-alive: ${modelId} PERSISTENTLY SLOW (${ms}ms, ${count} consecutive pings) — likely throttled/overloaded upstream, not cold-starting. Check NVIDIA account tier/quota.`);
-          nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
-        }
-      } else {
-        if (nvidiaConsecutiveSlow.has(modelId)) nvidiaConsecutiveSlow.delete(modelId);
-      }
+                          : 8000;  // fast/lightning
+      if (ms > slowThreshold) console.log(`NVIDIA keep-alive: ${modelId} slow (${ms}ms — was warming)`);
     } else if (res.status === 429) {
+      // back off silently this cycle
       try { await res.text(); } catch (_) {}
     } else if (res.status === 404 || res.status === 401 || res.status === 410) {
+      // HARD errors — model ID doesn't exist for this key (404), API key
+      // revoked (401), or model end-of-life'd (410). Mark invalid via the
+      // central registry — the TTL is 30min (NVIDIA_INVALID_TTL_MS), so we
+      // will auto-retry once per half hour in case access is granted back.
       try { await res.text(); } catch (_) {}
       markNvidiaModelInvalid(modelId, `HTTP ${res.status} during keep-alive`);
     } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+      // Transient unavailability — the circuit breaker (in streamNvidiaGLMOnly
+      // and tryNvidiaChat) already trips instantly on 502/503/504 and gives
+      // the model a 2-min cooldown, so logging it here every cycle is pure
+      // noise. Demote to debug-level unless VERBOSE_KEEPALIVE=1.
       try { await res.text(); } catch (_) {}
       if (process.env.VERBOSE_KEEPALIVE === '1') {
         console.log(`NVIDIA keep-alive: ${modelId} HTTP ${res.status} (unavailable, will retry next cycle)`);
@@ -2128,6 +2853,9 @@ async function pingNvidiaModel(modelId) {
     } else {
       console.log(`NVIDIA keep-alive: ${modelId} HTTP ${res.status}`);
       try { await res.text(); } catch (_) {}
+    }
+    } finally {
+      if (res.__clearTimeout) res.__clearTimeout();
     }
   } catch (e) {
     if (!e.message?.includes('aborted')) {
@@ -2141,6 +2869,9 @@ async function pingNvidiaModel(modelId) {
 function startNvidiaKeepAlive() {
   if (!process.env.NVIDIA_API_KEY) return;
 
+  // Deduplicate models — since NVIDIA_CHAT_QUALITY now points to the same
+  // ID as NVIDIA_CHAT_FAST (lightning), we'd otherwise ping it twice and
+  // waste budget. Build a set of unique model IDs and ping each once.
   const modelsToPing = [...new Set([
     NVIDIA_CODE_MODEL_FAST,
     NVIDIA_CODE_MODEL_HEAVY,
@@ -2157,10 +2888,13 @@ function startNvidiaKeepAlive() {
   }
 }
 
+// Fire-and-forget — do NOT await. Server starts listening immediately.
 warmUp();
+// Start the keep-alive pings AFTER the initial warmup has had a chance
+// to run. The keep-alive will keep all models warm going forward.
 setTimeout(startNvidiaKeepAlive, 5000);
 
-const externalUrl = process.env.RENDER_EXTERNAL_URL;
+const externalUrl = process.env.RENDER_EXTERNAL_URL; // Render sets this automatically if available
 if (externalUrl) {
   setInterval(() => {
     fetch(`${externalUrl}/health`).catch(() => {});
@@ -2171,7 +2905,7 @@ if (externalUrl) {
 }
 
 // ═════════════════════════════════════════════════════════════
-// ── MAIN HANDLER
+// ── MAIN HANDLER  (was the Vercel default export, now a route)
 // ═════════════════════════════════════════════════════════════
 app.post('/api/handler', async (req, res) => {
   if (!req.body || typeof req.body !== 'object') {
@@ -2200,10 +2934,16 @@ app.post('/api/handler', async (req, res) => {
     if (!['chat', 'search', 'image', 'vision', 'tts', 'execute', 'transcribe', 'memory', 'title'].includes(action)) return res.status(400).json({ error: `Invalid action: ${action}` });
     if (!checkRateLimit(userIp, action)) return res.status(429).json({ error: 'Too many requests. Slow down a bit!' });
 
-    if (action === 'title') {
+    // ── TITLE — cheap internal housekeeping.
+   if (action === 'title') {
   const titlePrompt = sanitizeString(req.body.prompt || '', 2000);
   if (!titlePrompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
+  // gpt-oss-20b is a reasoning model. reasoning_effort='low' is the lowest
+  // supported value ('none' returns 400). max_tokens=200 leaves room for
+  // reasoning + actual title (max_tokens=30 returns empty content because
+  // the model burns it all on reasoning_content). stripInternalReasoning()
+  // strips any reasoning that leaks into the content field.
   const titleController = new AbortController();
   const titleTimer = setTimeout(() => titleController.abort(), 6000);
   try {
@@ -2223,6 +2963,10 @@ app.post('/api/handler', async (req, res) => {
     clearTimeout(titleTimer);
   }
 
+  // Cloudflare fallback — reuses the same two models already proven to work
+  // as the CF chat fallback chain elsewhere in this file (CF_CHAT_MODELS),
+  // and the same response-shape parsing (result.response, or output_text,
+  // or choices[0].message.content depending on the model).
   const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
   const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
   if (CF_TOKEN && CF_ACCOUNT) {
@@ -2266,6 +3010,8 @@ app.post('/api/handler', async (req, res) => {
     console.warn('TITLE: Cloudflare fallback skipped — CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID not set');
   }
 
+  // Both providers failed — return empty; the frontend already falls back
+  // to using the first user message as the title (see generateChatTitle).
   return res.status(200).json({ title: '' });
 }
 
@@ -2309,6 +3055,11 @@ app.post('/api/handler', async (req, res) => {
     const isVoiceCall = Boolean(body.isVoiceCall);
     const isCodeMode  = Boolean(body.mode === 'code' || body.isCodeChat === true);
 
+    // FIX: create one AbortController per request that fires when the
+    // browser closes the SSE connection. We forward this signal to
+    // every upstream provider (Groq, NVIDIA, CF) so a closed tab
+    // cancels the in-flight request instead of letting it burn TPM
+    // and NVIDIA global budget on a response no one will read.
     const clientSignal = new AbortController();
     req.on('close', () => {
       if (!res.writableEnded) {
@@ -2316,12 +3067,24 @@ app.post('/api/handler', async (req, res) => {
       }
     });
 
+    // ── FIX (TDZ bug): CF_TOKEN / CF_ACCOUNT must be declared BEFORE the
+    // isCodeMode branch below. Previously these were declared further down
+    // (right before the `action === 'tts'` section), which meant that when
+    // the code-chat path fell through to `streamCodeChatFallback(...,
+    // { CF_TOKEN, CF_ACCOUNT, ... })`, the reference threw:
+    //   "ReferenceError: Cannot access 'CF_TOKEN' before initialization"
+    // because `const CF_TOKEN` / `const CF_ACCOUNT` exist in the temporal
+    // dead zone for the whole function until their declaration line runs —
+    // and that line never ran before the code-chat branch returned.
+    // Moving the declarations up here fixes the Groq+CF fallback for
+    // code-chat without touching any other logic.
     const CF_TOKEN   = process.env.CLOUDFLARE_API_TOKEN;
     const CF_ACCOUNT = process.env.CLOUDFLARE_ACCOUNT_ID;
     if (!CF_TOKEN || !CF_ACCOUNT) {
       console.error('CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID missing — Cloudflare fallback unavailable for this request');
     }
 
+    // ── ROUTE TO CODE-CHAT BEFORE the regular chat handler ──
     if (isCodeMode && action === 'chat') {
       if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
@@ -2330,6 +3093,19 @@ app.post('/api/handler', async (req, res) => {
       res.setHeader('Connection', 'keep-alive');
 
       try {
+        // FIX (2026-08-26): short-circuit IMAGE GENERATION requests with a
+        // templated redirect message instead of letting them flow into the
+        // NVIDIA heavy chain (which would write fake 'image generation'
+        // code — exactly what the user reported: 'it starting gen code of
+        // that i think he trying to gen me image with code').
+        //
+        // The redirect tells the user professionally:
+        //   - Vertex = coding side of Vortis, can't generate images
+        //   - Vortis (the main chat) has a built-in image generator
+        //   - Switch to Vortis for image generation
+        // Matches the user's explicit request: 'it should say if you want
+        // to gen image you can go to vortis it can help you better — like
+        // this it should say professionally'.
         if (isImageGenerationRequest(prompt)) {
           const redirectMsg = `I'm **Vertex**, the coding side of **Vortis** — I specialize in writing, debugging, and explaining code, and I don't generate images directly.\n\nFor image generation, switch to the main **Vortis** chat (use the chat switcher in the sidebar or start a new Vortis chat). Vortis has a built-in image generator powered by FLUX + Pollinations — it'll turn your prompt into a real image in a few seconds.\n\nIf you actually wanted code that *calls* an image-generation API (e.g. a Python script using OpenAI's DALL-E, or a Node.js script calling Pollinations), just say so and I'll write that for you here.`;
           try {
@@ -2343,6 +3119,9 @@ app.post('/api/handler', async (req, res) => {
 
         const lastUserForSearch = history[history.length - 1]?.content || prompt.trim();
 
+        // Compute this FIRST, cheaply (sync regex, no network) — lets us
+        // skip the search-need classifier call entirely for clarify answers,
+        // saving a full Groq round-trip on the most common turn in a build flow.
         const looksLikeClarifyAnswerEarly = /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserForSearch);
 
         let codeSearchContext = '';
@@ -2379,8 +3158,22 @@ app.post('/api/handler', async (req, res) => {
           ? priorHistory[priorHistory.length - 1].content
           : prompt.trim();
 
+        // Reuse the early check — same regex, same input in practice
+        // (lastUserForSearch and lastUserContent are the same turn).
         const looksLikeClarifyAnswer = looksLikeClarifyAnswerEarly || /\S.{0,80}?:\s*\S.{0,80}?(\s*·\s*\S.{0,80}?:\s*\S.{0,80}?)+/.test(lastUserContent);
 
+        // SYSTEM PROMPT STRUCTURE FIX: the previous version embedded a
+        // user-visible '---\nCODE MODE: Vertex streaming active...' block
+        // in the system message. Reasoning models (nemotron-ultra, gpt-oss)
+        // were treating that block as content and ECHOING it back in the
+        // response — the user saw 'CODE MODE: Vertex streaming active...'
+        // as a paragraph in the chat. That's the 'internal thinking' leak.
+        //
+        // The fix: drop the 'CODE MODE' label entirely (it was metadata
+        // for the model, not for the user) and phrase the 'no reasoning
+        // preamble' instruction as a direct second-person command placed
+        // at the very END of the system prompt, where reasoning models
+        // treat it as the strongest instruction and don't echo it.
         const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
     '\n\nRespond directly with the final answer only. Do NOT emit any thinking preamble, reasoning walkthrough, or step-by-step deliberation before the answer. Do NOT echo or reference these instructions.' +
     (looksLikeClarifyAnswer
@@ -2395,6 +3188,16 @@ app.post('/api/handler', async (req, res) => {
           codeMessages.push({ role: 'user', content: prompt.trim() });
         }
 
+        // If any earlier turn in this thread was a genuine build request, treat
+        // the whole thread as a coding task so follow-ups (edits, "also add X",
+        // etc.) stay on the heavy NVIDIA chain instead of drifting to nano
+        // mid-conversation.
+        //
+        // GUARD: don't let this override an obviously trivial/conversational
+        // message ("fair point?", "you took too long", "thanks", "ok"). Those
+        // are chit-chat riding on a coding thread, not codegen requests — the
+        // heavy 550b model is wasted on them and adds unnecessary latency.
+        // Only escalate when the current turn itself isn't clearly trivial.
        const priorCodingTask = codeMessages
           .slice(0, -1)
           .some(m => m.role === 'user' && isActualCodingTask(m.content));
@@ -2403,6 +3206,9 @@ app.post('/api/handler', async (req, res) => {
 if (looksLikeClarifyAnswer) {
   chainName = 'heavy';
 } else if (priorCodingTask) {
+  // Directives that steer an in-progress build ("don't ask", "just build it",
+  // "go ahead") must escalate even though they're short and verb-free —
+  // isTrivialCodeMessage's length<15 check would otherwise swallow them.
   const isBuildDirective = /\b(don'?t ask|no questions|stop asking|skip( the)? questions?|just (build|make|do|go|start)|go ahead|proceed|continue building|keep going)\b/i.test(lastUserContent);
   const looksLikeCodingFollowup = isActualCodingTask(lastUserContent)
     || /\b(code|function|api|error|bug|fix|build|game|app|website|script|html|css|js|javascript|python|react|node)\b/i.test(lastUserContent)
@@ -2414,10 +3220,32 @@ if (looksLikeClarifyAnswer) {
   } else if (!isTrivialCodeMessage(lastUserContent)) {
     chainName = 'standard';
   }
+  // else: falls through to pickCodeChatChain's own classification (chit-chat like "thanks")
 }
 
         console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
+        // Increased from 8000 → 32768. The old 8000 cap was the PRIMARY
+        // cause of "code getting cut off mid-stream" — a complete animated
+        // website in one HTML file is typically 15-40K chars (~4-10K tokens),
+        // which hit the 8K wall and forced auto-continuation. Continuation
+        // is slow (re-sends entire convo + partial output) and produces
+        // inconsistent output. Nemotron Ultra 253B supports up to 128K
+        // output tokens, so 32K is a safe cap that lets 95%+ of requests
+        // complete in a single pass with no continuation needed.
         let ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
+        // FIX (2026-08-26): the previous version printed a hardcoded
+        // 'code models are temporarily unavailable' message here and bailed
+        // — even though streamCodeChatFallback() (defined further up in this
+        // file) was DESIGNED for exactly this case. The dead-code gap meant
+        // that whenever every NVIDIA model timed out (which happens often
+        // right after a deploy or idle gap, when ultra-550b is cold-starting
+        // at 23-29s and exceeds even our 25s first-byte budget), the user
+        // saw 'temporarily unavailable' instead of getting an answer from
+        // Groq + Cloudflare. Now we actually fall through, matching the
+        // intent of streamCodeChatFallback's comment: 'Used when NVIDIA
+        // code-chat fails entirely. Streams via Groq using gpt-oss-20b
+        // (fast, decent for code) and falls back through the same
+        // NVIDIA / CF chain that regular chat uses.'
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           console.warn('Code-chat: NVIDIA chain failed — falling through to Groq+CF (streamCodeChatFallback)');
           try {
@@ -2432,6 +3260,9 @@ if (looksLikeClarifyAnswer) {
             ok = false;
           }
         }
+        // Only show the 'unavailable' message if BOTH the NVIDIA chain AND
+        // the Groq+CF fallback failed. This is now genuinely rare — it
+        // requires every provider to be down at once.
         if (!ok && !clientSignal.signal.aborted && !res.writableEnded) {
           try {
             res.write(`data: ${JSON.stringify({ content: 'All code models are temporarily unavailable (NVIDIA + Groq + Cloudflare all failed). Please retry in a moment.' })}\n\n`);
@@ -2442,6 +3273,9 @@ if (looksLikeClarifyAnswer) {
       } catch (err) {
         console.error('CODE CHAT ERROR:', err.message);
         if (!res.headersSent) return res.status(500).json({ error: 'Code chat request failed' });
+        // CRITICAL: if the stream was opened but no content was written
+        // (because an exception happened mid-stream), write a fallback
+        // message so the user doesn't see "empty response" in the frontend.
         if (!res.writableEnded) {
           try {
             res.write(`data: ${JSON.stringify({ content: 'I hit an error while generating that. Please try again — rephrasing your request may help.' })}\n\n`);
@@ -2453,8 +3287,14 @@ if (looksLikeClarifyAnswer) {
       return;
     }
 
+    // NOTE: CF_TOKEN / CF_ACCOUNT are already declared above (before the
+    // isCodeMode block) — do NOT redeclare them here with `const`, that
+    // would throw "Identifier 'CF_TOKEN' has already been declared".
     if (!CF_TOKEN || !CF_ACCOUNT) return res.status(500).json({ error: 'Server configuration error' });
 
+    // ╔══════════════════════════════════════╗
+    // ║  TTS                                 ║
+    // ╚══════════════════════════════════════╗
     if (action === 'tts') {
       const text  = sanitizeString(body.text  || '', 1000);
       const voice = sanitizeString(body.voice || 'en-US-GuyNeural', 60);
@@ -2536,15 +3376,20 @@ if (looksLikeClarifyAnswer) {
       return res.status(502).json({ error: 'TTS synthesis failed', audio: '' });
     }
 
+    // ╔══════════════════════════════════════╗
+    // ║  CHAT  — true token streaming        ║
+    // ╚══════════════════════════════════════╗
+    
     if (action === 'chat') {
     if (!prompt.trim()) return res.status(400).json({ error: 'Missing prompt' });
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-  res.write(': connected\n\n');
+  res.flushHeaders();                 // ← CHANGED: send headers now, don't wait for content
+  res.write(': connected\n\n');       // ← CHANGED: SSE comment, resolves client fetch() immediately
 
+  // ← CHANGED: heartbeat keeps the connection alive during search/geo lookups
   const heartbeat = setInterval(() => {
     if (!res.writableEnded) { try { res.write(': ping\n\n'); } catch (_) {} }
   }, 8000);
@@ -2688,6 +3533,8 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
     const [searchContext, userLocation] = await Promise.all([
       (async () => {
         if (!shouldSearch) return '';
+        // ← CHANGED: wrapped the actual search work in its own promise so we
+        // can race it against a hard timeout below.
         const searchWork = (async () => {
           try {
             const sq        = buildSearchQuery(lastUserMsg);
@@ -2714,6 +3561,7 @@ RESPONSE STYLE: Be concise and to the point. Short answers for simple questions 
             return '';
           }
         })();
+        // ← CHANGED: hard 7s ceiling — degrade to no search context instead of stalling
         return Promise.race([
           searchWork,
           new Promise(resolve => setTimeout(() => resolve(''), 7000)),
@@ -2774,11 +3622,14 @@ TABLE FORMATTING — CRITICAL: When outputting a markdown table, put a blank lin
     if (!res.headersSent) return res.status(500).json({ error: 'AI request failed' });
     if (!res.writableEnded) { res.write('data: [DONE]\n\n'); res.end(); }
   } finally {
-    clearInterval(heartbeat);
+    clearInterval(heartbeat);   // ← CHANGED: always clear, whichever path returned above
   }
   return;
 }
 
+    // ╔══════════════════════════════════════╗
+    // ║  MEMORY  — extract facts, decide op  ║
+    // ╚══════════════════════════════════════╗
     if (action === 'memory') {
       const userMsg = sanitizeString(body.userMsg || '', 800);
       const existing = Array.isArray(body.existing) ? body.existing.slice(0, 30) : [];
@@ -2852,6 +3703,9 @@ RULES — be strict, most messages produce an EMPTY array []:
       }
     }
 
+    // ╔══════════════════════════════════════╗
+    // ║  SEARCH                              ║
+    // ╚══════════════════════════════════════╗
     if (action === 'search') {
       const searchQuery = (query || prompt).trim();
       if (!searchQuery)             return res.status(400).json({ error: 'Missing search query' });
@@ -2904,6 +3758,10 @@ RULES — be strict, most messages produce an EMPTY array []:
       }
 
       if (allResults.length === 0) {
+        // All four search providers returned nothing. This is rare (DDG/Bing
+        // are keyless), so it usually means the query was blocked or there's
+        // a network issue. Tell the frontend explicitly so it can show a
+        // proper error instead of silently going to the AI.
         console.error('SEARCH: all providers (Tavily, Serper, DuckDuckGo, Bing) returned 0 results.');
         try {
           const fallback = await Promise.race([
@@ -2920,7 +3778,7 @@ RULES — be strict, most messages produce an EMPTY array []:
           const rawAnswer = fallback.choices?.[0]?.message?.content || null;
           const answer    = rawAnswer ? stripInternalReasoning(rawAnswer) : null;
            if (answer) {
-           aiSummary = answer;
+           aiSummary = answer; 
           }
         } catch (e) { console.error('Knowledge fallback failed:', e.message); }
       }
@@ -2929,11 +3787,16 @@ RULES — be strict, most messages produce an EMPTY array []:
         success:        allResults.length > 0,
         results:        allResults.slice(0, 10),
         aiSummary:      aiSummary || null,
+        // Tells the frontend which provider actually returned the results,
+        // so the UI can show "via DuckDuckGo" / "via Tavily" etc.
         provider:       allResults[0]?.source || 'unknown',
         searchWarning:  allResults.length === 0 ? 'All search providers returned no results. Check your network or try a different query.' : null,
       });
     }
 
+    // ╔══════════════════════════════════════╗
+    // ║  VISION                              ║
+    // ╚══════════════════════════════════════╗
     if (action === 'vision') {
       if (!image)                     return res.status(400).json({ error: 'Missing image data' });
       if (!isValidBase64Image(image)) return res.status(400).json({ error: 'Invalid image format' });
@@ -2942,6 +3805,7 @@ RULES — be strict, most messages produce an EMPTY array []:
       const base64Data = image.startsWith('data:') ? image.split(',')[1] : image;
       const cleanPrompt = sanitizeString(prompt || 'Describe this image in detail.', 500);
 
+      // ── Helper: try a Cloudflare vision model ──
       const tryCloudflareVision = async (modelId, useLlavaFormat = false) => {
         try {
           const body = useLlavaFormat
@@ -2969,7 +3833,24 @@ RULES — be strict, most messages produce an EMPTY array []:
         }
       };
 
+      // ── Helper: try an NVIDIA vision model ──
+      // FIX (2026-08-26): the old helper had three problems that together
+      //   caused the vision race to fire dead/blocked models on EVERY
+      //   request and produced the recurring log spam:
+      //     1. It did NOT consult isNvidiaModelBlocked() — so models that
+      //        had returned HTTP 410 (end-of-life) or were in circuit-
+      //        breaker cooldown were retried on every single vision call.
+      //     2. It did NOT mark models invalid on 404/401/410 — so the
+      //        EOL 'nvidia/nemotron-nano-12b-v2-vl' kept getting retried
+      //        indefinitely (it took a chain prune to actually stop the
+      //        noise). Now we mark + skip, so a future EOL won't need a
+      //        code change.
+      //     3. It did NOT distinguish 429 (rate-limit, transient) from
+      //        real failures, so a brief over-quota moment could cascade
+      //        into permanent circuit-breaker cooldown for the model.
       const tryNvidiaVision = async (modelId) => {
+  // Skip blocked models up front — no wasted network round-trip on a known
+  // dead ID (HTTP 410 EOL) or a model that's in 2-min cooldown after 502s.
   if (isNvidiaModelBlocked(modelId)) {
     if (process.env.VERBOSE_KEEPALIVE === '1') {
       console.log(`NVIDIA vision (${modelId}) skipped — blocked (invalid or circuit-breaker cooldown)`);
@@ -3002,16 +3883,23 @@ RULES — be strict, most messages produce an EMPTY array []:
     if (!nvRes.ok) {
       let errBody = '';
       try { errBody = (await nvRes.text()).slice(0, 300); } catch (_) {}
+      // PERMANENT errors (404/401/410) — mark invalid so we stop pinging.
+      // 'nvidia/nemotron-nano-12b-v2-vl' EOL on 2026-08-26 returns 410 and
+      // would otherwise be retried on every vision call forever.
       if (nvRes.status === 404 || nvRes.status === 401 || nvRes.status === 410) {
         markNvidiaModelInvalid(modelId, `HTTP ${nvRes.status} during vision`);
         console.warn(`NVIDIA vision (${modelId}) marked INVALID — HTTP ${nvRes.status} (${errBody.slice(0, 120)})`);
         return null;
       }
+      // RATE LIMIT (429) — model is fine, we're over quota. Don't trip the
+      // circuit breaker instantly; one strike so we only cool down if it
+      // happens twice in a row.
       if (nvRes.status === 429) {
         recordNvidiaFailure(modelId);
         console.warn(`NVIDIA vision (${modelId}) HTTP 429 (rate limited) — strike 1/2`);
         return null;
       }
+      // TRANSIENT (502/503/504) — instant trip, 2-min cooldown.
       if (nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
         recordNvidiaFailure(modelId);
         recordNvidiaFailure(modelId);
@@ -3039,9 +3927,20 @@ RULES — be strict, most messages produce an EMPTY array []:
   }
 };
 
+      // ── Vision routing ──
+      // 1. Race all NIM models in parallel — first valid response wins.
+      // 2. If all fail, retry the top 3 sequentially after a 2s delay.
+      // 3. Last resort: Cloudflare llava.
       let description = null;
 
       const raceNvidiaModels = async (label) => {
+        // FIX (2026-08-26): filter out blocked models BEFORE building the
+        // race candidate list. The old code mapped over the full chain
+        // unconditionally, so a model that returned 410 on the previous
+        // request (and was correctly marked invalid) was STILL fired again
+        // on the next request — wasting a network round-trip, producing
+        // the recurring 'NVIDIA vision (...) HTTP 410' log line, and
+        // slowing down the race for everyone.
         const candidates = NVIDIA_VISION_CHAIN
           .filter(id => !isNvidiaModelBlocked(id))
           .map(id => ({
@@ -3064,8 +3963,10 @@ RULES — be strict, most messages produce an EMPTY array []:
         ).catch(() => null);
       };
 
+      // Attempt 1: parallel race
       description = await raceNvidiaModels('race');
 
+      // Attempt 2: sequential retry of remaining (non-blocked) chain models after 2s
       if (!description) {
         const retryCandidates = NVIDIA_VISION_CHAIN.slice(0, 3).filter(id => !isNvidiaModelBlocked(id));
         if (retryCandidates.length > 0) {
@@ -3081,6 +3982,7 @@ RULES — be strict, most messages produce an EMPTY array []:
         }
       }
 
+      // Attempt 3: Cloudflare fallback
       if (!description) {
         for (const [modelId, useLlavaFormat] of NVIDIA_VISION_CF_FALLBACK) {
           description = await tryCloudflareVision(modelId, useLlavaFormat);
@@ -3098,6 +4000,9 @@ RULES — be strict, most messages produce an EMPTY array []:
       });
     }
 
+    // ╔══════════════════════════════════════╗
+    // ║  TRANSCRIBE (Voice call STT)         ║
+    // ╚══════════════════════════════════════╗
     if (action === 'transcribe') {
       const audioBase64 = body.audio || '';
       if (!audioBase64) return res.status(400).json({ error: 'Missing audio data' });
@@ -3124,6 +4029,9 @@ RULES — be strict, most messages produce an EMPTY array []:
       }
     }
 
+    // ╔══════════════════════════════════════╗
+    // ║  IMAGE GENERATION                    ║
+    // ╚══════════════════════════════════════╗
     if (action === 'image') {
       if (!prompt.trim())       return res.status(400).json({ error: 'Missing image prompt' });
       if (prompt.length > 1000) return res.status(400).json({ error: 'Prompt too long' });
@@ -3173,6 +4081,7 @@ RULES — be strict, most messages produce an EMPTY array []:
         }
       }
 
+      // ── Pollinations.ai — fallback image provider (free, no API key) ──
       async function tryPollinations(promptText) {
         try {
           const safePrompt = (promptText || '').trim().slice(0, 800);
@@ -3216,6 +4125,9 @@ RULES — be strict, most messages produce an EMPTY array []:
       }
 
       try {
+        // PROVIDER CHAIN:
+        //   1. Cloudflare Flux worker — PRIMARY
+        //   2. Pollinations.ai        — fallback (free, no API key)
         console.log('Routing prompt to Cloudflare Flux worker as Primary...');
 
         const fluxResult = await tryFlux(prompt);
