@@ -789,7 +789,7 @@ function setGroqCooldown(model, retryAfterSec = 30, isRealRateLimit = false) {
   console.log(`Cooling down ${model} for ${capped}s (realRateLimit=${isRealRateLimit})`);
 }
 
-function parseRetryAfterSec(errMessage) {
+function parseRetryAfterSecFromMessage(errMessage) {
   const match = errMessage?.match(/try again in ([\d.]+)s/i);
   return match ? parseFloat(match[1]) : 30;
 }
@@ -1366,8 +1366,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
         if (isTimeout) {
         try { setGroqCooldown(modelToTry, 5, false); } catch(_) {}   
     }
-        if (eg?.status === 429 || /rate_limit_exceeded|tokens per day|TPD/i.test(eg?.message || '')) {
-        const waitSec = parseRetryAfterSec(eg.message);
+        if (e.status === 429 || e.message?.includes('rate_limit_exceeded') || /tokens per day|TPD/i.test(e.message || '')) {
+        const waitSec = parseRetryAfterSecFromMessage(e.message);
         setGroqCooldown(modelToTry, waitSec, true);
         // If the error mentions "tokens per day" (TPD exhausted, not just
         // a transient 429), mark THIS key as dead so future requests
@@ -1432,8 +1432,8 @@ async function streamAI(groq, messages, res, { CF_TOKEN, CF_ACCOUNT, clientSigna
       }
     } catch (e) {
       console.error(`Groq stream failed (${modelToTry}):`, e.message);
-      if (e.status === 429 || e.message?.includes('rate_limit_exceeded') || /tokens per day|TPD/i.test(e.message || '')) {
-        const waitSec = parseRetryAfterSec(e.message);
+      if (eg?.status === 429 || /rate_limit_exceeded|tokens per day|TPD/i.test(eg?.message || '')) {
+        const waitSec = parseRetryAfterSecFromMessage(eg.message);
         setGroqCooldown(modelToTry, waitSec, true);
         // TPD exhausted on this key → mark it dead so future requests rotate.
         if (/tokens per day|TPD/i.test(e.message || '')) {
