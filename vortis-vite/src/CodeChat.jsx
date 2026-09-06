@@ -5768,7 +5768,12 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
   display: 'flex', justifyContent: 'center',
   }}>
 
-  <div style={{ maxWidth: sidebarOpen ? 680 : 820, width: '100%', boxSizing: 'border-box', transition: 'max-width .25s ease' }}>
+  <div style={{
+  maxWidth: hasProject
+    ? (sidebarOpen ? 'clamp(760px, 66vw, 1080px)' : 'clamp(800px, 70vw, 1200px)')
+    : (sidebarOpen ? 'clamp(600px, 50vw, 780px)' : 'clamp(640px, 52vw, 840px)'),
+  width: '100%', boxSizing: 'border-box', transition: 'max-width .25s ease',
+}}>
 
               {/* Editing banner — shows when the user is editing a previous
                   message. Lets them cancel and keep the original intact. */}
