@@ -2303,7 +2303,49 @@ const linkifyMarkdownUrls = (md) => {
   }).join('');
 };
 
-const MsgContent = ({ text, onRetryImage, onUpgradeClick }) => {
+const CollapsibleUserText = ({ text }) => {
+  const [expanded, setExpanded] = useState(false);
+  const lineCount = (text || '').split('\n').length;
+  const isLong = lineCount > 6 || (text || '').length > 380;
+  const showFull = !isLong || expanded;
+
+  return (
+    <div style={{ position: 'relative', width: 'fit-content', maxWidth: '100%' }}>
+      <div
+        className="bubble-user"
+        style={{
+          maxHeight: showFull ? 'none' : 132,
+          overflow: showFull ? 'visible' : 'hidden',
+          maskImage: !showFull ? 'linear-gradient(to bottom, #000 55%, transparent 100%)' : 'none',
+          WebkitMaskImage: !showFull ? 'linear-gradient(to bottom, #000 55%, transparent 100%)' : 'none',
+          transition: 'max-height .25s ease',
+        }}
+      >
+        {linkifyText(text)}
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            marginTop: 5, marginLeft: 'auto',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            color: 'rgba(224,231,255,.8)', fontSize: 12, fontWeight: 600,
+            fontFamily: 'var(--font-main)', padding: '2px 4px',
+          }}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+          <ChevronDown
+            size={13}
+            style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }}
+          />
+        </button>
+      )}
+    </div>
+  );
+};
+
+  const MsgContent = ({ text, onRetryImage, onUpgradeClick }) => {
   const contentRef = React.useRef(null);
 
   if (!text) return null;
@@ -8934,7 +8976,7 @@ return (
 
 
  {!hasCode ? (
-    <div className="bubble-user">{linkifyText(bodyText)}</div>
+    <CollapsibleUserText text={bodyText}/>
    ) : (
         parts.map((p, i) =>
           p.type === 'code'
