@@ -201,6 +201,14 @@ const NVIDIA_CODE_CHAINS = {
   trivial:  [NVIDIA_CODE_MODEL_FAST,  NVIDIA_CHAT_MODEL_QUALITY], 
 };
 
+// v3 (2026-09-06): "no more questions" directive detection — matches full
+// AND abbreviated forms ("no more q", "no q", "no ques"). The user's
+// tic-tac-toe request used the abbreviated form, which slipped past the
+// frontend prompt's phrase list. The code-chat route uses this to append a
+// server-side HARD OVERRIDE forbidding <<<ASK>>> clarify blocks for the
+// rest of the conversation.
+const NO_CLARIFY_DIRECTIVE_RX = /\b(no\s*more\s*(q|ques|questions?|clarifying)|no\s+(q|ques|questions?)\b|stop\s*asking|don'?t\s*ask\b|never\s*ask\b|skip\s+(the\s+)?(clarifying\s+)?(pref|questions?)|use\s+(your|own)\s+judg?e?ment)\b/i;
+
 function pickHeavyChain() {
   const heavyValid   = !isNvidiaModelInvalid(NVIDIA_CODE_MODEL_HEAVY);
   const qualityValid = !isNvidiaModelInvalid(NVIDIA_CHAT_MODEL_QUALITY);
@@ -624,6 +632,73 @@ function recordNvidiaSuccess(model) {
   }
 }
 
+// ── NVIDIA ACCOUNT-LEVEL 429 BACKOFF (v3, 2026-09-06) ───────────
+// Production logs for the "tic tac toe" request showed HTTP 429 hitting
+// DIFFERENT models on the same key at the same instant: deepseek AND
+// nemotron were both rejected ~400ms after boot, and both rejected again
+// during the request while kimi-k3's long attempt was in flight. Per-model
+// TPM limits can't explain that — NVIDIA NIM enforces limits at the
+// ACCOUNT/KEY level (concurrent requests + aggregate rate). A per-model
+// circuit breaker is the wrong tool for this: it blocks individual models
+// while the chain still burns 25s+ of doomed attempts before falling back
+// to Groq.
+//
+// The account backoff is one shared window:
+//   - 1st 429 → light window (30s): warmups/pings pause, chain skips NVIDIA.
+//   - any 429 while a window is active → escalated window (90s, or the
+//     server's Retry-After when it provides one).
+// During an active window:
+//   - warmUpNvidiaModel / pingNvidiaModel skip (logged once per window).
+//   - tryNvidiaChat returns null immediately.
+//   - streamNvidiaGLMOnly (the code-chat chain) returns false immediately,
+//     so the caller falls through to Groq+CF in milliseconds instead of
+//     burning three doomed attempts (the old behavior wasted ~60s on the
+//     tic-tac-toe request before Groq answered).
+const NVIDIA_ACCOUNT_429_LIGHT_MS = 30 * 1000;
+const NVIDIA_ACCOUNT_429_FULL_MS  = 90 * 1000;
+const nvidiaAccount429 = { until: 0, strikes: 0, lastSource: '', loggedSkip: false };
+
+function nvidiaAccount429RemainingMs() {
+  return Math.max(0, nvidiaAccount429.until - Date.now());
+}
+function nvidiaAccount429Active() {
+  return Date.now() < nvidiaAccount429.until;
+}
+// Retry-After is optional; NIM usually omits it and just says 429.
+function parseRetryAfterSec(res) {
+  try {
+    const v = res?.headers?.get?.('retry-after');
+    const n = v ? Number(v) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch (_) { return null; }
+}
+function noteNvidia429(source, retryAfterSec) {
+  const now = Date.now();
+  const inWindow = now < nvidiaAccount429.until;
+  nvidiaAccount429.strikes = inWindow ? nvidiaAccount429.strikes + 1 : 1;
+  nvidiaAccount429.lastSource = source;
+  nvidiaAccount429.loggedSkip = false; // re-arm the one-shot "pings paused" log
+  const ms = retryAfterSec
+    ? Math.min(retryAfterSec * 1000, 5 * 60 * 1000)
+    : (nvidiaAccount429.strikes >= 2 ? NVIDIA_ACCOUNT_429_FULL_MS : NVIDIA_ACCOUNT_429_LIGHT_MS);
+  nvidiaAccount429.until = Math.max(nvidiaAccount429.until, now + ms);
+  console.warn(`NVIDIA 429 backoff: account cooldown ${Math.round((nvidiaAccount429.until - now) / 1000)}s active (strike ${nvidiaAccount429.strikes}, source: ${source}${retryAfterSec ? `, Retry-After ${retryAfterSec}s` : ''}) — pings/warmups paused, code-chat falls to Groq until it clears`);
+}
+
+// Real (user-facing) NVIDIA requests currently in flight on this key.
+// pingNvidiaModel checks this counter and holds pings so background traffic
+// never competes with real requests for the per-key concurrency budget
+// (the 2026-09-06 logs show a nemotron keep-alive firing mid-chain, both
+// colliding into 429s). Single process → a plain counter is sufficient.
+let nvidiaRealRequestsInFlight = 0;
+
+// Boot warmup coordination: warmUp() assigns nvidiaBootWarmupSettle (a
+// promise) and flips nvidiaBootWarmupRunning while the sequential warmup
+// chain is in progress. startNvidiaKeepAlive waits (max 150s) for settle,
+// and pings hold while the warmup chain is running.
+let nvidiaBootWarmupSettle = null;
+let nvidiaBootWarmupRunning = false;
+
 
 const CF_CHAT_MODELS = [
   '@cf/meta/llama-3.2-3b-instruct',
@@ -1007,6 +1082,15 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
     console.log(`NVIDIA model ${modelId} skipped — circuit breaker open`);
     return null;
   }
+  // v3: skip while the account-level 429 backoff window is active — the
+  // request would just be rejected again and waste a round-trip.
+  if (nvidiaAccount429Active()) {
+    console.log(`NVIDIA model ${modelId} skipped — account-level 429 backoff (${Math.round(nvidiaAccount429RemainingMs() / 1000)}s remaining)`);
+    return null;
+  }
+  // v3: real-request counter — keep-alive pings hold while this is in
+  // flight so background traffic never competes for the per-key budget.
+  nvidiaRealRequestsInFlight++;
   try {
     const res = await fetchWithTimeout(
       `${NVIDIA_BASE_URL}/chat/completions`,
@@ -1048,6 +1132,14 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
         console.warn(`NVIDIA model ${modelId} HTTP ${res.status} — instant circuit breaker trip — unavailable (2 min cooldown)`);
         return null;
       }
+      // v3: 429 is account-level, not per-model — feed the account backoff
+      // instead of striking this model's breaker (a rate-limited key is not
+      // a broken model).
+      if (res.status === 429) {
+        noteNvidia429(`chat ${modelId}`, parseRetryAfterSec(res));
+        console.warn(`NVIDIA model ${modelId} HTTP 429 (rate limited) — account backoff engaged`);
+        return null;
+      }
       // Other non-OK statuses (400/402/405/etc.) — single failure count.
       // Most of these are bad request bodies; the model is fine. But we
       // count one strike so a persistently-misbehaving model still gets
@@ -1080,6 +1172,8 @@ async function tryNvidiaChat(modelId, messages, maxTokens, clientSignal, timeout
       recordNvidiaFailure(modelId);
     }
     return null;
+  } finally {
+    nvidiaRealRequestsInFlight = Math.max(0, nvidiaRealRequestsInFlight - 1);
   }
 }
 
@@ -1612,6 +1706,17 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
     return false;
   }
 
+  // v3 (2026-09-06): if the account-level 429 backoff window is active, do
+  // NOT burn 25s+ of doomed cold-start waits + 429 round-trips on this
+  // chain — return false immediately so the caller falls through to the
+  // Groq+CF fallback (which answers in ~1s). Production evidence: the
+  // "tic tac toe" request spent ~60s discovering what the boot warmup 429s
+  // already knew — the key was rate-limited.
+  if (nvidiaAccount429Active()) {
+    console.warn(`Code-chat stream: NVIDIA skipped — account-level 429 backoff active (${Math.round(nvidiaAccount429RemainingMs() / 1000)}s remaining, last source: ${nvidiaAccount429.lastSource || 'unknown'}) — going straight to Groq/CF`);
+    return false;
+  }
+
   // MAX_CONTINUATIONS: how many times one model attempt may auto-continue
   // a truncated response. Raised 4 → 8 (2026-09-06 v2) so very long
   // multi-file projects never hit an artificial ceiling — NIM bills by
@@ -1684,6 +1789,13 @@ if (modelsToTry.length === 0) {
 }
 console.log(`Code-chat stream: chain=${chainName} will try [${modelsToTry.join(', ')}]`);
 
+// v3: mark a real user request as in-flight for its whole lifetime on the
+// NVIDIA chain — pingNvidiaModel() checks this counter and holds pings so
+// background traffic never competes with real requests for the per-key
+// concurrency budget.
+nvidiaRealRequestsInFlight++;
+try {
+
 
 // FIX (2026-08-26): 35s → 75s. The old 35s ceiling was the direct cause
 // of 'all NVIDIA models failed — caller should try Groq/CF fallback' firing
@@ -1717,6 +1829,7 @@ for (const nvidiaModel of modelsToTry) {
     let fullRawBuffer = '';
     let attemptFailed = false;
     let failureWasTimeout = false;  // true if the failure was a first-byte/idle timeout (not a real error)
+    let failureRecorded = false;   // v3: one strike per attempt — prevents the double-count that tripped the breaker on a single 429
     let idleTimer = null;
     let headersTimerCleared = false;
     let finishReason = null;
@@ -1766,6 +1879,7 @@ for (const nvidiaModel of modelsToTry) {
           // returns true forever for it.
           if (nvRes.status === 404 || nvRes.status === 401 || nvRes.status === 410) {
             markNvidiaModelInvalid(nvidiaModel, `HTTP ${nvRes.status}`);
+            failureRecorded = true; // invalid registry already handles it — no extra strike below
             attemptFailed = true;
             break;
           }
@@ -1779,8 +1893,21 @@ for (const nvidiaModel of modelsToTry) {
           // of cause, blocking a perfectly-good model just because we
           // briefly over-queried it.
           if (nvRes.status === 429) {
+            // v3 FIX (2026-09-06): 429s observed hitting MULTIPLE models on
+            // the same key at the same instant = account/key-level limit,
+            // not a per-model problem. Two changes:
+            //   1. Exactly ONE strike for this attempt. The old code recorded
+            //      a SECOND strike in the post-attempt block below, so a
+            //      single 429 instantly tripped the 2-strike breaker despite
+            //      the log claiming "cooldown only if hit again".
+            //   2. Feed the account-level backoff (noteNvidia429) so warmups,
+            //      keep-alive pings, and any later chain attempts stop
+            //      burning doomed requests — callers fall to Groq
+            //      immediately while the window is active.
             recordNvidiaFailure(nvidiaModel);
-            console.warn(`Code-chat: ${nvidiaModel} HTTP 429 (rate limited) — circuit breaker strike 1/2 (cooldown only if hit again)`);
+            failureRecorded = true;
+            noteNvidia429(`code-chat ${nvidiaModel}`, parseRetryAfterSec(nvRes));
+            console.warn(`Code-chat: ${nvidiaModel} HTTP 429 (rate limited) — one strike recorded, account backoff engaged`);
             attemptFailed = true;
             break;
           }
@@ -1790,6 +1917,7 @@ for (const nvidiaModel of modelsToTry) {
           if (nvRes.status === 502 || nvRes.status === 503 || nvRes.status === 504) {
             recordNvidiaFailure(nvidiaModel);
             recordNvidiaFailure(nvidiaModel);
+            failureRecorded = true; // the two records above are the intended instant-trip — don't add a third below
             console.warn(`Code-chat: ${nvidiaModel} HTTP ${nvRes.status} — instant circuit breaker trip — unavailable (2 min cooldown)`);
           }
           attemptFailed = true;
@@ -2111,9 +2239,15 @@ for (const nvidiaModel of modelsToTry) {
     // and prevent the keep-alive from warming it. The next request should
     // still try it (it might be warm by then).
     if (!clientSignal?.aborted) {
-      if (!failureWasTimeout) {
+      if (!failureWasTimeout && !failureRecorded) {
+        // v3: only record if no earlier handler in THIS attempt already did
+        // (429 / 5xx instant-trip / markInvalid paths) — restores the
+        // intended "2 real failures = cooldown" semantics instead of
+        // "1 failure = cooldown".
         recordNvidiaFailure(nvidiaModel);
         console.warn(`Code-chat: ${nvidiaModel} produced nothing (real error) — trying next model`);
+      } else if (!failureWasTimeout && failureRecorded) {
+        console.warn(`Code-chat: ${nvidiaModel} failed (strike already recorded this attempt) — trying next model`);
       } else {
         console.warn(`Code-chat: ${nvidiaModel} timed out (cold/slow, not broken) — trying next model, circuit breaker NOT tripped`);
       }
@@ -2123,6 +2257,10 @@ for (const nvidiaModel of modelsToTry) {
   console.error('Code-chat stream: all NVIDIA models failed — caller should try Groq/CF fallback');
   // Do NOT end the response here — the caller owns the fallback chain.
   return false;
+  } finally {
+    // Release the real-request slot (fires on every return above too).
+    nvidiaRealRequestsInFlight = Math.max(0, nvidiaRealRequestsInFlight - 1);
+  }
 }
 
 // ── Code-chat Groq fallback ─────────────────────────────────────
@@ -2705,6 +2843,13 @@ app.get('/debug/nvidia-health', (req, res) => {
     transient_failures: transient,
     warm_state: warm,
     keepalive_in_flight: [...nvidiaKeepaliveInFlight],
+    account_429: {
+      active: nvidiaAccount429Active(),
+      remaining_sec: Math.round(nvidiaAccount429RemainingMs() / 1000),
+      strikes: nvidiaAccount429.strikes,
+      last_source: nvidiaAccount429.lastSource || null,
+      real_requests_in_flight: nvidiaRealRequestsInFlight,
+    },
   });
 });
 
@@ -2757,68 +2902,61 @@ async function warmUp() {
       NVIDIA_CHAT_MODEL_QUALITY,
     ].filter(m => !isNvidiaModelInvalid(m)))];
 
-    for (const modelId of modelsToWarm) {
-      // Ultra-550b is a 550B MoE that takes 25-90s to cold-start on NIM.
-      // The old 90s timeout was STILL right at the edge — your warmup logs
-      // showed "This operation was aborted" on the first attempt followed
-      // by a successful retry at 1085-2360ms. That's because cold-start on
-      // a freshly-deployed NIM endpoint can take up to 120s on the very
-      // first request after deploy. 150s gives comfortable headroom so
-      // the first attempt succeeds instead of falling through to the
-      // 10-second retry delay. Once warm, pings drop to 5-15s and the
-      // timeout never fires.
-      // FIX: stepfun (quality model) was timing out at 30s during warmup,
-      // triggering 'This operation was aborted' on every warmup attempt.
-      // Cold-start on NIM endpoints can legitimately take 30-60s on the
-      // first request after deploy. Give stepfun 60s of headroom (matches
-      // the keep-alive timeout for the quality slot) instead of the 30s
-      // default for non-heavy models. Heavy (ultra-550b) still gets 150s
-      // because it's a 550B MoE that takes even longer to cold-start.
-      // UPDATED 2026-09-06 (v2): heavy is now kimi-k3 (60s warmup budget
-      // for a flagship MoE cold-start), quality is deepseek-v4-pro-0813
-      // (55s — its cold-start on NIM legitimately takes 40s+ right after
-      // a deploy/idle gap, which is exactly the "This operation was
-      // aborted" warmup noise in the logs; it is NOT broken), others 30s.
-      const timeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000
-                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 55000
-                    : 30000;
+    // v3 FIX (2026-09-06): warm ONE MODEL AT A TIME. The old fire-and-forget
+    // loop sent all three warmup POSTs simultaneously, and the production
+    // "tic tac toe" logs show exactly what that does: deepseek AND nemotron
+    // both got instant HTTP 429s (~400ms) on the same key at the same moment —
+    // NVIDIA NIM enforces a per-key CONCURRENT-request cap, and three parallel
+    // warmups blow through it before any model has even loaded. The 429 storm
+    // then poisoned the whole chain: the user's first request burned ~60s on
+    // doomed attempts before falling to Groq. Sequential warmups cost a
+    // little boot time (fast model is first, so standard/trivial chains get
+    // a warm model quickly) but stop the storm at the source. Warmups also
+    // hold while a real user request is in flight (see warmUpNvidiaModel)
+    // and while the account-level 429 backoff is active.
+    const retryWarmup = async (modelId, timeout, attempt, maxAttempts) => {
+      const result = await warmUpNvidiaModel(modelId, timeout);
+      if (result.ok || attempt >= maxAttempts) return result;
+      // Back off but don't retry more than twice total — 3 full attempts at
+      // 60s each was burning ~3 minutes of background fetch time per
+      // deploy/restart, competing with real user requests for bandwidth.
+      await new Promise(r => setTimeout(r, 5000));
+      console.log(`NVIDIA warmup: retrying ${modelId} (attempt ${attempt + 1}/${maxAttempts})...`);
+      return retryWarmup(modelId, timeout, attempt + 1, maxAttempts);
+    };
 
-      // RETRY LOOP: if the warmup fails with a transient error (502/503/504/
-      // timeout), retry up to 3 times with increasing delay. This gets ultra
-      // warmed as soon as NVIDIA brings it back online, instead of waiting
-      // 70s for the keep-alive. The old code gave up after 1 attempt and
-      // waited for keep-alive — if ultra was temporarily down (502), it
-      // stayed cold for 70s+, and heavy requests fell to lightning (slower
-      // for complex code).
-      // Fixed — cap the warmup timeout much lower (this is a background task,
-// not a user-facing request — no reason to wait 60s per attempt), and
-// stop retrying once it's clear this model just isn't answering.
-const retryWarmup = async (modelId, timeout, attempt, maxAttempts) => {
-  const result = await warmUpNvidiaModel(modelId, timeout);
-  if (result.ok || attempt >= maxAttempts) return result;
-  // Back off but don't retry more than twice total — 3 full attempts at
-  // 60s each was burning ~3 minutes of background fetch time per
-  // deploy/restart, competing with real user requests for bandwidth.
-  await new Promise(r => setTimeout(r, 5000));
-  console.log(`NVIDIA warmup: retrying ${modelId} (attempt ${attempt + 1}/${maxAttempts})...`);
-  return retryWarmup(modelId, timeout, attempt + 1, maxAttempts);
-};
-
-      retryWarmup(modelId, timeout, 1, 2).then(({ ok, ms }) => {
-        if (!ok) {
-          // v2: say WHY the warmup gave up. "not ready after 0ms" (the log
-          // that looked like a bug) means the model is already in the
-          // invalid registry — the warmup short-circuits without a network
-          // call (e.g. GLM-5.2 after its 410 end-of-life, or a 404 key-tier
-          // issue). Anything else is a real timeout/HTTP failure.
-          const invalidEntry = nvidiaEolModels.get(modelId);
-          const invalidNote = invalidEntry
-            ? ` — marked invalid: ${invalidEntry.reason || 'unknown'} (auto-retries after TTL)`
-            : (modelId === NVIDIA_CODE_MODEL_HEAVY ? ' — will keep trying via keep-alive' : '');
-          console.log(`NVIDIA warmup skipped: ${modelId} not ready after ${ms}ms${invalidNote}`);
+    nvidiaBootWarmupSettle = (async () => {
+      nvidiaBootWarmupRunning = true;
+      try {
+        for (const modelId of modelsToWarm) {
+          // Per-model warmup budgets (unchanged from v2):
+          //   kimi-k3 (heavy) 60s — flagship MoE cold-start headroom;
+          //   deepseek-v4-pro (quality) 55s — its cold-start on NIM
+          //     legitimately takes 40s+ right after a deploy/idle gap (the
+          //     "This operation was aborted" warmup noise; it is NOT broken);
+          //   others 30s. Background task, not user-facing — budgets are
+          //   generous but finite, and the keep-alive keeps retrying after.
+          const timeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000
+                        : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 55000
+                        : 30000;
+          const { ok, ms } = await retryWarmup(modelId, timeout, 1, 2);
+          if (!ok) {
+            // v2: say WHY the warmup gave up. "not ready after 0ms" (the log
+            // that looked like a bug) means the model is already in the
+            // invalid registry — the warmup short-circuits without a network
+            // call (e.g. GLM-5.2 after its 410 end-of-life, or a 404 key-tier
+            // issue). Anything else is a real timeout/HTTP failure.
+            const invalidEntry = nvidiaEolModels.get(modelId);
+            const invalidNote = invalidEntry
+              ? ` — marked invalid: ${invalidEntry.reason || 'unknown'} (auto-retries after TTL)`
+              : (modelId === NVIDIA_CODE_MODEL_HEAVY ? ' — will keep trying via keep-alive' : '');
+            console.log(`NVIDIA warmup skipped: ${modelId} not ready after ${ms}ms${invalidNote}`);
+          }
         }
-      });
-    }
+      } finally {
+        nvidiaBootWarmupRunning = false;
+      }
+    })();
   } else {
     console.log('NVIDIA warmup skipped: NVIDIA_API_KEY not set');
   }
@@ -2834,6 +2972,18 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
   // invalid (e.g. a previous call returned 404). No point spending a
   // network round trip on a known-bad ID.
   if (isNvidiaModelInvalid(modelId)) {
+    return { ok: false, ms: 0 };
+  }
+  // v3: skip while the account-level 429 backoff is active — pinging now
+  // would just extend the rate-limit storm. The keep-alive retries after
+  // the window clears.
+  if (nvidiaAccount429Active()) {
+    console.log(`NVIDIA warmup ${modelId} deferred — account-level 429 backoff (${Math.round(nvidiaAccount429RemainingMs() / 1000)}s remaining)`);
+    return { ok: false, ms: 0 };
+  }
+  // v3: a real user request outranks a warmup — if one is in flight, defer
+  // this warmup (retryWarmup's next attempt or the keep-alive picks it up).
+  if (nvidiaRealRequestsInFlight > 0) {
     return { ok: false, ms: 0 };
   }
   const t0 = Date.now();
@@ -2946,9 +3096,13 @@ async function warmUpNvidiaModel(modelId, timeoutMs = 30000) {
       nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
       console.log(`NVIDIA warmup ${modelId} HTTP ${res.status} (transient — will retry via keep-alive) [${elapsed}ms]`);
     } else if (res.status === 429) {
-      // Rate limited — back off, don't count as failure.
+      // Rate limited — back off, don't count as per-model failure. v3: also
+      // feed the account-level backoff so the OTHER models' warmups and
+      // pings pause too (production logs show 429s hitting several models
+      // on the same key simultaneously).
+      noteNvidia429(`warmup ${modelId}`, parseRetryAfterSec(res));
       nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
-      console.log(`NVIDIA warmup ${modelId} HTTP 429 (rate limited — will retry via keep-alive) [${elapsed}ms]`);
+      console.log(`NVIDIA warmup ${modelId} HTTP 429 (rate limited — account backoff engaged, will retry via keep-alive) [${elapsed}ms]`);
     } else {
       // Other non-OK status (500, 400, etc.) — log with status.
       nvidiaWarmState.set(modelId, { warm: false, lastCheck: Date.now() });
@@ -2989,6 +3143,25 @@ async function pingNvidiaModel(modelId) {
   // isNvidiaModelBlocked already checks nvidiaEolModels, so this single
   // guard covers both transient cooldowns and permanent-invalid models.
   if (isNvidiaModelBlocked(modelId)) return;
+  // v3: pause ALL pings while the account-level 429 backoff window is
+  // active — pinging a rate-limited key just extends the storm and burns
+  // the exact budget real user requests need.
+  if (nvidiaAccount429Active()) {
+    if (!nvidiaAccount429.loggedSkip) {
+      nvidiaAccount429.loggedSkip = true;
+      console.log(`NVIDIA keep-alive: pings paused — account-level 429 backoff (${Math.round(nvidiaAccount429RemainingMs() / 1000)}s remaining)`);
+    }
+    return;
+  }
+  // v3: pause pings while a real user request is mid-flight on this key —
+  // the production 429 storm happened exactly here (keep-alive pings +
+  // code-chat attempts colliding on NVIDIA's per-key concurrency cap).
+  // A real request keeps its own model warm for its whole duration, so
+  // skipping the ping during it loses nothing.
+  if (nvidiaRealRequestsInFlight > 0) return;
+  // v3: pause pings while the boot warmup sequence is still running (same
+  // concurrency reasoning — don't stack pings on top of warmups).
+  if (nvidiaBootWarmupRunning) return;
   // Guard: don't fire a new ping for this model while an old one is
   // still in flight — this is what was causing overlapping 429s.
   if (nvidiaKeepaliveInFlight.has(modelId)) {
@@ -3062,9 +3235,19 @@ async function pingNvidiaModel(modelId) {
         }
       } catch (readErr) {
         // Stream read failed AFTER headers arrived — model is at least
-        // returning 200, so don't mark invalid. Count one transient fail.
-        console.warn(`NVIDIA keep-alive: ${modelId} stream read error:`, readErr.message);
-        recordNvidiaFailure(modelId);
+        // returning 200, so don't mark invalid. v3: an ABORT here is our own
+        // ping timeout (or a cancel), NOT a model problem — it must not
+        // strike the circuit breaker (the production log showed an aborted
+        // ping adding "failed 1/2" to the breaker). Only real read errors
+        // count.
+        if (/abort/i.test(String(readErr?.message || ''))) {
+          if (process.env.VERBOSE_KEEPALIVE === '1') {
+            console.log(`NVIDIA keep-alive: ${modelId} read aborted (ping timeout) — no strike recorded`);
+          }
+        } else {
+          console.warn(`NVIDIA keep-alive: ${modelId} stream read error:`, readErr.message);
+          recordNvidiaFailure(modelId);
+        }
         return;
       }
       recordNvidiaSuccess(modelId);
@@ -3078,8 +3261,12 @@ async function pingNvidiaModel(modelId) {
                           : 8000;  // fast/lightning
       if (ms > slowThreshold) console.log(`NVIDIA keep-alive: ${modelId} slow (${ms}ms — was warming)`);
     } else if (res.status === 429) {
-      // back off silently this cycle
+      // v3: feed the account-level backoff so warmups, other pings, and
+      // chain attempts all pause too — instead of each discovering the 429
+      // the hard way. (Old behavior: "back off silently this cycle" — but
+      // every OTHER ping and request kept firing into the same limited key.)
       try { await res.text(); } catch (_) {}
+      noteNvidia429(`keep-alive ${modelId}`, parseRetryAfterSec(res));
     } else if (res.status === 404 || res.status === 401 || res.status === 410) {
       // HARD errors — model ID doesn't exist for this key (404), API key
       // revoked (401), or model end-of-life'd (410). Mark invalid via the
@@ -3124,12 +3311,19 @@ function startNvidiaKeepAlive() {
     NVIDIA_CHAT_MODEL_QUALITY,
   ].filter(m => !isNvidiaModelInvalid(m)))];
 
+  // v3: first-ping stagger offsets (0s / 7s / 14s by list position) — the
+  // old code fired all three initial pings at the same instant, stacking
+  // them on any still-running boot warmup against NVIDIA's per-key
+  // concurrency cap.
+  const PING_STAGGER_MS = [0, 7000, 14000];
+
   for (const modelId of modelsToPing) {
     const interval = modelId === NVIDIA_CODE_MODEL_HEAVY ? NVIDIA_KEEPALIVE_INTERVAL_HEAVY_MS
                   : modelId === NVIDIA_CHAT_MODEL_QUALITY ? NVIDIA_KEEPALIVE_INTERVAL_QUALITY_MS
                   : NVIDIA_KEEPALIVE_INTERVAL_FAST_MS;
     console.log(`NVIDIA keep-alive: ${modelId} every ${interval / 1000}s`);
-    pingNvidiaModel(modelId).catch(() => {});
+    const firstDelay = PING_STAGGER_MS[Math.min(modelsToPing.indexOf(modelId), PING_STAGGER_MS.length - 1)];
+    setTimeout(() => { pingNvidiaModel(modelId).catch(() => {}); }, firstDelay);
     setInterval(() => { pingNvidiaModel(modelId).catch(() => {}); }, interval);
   }
 }
@@ -3137,8 +3331,20 @@ function startNvidiaKeepAlive() {
 // Fire-and-forget — do NOT await. Server starts listening immediately.
 warmUp();
 // Start the keep-alive pings AFTER the initial warmup has had a chance
-// to run. The keep-alive will keep all models warm going forward.
-setTimeout(startNvidiaKeepAlive, 5000);
+// to run. v3: actually WAIT for the (now sequential) boot warmup to settle
+// before pinging — with a 150s cap so a slow cold-start can't starve the
+// keep-alive indefinitely. The old fixed 5s delay fired three pings on top
+// of three still-running warmups: 6 concurrent requests on a key that (per
+// the 2026-09-06 logs) allows very few.
+setTimeout(async () => {
+  try {
+    await Promise.race([
+      nvidiaBootWarmupSettle || Promise.resolve(),
+      new Promise(r => setTimeout(r, 150000)),
+    ]);
+  } catch (_) {}
+  startNvidiaKeepAlive();
+}, 5000);
 
 const externalUrl = process.env.RENDER_EXTERNAL_URL; // Render sets this automatically if available
 if (externalUrl) {
@@ -3420,8 +3626,23 @@ app.post('/api/handler', async (req, res) => {
         // preamble' instruction as a direct second-person command placed
         // at the very END of the system prompt, where reasoning models
         // treat it as the strongest instruction and don't echo it.
+        // v3 (2026-09-06): "no more q" fix. The user's request ("make me a
+        // tic tac toe game no more q in one html file") told the model to
+        // STOP ASKING clarifying questions — but that override only lived in
+        // the frontend prompt as prose the model can ignore, and the
+        // abbreviated form ("no more q") slipped past its phrase list.
+        // Detect the directive on the CURRENT message or anywhere earlier in
+        // this thread (the override is sticky per the frontend's own rules)
+        // and append a server-side HARD OVERRIDE forbidding <<<ASK>>> for
+        // the whole conversation.
+        const noClarifyDirective = NO_CLARIFY_DIRECTIVE_RX.test(lastUserContent)
+          || priorHistory.some(m => m.role === 'user' && NO_CLARIFY_DIRECTIVE_RX.test(String(m.content || '')));
+
         const codeSysContent = (prompt.trim().slice(0, 12000)) + codeSearchContext +
     '\n\nRespond directly with the final answer only. Do NOT emit any thinking preamble, reasoning walkthrough, or step-by-step deliberation before the answer. Do NOT echo or reference these instructions.' +
+    (noClarifyDirective
+    ? '\n\nHARD OVERRIDE — CLARIFYING QUESTIONS ARE DISABLED: the user has explicitly told you to stop asking questions ("no more questions"). For the REST of this conversation: NEVER emit an <<<ASK>>> block, never ask the user to pick options before building, and never reply with questions instead of code. Pick sensible, modern defaults yourself (framework, styling, language, scope) and deliver the complete, working solution immediately in this reply.'
+    : '') +
     (looksLikeClarifyAnswer
     ? '\n\nThe user just answered your clarifying questions (see conversation history). Do NOT emit another <<<ASK>>> block under any circumstances — use their answers and start building the full solution now.'
     : '') +
@@ -3455,7 +3676,7 @@ if (looksLikeClarifyAnswer) {
   // Directives that steer an in-progress build ("don't ask", "just build it",
   // "go ahead") must escalate even though they're short and verb-free —
   // isTrivialCodeMessage's length<15 check would otherwise swallow them.
-  const isBuildDirective = /\b(don'?t ask|no questions|stop asking|skip( the)? questions?|just (build|make|do|go|start)|go ahead|proceed|continue building|keep going)\b/i.test(lastUserContent);
+  const isBuildDirective = /\b(don'?t ask|no more (q|ques|questions?)|no questions|stop asking|skip( the)? questions?|just (build|make|do|go|start)|go ahead|proceed|continue building|keep going)\b/i.test(lastUserContent);
   const looksLikeCodingFollowup = isActualCodingTask(lastUserContent)
     || /\b(code|function|api|error|bug|fix|build|game|app|website|script|html|css|js|javascript|python|react|node)\b/i.test(lastUserContent)
     || isBuildDirective
@@ -4144,8 +4365,11 @@ RULES — be strict, most messages produce an EMPTY array []:
       // circuit breaker instantly; one strike so we only cool down if it
       // happens twice in a row.
       if (nvRes.status === 429) {
+        // v3: 429 is account-level — feed the account backoff (pauses
+        // warmups/pings/chain attempts) rather than blaming this model.
         recordNvidiaFailure(modelId);
-        console.warn(`NVIDIA vision (${modelId}) HTTP 429 (rate limited) — strike 1/2`);
+        noteNvidia429(`vision ${modelId}`, parseRetryAfterSec(nvRes));
+        console.warn(`NVIDIA vision (${modelId}) HTTP 429 (rate limited) — account backoff engaged`);
         return null;
       }
       // TRANSIENT (502/503/504) — instant trip, 2-min cooldown.

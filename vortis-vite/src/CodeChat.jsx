@@ -298,7 +298,7 @@ STRICT RULES:
 - Bug fixes where the user pasted the broken code
 - Casual conversation
 - The user already specified everything (framework, language, scope) in their request
-- The user explicitly says to skip questions and just build it — "just do it", "no questions", "no more questions", "stop asking", "use your judgment", or similar. This is a HARD OVERRIDE that beats every "always ask" trigger above, for this request AND every later build request in the same conversation, unless the user explicitly asks you to start asking again. Pick sensible defaults yourself and go straight to code.
+- The user explicitly says to skip questions and just build it — "just do it", "no questions", "no more questions", "no more q", "no q", "stop asking", "use your judgment", or similar. This is a HARD OVERRIDE that beats every "always ask" trigger above, for this request AND every later build request in the same conversation, unless the user explicitly asks you to start asking again. Pick sensible defaults yourself and go straight to code.
 
 Example of a CORRECT proactive clarify reply (the WHOLE reply is just this):
 <<<ASK>>>
@@ -5664,7 +5664,7 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
     maxWidth: hasProject
       ? (sidebarOpen ? 'clamp(760px, 66vw, 1080px)' : 'clamp(800px, 70vw, 1200px)')
       : (sidebarOpen ? 'clamp(600px, 50vw, 780px)' : 'clamp(640px, 52vw, 840px)'),
-    width: '100%', boxSizing: 'border-box', padding: '20px 22px 12px', margin: '0 auto',
+    width: '100%', boxSizing: 'border-box', padding: '20px 22px 12px',
     transition: 'max-width .25s ease',
   }}>
                 {messages.map((m, i) => (
@@ -5763,10 +5763,12 @@ if (codeLines.length <= 3 && rawCodeText.length < 120) {
 
           {/* ── Input area ── */}
           <div style={{
-            flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
-            padding: '12px 22px 16px'
-          }}>
-            <div style={{ maxWidth: sidebarOpen ? 680 : 820, width: '100%', boxSizing: 'border-box', margin: '0 auto', transition: 'max-width .25s ease' }}>
+  flexShrink: 0, borderTop: '1px solid #212121', background: '#0f0f0f',
+  padding: '12px 22px 16px',
+  display: 'flex', justifyContent: 'center',
+  }}>
+
+  <div style={{ maxWidth: sidebarOpen ? 680 : 820, width: '100%', boxSizing: 'border-box', transition: 'max-width .25s ease' }}>
 
               {/* Editing banner — shows when the user is editing a previous
                   message. Lets them cancel and keep the original intact. */}

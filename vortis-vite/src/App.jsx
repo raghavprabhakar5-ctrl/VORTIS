@@ -8909,7 +8909,10 @@ return (
                     </div>
                   </div>
                 ) : msg.type === 'user' ? (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }}>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'flex-end' }}
+                       onMouseEnter={() => setHoveredMsg(msg.id)}
+                       onMouseLeave={() => setHoveredMsg(null)}
+                    >
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, maxWidth: '70%' }}>
                       {msg.image && <img src={msg.image} alt="Uploaded" style={{ maxWidth: 180, maxHeight: 140, borderRadius: 10, objectFit: 'cover', border: '1.5px solid rgba(99,102,241,.3)', display: 'block' }}/>}
                       {msg.doc && (
@@ -8987,7 +8990,17 @@ return (
     </div>
   );
 })()}
-                      <div className="msg-actions" style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                     <div
+                        className="msg-actions"
+                        style={{
+                        display: 'flex',
+                        gap: 4,
+                        marginTop: 2,
+                        opacity: hoveredMsg === msg.id ? 1 : 0,
+                        pointerEvents: hoveredMsg === msg.id ? 'auto' : 'none',
+                        transition: 'opacity .15s',
+                        }}
+                        >
                      <button className="user-action-btn" title="Copy" onClick={() => { navigator.clipboard.writeText(msg.text||''); setCopiedUserIdx(idx); setTimeout(() => setCopiedUserIdx(null), 2000); }} style={{ background: copiedUserIdx===idx ? 'rgba(16,185,129,.2)' : undefined, borderColor: copiedUserIdx===idx ? 'rgba(16,185,129,.4)' : undefined }}>{copiedUserIdx === idx ? <Check size={11} color="#10b981"/> : <Copy size={11}/>}</button>
                    <button className="user-action-btn" title="Edit & resend" onClick={() => { setInput(msg.text||''); setMessages(prev => prev.slice(0, idx)); convHistory.current = []; setTimeout(() => { textareaRef.current?.focus(); if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight,140)+'px'; } }, 50); }}><Edit2 size={11}/></button><button className="user-action-btn" title="Retry" onClick={() => { setMessages(prev => prev.slice(0, idx + 1)); convHistory.current = []; setIsProcessing(true); getAI(msg.text || '', false).finally(() => setIsProcessing(false)); }}><RefreshCw size={11}/></button>
                   </div>
