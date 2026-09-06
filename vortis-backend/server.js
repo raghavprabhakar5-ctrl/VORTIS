@@ -89,56 +89,62 @@ function makeGroqClient(key) {
 }
 
 const NVIDIA_BASE_URL     = 'https://integrate.api.nvidia.com/v1';
-// ── NVIDIA NIM MODEL LINEUP (FIX 2026-09-06) ──────────────────────────
-// CHANGES:
-//   1. CODING MODEL (heavy): deepseek-v4-flash-0731 → 'z-ai/glm-5.2'
-//      - User-requested: "use glm 5.2 for coding in nim api".
-//      - GLM-5.2 is Z.ai's flagship coding/agentic model hosted on NVIDIA
-//        NIM (build.nvidia.com/z-ai/glm-5.2). 1M context, up to 32768
-//        output tokens per call — a full animated website in ONE pass,
-//        which also makes the auto-continuation (and its duplicate-code
-//        failure mode) extremely rare.
-//      - NOTE: integrate.api.nvidia.com/v1/models does NOT list every
-//        hosted model — z-ai/glm-5.2 is served on the /chat/completions
-//        endpoint (confirmed by docs.api.nvidia.com/nim/reference/
-//        z-ai-glm-5.2-infer) even though the catalog endpoint omits it.
-//        So `in_catalog: false` in /debug/nvidia-models is EXPECTED for
-//        this ID — the http_status field is the real test.
-//      - KEY NOTE: if this model returns 404 with your current key, go to
-//        build.nvidia.com/z-ai/glm-5.2 and click "Get API Key" — keys are
-//        sometimes scoped per-model page on NVIDIA accounts. Generate a
-//        fresh key there and set it as NVIDIA_API_KEY. The 30-min invalid
-//        TTL below auto-retries, so no restart is needed after you swap
-//        the key in Render's env.
-//   2. QUALITY MODEL: nemotron-3-super-120b-a12b → 'deepseek-ai/
-//      deepseek-v4-pro-0813' (user-requested "make quality model better").
-//      DeepSeek V4 Pro is a flagship reasoning model — a much stronger
-//      fallback behind GLM-5.2 in the heavy chain.
-//   3. FAST MODEL: unchanged (nemotron-3.5-lightning-30b-a3b) — fast,
-//      warm, proven in production.
+// ── NVIDIA NIM MODEL LINEUP (FIX 2026-09-06, v2) ─────────────────────
+// v2 CHANGES:
+//   1. CODING MODEL (heavy): z-ai/glm-5.2 → 'moonshotai/kimi-k3'
+//      - GLM-5.2 IS DEAD: NVIDIA end-of-life'd it on 2026-08-21. Every call
+//        now returns HTTP 410 Gone ("The model 'z-ai/glm-5.2' has reached
+//        its end of life"), which is why the boot warmup kept failing
+//        ("not ready after 0ms" = short-circuited by the invalid registry)
+//        and heavy code requests fell through to deepseek (cold, 40s+
+//        timeouts) and then lightning (a small 30B-A3B model that writes
+//        short/truncated files). Confirmed live 2026-09-06 via
+//        GET /v1/models/z-ai/glm-5.2 → 410 Gone.
+//      - REPLACEMENT: moonshotai/kimi-k3 — Moonshot's flagship coding/
+//        agentic model. Verified: listed in this key's /v1/models catalog,
+//        resolves on /v1/models/moonshotai/kimi-k3, and supports
+//        max_tokens 1-65536 (docs.api.nvidia.com/nim/reference/
+//        moonshotai-kimi-k3-infer) — the largest output budget in the
+//        catalog, whole projects in ONE pass.
+//      - No other z-ai/* model exists on NIM (glm-5.2-flash / glm-5 /
+//        glm-4.7 etc. all 404 — probed live 2026-09-06).
+//   2. QUALITY MODEL: deepseek-ai/deepseek-v4-pro-0813 (unchanged).
+//      NOTE: deepseek-v4-pro cold-starts slowly on NIM (40s+ after idle)
+//        — that's the "This operation was aborted" warmup noise. It is NOT
+//        broken: the keep-alive warms it within a couple of cycles, it is
+//        always retried once per heavy request even when marked invalid,
+//        and kimi-k3 now sits in front of it as the primary coding model.
+//   3. FAST MODEL: unchanged (nemotron-3.5-lightning-30b-a3b) — now the
+//      LAST resort in the heavy chain instead of the de-facto coding model.
 //
 // ALL-VERIFIED (2026-09-06, live ping via /debug/nvidia-models on the
-// deployed Render service + docs.api.nvidia.com per-model reference):
-//   z-ai/glm-5.2                            → serving, max_tokens ≤ 32768
+// deployed Render service + integrate.api.nvidia.com + docs.api.nvidia.com
+// per-model reference):
+//   moonshotai/kimi-k3                      → in catalog, max_tokens ≤ 65536
 //   deepseek-ai/deepseek-v4-pro-0813        → in catalog, max_tokens ≤ 16384
 //   nvidia/nemotron-3.5-lightning-30b-a3b   → in catalog, max_tokens ≤ 32768 (HTTP 200, ~350ms warm)
 //   nvidia/nemotron-3-nano-omni-30b-a3b-... → in catalog, HTTP 200 (vision)
 //   meta/llama-3.2-11b-vision-instruct      → in catalog, HTTP 200 (vision)
+//   z-ai/glm-5.2                            → HTTP 410 GONE (EOL 2026-08-21) — removed
 const NVIDIA_CHAT_FAST    = 'nvidia/nemotron-3.5-lightning-30b-a3b';
 const NVIDIA_CHAT_QUALITY = 'deepseek-ai/deepseek-v4-pro-0813';
-const NVIDIA_CHAT_CODE    = 'z-ai/glm-5.2';
+const NVIDIA_CHAT_CODE    = 'moonshotai/kimi-k3';
 
-// ── PER-MODEL max_tokens CAPS (FIX 2026-09-06) ───────────────────────
-// CRITICAL BUG this fixes: the code-chat path passes max_tokens=32768 to
-// EVERY model in the chain. deepseek-ai models on NIM cap max_tokens at
-// 16384 — sending 32768 returns HTTP 400 "max_tokens must be between 1
-// and 16384", which burned a failure strike and silently pushed every
-// heavy request to the fallback models. (The old heavy model,
-// deepseek-v4-flash-0731, has this exact 16384 cap — one likely reason
-// code generation was "not able to make properly".) Every NVIDIA call
-// now clamps max_tokens through nvidiaMaxTokensFor() before sending.
+// ── PER-MODEL max_tokens CAPS (FIX 2026-09-06, v2) ───────────────────
+// The code-chat path deliberately requests max_tokens=65536 — the LARGEST
+// budget any model in the chain accepts, per the user's "don't add any
+// text limit like token limit" instruction (NIM rate limits are
+// request-based, not output-token-based, so requesting the max costs
+// nothing — the model stops when it's done). But deepseek-ai models on
+// NIM HARD-CAP max_tokens at 16384 — sending more returns HTTP 400
+// "max_tokens must be between 1 and 16384", which burns a failure strike
+// and silently pushes the request to the fallback models. So every NVIDIA
+// call clamps through nvidiaMaxTokensFor(): each model gets its OWN
+// maximum — kimi-k3 65536, lightning 32768, deepseek 16384.
 const NVIDIA_MODEL_MAX_TOKENS = {
-  'z-ai/glm-5.2':                          32768,
+  'moonshotai/kimi-k3':                    65536,
+  'moonshotai/kimi-k2.6':                  16384,
+  'z-ai/glm-5.2':                          32768, // EOL on NIM — kept only so a stray reference clamps safely
   'deepseek-ai/deepseek-v4-pro-0813':      16384,
   'deepseek-ai/deepseek-v4-flash-0731':    16384,
   'nvidia/nemotron-3.5-lightning-30b-a3b': 32768,
@@ -538,20 +544,29 @@ function isNvidiaModelWarm(model) {
 // Side benefit: the recurring "keep-alive: HTTP 404" spam is gone — we
 // only retry once per 30 min instead of every 70s.
 const NVIDIA_INVALID_TTL_MS = 30 * 60 * 1000; // 30 minutes
+// 410 Gone = NVIDIA formally end-of-life'd the model (e.g. z-ai/glm-5.2,
+// EOL 2026-08-21). Unlike a 404 (often just a key-tier/entitlement issue
+// that can resolve after an account upgrade), a 410 is definitive, so it
+// gets a 24h TTL — retrying it every 30 minutes just burns a request and
+// a log line for a model that will never come back.
+const NVIDIA_INVALID_EOL_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const nvidiaEolModels = new Map(); // model -> { expiresAt, reason, since }
 
 function markNvidiaModelInvalid(model, reason) {
   const prev = nvidiaEolModels.get(model);
-  // Always reset the TTL on a fresh 404 — even if there was a previous
+  // 410 (end-of-life) gets the 24h TTL; 404/401 keep the 30-min TTL so a
+  // key-scope/entitlement fix is picked up quickly.
+  const ttl = /410/.test(String(reason)) ? NVIDIA_INVALID_EOL_TTL_MS : NVIDIA_INVALID_TTL_MS;
+  // Always reset the TTL on a fresh failure — even if there was a previous
   // entry. This prevents a model from being un-blacklisted mid-cooldown
   // by an old expiry timestamp.
   nvidiaEolModels.set(model, {
-    expiresAt: Date.now() + NVIDIA_INVALID_TTL_MS,
+    expiresAt: Date.now() + ttl,
     reason,
     since: Date.now(),
   });
   if (!prev) {
-    console.error(`NVIDIA model ${model} marked INVALID for ${NVIDIA_INVALID_TTL_MS / 60000}min — ${reason}. Will auto-retry after TTL expires.`);
+    console.error(`NVIDIA model ${model} marked INVALID for ${Math.round(ttl / 60000)}min — ${reason}. Will auto-retry after TTL expires.`);
   }
 }
 
@@ -1597,7 +1612,11 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
     return false;
   }
 
-  const MAX_CONTINUATIONS = 4;
+  // MAX_CONTINUATIONS: how many times one model attempt may auto-continue
+  // a truncated response. Raised 4 → 8 (2026-09-06 v2) so very long
+  // multi-file projects never hit an artificial ceiling — NIM bills by
+  // REQUEST (RPM), not tokens, so extra continuation turns cost nothing.
+  const MAX_CONTINUATIONS = 8;
 // Both HEADERS_TIMEOUT_MS and firstByteTimeoutFor were bounding the SAME
 // "model is cold-starting" delay separately, which meant a cold heavy
 // model could burn up to 60s+50s=110s before we even tried the next
@@ -1606,7 +1625,7 @@ async function streamNvidiaGLMOnly(messages, res, maxTokens = 8000, clientSignal
 // below so we never wait more than ~35s total across all models before
 // falling back to Groq/CF.
 function headersTimeoutFor(model) {
-  // UPDATED 2026-09-06: GLM-5.2 (heavy) is a large MoE — 25s headers
+  // UPDATED 2026-09-06 (v2): kimi-k3 (heavy) is a large MoE — 25s headers
   // budget for cold-start; deepseek-v4-pro (quality) 20s; others 10s.
   if (model === NVIDIA_CODE_MODEL_HEAVY) return 25000;
   if (model === NVIDIA_CHAT_MODEL_QUALITY) return 20000;
@@ -1614,7 +1633,7 @@ function headersTimeoutFor(model) {
 }
 
 function firstByteTimeoutFor(model) {
-  // UPDATED 2026-09-06: GLM-5.2 gets 22s to first byte (cold-start
+  // UPDATED 2026-09-06 (v2): kimi-k3 gets 22s to first byte (cold-start
   // headroom for a flagship MoE); deepseek-v4-pro 16s; others 10s.
   if (model === NVIDIA_CODE_MODEL_HEAVY) return 22000;
   if (model === NVIDIA_CHAT_MODEL_QUALITY) return 16000;
@@ -1717,9 +1736,9 @@ for (const nvidiaModel of modelsToTry) {
             body: JSON.stringify({
               model:           nvidiaModel,
               messages:        convoMessages,
-              // FIX 2026-09-06: clamp per-model — deepseek-ai models cap
-              // max_tokens at 16384; sending 32768 (our code-chat budget)
-              // returned HTTP 400 and silently failed the request.
+              // FIX 2026-09-06 (v2): clamp per-model — deepseek-ai models
+              // cap max_tokens at 16384; sending the 65536 kimi-k3 budget
+              // to them returned HTTP 400 and silently failed the request.
               max_tokens:      nvidiaMaxTokensFor(nvidiaModel, maxTokens),
               temperature:     0.5,
               top_p:           0.9,
@@ -1926,9 +1945,24 @@ for (const nvidiaModel of modelsToTry) {
           restartGuard = null;
         }
 
-        if (finishReason === 'length' && continuations < MAX_CONTINUATIONS) {
+        // FIX 2026-09-06 (v2) — "the text like 100 lines is truncated":
+        // the old condition auto-continued ONLY on finish_reason=length.
+        // But the most common truncation in production is a model that
+        // stops early MID-FILE (finish_reason=stop, or null when the
+        // stream was cut) leaving the closing ``` never emitted — the
+        // user gets a half file (~100 lines) and NO continuation ever
+        // fires, then the model restarts the file from scratch on the
+        // next turn ("same file made twice"). Now we ALSO continue when
+        // the visible turn output ends inside an unclosed code fence.
+        const fenceCount = (turnBuffer.match(/```/g) || []).length;
+        const endsInOpenFence = fenceCount % 2 === 1 && turnBuffer.trim().length > 400;
+        if ((finishReason === 'length' || endsInOpenFence) && continuations < MAX_CONTINUATIONS) {
           continuations++;
-          console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS}) on ${nvidiaModel}`);
+          if (endsInOpenFence && finishReason !== 'length') {
+            console.warn(`Code-chat output ended inside an unclosed code fence (finish_reason=${finishReason || 'null'}, ${written} chars so far) — auto-continuing (${continuations}/${MAX_CONTINUATIONS}) on ${nvidiaModel}`);
+          } else {
+            console.warn(`Code-chat truncated by max_tokens — auto-continuing (${continuations}/${MAX_CONTINUATIONS}) on ${nvidiaModel}`);
+          }
           // FIX (2026-08-26): the previous continuation prompt caused two
           // visible bugs in production:
           //
@@ -1978,6 +2012,13 @@ for (const nvidiaModel of modelsToTry) {
             resumeFromHint = `You were cut off MID-SENTENCE. The last incomplete sentence was:\n\n<incomplete_sentence>\n${brokenSentence}\n</incomplete_sentence>\n\nRESTART that exact sentence from its beginning and continue from there. Do NOT pick up mid-word. Do NOT repeat any text from before this sentence.`;
           } else {
             resumeFromHint = `You were cut off mid-output. Here is the last part of what you produced:\n\n<previous_output_tail>\n${trimmedPrior}\n</previous_output_tail>\n\nContinue EXACTLY where you left off. Rules:\n- Do NOT repeat any text from above.\n- Do NOT add any preamble, explanation, or apology.\n- Do NOT restart the file or wrap in a new code fence if you were inside one.\n- Just output the next characters that would naturally follow the last character above.`;
+          }
+          // FIX 2026-09-06 (v2): when the cut happened INSIDE an unclosed
+          // code fence, make the instruction explicit: finish the file,
+          // close the fence, and never restart the file from the top —
+          // that restart is exactly what made the same file appear twice.
+          if (endsInOpenFence) {
+            resumeFromHint += `\n\nIMPORTANT: your output stopped INSIDE an unfinished code block (the closing \`\`\` was never emitted). Continue the code from the exact stopping point, finish the file completely, and emit the closing \`\`\` when the file is done. Do NOT restart the file, do NOT re-emit any earlier part of it, and do NOT output anything before the code continues.`;
           }
           convoMessages = [
             ...convoMessages,
@@ -2733,11 +2774,13 @@ async function warmUp() {
       // the keep-alive timeout for the quality slot) instead of the 30s
       // default for non-heavy models. Heavy (ultra-550b) still gets 150s
       // because it's a 550B MoE that takes even longer to cold-start.
-      // UPDATED 2026-09-06: heavy is now GLM-5.2 (60s warmup budget for a
-      // flagship MoE cold-start), quality is deepseek-v4-pro-0813 (40s —
-      // bigger than the old nemotron-super-120b), others 30s.
+      // UPDATED 2026-09-06 (v2): heavy is now kimi-k3 (60s warmup budget
+      // for a flagship MoE cold-start), quality is deepseek-v4-pro-0813
+      // (55s — its cold-start on NIM legitimately takes 40s+ right after
+      // a deploy/idle gap, which is exactly the "This operation was
+      // aborted" warmup noise in the logs; it is NOT broken), others 30s.
       const timeout = modelId === NVIDIA_CODE_MODEL_HEAVY ? 60000
-                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 40000
+                    : modelId === NVIDIA_CHAT_MODEL_QUALITY ? 55000
                     : 30000;
 
       // RETRY LOOP: if the warmup fails with a transient error (502/503/504/
@@ -2762,7 +2805,18 @@ const retryWarmup = async (modelId, timeout, attempt, maxAttempts) => {
 };
 
       retryWarmup(modelId, timeout, 1, 2).then(({ ok, ms }) => {
-        if (!ok) console.log(`NVIDIA warmup skipped: ${modelId} not ready after ${ms}ms${modelId === NVIDIA_CODE_MODEL_HEAVY ? ' — will keep trying via keep-alive' : ''}`);
+        if (!ok) {
+          // v2: say WHY the warmup gave up. "not ready after 0ms" (the log
+          // that looked like a bug) means the model is already in the
+          // invalid registry — the warmup short-circuits without a network
+          // call (e.g. GLM-5.2 after its 410 end-of-life, or a 404 key-tier
+          // issue). Anything else is a real timeout/HTTP failure.
+          const invalidEntry = nvidiaEolModels.get(modelId);
+          const invalidNote = invalidEntry
+            ? ` — marked invalid: ${invalidEntry.reason || 'unknown'} (auto-retries after TTL)`
+            : (modelId === NVIDIA_CODE_MODEL_HEAVY ? ' — will keep trying via keep-alive' : '');
+          console.log(`NVIDIA warmup skipped: ${modelId} not ready after ${ms}ms${invalidNote}`);
+        }
       });
     }
   } else {
@@ -3416,19 +3470,18 @@ if (looksLikeClarifyAnswer) {
 }
 
         console.log(`Code-chat: routing "${lastUserContent.slice(0, 50)}..." → chain=${chainName}`);
-        // Increased from 8000 → 32768. The old 8000 cap was the PRIMARY
-        // cause of "code getting cut off mid-stream" — a complete animated
-        // website in one HTML file is typically 15-40K chars (~4-10K tokens),
-        // which hit the 8K wall and forced auto-continuation. Continuation
-        // is slow (re-sends entire convo + partial output) and produces
-        // inconsistent output. GLM-5.2 (the coding model since 2026-09-06)
-        // supports exactly 32768 output tokens per call, so 32K is a safe
-        // cap that lets 95%+ of requests complete in a single pass with no
-        // continuation needed. (deepseek fallback models cap at 16384 —
-        // streamNvidiaGLMOnly now clamps per-model via
-        // nvidiaMaxTokensFor(), which fixes the silent HTTP 400 that the
-        // old unclamped 32768 caused on those models.)
-        let ok = await streamNvidiaGLMOnly(codeMessages, res, 32768, clientSignal.signal, chainName);
+        // Token budget: 65536 — the kimi-k3 maximum, deliberately set to
+        // the LARGEST budget any chain model accepts (user instruction:
+        // "don't add any text limit like token limit — nim apis based on
+        // rpm speed"). NIM rate limits by REQUEST, not output tokens, so
+        // requesting the max costs nothing; each model still gets clamped
+        // to its own hard cap by nvidiaMaxTokensFor() (kimi-k3 65536,
+        // lightning 32768, deepseek 16384) to avoid HTTP 400s. The old
+        // 8000 cap was the primary cause of "code getting cut off
+        // mid-stream"; long outputs that STILL overflow (rare now) are
+        // handled by the auto-continuation above — including the new
+        // unclosed-code-fence detection.
+        let ok = await streamNvidiaGLMOnly(codeMessages, res, 65536, clientSignal.signal, chainName);
         // FIX (2026-08-26): the previous version printed a hardcoded
         // 'code models are temporarily unavailable' message here and bailed
         // — even though streamCodeChatFallback() (defined further up in this

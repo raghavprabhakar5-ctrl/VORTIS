@@ -913,21 +913,45 @@ const dedupeProjectFiles = (files) => {
   return out;
 };
 
-/* Removes closed, untagged fenced code blocks from `text` when their
-   content duplicates one of `files`. The FileTreePanel already renders
-   that code — the inline copy is the visual duplicate the user reported. */
+/* Removes closed AND trailing-open untagged fenced code blocks from `text`
+   when their content duplicates one of `files`. The FileTreePanel already
+   renders that code — the inline copy is the visual duplicate the user
+   reported ("it is making the same file two time").
+   v2 FIX 2026-09-06: the old version only matched CLOSED fences. When the
+   duplicate restart emission was itself truncated mid-file (very common —
+   the model restarts the file, then gets cut off AGAIN), the unclosed
+   fence never matched and the duplicate PLAINTEXT block stayed visible
+   right below the file panel. We now also absorb the trailing OPEN fence
+   (a ``` with no closing marker, running to end-of-text) when it is an
+   untagged near-duplicate of an extracted file. */
 const absorbDuplicatePlainFences = (text, files) => {
   if (!text || !text.includes('```') || !files || files.length === 0) return text;
   const fenceRe = /```([\w+#.\-]*)[ \t]*\n?([\s\S]*?)```/g;
   const removals = [];
+  let lastClosedEnd = 0; // end index of the last closed fence scanned
   let m;
   while ((m = fenceRe.exec(text))) {
+    lastClosedEnd = m.index + m[0].length;
     let code = m[2] || '';
     let unwrap = unwrapNestedFence(code);
     while (unwrap) { code = unwrap.code; unwrap = unwrapNestedFence(code); }
     if (extractFilePath(code, m[1] || '')) continue; // tagged → handled by extraction
     if (!files.some(f => codeBlocksAreDuplicates(f.code, code))) continue;
     removals.push(m.index, m.index + m[0].length);
+  }
+  // v2: trailing OPEN fence — no closing ```, runs to end of text. This is
+  // the truncated restart copy that used to survive as a PLAINTEXT block.
+  const tail = text.slice(lastClosedEnd);
+  const openMatch = tail.match(/```([\w+#.\-]*)[ \t]*\n?([\s\S]*)$/);
+  if (openMatch) {
+    let code = openMatch[2] || '';
+    let unwrap = unwrapNestedFence(code);
+    while (unwrap) { code = unwrap.code; unwrap = unwrapNestedFence(code); }
+    if (!extractFilePath(code, openMatch[1] || '')) { // untagged only
+      if (files.some(f => codeBlocksAreDuplicates(f.code, code))) {
+        removals.push(lastClosedEnd + openMatch.index, text.length);
+      }
+    }
   }
   if (removals.length === 0) return text;
   let out = text;
@@ -3015,6 +3039,61 @@ const extractCodeBlocksFromMessages = (messages) => {
         });
       }
     }
+  }
+  // v2 FIX 2026-09-06 — cross-message restart dedupe ("it is making the
+  // same file twice" in the Artifacts panel). The per-message dedupe above
+  // can't see duplicates ACROSS messages: message 1 emits the file, gets
+  // cut off (~100 lines), the user/auto-Continue asks to finish, and
+  // message 2 re-emits the same file (often from the top). Both messages
+  // then push their own project/file rows and the panel lists the same
+  // file twice. CONSERVATIVE by design: only collapses entries whose
+  // CONTENT is near-identical (codeBlocksAreDuplicates — prefix/identical
+  // after normalization), keeping the LONGER copy. A real edit of the same
+  // path (different content) is never touched — that's version history.
+  if (out.length > 1) {
+    // Reference to each kept file: { entry, fileObj, code }. We track the
+    // file OBJECT (not its index) because the per-entry filter below can
+    // remove earlier files and shift indices mid-pass.
+    const seenFiles = [];
+    const replaceKeptFile = (dup, newFile) => {
+      const arr = dup.entry.files;
+      const i = arr ? arr.indexOf(dup.fileObj) : -1;
+      if (i !== -1) { arr[i] = newFile; dup.fileObj = newFile; dup.code = newFile.code || ''; }
+    };
+    for (const entry of out) {
+      if (entry.type === 'project' && Array.isArray(entry.files)) {
+        entry.files = entry.files.filter((f) => {
+          const code = f.code || '';
+          if (code.trim().length < 200) return true; // too small to judge
+          const dup = seenFiles.find(s => codeBlocksAreDuplicates(s.code, code));
+          if (!dup) { seenFiles.push({ entry, fileObj: f, code }); return true; }
+          // Keep the LONGER copy — the truncated original (~100 lines) is a
+          // prefix of the restarted emission, so the restart wins.
+          if (code.length > dup.code.length) replaceKeptFile(dup, f);
+          return false;
+        });
+      } else if (entry.type === 'file') {
+        const code = entry.code || '';
+        if (code.trim().length >= 200) {
+          const dup = seenFiles.find(s => codeBlocksAreDuplicates(s.code, code));
+          if (dup) {
+            // Standalone copy duplicates a kept project file — keep the
+            // longer content in the project entry, drop this row.
+            if (code.length > dup.code.length && dup.entry.files) {
+              replaceKeptFile(dup, { path: entry.filePath || (dup.fileObj && dup.fileObj.path), lang: entry.lang, code });
+            }
+            entry._dupOfEarlier = true; // removed below
+          } else {
+            seenFiles.push({ entry, fileObj: null, code });
+          }
+        }
+      }
+    }
+    // Drop project entries left with zero files, and flagged file rows.
+    const filtered = out.filter(e =>
+      (e.type === 'project' ? (e.files && e.files.length > 0) : !e._dupOfEarlier)
+    );
+    return filtered;
   }
   return out;
 };
